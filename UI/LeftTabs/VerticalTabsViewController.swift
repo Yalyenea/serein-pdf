@@ -4,7 +4,8 @@ final class VerticalTabsViewController: NSViewController {
     let documentStore: DocumentStore
     private let titleLabel = NSTextField(labelWithString: "Documents")
     private let countLabel = NSTextField(labelWithString: "0 open")
-    private let emptyStateLabel = NSTextField(labelWithString: "Open multiple PDFs and switch them here.")
+    private let emptyStateLabel = NSTextField(
+        labelWithString: "Open multiple PDFs and switch them here.")
     private let listStackView = NSStackView()
 
     init(documentStore: DocumentStore) {
@@ -54,7 +55,7 @@ final class VerticalTabsViewController: NSViewController {
 
         listStackView.orientation = .vertical
         listStackView.alignment = .leading
-        listStackView.spacing = 4
+        listStackView.spacing = 6
         listStackView.translatesAutoresizingMaskIntoConstraints = false
 
         for view in [headerStack, emptyStateLabel, listStackView] {
@@ -67,17 +68,27 @@ final class VerticalTabsViewController: NSViewController {
             headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
             headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
 
-            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+            emptyStateLabel.leadingAnchor.constraint(
+                equalTo: container.leadingAnchor, constant: 14),
+            emptyStateLabel.trailingAnchor.constraint(
+                equalTo: container.trailingAnchor, constant: -14),
             emptyStateLabel.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 16),
 
             listStackView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
-            listStackView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+            listStackView.trailingAnchor.constraint(
+                equalTo: container.trailingAnchor, constant: -8),
             listStackView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 12),
-            listStackView.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -8),
+            listStackView.bottomAnchor.constraint(
+                lessThanOrEqualTo: container.bottomAnchor, constant: -8),
         ])
 
         view = container
+    }
+
+    func refreshChromeColors() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+        }
     }
 
     @objc

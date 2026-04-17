@@ -16,6 +16,10 @@ struct AppConfiguration: Equatable, Sendable {
         var bindings: [ShortcutCommand: KeyboardShortcut]
 
         static let `default` = Shortcuts(bindings: [
+            .highlightSelection: KeyboardShortcut(key: "a", modifiers: []),
+            .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
+            .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
+            .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
             .toggleLeftSidebar: KeyboardShortcut(key: "b", modifiers: [.command]),
             .toggleRightSidebar: KeyboardShortcut(key: "b", modifiers: [.command, .option]),
             .useSidebarTabs: KeyboardShortcut(key: "1", modifiers: [.command, .shift]),
@@ -75,6 +79,34 @@ struct KeyboardShortcut: Equatable, Sendable {
         }
     }
 
+    var isPlainShortcut: Bool {
+        modifiers.isEmpty
+    }
+
+    var menuKeyEquivalent: String {
+        switch key {
+        case "escape":
+            "\u{1b}"
+        default:
+            key
+        }
+    }
+
+    func matches(event: NSEvent) -> Bool {
+        let normalizedModifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard normalizedModifiers == modifierMask else { return false }
+
+        guard let characters = event.charactersIgnoringModifiers?.lowercased() else { return false }
+        let normalizedKey = switch characters {
+        case "\u{1b}":
+            "escape"
+        default:
+            characters
+        }
+
+        return normalizedKey == key
+    }
+
     var serializedValue: String {
         let orderedModifiers = KeyboardShortcutModifier.allCases
             .filter { modifiers.contains($0) }
@@ -88,7 +120,7 @@ struct KeyboardShortcut: Equatable, Sendable {
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { $0.isEmpty == false }
 
-        guard let key = tokens.last, key.count == 1 else {
+        guard let key = tokens.last, isSupportedKeyToken(key) else {
             throw AppConfigurationError.invalidShortcut(rawValue)
         }
 
@@ -100,6 +132,10 @@ struct KeyboardShortcut: Equatable, Sendable {
         })
 
         return KeyboardShortcut(key: key, modifiers: modifiers)
+    }
+
+    private static func isSupportedKeyToken(_ token: String) -> Bool {
+        token.count == 1 || token == "escape"
     }
 }
 
@@ -133,6 +169,10 @@ default_display_mode = "single_page_continuous"
 fit_width_on_open = false
 
 [shortcuts]
+highlight_selection = "a"
+exit_highlight_mode = "escape"
+toggle_night_mode = "i"
+save_annotations = "command+s"
 toggle_left_sidebar = "command+b"
 toggle_right_sidebar = "command+option+b"
 use_sidebar_tabs = "command+shift+1"
@@ -157,6 +197,10 @@ default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
 fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
 
 [shortcuts]
+highlight_selection = "\(configuration.shortcuts.bindings[.highlightSelection]?.serializedValue ?? "a")"
+exit_highlight_mode = "\(configuration.shortcuts.bindings[.exitHighlightMode]?.serializedValue ?? "escape")"
+toggle_night_mode = "\(configuration.shortcuts.bindings[.toggleNightMode]?.serializedValue ?? "i")"
+save_annotations = "\(configuration.shortcuts.bindings[.saveAnnotations]?.serializedValue ?? "command+s")"
 toggle_left_sidebar = "\(configuration.shortcuts.bindings[.toggleLeftSidebar]?.serializedValue ?? "command+b")"
 toggle_right_sidebar = "\(configuration.shortcuts.bindings[.toggleRightSidebar]?.serializedValue ?? "command+option+b")"
 use_sidebar_tabs = "\(configuration.shortcuts.bindings[.useSidebarTabs]?.serializedValue ?? "command+shift+1")"
@@ -210,6 +254,14 @@ struct AppConfigurationParser {
         to configuration: inout AppConfiguration
     ) throws {
         switch (section, key) {
+        case ("shortcuts", "highlight_selection"):
+            configuration.shortcuts.bindings[.highlightSelection] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "exit_highlight_mode"):
+            configuration.shortcuts.bindings[.exitHighlightMode] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "toggle_night_mode"):
+            configuration.shortcuts.bindings[.toggleNightMode] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "save_annotations"):
+            configuration.shortcuts.bindings[.saveAnnotations] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("reader", "default_display_mode"):
             let value = parseString(rawValue)
             guard let displayMode = ReaderDisplayMode(rawValue: value) else {
@@ -292,6 +344,10 @@ struct AppConfigurationStore {
 
         let existingContent = try String(contentsOf: fileURL, encoding: .utf8)
         let requiredShortcutKeys = [
+            "highlight_selection",
+            "exit_highlight_mode",
+            "toggle_night_mode",
+            "save_annotations",
             "toggle_left_sidebar",
             "toggle_right_sidebar",
             "use_sidebar_tabs",

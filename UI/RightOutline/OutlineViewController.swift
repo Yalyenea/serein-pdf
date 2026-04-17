@@ -89,6 +89,13 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         view = container
     }
 
+    func refreshChromeColors() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+            outlineView.backgroundColor = PlaceholderViewController.paneBackgroundColor
+        }
+    }
+
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         reloadOutline()

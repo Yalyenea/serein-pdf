@@ -2,6 +2,7 @@ import AppKit
 
 final class VerticalTabItemView: NSView {
     private let sessionID: UUID
+    private let selectButton = NSButton(title: "", target: nil, action: nil)
     private let titleLabel = NSTextField(labelWithString: "")
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let separator = NSBox()
@@ -27,6 +28,13 @@ final class VerticalTabItemView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 8
 
+        selectButton.isBordered = false
+        selectButton.title = ""
+        selectButton.bezelStyle = .regularSquare
+        selectButton.focusRingType = .none
+        selectButton.target = self
+        selectButton.action = #selector(handleSelect)
+
         titleLabel.stringValue = title
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
@@ -35,6 +43,7 @@ final class VerticalTabItemView: NSView {
         closeButton.font = .systemFont(ofSize: 15, weight: .medium)
         closeButton.isBordered = false
         closeButton.bezelStyle = .regularSquare
+        closeButton.focusRingType = .none
         closeButton.target = self
         closeButton.action = #selector(handleClose)
         closeButton.contentTintColor = .secondaryLabelColor
@@ -42,7 +51,7 @@ final class VerticalTabItemView: NSView {
 
         separator.boxType = .custom
         separator.isTransparent = false
-        separator.fillColor = NSColor(calibratedWhite: 0.84, alpha: 1.0)
+        separator.fillColor = SplitViewController.dividerBackgroundColor
 
         let row = NSStackView(views: [titleLabel, closeButton])
         row.orientation = .horizontal
@@ -50,12 +59,18 @@ final class VerticalTabItemView: NSView {
         row.spacing = 8
         row.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 6)
 
+        addSubview(selectButton)
         addSubview(row)
         addSubview(separator)
+        selectButton.translatesAutoresizingMaskIntoConstraints = false
         row.translatesAutoresizingMaskIntoConstraints = false
         separator.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
+            selectButton.leadingAnchor.constraint(equalTo: leadingAnchor),
+            selectButton.trailingAnchor.constraint(equalTo: trailingAnchor),
+            selectButton.topAnchor.constraint(equalTo: topAnchor),
+            selectButton.bottomAnchor.constraint(equalTo: bottomAnchor),
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
             row.trailingAnchor.constraint(equalTo: trailingAnchor),
             row.topAnchor.constraint(equalTo: topAnchor),
@@ -66,9 +81,6 @@ final class VerticalTabItemView: NSView {
             separator.bottomAnchor.constraint(equalTo: bottomAnchor),
             separator.heightAnchor.constraint(equalToConstant: 1),
         ])
-
-        let clickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(handleSelect))
-        addGestureRecognizer(clickRecognizer)
 
         self.isSelected = isSelected
         updateAppearance()
@@ -89,10 +101,17 @@ final class VerticalTabItemView: NSView {
         onClose?(sessionID)
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
     private func updateAppearance() {
-        layer?.backgroundColor = isSelected
-            ? NSColor(calibratedWhite: 0.90, alpha: 1.0).cgColor
-            : NSColor.clear.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = isSelected
+                ? SplitViewController.selectedChromeBackgroundColor.cgColor
+                : NSColor.clear.cgColor
+        }
         titleLabel.textColor = isSelected ? .labelColor : .secondaryLabelColor
         closeButton.contentTintColor = isSelected ? .labelColor : .secondaryLabelColor
     }

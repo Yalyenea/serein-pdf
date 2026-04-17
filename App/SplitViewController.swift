@@ -23,16 +23,30 @@ final class SplitViewController: NSSplitViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    static let splitBackgroundColor: NSColor = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor(calibratedWhite: isDark ? 0.10 : 0.96, alpha: 1.0)
+    }
+
+    static let dividerBackgroundColor: NSColor = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor(calibratedWhite: isDark ? 0.05 : 0.86, alpha: 1.0)
+    }
+
+    static let selectedChromeBackgroundColor: NSColor = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor(calibratedWhite: isDark ? 0.20 : 0.90, alpha: 1.0)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1.0).cgColor
         splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitView.autosaveName = "MainSplitView"
         splitView.wantsLayer = true
-        splitView.layer?.backgroundColor = NSColor(calibratedWhite: 0.86, alpha: 1.0).cgColor
+        applyChromeColors()
 
         let leftItem = NSSplitViewItem(viewController: verticalTabsViewController)
         leftItem.canCollapse = true
@@ -77,5 +91,19 @@ final class SplitViewController: NSSplitViewController {
     private func applyStoreState() {
         leftSidebarItem?.isCollapsed = !documentStore.isLeftSidebarVisible
         rightSidebarItem?.isCollapsed = !documentStore.isRightSidebarVisible
+    }
+
+    func refreshChromeColors() {
+        applyChromeColors()
+        verticalTabsViewController.refreshChromeColors()
+        outlineViewController.refreshChromeColors()
+        titlebarTabsController.refreshChromeColors()
+    }
+
+    private func applyChromeColors() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.layer?.backgroundColor = Self.splitBackgroundColor.cgColor
+            splitView.layer?.backgroundColor = Self.dividerBackgroundColor.cgColor
+        }
     }
 }

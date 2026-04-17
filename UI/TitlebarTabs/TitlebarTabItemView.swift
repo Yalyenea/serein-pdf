@@ -105,13 +105,20 @@ final class TitlebarTabItemView: NSView {
         onClose?(sessionID)
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
     private func updateAppearance() {
-        layer?.backgroundColor = isSelected
-            ? NSColor(calibratedWhite: 0.91, alpha: 1.0).cgColor
-            : NSColor.clear.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = isSelected
+                ? SplitViewController.selectedChromeBackgroundColor.cgColor
+                : NSColor.clear.cgColor
+            dividerView.layer?.backgroundColor = SplitViewController.dividerBackgroundColor.cgColor
+        }
         titleLabel.textColor = isSelected ? .labelColor : .secondaryLabelColor
         closeButton.contentTintColor = isSelected ? .labelColor : .tertiaryLabelColor
-        dividerView.layer?.backgroundColor = NSColor(calibratedWhite: 0.84, alpha: 0.9).cgColor
         dividerView.isHidden = isSelected
     }
 }

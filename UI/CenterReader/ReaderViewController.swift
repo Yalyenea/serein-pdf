@@ -1,16 +1,21 @@
 import AppKit
+import CoreImage
 import PDFKit
 
 final class ReaderViewController: NSViewController {
     let documentStore: DocumentStore
     let pdfView = PDFView()
+    private let pdfContainerView = PDFContainerView()
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
+    private let themeManager = ThemeManager()
     private var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
     private var displayedDisplayMode: ReaderDisplayMode?
     private var displayedScaleMode: ReaderScaleMode?
     private var isApplyingStoreState = false
     private var isApplyingProgrammaticScale = false
+    private var isApplyingHighlightSelection = false
+    private var appearanceObservation: NSKeyValueObservation?
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -44,7 +49,27 @@ final class ReaderViewController: NSViewController {
             name: Notification.Name.PDFViewScaleChanged,
             object: pdfView
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePDFViewSelectionChanged),
+            name: Notification.Name.PDFViewSelectionChanged,
+            object: pdfView
+        )
+        syncNightModeFromSystem()
+        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.syncNightModeFromSystem()
+                self.applyReaderAppearance()
+            }
+        }
         refreshDisplayedDocument()
+        applyReaderAppearance()
+    }
+
+    private func syncNightModeFromSystem() {
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        themeManager.setNightModeEnabled(isDark)
     }
 
     override func viewDidLayout() {
@@ -66,7 +91,10 @@ final class ReaderViewController: NSViewController {
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.white.cgColor
 
+        pdfContainerView.translatesAutoresizingMaskIntoConstraints = false
+
         pdfView.translatesAutoresizingMaskIntoConstraints = false
+        pdfView.wantsLayer = true
         pdfView.autoScales = false
         pdfView.displayMode = .singlePageContinuous
         pdfView.displayDirection = .vertical
@@ -78,14 +106,19 @@ final class ReaderViewController: NSViewController {
         emptyStateLabel.font = .systemFont(ofSize: 18, weight: .medium)
         emptyStateLabel.textColor = .secondaryLabelColor
 
-        container.addSubview(pdfView)
+        pdfContainerView.embedPDFView(pdfView)
+        container.addSubview(pdfContainerView)
         container.addSubview(emptyStateLabel)
 
         NSLayoutConstraint.activate([
-            pdfView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            pdfView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            pdfView.topAnchor.constraint(equalTo: container.topAnchor),
-            pdfView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            pdfContainerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            pdfContainerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor),
+            pdfContainerView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            pdfView.leadingAnchor.constraint(equalTo: pdfContainerView.leadingAnchor),
+            pdfView.trailingAnchor.constraint(equalTo: pdfContainerView.trailingAnchor),
+            pdfView.topAnchor.constraint(equalTo: pdfContainerView.topAnchor),
+            pdfView.bottomAnchor.constraint(equalTo: pdfContainerView.bottomAnchor),
             emptyStateLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
@@ -96,6 +129,53 @@ final class ReaderViewController: NSViewController {
     func fitToWidth() {
         guard let session = documentStore.activeSession else { return }
         applyFitWidth(for: session)
+    }
+
+    var isNightModeEnabled: Bool {
+        themeManager.readerState.isNightModeEnabled
+    }
+
+    var isHighlightModeEnabled: Bool {
+        themeManager.readerState.isHighlightModeEnabled
+    }
+
+    @discardableResult
+    func triggerHighlightShortcut() -> Bool {
+        if highlightCurrentSelection() {
+            return true
+        }
+
+        themeManager.setHighlightModeEnabled(true)
+        return false
+    }
+
+    func exitHighlightMode() {
+        themeManager.setHighlightModeEnabled(false)
+    }
+
+    func toggleNightMode() {
+        themeManager.toggleNightMode()
+        applyReaderAppearance()
+    }
+
+    func saveAnnotations() throws {
+        guard let sessionID = documentStore.activeSessionID else { return }
+        try documentStore.saveAnnotations(for: sessionID)
+    }
+
+    @discardableResult
+    func search(for query: String) -> Bool {
+        guard let document = pdfView.document else { return false }
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedQuery.isEmpty == false,
+              let selection = document.findString(trimmedQuery, withOptions: .caseInsensitive).first else {
+            return false
+        }
+
+        pdfView.setCurrentSelection(selection, animate: true)
+        pdfView.go(to: selection)
+        return true
     }
 
     @objc
@@ -130,6 +210,14 @@ final class ReaderViewController: NSViewController {
         }
     }
 
+    @objc
+    private func handlePDFViewSelectionChanged(_ notification: Notification) {
+        guard themeManager.readerState.isHighlightModeEnabled,
+              isApplyingHighlightSelection == false else { return }
+
+        _ = highlightCurrentSelection()
+    }
+
     private func refreshDisplayedDocument() {
         guard isViewLoaded else { return }
 
@@ -160,6 +248,7 @@ final class ReaderViewController: NSViewController {
         applyDisplayModeIfNeeded(session)
         applyScaleIfNeeded(session)
         applyReadingPositionIfNeeded(session, isNewSession: isNewSession)
+        applyReaderAppearance()
 
         pdfView.isHidden = false
         emptyStateLabel.isHidden = true
@@ -252,4 +341,49 @@ final class ReaderViewController: NSViewController {
 
         return ReadingPosition(pageIndex: document.index(for: page), point: .zero)
     }
+
+    @discardableResult
+    private func highlightCurrentSelection() -> Bool {
+        guard let session = documentStore.activeSession,
+              session.id == displayedSessionID,
+              let selection = pdfView.currentSelection,
+              HighlightService.selectionContainsText(selection) else { return false }
+
+        isApplyingHighlightSelection = true
+        defer { isApplyingHighlightSelection = false }
+
+        let appliedAnnotations = HighlightService.applyHighlight(to: selection)
+        guard appliedAnnotations > 0 else { return false }
+
+        documentStore.setDirty(true, for: session.id)
+        pdfView.currentSelection = nil
+        return true
+    }
+
+    private func applyReaderAppearance() {
+        let isNightModeEnabled = themeManager.readerState.isNightModeEnabled
+        let nightBackground = NSColor(calibratedWhite: 0.07, alpha: 1.0)
+        view.layer?.backgroundColor = (isNightModeEnabled ? nightBackground : NSColor.white).cgColor
+        pdfView.backgroundColor = .white
+        pdfView.isHidden = false
+        pdfContainerView.setNightModeEnabled(isNightModeEnabled)
+        emptyStateLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
+        applyNightModeFilter(isEnabled: isNightModeEnabled)
+    }
+
+    private func applyNightModeFilter(isEnabled: Bool) {
+        guard isEnabled, let filter = CIFilter(name: "CIColorMatrix") else {
+            pdfView.contentFilters = []
+            return
+        }
+        let scale: CGFloat = -1.0
+        let bias: CGFloat = 0.95
+        filter.setValue(CIVector(x: scale, y: 0, z: 0, w: 0), forKey: "inputRVector")
+        filter.setValue(CIVector(x: 0, y: scale, z: 0, w: 0), forKey: "inputGVector")
+        filter.setValue(CIVector(x: 0, y: 0, z: scale, w: 0), forKey: "inputBVector")
+        filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 1), forKey: "inputAVector")
+        filter.setValue(CIVector(x: bias, y: bias, z: bias, w: 0), forKey: "inputBiasVector")
+        pdfView.contentFilters = [filter]
+    }
+
 }

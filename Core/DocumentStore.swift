@@ -15,21 +15,26 @@ extension Notification.Name {
 final class DocumentStore {
     private let persistence: DocumentStorePersistence
     private let readingStateStore: ReadingStateStore
+    private let recentFilesStore: RecentFilesStore
     private let appConfiguration: AppConfiguration
     private(set) var sessions: [DocumentSession] = []
     private(set) var activeSessionID: UUID?
     private(set) var tabPresentationMode: TabPresentationMode = .verticalSidebar
     private(set) var isLeftSidebarVisible = true
     private(set) var isRightSidebarVisible = true
+    private(set) var recentDocumentURLs: [URL] = []
 
     init(
         persistence: DocumentStorePersistence = UserDefaultsDocumentStorePersistence(),
         readingStateStore: ReadingStateStore = UserDefaultsReadingStateStore(),
+        recentFilesStore: RecentFilesStore = UserDefaultsRecentFilesStore(),
         appConfiguration: AppConfiguration = .default
     ) {
         self.persistence = persistence
         self.readingStateStore = readingStateStore
+        self.recentFilesStore = recentFilesStore
         self.appConfiguration = appConfiguration
+        recentDocumentURLs = (try? recentFilesStore.loadRecentFiles()) ?? []
     }
 
     var activeSession: DocumentSession? {
@@ -62,6 +67,7 @@ final class DocumentStore {
 
         sessions.append(session)
         activeSessionID = session.id
+        recentDocumentURLs = (try? recentFilesStore.recordOpen(for: url)) ?? recentDocumentURLs
         notifyChange()
         return session
     }
@@ -199,6 +205,25 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func setDirty(_ isDirty: Bool, for sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard sessions[sessionIndex].isDirty != isDirty else { return }
+
+        sessions[sessionIndex].isDirty = isDirty
+        notifyChange()
+    }
+
+    func saveAnnotations(for sessionID: UUID) throws {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard sessions[sessionIndex].isDirty else { return }
+        guard sessions[sessionIndex].pdfDocument.write(to: sessions[sessionIndex].url) else {
+            throw DocumentStoreError.failedToSaveDocument(sessions[sessionIndex].url)
+        }
+
+        sessions[sessionIndex].isDirty = false
+        notifyChange()
+    }
+
     func restorePersistedState() throws {
         guard let persistedState = try persistence.loadState() else { return }
 
@@ -288,11 +313,14 @@ final class DocumentStore {
 
 enum DocumentStoreError: Error, LocalizedError {
     case unreadableDocument(URL)
+    case failedToSaveDocument(URL)
 
     var errorDescription: String? {
         switch self {
         case let .unreadableDocument(url):
             "Unable to open PDF at \(url.path)"
+        case let .failedToSaveDocument(url):
+            "Unable to save PDF at \(url.path)"
         }
     }
 }

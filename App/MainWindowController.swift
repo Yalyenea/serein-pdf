@@ -14,7 +14,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
         splitViewController = SplitViewController(documentStore: documentStore)
-        let window = NSWindow(contentViewController: splitViewController)
+        let window = ReaderShortcutWindow(contentViewController: splitViewController)
 
         window.title = "SlatePDF"
         window.setContentSize(NSSize(width: 1360, height: 900))
@@ -29,13 +29,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         window.toolbarStyle = .unifiedCompact
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1.0)
+        window.backgroundColor = SplitViewController.splitBackgroundColor
         window.isReleasedWhenClosed = false
 
         super.init(window: window)
 
         toolbar.delegate = self
-        window.toolbar = toolbar
         shouldCascadeWindows = true
         NotificationCenter.default.addObserver(
             self,
@@ -77,7 +76,24 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             !documentStore.isLeftSidebarVisible
 
         splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
+        synchronizeWindowToolbar(isVisible: shouldShowTitlebarTabs)
         synchronizeTitlebarTabsItem(isVisible: shouldShowTitlebarTabs)
+    }
+
+    private func synchronizeWindowToolbar(isVisible: Bool) {
+        guard let window else { return }
+
+        if isVisible {
+            if window.toolbar !== toolbar {
+                window.toolbar = toolbar
+            }
+            window.toolbarStyle = .unifiedCompact
+            return
+        }
+
+        if window.toolbar === toolbar {
+            window.toolbar = nil
+        }
     }
 
     private func synchronizeTitlebarTabsItem(isVisible: Bool) {
@@ -122,5 +138,47 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     func fitReaderToWidth() {
         splitViewController.readerViewController.fitToWidth()
+    }
+
+    func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
+        guard let window = window as? ReaderShortcutWindow else { return }
+        window.plainShortcutHandler = handler
+    }
+
+    @discardableResult
+    func triggerHighlightShortcut() -> Bool {
+        splitViewController.readerViewController.triggerHighlightShortcut()
+    }
+
+    func exitHighlightMode() {
+        splitViewController.readerViewController.exitHighlightMode()
+    }
+
+    func toggleNightMode() {
+        splitViewController.readerViewController.toggleNightMode()
+        applyNightAppearance()
+    }
+
+    private func applyNightAppearance() {
+        let isNight = splitViewController.readerViewController.isNightModeEnabled
+        window?.appearance = NSAppearance(named: isNight ? .darkAqua : .aqua)
+        splitViewController.refreshChromeColors()
+    }
+
+    func saveAnnotations() throws {
+        try splitViewController.readerViewController.saveAnnotations()
+    }
+
+    @discardableResult
+    func searchCurrentDocument(for query: String) -> Bool {
+        splitViewController.readerViewController.search(for: query)
+    }
+
+    var isHighlightModeEnabled: Bool {
+        splitViewController.readerViewController.isHighlightModeEnabled
+    }
+
+    var isNightModeEnabled: Bool {
+        splitViewController.readerViewController.isNightModeEnabled
     }
 }

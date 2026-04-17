@@ -39,7 +39,6 @@ final class TitlebarTabsController: NSViewController {
         let container = NSView()
         container.frame = NSRect(x: 0, y: 0, width: 720, height: 28)
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1.0).cgColor
 
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
@@ -59,7 +58,6 @@ final class TitlebarTabsController: NSViewController {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         bottomBorderView.wantsLayer = true
-        bottomBorderView.layer?.backgroundColor = NSColor(calibratedWhite: 0.84, alpha: 0.9).cgColor
         bottomBorderView.translatesAutoresizingMaskIntoConstraints = false
         bottomBorderView.isHidden = !isTabsStripVisible
 
@@ -84,7 +82,20 @@ final class TitlebarTabsController: NSViewController {
         ])
 
         view = container
+        applyChromeColors()
         applyVisibilityState()
+    }
+
+    func refreshChromeColors() {
+        guard isViewLoaded else { return }
+        applyChromeColors()
+    }
+
+    private func applyChromeColors() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
+            bottomBorderView.layer?.backgroundColor = SplitViewController.dividerBackgroundColor.cgColor
+        }
     }
 
     override func viewDidLayout() {

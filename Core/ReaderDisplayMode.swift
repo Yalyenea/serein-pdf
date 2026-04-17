@@ -49,6 +49,10 @@ enum ReaderScaleMode: String, Codable, Sendable {
 }
 
 enum ShortcutCommand: String, CaseIterable, Sendable {
+    case highlightSelection = "highlight_selection"
+    case exitHighlightMode = "exit_highlight_mode"
+    case toggleNightMode = "toggle_night_mode"
+    case saveAnnotations = "save_annotations"
     case toggleLeftSidebar = "toggle_left_sidebar"
     case toggleRightSidebar = "toggle_right_sidebar"
     case useSidebarTabs = "use_sidebar_tabs"
@@ -64,6 +68,14 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
 
     var menuTitle: String {
         switch self {
+        case .highlightSelection:
+            "Highlight Selection or Enter Highlight Mode"
+        case .exitHighlightMode:
+            "Exit Highlight Mode"
+        case .toggleNightMode:
+            "Toggle Night Mode"
+        case .saveAnnotations:
+            "Save Annotations"
         case .toggleLeftSidebar:
             "Toggle Left Sidebar"
         case .toggleRightSidebar:
@@ -93,7 +105,11 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
 
     var displayMode: ReaderDisplayMode? {
         switch self {
-        case .toggleLeftSidebar,
+        case .highlightSelection,
+             .exitHighlightMode,
+             .toggleNightMode,
+             .saveAnnotations,
+             .toggleLeftSidebar,
              .toggleRightSidebar,
              .useSidebarTabs,
              .useTitlebarTabs,
