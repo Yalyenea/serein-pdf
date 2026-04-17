@@ -62,7 +62,8 @@ final class DocumentStore {
                 isLeftSidebarVisible: isLeftSidebarVisible,
                 isRightSidebarVisible: isRightSidebarVisible
             ),
-            tabPresentationState: TabPresentationState(mode: tabPresentationMode)
+            tabPresentationState: TabPresentationState(mode: tabPresentationMode),
+            annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
         )
 
         sessions.append(session)
@@ -205,11 +206,20 @@ final class DocumentStore {
         notifyChange()
     }
 
-    func setDirty(_ isDirty: Bool, for sessionID: UUID) {
+    func setDirty(_ isDirty: Bool, for sessionID: UUID, now: Date = Date()) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[sessionIndex].isDirty != isDirty else { return }
 
         sessions[sessionIndex].isDirty = isDirty
+        sessions[sessionIndex].dirtySince = isDirty ? (sessions[sessionIndex].dirtySince ?? now) : nil
+        notifyChange()
+    }
+
+    func setAnnotationSavePolicy(_ policy: AnnotationSavePolicy, for sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard sessions[sessionIndex].annotationSavePolicy != policy else { return }
+
+        sessions[sessionIndex].annotationSavePolicy = policy
         notifyChange()
     }
 
@@ -221,7 +231,25 @@ final class DocumentStore {
         }
 
         sessions[sessionIndex].isDirty = false
+        sessions[sessionIndex].dirtySince = nil
         notifyChange()
+    }
+
+    @discardableResult
+    func autoSaveDirtySessions(now: Date = Date()) -> [URL: Error] {
+        var errors: [URL: Error] = [:]
+        for session in sessions where session.isDirty {
+            guard let interval = session.annotationSavePolicy.autoSaveInterval,
+                  let dirtySince = session.dirtySince,
+                  now.timeIntervalSince(dirtySince) >= interval else { continue }
+
+            do {
+                try saveAnnotations(for: session.id)
+            } catch {
+                errors[session.url] = error
+            }
+        }
+        return errors
     }
 
     func restorePersistedState() throws {
@@ -252,7 +280,8 @@ final class DocumentStore {
                         isLeftSidebarVisible: isLeftSidebarVisible,
                         isRightSidebarVisible: isRightSidebarVisible
                     ),
-                    tabPresentationState: TabPresentationState(mode: tabPresentationMode)
+                    tabPresentationState: TabPresentationState(mode: tabPresentationMode),
+                    annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
                 )
             )
         }

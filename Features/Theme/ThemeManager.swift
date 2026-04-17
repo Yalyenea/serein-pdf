@@ -15,4 +15,8 @@ final class ThemeManager {
     func setHighlightModeEnabled(_ isEnabled: Bool) {
         readerState.isHighlightModeEnabled = isEnabled
     }
+
+    func setHighlightColor(_ color: HighlightColor) {
+        readerState.highlightColor = color
+    }
 }

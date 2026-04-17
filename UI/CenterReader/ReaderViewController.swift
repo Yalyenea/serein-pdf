@@ -7,6 +7,7 @@ final class ReaderViewController: NSViewController {
     let pdfView = PDFView()
     private let pdfContainerView = PDFContainerView()
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
+    private let highlightModeBanner = NSTextField(labelWithString: "Highlight Mode · Esc to exit")
     private let themeManager = ThemeManager()
     private var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
@@ -106,9 +107,24 @@ final class ReaderViewController: NSViewController {
         emptyStateLabel.font = .systemFont(ofSize: 18, weight: .medium)
         emptyStateLabel.textColor = .secondaryLabelColor
 
+        highlightModeBanner.translatesAutoresizingMaskIntoConstraints = false
+        highlightModeBanner.font = .systemFont(ofSize: 11, weight: .medium)
+        highlightModeBanner.textColor = .secondaryLabelColor
+        highlightModeBanner.alignment = .center
+        highlightModeBanner.wantsLayer = true
+        highlightModeBanner.layer?.cornerRadius = 4
+        highlightModeBanner.layer?.backgroundColor = NSColor(
+            calibratedRed: 0.97, green: 0.79, blue: 0.86, alpha: 0.75
+        ).cgColor
+        highlightModeBanner.drawsBackground = false
+        highlightModeBanner.isHidden = true
+        highlightModeBanner.isEditable = false
+        highlightModeBanner.isBordered = false
+
         pdfContainerView.embedPDFView(pdfView)
         container.addSubview(pdfContainerView)
         container.addSubview(emptyStateLabel)
+        container.addSubview(highlightModeBanner)
 
         NSLayoutConstraint.activate([
             pdfContainerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -121,6 +137,10 @@ final class ReaderViewController: NSViewController {
             pdfView.bottomAnchor.constraint(equalTo: pdfContainerView.bottomAnchor),
             emptyStateLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            highlightModeBanner.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            highlightModeBanner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            highlightModeBanner.heightAnchor.constraint(equalToConstant: 22),
+            highlightModeBanner.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
         ])
 
         view = container
@@ -139,6 +159,10 @@ final class ReaderViewController: NSViewController {
         themeManager.readerState.isHighlightModeEnabled
     }
 
+    var currentHighlightColor: HighlightColor {
+        themeManager.readerState.highlightColor
+    }
+
     @discardableResult
     func triggerHighlightShortcut() -> Bool {
         if highlightCurrentSelection() {
@@ -146,11 +170,33 @@ final class ReaderViewController: NSViewController {
         }
 
         themeManager.setHighlightModeEnabled(true)
+        updateHighlightModeBanner()
         return false
     }
 
     func exitHighlightMode() {
         themeManager.setHighlightModeEnabled(false)
+        updateHighlightModeBanner()
+    }
+
+    func setHighlightColor(_ color: HighlightColor) {
+        themeManager.setHighlightColor(color)
+        updateHighlightModeBanner()
+    }
+
+    @discardableResult
+    func removeHighlightInSelection() -> Bool {
+        guard let session = documentStore.activeSession,
+              session.id == displayedSessionID,
+              let selection = pdfView.currentSelection,
+              HighlightService.selectionContainsText(selection) else { return false }
+
+        let removed = HighlightService.removeHighlights(in: selection)
+        guard removed > 0 else { return false }
+
+        documentStore.setDirty(true, for: session.id)
+        pdfView.currentSelection = nil
+        return true
     }
 
     func toggleNightMode() {
@@ -352,7 +398,10 @@ final class ReaderViewController: NSViewController {
         isApplyingHighlightSelection = true
         defer { isApplyingHighlightSelection = false }
 
-        let appliedAnnotations = HighlightService.applyHighlight(to: selection)
+        let appliedAnnotations = HighlightService.applyHighlight(
+            to: selection,
+            color: themeManager.readerState.highlightColor.nsColor
+        )
         guard appliedAnnotations > 0 else { return false }
 
         documentStore.setDirty(true, for: session.id)
@@ -369,6 +418,15 @@ final class ReaderViewController: NSViewController {
         pdfContainerView.setNightModeEnabled(isNightModeEnabled)
         emptyStateLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
         applyNightModeFilter(isEnabled: isNightModeEnabled)
+        updateHighlightModeBanner()
+    }
+
+    private func updateHighlightModeBanner() {
+        let isEnabled = themeManager.readerState.isHighlightModeEnabled
+        highlightModeBanner.isHidden = !isEnabled
+        let color = themeManager.readerState.highlightColor
+        highlightModeBanner.stringValue = "Highlight Mode · \(color.menuTitle) · Esc to exit"
+        highlightModeBanner.layer?.backgroundColor = color.nsColor.withAlphaComponent(0.7).cgColor
     }
 
     private func applyNightModeFilter(isEnabled: Bool) {

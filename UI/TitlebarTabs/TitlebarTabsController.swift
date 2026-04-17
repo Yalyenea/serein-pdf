@@ -121,6 +121,7 @@ final class TitlebarTabsController: NSViewController {
                 sessionID: session.id,
                 title: session.title,
                 isSelected: documentStore.activeSessionID == session.id,
+                isDirty: session.isDirty,
                 onSelect: { [weak self] sessionID in
                     self?.documentStore.activate(sessionID: sessionID)
                 },

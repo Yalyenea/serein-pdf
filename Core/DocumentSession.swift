@@ -10,9 +10,25 @@ struct TabPresentationState: Equatable, Sendable {
     var mode: TabPresentationMode = .verticalSidebar
 }
 
-enum AnnotationSavePolicy: Equatable, Sendable {
-    case after10Minutes
+enum AnnotationSavePolicy: String, Equatable, Codable, Sendable {
+    case after10Minutes = "after_10_minutes"
     case never
+
+    static let `default`: AnnotationSavePolicy = .after10Minutes
+
+    var autoSaveInterval: TimeInterval? {
+        switch self {
+        case .after10Minutes: 600
+        case .never: nil
+        }
+    }
+
+    var menuTitle: String {
+        switch self {
+        case .after10Minutes: "Every 10 Minutes"
+        case .never: "Never"
+        }
+    }
 }
 
 struct DocumentSession {
@@ -27,6 +43,7 @@ struct DocumentSession {
     var lastReadPosition: ReadingPosition
     var outlineTree: [OutlineNode]
     var isDirty: Bool
+    var dirtySince: Date?
     var sidebarState: SidebarState
     var tabPresentationState: TabPresentationState
     var annotationSavePolicy: AnnotationSavePolicy
@@ -43,9 +60,10 @@ struct DocumentSession {
         lastReadPosition: ReadingPosition = .zero,
         outlineTree: [OutlineNode] = [],
         isDirty: Bool = false,
+        dirtySince: Date? = nil,
         sidebarState: SidebarState = SidebarState(),
         tabPresentationState: TabPresentationState = TabPresentationState(),
-        annotationSavePolicy: AnnotationSavePolicy = .after10Minutes
+        annotationSavePolicy: AnnotationSavePolicy = .default
     ) {
         self.id = id
         self.url = url
@@ -58,6 +76,7 @@ struct DocumentSession {
         self.lastReadPosition = lastReadPosition
         self.outlineTree = outlineTree
         self.isDirty = isDirty
+        self.dirtySince = dirtySince
         self.sidebarState = sidebarState
         self.tabPresentationState = tabPresentationState
         self.annotationSavePolicy = annotationSavePolicy

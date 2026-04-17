@@ -17,6 +17,7 @@ final class VerticalTabItemView: NSView {
         sessionID: UUID,
         title: String,
         isSelected: Bool,
+        isDirty: Bool,
         onSelect: @escaping (UUID) -> Void,
         onClose: @escaping (UUID) -> Void
     ) {
@@ -35,7 +36,7 @@ final class VerticalTabItemView: NSView {
         selectButton.target = self
         selectButton.action = #selector(handleSelect)
 
-        titleLabel.stringValue = title
+        titleLabel.stringValue = isDirty ? "• \(title)" : title
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.maximumNumberOfLines = 1

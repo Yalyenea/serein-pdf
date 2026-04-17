@@ -53,6 +53,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case exitHighlightMode = "exit_highlight_mode"
     case toggleNightMode = "toggle_night_mode"
     case saveAnnotations = "save_annotations"
+    case removeHighlight = "remove_highlight"
+    case highlightColorPink = "highlight_color_pink"
+    case highlightColorYellow = "highlight_color_yellow"
+    case highlightColorGreen = "highlight_color_green"
     case toggleLeftSidebar = "toggle_left_sidebar"
     case toggleRightSidebar = "toggle_right_sidebar"
     case useSidebarTabs = "use_sidebar_tabs"
@@ -76,6 +80,14 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Toggle Night Mode"
         case .saveAnnotations:
             "Save Annotations"
+        case .removeHighlight:
+            "Remove Highlight in Selection"
+        case .highlightColorPink:
+            "Highlight Color: \(HighlightColor.pink.menuTitle)"
+        case .highlightColorYellow:
+            "Highlight Color: \(HighlightColor.yellow.menuTitle)"
+        case .highlightColorGreen:
+            "Highlight Color: \(HighlightColor.green.menuTitle)"
         case .toggleLeftSidebar:
             "Toggle Left Sidebar"
         case .toggleRightSidebar:
@@ -109,6 +121,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
              .exitHighlightMode,
              .toggleNightMode,
              .saveAnnotations,
+             .removeHighlight,
+             .highlightColorPink,
+             .highlightColorYellow,
+             .highlightColorGreen,
              .toggleLeftSidebar,
              .toggleRightSidebar,
              .useSidebarTabs,
@@ -127,6 +143,15 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             .twoUp
         case .twoUpContinuous:
             .twoUpContinuous
+        }
+    }
+
+    var highlightColor: HighlightColor? {
+        switch self {
+        case .highlightColorPink: .pink
+        case .highlightColorYellow: .yellow
+        case .highlightColorGreen: .green
+        default: nil
         }
     }
 }

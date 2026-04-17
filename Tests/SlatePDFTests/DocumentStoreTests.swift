@@ -316,6 +316,7 @@ final class DocumentStoreTests: XCTestCase {
             recentFilesStore: InMemoryRecentFilesStore(),
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .singlePage, fitWidthOnOpen: false),
+                annotations: .default,
                 shortcuts: .default
             )
         )
@@ -344,6 +345,7 @@ final class DocumentStoreTests: XCTestCase {
             recentFilesStore: InMemoryRecentFilesStore(),
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: false),
+                annotations: .default,
                 shortcuts: .default
             )
         )
@@ -378,6 +380,7 @@ final class DocumentStoreTests: XCTestCase {
             readingStateStore: InMemoryReadingStateStore(),
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .twoUp, fitWidthOnOpen: false),
+                annotations: .default,
                 shortcuts: .default
             )
         )

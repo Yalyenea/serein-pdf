@@ -154,6 +154,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         splitViewController.readerViewController.exitHighlightMode()
     }
 
+    func setHighlightColor(_ color: HighlightColor) {
+        splitViewController.readerViewController.setHighlightColor(color)
+    }
+
+    @discardableResult
+    func removeHighlightInSelection() -> Bool {
+        splitViewController.readerViewController.removeHighlightInSelection()
+    }
+
+    var currentHighlightColor: HighlightColor {
+        splitViewController.readerViewController.currentHighlightColor
+    }
+
     func toggleNightMode() {
         splitViewController.readerViewController.toggleNightMode()
         applyNightAppearance()

@@ -12,6 +12,12 @@ struct AppConfiguration: Equatable, Sendable {
         )
     }
 
+    struct Annotations: Equatable, Sendable {
+        var autoSavePolicy: AnnotationSavePolicy
+
+        static let `default` = Annotations(autoSavePolicy: .default)
+    }
+
     struct Shortcuts: Equatable, Sendable {
         var bindings: [ShortcutCommand: KeyboardShortcut]
 
@@ -20,6 +26,10 @@ struct AppConfiguration: Equatable, Sendable {
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
+            .removeHighlight: KeyboardShortcut(key: "d", modifiers: [.command, .shift]),
+            .highlightColorPink: KeyboardShortcut(key: "p", modifiers: [.command, .shift]),
+            .highlightColorYellow: KeyboardShortcut(key: "y", modifiers: [.command, .shift]),
+            .highlightColorGreen: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
             .toggleLeftSidebar: KeyboardShortcut(key: "b", modifiers: [.command]),
             .toggleRightSidebar: KeyboardShortcut(key: "b", modifiers: [.command, .option]),
             .useSidebarTabs: KeyboardShortcut(key: "1", modifiers: [.command, .shift]),
@@ -36,10 +46,12 @@ struct AppConfiguration: Equatable, Sendable {
     }
 
     var reader: Reader
+    var annotations: Annotations
     var shortcuts: Shortcuts
 
     static let `default` = AppConfiguration(
         reader: .default,
+        annotations: .default,
         shortcuts: .default
     )
 }
@@ -144,6 +156,7 @@ enum AppConfigurationError: LocalizedError {
     case invalidBoolean(String)
     case invalidDisplayMode(String)
     case invalidShortcut(String)
+    case invalidAnnotationSavePolicy(String)
 
     var errorDescription: String? {
         switch self {
@@ -155,6 +168,8 @@ enum AppConfigurationError: LocalizedError {
             "Invalid reader display mode in config: \(value)"
         case let .invalidShortcut(value):
             "Invalid keyboard shortcut in config: \(value)"
+        case let .invalidAnnotationSavePolicy(value):
+            "Invalid annotation auto-save policy in config: \(value)"
         }
     }
 }
@@ -168,11 +183,18 @@ struct AppConfigurationFile {
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
 
+[annotations]
+auto_save = "after_10_minutes"
+
 [shortcuts]
 highlight_selection = "a"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 save_annotations = "command+s"
+remove_highlight = "command+shift+d"
+highlight_color_pink = "command+shift+p"
+highlight_color_yellow = "command+shift+y"
+highlight_color_green = "command+shift+g"
 toggle_left_sidebar = "command+b"
 toggle_right_sidebar = "command+option+b"
 use_sidebar_tabs = "command+shift+1"
@@ -196,11 +218,18 @@ two_up_continuous = "command+4"
 default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
 fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
 
+[annotations]
+auto_save = "\(configuration.annotations.autoSavePolicy.rawValue)"
+
 [shortcuts]
 highlight_selection = "\(configuration.shortcuts.bindings[.highlightSelection]?.serializedValue ?? "a")"
 exit_highlight_mode = "\(configuration.shortcuts.bindings[.exitHighlightMode]?.serializedValue ?? "escape")"
 toggle_night_mode = "\(configuration.shortcuts.bindings[.toggleNightMode]?.serializedValue ?? "i")"
 save_annotations = "\(configuration.shortcuts.bindings[.saveAnnotations]?.serializedValue ?? "command+s")"
+remove_highlight = "\(configuration.shortcuts.bindings[.removeHighlight]?.serializedValue ?? "command+shift+d")"
+highlight_color_pink = "\(configuration.shortcuts.bindings[.highlightColorPink]?.serializedValue ?? "command+shift+p")"
+highlight_color_yellow = "\(configuration.shortcuts.bindings[.highlightColorYellow]?.serializedValue ?? "command+shift+y")"
+highlight_color_green = "\(configuration.shortcuts.bindings[.highlightColorGreen]?.serializedValue ?? "command+shift+g")"
 toggle_left_sidebar = "\(configuration.shortcuts.bindings[.toggleLeftSidebar]?.serializedValue ?? "command+b")"
 toggle_right_sidebar = "\(configuration.shortcuts.bindings[.toggleRightSidebar]?.serializedValue ?? "command+option+b")"
 use_sidebar_tabs = "\(configuration.shortcuts.bindings[.useSidebarTabs]?.serializedValue ?? "command+shift+1")"
@@ -270,6 +299,20 @@ struct AppConfigurationParser {
             configuration.reader.defaultDisplayMode = displayMode
         case ("reader", "fit_width_on_open"):
             configuration.reader.fitWidthOnOpen = try parseBool(rawValue)
+        case ("annotations", "auto_save"):
+            let value = parseString(rawValue)
+            guard let policy = AnnotationSavePolicy(rawValue: value) else {
+                throw AppConfigurationError.invalidAnnotationSavePolicy(value)
+            }
+            configuration.annotations.autoSavePolicy = policy
+        case ("shortcuts", "remove_highlight"):
+            configuration.shortcuts.bindings[.removeHighlight] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "highlight_color_pink"):
+            configuration.shortcuts.bindings[.highlightColorPink] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "highlight_color_yellow"):
+            configuration.shortcuts.bindings[.highlightColorYellow] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "highlight_color_green"):
+            configuration.shortcuts.bindings[.highlightColorGreen] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "toggle_left_sidebar"):
             configuration.shortcuts.bindings[.toggleLeftSidebar] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "toggle_right_sidebar"):
@@ -343,11 +386,17 @@ struct AppConfigurationStore {
         }
 
         let existingContent = try String(contentsOf: fileURL, encoding: .utf8)
-        let requiredShortcutKeys = [
+        let requiredKeys = [
+            "[annotations]",
+            "auto_save",
             "highlight_selection",
             "exit_highlight_mode",
             "toggle_night_mode",
             "save_annotations",
+            "remove_highlight",
+            "highlight_color_pink",
+            "highlight_color_yellow",
+            "highlight_color_green",
             "toggle_left_sidebar",
             "toggle_right_sidebar",
             "use_sidebar_tabs",
@@ -357,7 +406,7 @@ struct AppConfigurationStore {
             "next_tab",
         ]
 
-        guard requiredShortcutKeys.contains(where: { existingContent.contains($0) == false }) else { return }
+        guard requiredKeys.contains(where: { existingContent.contains($0) == false }) else { return }
 
         let configuration = try parser.parse(existingContent)
         try AppConfigurationFile.render(configuration).write(to: fileURL, atomically: true, encoding: .utf8)

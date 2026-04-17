@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var configStore: AppConfigurationStore?
     private var readerShortcutsController: ReaderShortcutsController?
     private let recentFilesMenu = NSMenu(title: "Open Recent")
+    private var autoSaveTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -48,6 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
                     .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
                     .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
+                    .removeHighlight: { [weak self] in self?.removeHighlightInSelection(nil) },
+                    .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
+                    .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
+                    .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
                 ]
             }
         )
@@ -58,7 +63,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         try? documentStore.restorePersistedState()
         updateRecentFilesMenu()
+        startAutoSaveTimer()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func startAutoSaveTimer() {
+        autoSaveTimer?.invalidate()
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.runAutoSave()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        autoSaveTimer = timer
+    }
+
+    private func runAutoSave() {
+        let errors = documentStore.autoSaveDirtySessions()
+        guard errors.isEmpty == false else { return }
+        NSLog("SlatePDF auto-save failed for: %@", errors.keys.map(\.lastPathComponent).joined(separator: ", "))
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -193,6 +216,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 command: .exitHighlightMode,
                 action: #selector(exitHighlightMode(_:))
             ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.highlightColorPink.menuTitle,
+                command: .highlightColorPink,
+                action: #selector(setHighlightColorPink(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.highlightColorYellow.menuTitle,
+                command: .highlightColorYellow,
+                action: #selector(setHighlightColorYellow(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.highlightColorGreen.menuTitle,
+                command: .highlightColorGreen,
+                action: #selector(setHighlightColorGreen(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.removeHighlight.menuTitle,
+                command: .removeHighlight,
+                action: #selector(removeHighlightInSelection(_:))
+            ),
         ]
 
         annotateMenuItem.submenu = annotateMenu
@@ -302,6 +347,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func exitHighlightMode(_ sender: Any?) {
         mainWindowController?.exitHighlightMode()
+    }
+
+    @objc
+    private func setHighlightColorPink(_ sender: Any?) {
+        mainWindowController?.setHighlightColor(.pink)
+    }
+
+    @objc
+    private func setHighlightColorYellow(_ sender: Any?) {
+        mainWindowController?.setHighlightColor(.yellow)
+    }
+
+    @objc
+    private func setHighlightColorGreen(_ sender: Any?) {
+        mainWindowController?.setHighlightColor(.green)
+    }
+
+    @objc
+    private func removeHighlightInSelection(_ sender: Any?) {
+        _ = mainWindowController?.removeHighlightInSelection()
     }
 
     @objc
@@ -466,6 +531,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return documentStore.activeSession != nil
         case #selector(saveAnnotations(_:)):
             return documentStore.activeSession?.isDirty == true
+        case #selector(removeHighlightInSelection(_:)):
+            return documentStore.activeSession != nil
+        case #selector(setHighlightColorPink(_:)):
+            menuItem.state = mainWindowController?.currentHighlightColor == .pink ? .on : .off
+            return true
+        case #selector(setHighlightColorYellow(_:)):
+            menuItem.state = mainWindowController?.currentHighlightColor == .yellow ? .on : .off
+            return true
+        case #selector(setHighlightColorGreen(_:)):
+            menuItem.state = mainWindowController?.currentHighlightColor == .green ? .on : .off
+            return true
         case #selector(findInCurrentDocument(_:)):
             return documentStore.activeSession != nil
         case #selector(useSidebarTabs(_:)):
