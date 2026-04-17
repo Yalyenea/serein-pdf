@@ -61,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let mainMenu = NSMenu()
         mainMenu.addItem(buildApplicationMenuItem())
         mainMenu.addItem(buildFileMenuItem())
+        mainMenu.addItem(buildTabsMenuItem())
         mainMenu.addItem(buildViewMenuItem())
         NSApp.mainMenu = mainMenu
     }
@@ -85,78 +86,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             action: #selector(openDocument(_:)),
             keyEquivalent: "o"
         )
+        let closeItem = makeConfiguredMenuItem(
+            title: "Close Current Tab",
+            command: .closeCurrentTab,
+            action: #selector(closeCurrentTab(_:))
+        )
 
         openItem.keyEquivalentModifierMask = [.command]
         openItem.target = self
-        fileMenu.addItem(openItem)
+        fileMenu.items = [openItem, closeItem]
         fileMenuItem.submenu = fileMenu
-
         return fileMenuItem
+    }
+
+    private func buildTabsMenuItem() -> NSMenuItem {
+        let tabsMenuItem = NSMenuItem()
+        let tabsMenu = NSMenu(title: "Tabs")
+
+        tabsMenu.items = [
+            makeConfiguredMenuItem(
+                title: "Previous Tab",
+                command: .previousTab,
+                action: #selector(activatePreviousTab(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: "Next Tab",
+                command: .nextTab,
+                action: #selector(activateNextTab(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: "Use Sidebar Tabs",
+                command: .useSidebarTabs,
+                action: #selector(useSidebarTabs(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: "Use Titlebar Tabs",
+                command: .useTitlebarTabs,
+                action: #selector(useTitlebarTabs(_:))
+            ),
+        ]
+        tabsMenuItem.submenu = tabsMenu
+        return tabsMenuItem
     }
 
     private func buildViewMenuItem() -> NSMenuItem {
         let viewMenuItem = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
 
-        let sidebarTabsItem = NSMenuItem(
-            title: "Use Sidebar Tabs",
-            action: #selector(useSidebarTabs(_:)),
-            keyEquivalent: ""
-        )
-        sidebarTabsItem.target = self
-
-        let titlebarTabsItem = NSMenuItem(
-            title: "Use Titlebar Tabs",
-            action: #selector(useTitlebarTabs(_:)),
-            keyEquivalent: ""
-        )
-        titlebarTabsItem.target = self
-
-        let toggleLeftSidebarItem = NSMenuItem(
-            title: "Toggle Left Sidebar",
-            action: #selector(toggleLeftSidebar(_:)),
-            keyEquivalent: ""
-        )
-        toggleLeftSidebarItem.target = self
-
-        let toggleRightSidebarItem = NSMenuItem(
-            title: "Toggle Right Sidebar",
-            action: #selector(toggleRightSidebar(_:)),
-            keyEquivalent: ""
-        )
-        toggleRightSidebarItem.target = self
-
-        let fitWidthItem = makeReaderCommandItem(.fitWidth, action: #selector(fitReaderToWidth(_:)))
-        let singlePageItem = makeReaderCommandItem(.singlePage, action: #selector(useSinglePage(_:)))
-        let singlePageContinuousItem = makeReaderCommandItem(
-            .singlePageContinuous,
-            action: #selector(useSinglePageContinuous(_:))
-        )
-        let twoUpItem = makeReaderCommandItem(.twoUp, action: #selector(useTwoUp(_:)))
-        let twoUpContinuousItem = makeReaderCommandItem(
-            .twoUpContinuous,
-            action: #selector(useTwoUpContinuous(_:))
-        )
-
         viewMenu.items = [
-            sidebarTabsItem,
-            titlebarTabsItem,
+            makeConfiguredMenuItem(
+                title: "Toggle Left Sidebar",
+                command: .toggleLeftSidebar,
+                action: #selector(toggleLeftSidebar(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: "Toggle Right Sidebar",
+                command: .toggleRightSidebar,
+                action: #selector(toggleRightSidebar(_:))
+            ),
             .separator(),
-            toggleLeftSidebarItem,
-            toggleRightSidebarItem,
-            .separator(),
-            fitWidthItem,
-            singlePageItem,
-            singlePageContinuousItem,
-            twoUpItem,
-            twoUpContinuousItem,
+            makeConfiguredMenuItem(
+                title: "Fit Width",
+                command: .fitWidth,
+                action: #selector(fitReaderToWidth(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ReaderDisplayMode.singlePage.menuTitle,
+                command: .singlePage,
+                action: #selector(useSinglePage(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ReaderDisplayMode.singlePageContinuous.menuTitle,
+                command: .singlePageContinuous,
+                action: #selector(useSinglePageContinuous(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ReaderDisplayMode.twoUp.menuTitle,
+                command: .twoUp,
+                action: #selector(useTwoUp(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ReaderDisplayMode.twoUpContinuous.menuTitle,
+                command: .twoUpContinuous,
+                action: #selector(useTwoUpContinuous(_:))
+            ),
         ]
         viewMenuItem.submenu = viewMenu
         return viewMenuItem
     }
 
-    private func makeReaderCommandItem(_ command: ReaderCommand, action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: command.menuTitle, action: action, keyEquivalent: "")
+    private func makeConfiguredMenuItem(
+        title: String,
+        command: ShortcutCommand,
+        action: Selector
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
         item.representedObject = command
 
@@ -166,6 +191,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
 
         return item
+    }
+
+    @objc
+    private func closeCurrentTab(_ sender: Any?) {
+        documentStore.closeActiveSession()
+    }
+
+    @objc
+    private func activatePreviousTab(_ sender: Any?) {
+        documentStore.activatePreviousSession()
+    }
+
+    @objc
+    private func activateNextTab(_ sender: Any?) {
+        documentStore.activateNextSession()
     }
 
     @objc
@@ -240,12 +280,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch menuItem.action {
         case #selector(useSidebarTabs(_:)):
             menuItem.state = documentStore.tabPresentationMode == .verticalSidebar ? .on : .off
+            return true
         case #selector(useTitlebarTabs(_:)):
             menuItem.state = documentStore.tabPresentationMode == .horizontalTitlebar ? .on : .off
+            return true
         case #selector(toggleLeftSidebar(_:)):
             menuItem.state = documentStore.isLeftSidebarVisible ? .on : .off
+            return true
         case #selector(toggleRightSidebar(_:)):
             menuItem.state = documentStore.isRightSidebarVisible ? .on : .off
+            return true
+        case #selector(closeCurrentTab(_:)):
+            return documentStore.activeSession != nil
+        case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
+            return documentStore.sessions.count > 1
         case #selector(fitReaderToWidth(_:)):
             menuItem.state = documentStore.activeSession?.scaleMode == .fitWidth ? .on : .off
             return documentStore.activeSession != nil
@@ -262,9 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = documentStore.activeSession?.displayMode == .twoUpContinuous ? .on : .off
             return documentStore.activeSession != nil
         default:
-            break
+            return true
         }
-
-        return true
     }
 }

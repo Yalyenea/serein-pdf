@@ -56,7 +56,7 @@
 | 搜索 | 当前文档文本搜索 |
 | 批注 | 文本高亮、删除高亮、保存批注、默认轻粉色高亮、脏状态后手动保存 |
 | 主题 | UI 深色主题、基础夜间阅读模式、反色切换 |
-| 快捷键 | `a` 进入或执行高亮、`Esc` 退出高亮模式、`i` 切换夜间模式、`Cmd+S` 保存批注、阅读模式快捷键 |
+| 快捷键 | `a` 进入或执行高亮、`Esc` 退出高亮模式、`i` 切换夜间模式、`Cmd+S` 保存批注、可配置文档/布局快捷键 |
 | 保存策略 | 默认 10 分钟自动保存，可切换为永不自动保存 |
 | 窗口体验 | 三栏布局、左右栏显隐、压缩标题栏、减少顶部控件、标题栏水平 tab |
 
@@ -349,6 +349,18 @@ Tests/
 | AC-M2-3 | 搜索结果可定位到文档具体位置 |
 | AC-M2-4 | 最近文件可用来重新打开历史 PDF |
 | AC-M2-5 | `i` 可稳定切换夜间模式，`Esc` 可退出高亮模式 |
+
+#### 默认快捷键方案
+
+- 配置文件路径：`~/Library/Application Support/SlatePDF/config.toml`
+- `Cmd+B`：切换左侧边栏
+- `Cmd+Option+B`：切换右侧边栏
+- `Cmd+Shift+1`：切换到垂直 sidebar tabs
+- `Cmd+Shift+2`：切换到水平 titlebar tabs
+- `Cmd+W`：关闭当前标签页
+- `Cmd+Shift+[` / `Cmd+Shift+]`：切换到上一个 / 下一个标签页
+- `Cmd+0`：适应宽度
+- `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`：切换 `singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`
 
 ### 7.3 Milestone 3: 高亮与批注
 

@@ -84,12 +84,35 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func closeActiveSession() {
+        guard let activeSessionID else { return }
+        close(sessionID: activeSessionID)
+    }
+
     func activate(sessionID: UUID) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         activeSessionID = sessionID
         isLeftSidebarVisible = session.sidebarState.isLeftSidebarVisible
         isRightSidebarVisible = session.sidebarState.isRightSidebarVisible
         notifyChange()
+    }
+
+    func activatePreviousSession() {
+        guard let activeSessionID,
+              let currentIndex = sessions.firstIndex(where: { $0.id == activeSessionID }),
+              sessions.count > 1 else { return }
+
+        let previousIndex = (currentIndex - 1 + sessions.count) % sessions.count
+        activate(sessionID: sessions[previousIndex].id)
+    }
+
+    func activateNextSession() {
+        guard let activeSessionID,
+              let currentIndex = sessions.firstIndex(where: { $0.id == activeSessionID }),
+              sessions.count > 1 else { return }
+
+        let nextIndex = (currentIndex + 1) % sessions.count
+        activate(sessionID: sessions[nextIndex].id)
     }
 
     func setTabPresentationMode(_ mode: TabPresentationMode) {

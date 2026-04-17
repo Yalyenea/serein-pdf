@@ -48,7 +48,14 @@ enum ReaderScaleMode: String, Codable, Sendable {
     case fitWidth = "fit_width"
 }
 
-enum ReaderCommand: String, CaseIterable, Sendable {
+enum ShortcutCommand: String, CaseIterable, Sendable {
+    case toggleLeftSidebar = "toggle_left_sidebar"
+    case toggleRightSidebar = "toggle_right_sidebar"
+    case useSidebarTabs = "use_sidebar_tabs"
+    case useTitlebarTabs = "use_titlebar_tabs"
+    case closeCurrentTab = "close_current_tab"
+    case previousTab = "previous_tab"
+    case nextTab = "next_tab"
     case fitWidth = "fit_width"
     case singlePage = "single_page"
     case singlePageContinuous = "single_page_continuous"
@@ -57,6 +64,20 @@ enum ReaderCommand: String, CaseIterable, Sendable {
 
     var menuTitle: String {
         switch self {
+        case .toggleLeftSidebar:
+            "Toggle Left Sidebar"
+        case .toggleRightSidebar:
+            "Toggle Right Sidebar"
+        case .useSidebarTabs:
+            "Use Sidebar Tabs"
+        case .useTitlebarTabs:
+            "Use Titlebar Tabs"
+        case .closeCurrentTab:
+            "Close Current Tab"
+        case .previousTab:
+            "Previous Tab"
+        case .nextTab:
+            "Next Tab"
         case .fitWidth:
             "Fit Width"
         case .singlePage:
@@ -72,6 +93,14 @@ enum ReaderCommand: String, CaseIterable, Sendable {
 
     var displayMode: ReaderDisplayMode? {
         switch self {
+        case .toggleLeftSidebar,
+             .toggleRightSidebar,
+             .useSidebarTabs,
+             .useTitlebarTabs,
+             .closeCurrentTab,
+             .previousTab,
+             .nextTab:
+            nil
         case .fitWidth:
             nil
         case .singlePage:

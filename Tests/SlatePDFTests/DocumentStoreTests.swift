@@ -77,6 +77,21 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions.count, 1)
     }
 
+    func testCloseActiveSessionConvenienceUsesCurrentSelection() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "close-active-alpha"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "close-active-beta"))
+
+        XCTAssertEqual(store.activeSessionID, second.id)
+        store.closeActiveSession()
+
+        XCTAssertEqual(store.activeSessionID, first.id)
+        XCTAssertEqual(store.sessions.count, 1)
+    }
+
     func testActivateSessionSwitchesActiveDocument() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -91,6 +106,42 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(store.activeSessionID, first.id)
         XCTAssertEqual(store.activeSession?.url, first.url)
+    }
+
+    func testActivatePreviousSessionWrapsAround() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "prev-alpha"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "prev-beta"))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "prev-gamma"))
+
+        XCTAssertEqual(store.activeSessionID, third.id)
+        store.activatePreviousSession()
+        XCTAssertNotEqual(store.activeSessionID, third.id)
+        store.activatePreviousSession()
+        XCTAssertEqual(store.activeSessionID, first.id)
+        store.activatePreviousSession()
+        XCTAssertEqual(store.activeSessionID, third.id)
+    }
+
+    func testActivateNextSessionWrapsAround() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "next-alpha"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "next-beta"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "next-gamma"))
+
+        store.activate(sessionID: first.id)
+        store.activateNextSession()
+        XCTAssertEqual(store.activeSessionID, second.id)
+        store.activateNextSession()
+        XCTAssertNotEqual(store.activeSessionID, second.id)
+        store.activateNextSession()
+        XCTAssertEqual(store.activeSessionID, first.id)
     }
 
     func testUpdateCurrentPageMutatesOnlyTargetSession() throws {
