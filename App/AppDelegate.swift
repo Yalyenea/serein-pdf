@@ -4,10 +4,24 @@ import UniformTypeIdentifiers
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var mainWindowController: MainWindowController?
-    private let documentStore = DocumentStore()
+    private var documentStore: DocumentStore!
+    private var appConfiguration: AppConfiguration = .default
+    private var configStore: AppConfigurationStore?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
+
+        do {
+            let configStore = try AppConfigurationStore()
+            self.configStore = configStore
+            appConfiguration = try configStore.load()
+        } catch {
+            presentConfigurationError(error)
+            NSApp.terminate(nil)
+            return
+        }
+
+        documentStore = DocumentStore(appConfiguration: appConfiguration)
         installMainMenu()
 
         let windowController = MainWindowController(documentStore: documentStore)
@@ -112,15 +126,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         )
         toggleRightSidebarItem.target = self
 
+        let fitWidthItem = makeReaderCommandItem(.fitWidth, action: #selector(fitReaderToWidth(_:)))
+        let singlePageItem = makeReaderCommandItem(.singlePage, action: #selector(useSinglePage(_:)))
+        let singlePageContinuousItem = makeReaderCommandItem(
+            .singlePageContinuous,
+            action: #selector(useSinglePageContinuous(_:))
+        )
+        let twoUpItem = makeReaderCommandItem(.twoUp, action: #selector(useTwoUp(_:)))
+        let twoUpContinuousItem = makeReaderCommandItem(
+            .twoUpContinuous,
+            action: #selector(useTwoUpContinuous(_:))
+        )
+
         viewMenu.items = [
             sidebarTabsItem,
             titlebarTabsItem,
             .separator(),
             toggleLeftSidebarItem,
             toggleRightSidebarItem,
+            .separator(),
+            fitWidthItem,
+            singlePageItem,
+            singlePageContinuousItem,
+            twoUpItem,
+            twoUpContinuousItem,
         ]
         viewMenuItem.submenu = viewMenu
         return viewMenuItem
+    }
+
+    private func makeReaderCommandItem(_ command: ReaderCommand, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: command.menuTitle, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = command
+
+        if let shortcut = appConfiguration.shortcuts.bindings[command] {
+            item.keyEquivalent = shortcut.key
+            item.keyEquivalentModifierMask = shortcut.modifierMask
+        }
+
+        return item
     }
 
     @objc
@@ -143,6 +188,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         documentStore.setRightSidebarVisible(!documentStore.isRightSidebarVisible)
     }
 
+    @objc
+    private func fitReaderToWidth(_ sender: Any?) {
+        mainWindowController?.fitReaderToWidth()
+    }
+
+    @objc
+    private func useSinglePage(_ sender: Any?) {
+        setActiveReaderDisplayMode(.singlePage)
+    }
+
+    @objc
+    private func useSinglePageContinuous(_ sender: Any?) {
+        setActiveReaderDisplayMode(.singlePageContinuous)
+    }
+
+    @objc
+    private func useTwoUp(_ sender: Any?) {
+        setActiveReaderDisplayMode(.twoUp)
+    }
+
+    @objc
+    private func useTwoUpContinuous(_ sender: Any?) {
+        setActiveReaderDisplayMode(.twoUpContinuous)
+    }
+
+    private func setActiveReaderDisplayMode(_ mode: ReaderDisplayMode) {
+        guard let sessionID = documentStore.activeSessionID else { return }
+        documentStore.setDisplayMode(mode, for: sessionID)
+    }
+
     private func presentOpenError(_ error: Error) {
         let alert = NSAlert(error: error)
         alert.messageText = "Failed to open PDF"
@@ -151,6 +226,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         } else {
             alert.runModal()
         }
+    }
+
+    private func presentConfigurationError(_ error: Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Failed to load SlatePDF config"
+        alert.informativeText = error.localizedDescription
+        alert.runModal()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -163,6 +246,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = documentStore.isLeftSidebarVisible ? .on : .off
         case #selector(toggleRightSidebar(_:)):
             menuItem.state = documentStore.isRightSidebarVisible ? .on : .off
+        case #selector(fitReaderToWidth(_:)):
+            menuItem.state = documentStore.activeSession?.scaleMode == .fitWidth ? .on : .off
+            return documentStore.activeSession != nil
+        case #selector(useSinglePage(_:)):
+            menuItem.state = documentStore.activeSession?.displayMode == .singlePage ? .on : .off
+            return documentStore.activeSession != nil
+        case #selector(useSinglePageContinuous(_:)):
+            menuItem.state = documentStore.activeSession?.displayMode == .singlePageContinuous ? .on : .off
+            return documentStore.activeSession != nil
+        case #selector(useTwoUp(_:)):
+            menuItem.state = documentStore.activeSession?.displayMode == .twoUp ? .on : .off
+            return documentStore.activeSession != nil
+        case #selector(useTwoUpContinuous(_:)):
+            menuItem.state = documentStore.activeSession?.displayMode == .twoUpContinuous ? .on : .off
+            return documentStore.activeSession != nil
         default:
             break
         }

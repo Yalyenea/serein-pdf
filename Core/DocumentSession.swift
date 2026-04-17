@@ -21,6 +21,8 @@ struct DocumentSession {
     var title: String
     let pdfDocument: PDFDocument
     var currentPageIndex: Int
+    var displayMode: ReaderDisplayMode
+    var scaleMode: ReaderScaleMode
     var zoomScale: CGFloat
     var lastReadPosition: ReadingPosition
     var outlineTree: [OutlineNode]
@@ -35,6 +37,8 @@ struct DocumentSession {
         title: String? = nil,
         pdfDocument: PDFDocument,
         currentPageIndex: Int = 0,
+        displayMode: ReaderDisplayMode = .singlePageContinuous,
+        scaleMode: ReaderScaleMode = .fitWidth,
         zoomScale: CGFloat = 1.0,
         lastReadPosition: ReadingPosition = .zero,
         outlineTree: [OutlineNode] = [],
@@ -48,6 +52,8 @@ struct DocumentSession {
         self.title = title ?? url.deletingPathExtension().lastPathComponent
         self.pdfDocument = pdfDocument
         self.currentPageIndex = currentPageIndex
+        self.displayMode = displayMode
+        self.scaleMode = scaleMode
         self.zoomScale = zoomScale
         self.lastReadPosition = lastReadPosition
         self.outlineTree = outlineTree

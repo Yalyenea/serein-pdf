@@ -14,14 +14,22 @@ extension Notification.Name {
 @MainActor
 final class DocumentStore {
     private let persistence: DocumentStorePersistence
+    private let readingStateStore: ReadingStateStore
+    private let appConfiguration: AppConfiguration
     private(set) var sessions: [DocumentSession] = []
     private(set) var activeSessionID: UUID?
     private(set) var tabPresentationMode: TabPresentationMode = .verticalSidebar
     private(set) var isLeftSidebarVisible = true
     private(set) var isRightSidebarVisible = true
 
-    init(persistence: DocumentStorePersistence = UserDefaultsDocumentStorePersistence()) {
+    init(
+        persistence: DocumentStorePersistence = UserDefaultsDocumentStorePersistence(),
+        readingStateStore: ReadingStateStore = UserDefaultsReadingStateStore(),
+        appConfiguration: AppConfiguration = .default
+    ) {
         self.persistence = persistence
+        self.readingStateStore = readingStateStore
+        self.appConfiguration = appConfiguration
     }
 
     var activeSession: DocumentSession? {
@@ -34,9 +42,16 @@ final class DocumentStore {
             throw DocumentStoreError.unreadableDocument(url)
         }
 
+        let restoredState = try readingStateStore.loadState(for: url)
+
         let session = DocumentSession(
             url: url,
             pdfDocument: pdfDocument,
+            currentPageIndex: restoredState?.readingPosition.pageIndex ?? 0,
+            displayMode: restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
+            scaleMode: resolvedScaleMode(restoredState?.scaleMode),
+            zoomScale: restoredState?.scaleFactor ?? 1.0,
+            lastReadPosition: restoredState?.readingPosition ?? .zero,
             outlineTree: OutlineExtractor.extract(from: pdfDocument),
             sidebarState: SidebarState(
                 isLeftSidebarVisible: isLeftSidebarVisible,
@@ -99,7 +114,51 @@ final class DocumentStore {
         guard sessions[sessionIndex].currentPageIndex != index else { return }
 
         sessions[sessionIndex].currentPageIndex = index
-        sessions[sessionIndex].lastReadPosition.pageIndex = index
+        sessions[sessionIndex].lastReadPosition = ReadingPosition(
+            pageIndex: index,
+            point: sessions[sessionIndex].lastReadPosition.point
+        )
+        persistReadingState(for: sessions[sessionIndex])
+        notifyChange()
+    }
+
+    func setDisplayMode(_ mode: ReaderDisplayMode, for sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard sessions[sessionIndex].displayMode != mode else { return }
+
+        sessions[sessionIndex].displayMode = mode
+        persistReadingState(for: sessions[sessionIndex])
+        notifyChange()
+    }
+
+    func setScaleMode(_ mode: ReaderScaleMode, scaleFactor: CGFloat, for sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let needsUpdate =
+            sessions[sessionIndex].scaleMode != mode ||
+            sessions[sessionIndex].zoomScale != scaleFactor
+
+        guard needsUpdate else { return }
+
+        sessions[sessionIndex].scaleMode = mode
+        sessions[sessionIndex].zoomScale = scaleFactor
+        persistReadingState(for: sessions[sessionIndex])
+        notifyChange()
+    }
+
+    func updateReadingPosition(_ position: ReadingPosition, scaleFactor: CGFloat, for sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let session = sessions[sessionIndex]
+        let needsUpdate =
+            session.lastReadPosition != position ||
+            session.currentPageIndex != position.pageIndex ||
+            session.zoomScale != scaleFactor
+
+        guard needsUpdate else { return }
+
+        sessions[sessionIndex].currentPageIndex = position.pageIndex
+        sessions[sessionIndex].lastReadPosition = position
+        sessions[sessionIndex].zoomScale = scaleFactor
+        persistReadingState(for: sessions[sessionIndex])
         notifyChange()
     }
 
@@ -130,10 +189,16 @@ final class DocumentStore {
 
         for reference in persistedState.sessions {
             guard let pdfDocument = PDFDocument(url: reference.url) else { continue }
+            let restoredState = try readingStateStore.loadState(for: reference.url)
             sessions.append(
                 DocumentSession(
                     url: reference.url,
                     pdfDocument: pdfDocument,
+                    currentPageIndex: restoredState?.readingPosition.pageIndex ?? 0,
+                    displayMode: restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
+                    scaleMode: resolvedScaleMode(restoredState?.scaleMode),
+                    zoomScale: restoredState?.scaleFactor ?? 1.0,
+                    lastReadPosition: restoredState?.readingPosition ?? .zero,
                     outlineTree: OutlineExtractor.extract(from: pdfDocument),
                     sidebarState: SidebarState(
                         isLeftSidebarVisible: isLeftSidebarVisible,
@@ -173,6 +238,28 @@ final class DocumentStore {
             )
         )
         NotificationCenter.default.post(name: .documentStoreDidChange, object: self)
+    }
+
+    private var defaultScaleMode: ReaderScaleMode {
+        appConfiguration.reader.fitWidthOnOpen ? .fitWidth : .manual
+    }
+
+    private func resolvedScaleMode(_ restoredScaleMode: ReaderScaleMode?) -> ReaderScaleMode {
+        guard let restoredScaleMode else { return defaultScaleMode }
+        guard restoredScaleMode == .fitWidth else { return restoredScaleMode }
+        return appConfiguration.reader.fitWidthOnOpen ? .fitWidth : .manual
+    }
+
+    private func persistReadingState(for session: DocumentSession) {
+        try? readingStateStore.saveState(
+            PersistedReadingState(
+                url: session.url,
+                displayMode: session.displayMode,
+                scaleMode: session.scaleMode,
+                scaleFactor: session.zoomScale,
+                readingPosition: session.lastReadPosition
+            )
+        )
     }
 }
 

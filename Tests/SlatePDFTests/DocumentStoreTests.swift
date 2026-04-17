@@ -15,10 +15,25 @@ private final class InMemoryDocumentStorePersistence: DocumentStorePersistence {
     }
 }
 
+private final class InMemoryReadingStateStore: ReadingStateStore {
+    var states: [URL: PersistedReadingState] = [:]
+
+    func loadState(for url: URL) throws -> PersistedReadingState? {
+        states[url]
+    }
+
+    func saveState(_ state: PersistedReadingState) throws {
+        states[state.url] = state
+    }
+}
+
 @MainActor
 final class DocumentStoreTests: XCTestCase {
     func testOpenDocumentCreatesActiveSession() throws {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
         let url = try makeTemporaryPDF(named: "single")
 
         let session = try store.open(documentAt: url)
@@ -29,7 +44,10 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testOpenMultipleDocumentsKeepsAllSessionsAndActivatesLast() throws {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
         let firstURL = try makeTemporaryPDF(named: "first")
         let secondURL = try makeTemporaryPDF(named: "second")
         let thirdURL = try makeTemporaryPDF(named: "third")
@@ -44,7 +62,10 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCloseActiveSessionFallsBackToPreviousSession() throws {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
         let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
 
@@ -57,7 +78,10 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testActivateSessionSwitchesActiveDocument() throws {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
         let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
 
@@ -70,7 +94,10 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testUpdateCurrentPageMutatesOnlyTargetSession() throws {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
         let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
 
@@ -83,13 +110,19 @@ final class DocumentStoreTests: XCTestCase {
 
     func testDefaultTabPresentationModeIsVerticalSidebar() {
         XCTAssertEqual(
-            DocumentStore(persistence: InMemoryDocumentStorePersistence()).tabPresentationMode,
+            DocumentStore(
+                persistence: InMemoryDocumentStorePersistence(),
+                readingStateStore: InMemoryReadingStateStore()
+            ).tabPresentationMode,
             .verticalSidebar
         )
     }
 
     func testSetTabPresentationModeUpdatesStore() {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
 
         store.setTabPresentationMode(.horizontalTitlebar)
 
@@ -97,7 +130,10 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCloseUnknownSessionDoesNotCrashOrMutateMode() {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
         let unknownSessionID = UUID()
 
         store.close(sessionID: unknownSessionID)
@@ -107,7 +143,10 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testSetTabPresentationModeAdjustsLeftSidebarVisibility() {
-        let store = DocumentStore(persistence: InMemoryDocumentStorePersistence())
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
 
         store.setTabPresentationMode(.horizontalTitlebar)
         XCTAssertEqual(store.tabPresentationMode, .horizontalTitlebar)
@@ -119,7 +158,10 @@ final class DocumentStoreTests: XCTestCase {
 
     func testSidebarVisibilityUpdatesPersistedState() {
         let persistence = InMemoryDocumentStorePersistence()
-        let store = DocumentStore(persistence: persistence)
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore()
+        )
 
         store.setLeftSidebarVisible(false)
         store.setRightSidebarVisible(false)
@@ -132,6 +174,7 @@ final class DocumentStoreTests: XCTestCase {
         let firstURL = try makeTemporaryPDF(named: "restore-first")
         let secondURL = try makeTemporaryPDF(named: "restore-second")
         let persistence = InMemoryDocumentStorePersistence()
+        let readingStateStore = InMemoryReadingStateStore()
         persistence.state = PersistedDocumentStoreState(
             sessions: [
                 .init(url: firstURL),
@@ -142,7 +185,10 @@ final class DocumentStoreTests: XCTestCase {
             isLeftSidebarVisible: false,
             isRightSidebarVisible: true
         )
-        let store = DocumentStore(persistence: persistence)
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: readingStateStore
+        )
 
         try store.restorePersistedState()
 
@@ -163,12 +209,134 @@ final class DocumentStoreTests: XCTestCase {
             isLeftSidebarVisible: false,
             isRightSidebarVisible: true
         )
-        let store = DocumentStore(persistence: persistence)
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore()
+        )
 
         try store.restorePersistedState()
 
         XCTAssertEqual(store.tabPresentationMode, .verticalSidebar)
         XCTAssertTrue(store.isLeftSidebarVisible)
+    }
+
+    func testOpenDocumentUsesPersistedReadingStateAndConfiguredDefaults() throws {
+        let url = try makeTemporaryPDF(named: "persisted-reading")
+        let readingStateStore = InMemoryReadingStateStore()
+        readingStateStore.states[url] = PersistedReadingState(
+            url: url,
+            displayMode: .twoUpContinuous,
+            scaleMode: .manual,
+            scaleFactor: 1.75,
+            readingPosition: ReadingPosition(pageIndex: 2, point: CGPoint(x: 14, y: 28))
+        )
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore,
+            appConfiguration: AppConfiguration(
+                reader: .init(defaultDisplayMode: .singlePage, fitWidthOnOpen: false),
+                shortcuts: .default
+            )
+        )
+
+        let session = try store.open(documentAt: url)
+
+        XCTAssertEqual(session.displayMode, .twoUpContinuous)
+        XCTAssertEqual(session.scaleMode, .manual)
+        XCTAssertEqual(session.zoomScale, 1.75)
+        XCTAssertEqual(session.lastReadPosition, ReadingPosition(pageIndex: 2, point: CGPoint(x: 14, y: 28)))
+    }
+
+    func testDisabledFitWidthConfigOverridesPersistedFitWidthMode() throws {
+        let url = try makeTemporaryPDF(named: "disabled-fit-width")
+        let readingStateStore = InMemoryReadingStateStore()
+        readingStateStore.states[url] = PersistedReadingState(
+            url: url,
+            displayMode: .singlePageContinuous,
+            scaleMode: .fitWidth,
+            scaleFactor: 1.4,
+            readingPosition: ReadingPosition(pageIndex: 0, point: CGPoint(x: 0, y: 0))
+        )
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore,
+            appConfiguration: AppConfiguration(
+                reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: false),
+                shortcuts: .default
+            )
+        )
+
+        let session = try store.open(documentAt: url)
+
+        XCTAssertEqual(session.scaleMode, .manual)
+        XCTAssertEqual(session.zoomScale, 1.4)
+    }
+
+    func testOpenDocumentUsesConfiguredDefaultsWhenNoPersistedReadingStateExists() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            appConfiguration: AppConfiguration(
+                reader: .init(defaultDisplayMode: .twoUp, fitWidthOnOpen: false),
+                shortcuts: .default
+            )
+        )
+
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "config-defaults"))
+
+        XCTAssertEqual(session.displayMode, .twoUp)
+        XCTAssertEqual(session.scaleMode, .manual)
+    }
+
+    func testUpdateReadingPositionPersistsScaleAndPoint() throws {
+        let readingStateStore = InMemoryReadingStateStore()
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-state"))
+
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 4, point: CGPoint(x: 33, y: 77)),
+            scaleFactor: 1.5,
+            for: session.id
+        )
+        store.setDisplayMode(.twoUp, for: session.id)
+        store.setScaleMode(.manual, scaleFactor: 1.5, for: session.id)
+
+        XCTAssertEqual(readingStateStore.states[session.url]?.readingPosition.pageIndex, 4)
+        XCTAssertEqual(readingStateStore.states[session.url]?.readingPosition.point, CGPoint(x: 33, y: 77))
+        XCTAssertEqual(readingStateStore.states[session.url]?.scaleFactor, 1.5)
+        XCTAssertEqual(readingStateStore.states[session.url]?.displayMode, .twoUp)
+        XCTAssertEqual(readingStateStore.states[session.url]?.scaleMode, .manual)
+    }
+
+    func testReadingStateRemainsIndependentAcrossSessions() throws {
+        let readingStateStore = InMemoryReadingStateStore()
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "first-reading-state"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "second-reading-state"))
+
+        store.setDisplayMode(.singlePage, for: first.id)
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 1, point: CGPoint(x: 10, y: 20)),
+            scaleFactor: 1.2,
+            for: first.id
+        )
+        store.setDisplayMode(.twoUpContinuous, for: second.id)
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 6, point: CGPoint(x: 30, y: 40)),
+            scaleFactor: 1.8,
+            for: second.id
+        )
+
+        XCTAssertEqual(readingStateStore.states[first.url]?.displayMode, .singlePage)
+        XCTAssertEqual(readingStateStore.states[first.url]?.readingPosition.pageIndex, 1)
+        XCTAssertEqual(readingStateStore.states[second.url]?.displayMode, .twoUpContinuous)
+        XCTAssertEqual(readingStateStore.states[second.url]?.readingPosition.pageIndex, 6)
     }
 
     private func makeTemporaryPDF(named name: String) throws -> URL {

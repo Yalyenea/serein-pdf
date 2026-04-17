@@ -119,4 +119,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         configureTitlebarTabsItemIfNeeded()
         return titlebarTabsItem
     }
+
+    func fitReaderToWidth() {
+        splitViewController.readerViewController.fitToWidth()
+    }
 }
