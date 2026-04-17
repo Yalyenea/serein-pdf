@@ -1,17 +1,31 @@
 import AppKit
 
-final class MainWindowController: NSWindowController {
+extension NSToolbarItem.Identifier {
+    static let titlebarTabs = NSToolbarItem.Identifier("local.yfff.SlatePDF.titlebarTabs")
+}
+
+final class MainWindowController: NSWindowController, NSToolbarDelegate {
     let documentStore: DocumentStore
+    private let splitViewController: SplitViewController
+    private let toolbar = NSToolbar(identifier: "MainToolbar")
+    private let titlebarTabsItem = NSToolbarItem(itemIdentifier: .titlebarTabs)
+    private var isTitlebarTabsItemAttached = false
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
-        let contentViewController = SplitViewController(documentStore: documentStore)
-        let window = NSWindow(contentViewController: contentViewController)
+        splitViewController = SplitViewController(documentStore: documentStore)
+        let window = NSWindow(contentViewController: splitViewController)
 
         window.title = "SlatePDF"
         window.setContentSize(NSSize(width: 1360, height: 900))
         window.minSize = NSSize(width: 960, height: 640)
         window.center()
+        window.styleMask.insert(.fullSizeContentView)
+        window.tabbingMode = .disallowed
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        toolbar.showsBaselineSeparator = false
+        toolbar.centeredItemIdentifier = nil
         window.toolbarStyle = .unifiedCompact
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
@@ -20,24 +34,22 @@ final class MainWindowController: NSWindowController {
 
         super.init(window: window)
 
+        toolbar.delegate = self
+        window.toolbar = toolbar
         shouldCascadeWindows = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func windowDidLoad() {
-        super.windowDidLoad()
-
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDocumentStoreDidChange),
             name: .documentStoreDidChange,
             object: documentStore
         )
+        applyWindowChromeState()
         refreshWindowTitle()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
     deinit {
@@ -46,10 +58,65 @@ final class MainWindowController: NSWindowController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        applyWindowChromeState()
         refreshWindowTitle()
+    }
+
+    private func configureTitlebarTabsItemIfNeeded() {
+        let tabsView = splitViewController.titlebarTabsController.view
+        tabsView.frame = NSRect(x: 0, y: 0, width: 760, height: 28)
+        titlebarTabsItem.label = "Open Documents"
+        titlebarTabsItem.paletteLabel = "Open Documents"
+        titlebarTabsItem.view = tabsView
+        titlebarTabsItem.visibilityPriority = .high
+    }
+
+    private func applyWindowChromeState() {
+        let shouldShowTitlebarTabs =
+            documentStore.tabPresentationMode == .horizontalTitlebar &&
+            !documentStore.isLeftSidebarVisible
+
+        splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
+        synchronizeTitlebarTabsItem(isVisible: shouldShowTitlebarTabs)
+    }
+
+    private func synchronizeTitlebarTabsItem(isVisible: Bool) {
+        if isVisible {
+            configureTitlebarTabsItemIfNeeded()
+            if isTitlebarTabsItemAttached == false {
+                toolbar.insertItem(withItemIdentifier: .titlebarTabs, at: 0)
+                isTitlebarTabsItemAttached = true
+            }
+            toolbar.centeredItemIdentifier = .titlebarTabs
+            return
+        }
+
+        toolbar.centeredItemIdentifier = nil
+        if let itemIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == .titlebarTabs }) {
+            toolbar.removeItem(at: itemIndex)
+        }
+        isTitlebarTabsItemAttached = false
     }
 
     private func refreshWindowTitle() {
         window?.title = documentStore.activeSession?.title ?? "SlatePDF"
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.titlebarTabs]
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        []
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        guard itemIdentifier == .titlebarTabs else { return nil }
+        configureTitlebarTabsItemIfNeeded()
+        return titlebarTabsItem
     }
 }

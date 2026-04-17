@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import PDFKit
 
-enum TabPresentationMode: String, CaseIterable, Sendable {
+enum TabPresentationMode: String, CaseIterable, Codable, Sendable {
     case verticalSidebar
     case horizontalTitlebar
 }
@@ -13,9 +13,16 @@ extension Notification.Name {
 
 @MainActor
 final class DocumentStore {
+    private let persistence: DocumentStorePersistence
     private(set) var sessions: [DocumentSession] = []
     private(set) var activeSessionID: UUID?
     private(set) var tabPresentationMode: TabPresentationMode = .verticalSidebar
+    private(set) var isLeftSidebarVisible = true
+    private(set) var isRightSidebarVisible = true
+
+    init(persistence: DocumentStorePersistence = UserDefaultsDocumentStorePersistence()) {
+        self.persistence = persistence
+    }
 
     var activeSession: DocumentSession? {
         guard let activeSessionID else { return nil }
@@ -30,6 +37,11 @@ final class DocumentStore {
         let session = DocumentSession(
             url: url,
             pdfDocument: pdfDocument,
+            outlineTree: OutlineExtractor.extract(from: pdfDocument),
+            sidebarState: SidebarState(
+                isLeftSidebarVisible: isLeftSidebarVisible,
+                isRightSidebarVisible: isRightSidebarVisible
+            ),
             tabPresentationState: TabPresentationState(mode: tabPresentationMode)
         )
 
@@ -40,27 +52,39 @@ final class DocumentStore {
     }
 
     func close(sessionID: UUID) {
-        sessions.removeAll { $0.id == sessionID }
+        guard let closedIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions.remove(at: closedIndex)
 
         if activeSessionID == sessionID {
-            activeSessionID = sessions.last?.id
+            guard !sessions.isEmpty else {
+                activeSessionID = nil
+                notifyChange()
+                return
+            }
+
+            let nextIndex = min(closedIndex, sessions.count - 1)
+            activeSessionID = sessions[nextIndex].id
         }
 
         notifyChange()
     }
 
     func activate(sessionID: UUID) {
-        guard sessions.contains(where: { $0.id == sessionID }) else { return }
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         activeSessionID = sessionID
+        isLeftSidebarVisible = session.sidebarState.isLeftSidebarVisible
+        isRightSidebarVisible = session.sidebarState.isRightSidebarVisible
         notifyChange()
     }
 
     func setTabPresentationMode(_ mode: TabPresentationMode) {
         guard tabPresentationMode != mode else { return }
         tabPresentationMode = mode
+        isLeftSidebarVisible = mode == .verticalSidebar
 
         for index in sessions.indices {
             sessions[index].tabPresentationState.mode = mode
+            sessions[index].sidebarState.isLeftSidebarVisible = isLeftSidebarVisible
         }
 
         notifyChange()
@@ -70,7 +94,84 @@ final class DocumentStore {
         sessions.first { $0.id == id }
     }
 
+    func updateCurrentPage(index: Int, for sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard sessions[sessionIndex].currentPageIndex != index else { return }
+
+        sessions[sessionIndex].currentPageIndex = index
+        sessions[sessionIndex].lastReadPosition.pageIndex = index
+        notifyChange()
+    }
+
+    func setLeftSidebarVisible(_ isVisible: Bool) {
+        guard isLeftSidebarVisible != isVisible else { return }
+        isLeftSidebarVisible = isVisible
+        syncActiveSessionSidebarState()
+        notifyChange()
+    }
+
+    func setRightSidebarVisible(_ isVisible: Bool) {
+        guard isRightSidebarVisible != isVisible else { return }
+        isRightSidebarVisible = isVisible
+        syncActiveSessionSidebarState()
+        notifyChange()
+    }
+
+    func restorePersistedState() throws {
+        guard let persistedState = try persistence.loadState() else { return }
+
+        tabPresentationMode = persistedState.tabPresentationMode
+        isLeftSidebarVisible = persistedState.tabPresentationMode == .verticalSidebar
+            ? true
+            : persistedState.isLeftSidebarVisible
+        isRightSidebarVisible = persistedState.isRightSidebarVisible
+        sessions = []
+        activeSessionID = nil
+
+        for reference in persistedState.sessions {
+            guard let pdfDocument = PDFDocument(url: reference.url) else { continue }
+            sessions.append(
+                DocumentSession(
+                    url: reference.url,
+                    pdfDocument: pdfDocument,
+                    outlineTree: OutlineExtractor.extract(from: pdfDocument),
+                    sidebarState: SidebarState(
+                        isLeftSidebarVisible: isLeftSidebarVisible,
+                        isRightSidebarVisible: isRightSidebarVisible
+                    ),
+                    tabPresentationState: TabPresentationState(mode: tabPresentationMode)
+                )
+            )
+        }
+
+        if let activeURL = persistedState.activeSessionURL,
+           let activeSession = sessions.first(where: { $0.url == activeURL }) {
+            activeSessionID = activeSession.id
+        } else {
+            activeSessionID = sessions.last?.id
+        }
+
+        notifyChange()
+    }
+
+    private func syncActiveSessionSidebarState() {
+        guard let activeSessionID,
+              let sessionIndex = sessions.firstIndex(where: { $0.id == activeSessionID }) else { return }
+
+        sessions[sessionIndex].sidebarState.isLeftSidebarVisible = isLeftSidebarVisible
+        sessions[sessionIndex].sidebarState.isRightSidebarVisible = isRightSidebarVisible
+    }
+
     private func notifyChange() {
+        try? persistence.saveState(
+            PersistedDocumentStoreState(
+                sessions: sessions.map { PersistedDocumentStoreState.SessionReference(url: $0.url) },
+                activeSessionURL: activeSession?.url,
+                tabPresentationMode: tabPresentationMode,
+                isLeftSidebarVisible: isLeftSidebarVisible,
+                isRightSidebarVisible: isRightSidebarVisible
+            )
+        )
         NotificationCenter.default.post(name: .documentStoreDidChange, object: self)
     }
 }

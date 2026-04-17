@@ -5,6 +5,8 @@ final class ReaderViewController: NSViewController {
     let documentStore: DocumentStore
     let pdfView = PDFView()
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
+    private var displayedSessionID: UUID?
+    private var displayedPageIndex: Int?
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -73,13 +75,28 @@ final class ReaderViewController: NSViewController {
         guard isViewLoaded else { return }
 
         if let session = documentStore.activeSession {
-            pdfView.document = session.pdfDocument
+            let isNewSession = displayedSessionID != session.id
+
+            if isNewSession {
+                pdfView.document = session.pdfDocument
+                displayedSessionID = session.id
+                displayedPageIndex = nil
+            }
+
+            if displayedPageIndex != session.currentPageIndex,
+               let page = session.pdfDocument.page(at: session.currentPageIndex) {
+                pdfView.go(to: page)
+                displayedPageIndex = session.currentPageIndex
+            }
+
             pdfView.isHidden = false
             emptyStateLabel.isHidden = true
         } else {
             pdfView.document = nil
             pdfView.isHidden = true
             emptyStateLabel.isHidden = false
+            displayedSessionID = nil
+            displayedPageIndex = nil
         }
     }
 }

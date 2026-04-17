@@ -2,11 +2,12 @@ import AppKit
 import UniformTypeIdentifiers
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var mainWindowController: MainWindowController?
     private let documentStore = DocumentStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSWindow.allowsAutomaticWindowTabbing = false
         installMainMenu()
 
         let windowController = MainWindowController(documentStore: documentStore)
@@ -14,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController.window?.makeKeyAndOrderFront(nil)
 
         mainWindowController = windowController
+        try? documentStore.restorePersistedState()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -45,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
         mainMenu.addItem(buildApplicationMenuItem())
         mainMenu.addItem(buildFileMenuItem())
+        mainMenu.addItem(buildViewMenuItem())
         NSApp.mainMenu = mainMenu
     }
 
@@ -77,6 +80,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return fileMenuItem
     }
 
+    private func buildViewMenuItem() -> NSMenuItem {
+        let viewMenuItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+
+        let sidebarTabsItem = NSMenuItem(
+            title: "Use Sidebar Tabs",
+            action: #selector(useSidebarTabs(_:)),
+            keyEquivalent: ""
+        )
+        sidebarTabsItem.target = self
+
+        let titlebarTabsItem = NSMenuItem(
+            title: "Use Titlebar Tabs",
+            action: #selector(useTitlebarTabs(_:)),
+            keyEquivalent: ""
+        )
+        titlebarTabsItem.target = self
+
+        let toggleLeftSidebarItem = NSMenuItem(
+            title: "Toggle Left Sidebar",
+            action: #selector(toggleLeftSidebar(_:)),
+            keyEquivalent: ""
+        )
+        toggleLeftSidebarItem.target = self
+
+        let toggleRightSidebarItem = NSMenuItem(
+            title: "Toggle Right Sidebar",
+            action: #selector(toggleRightSidebar(_:)),
+            keyEquivalent: ""
+        )
+        toggleRightSidebarItem.target = self
+
+        viewMenu.items = [
+            sidebarTabsItem,
+            titlebarTabsItem,
+            .separator(),
+            toggleLeftSidebarItem,
+            toggleRightSidebarItem,
+        ]
+        viewMenuItem.submenu = viewMenu
+        return viewMenuItem
+    }
+
+    @objc
+    private func useSidebarTabs(_ sender: Any?) {
+        documentStore.setTabPresentationMode(.verticalSidebar)
+    }
+
+    @objc
+    private func useTitlebarTabs(_ sender: Any?) {
+        documentStore.setTabPresentationMode(.horizontalTitlebar)
+    }
+
+    @objc
+    private func toggleLeftSidebar(_ sender: Any?) {
+        documentStore.setLeftSidebarVisible(!documentStore.isLeftSidebarVisible)
+    }
+
+    @objc
+    private func toggleRightSidebar(_ sender: Any?) {
+        documentStore.setRightSidebarVisible(!documentStore.isRightSidebarVisible)
+    }
+
     private func presentOpenError(_ error: Error) {
         let alert = NSAlert(error: error)
         alert.messageText = "Failed to open PDF"
@@ -85,5 +151,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             alert.runModal()
         }
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(useSidebarTabs(_:)):
+            menuItem.state = documentStore.tabPresentationMode == .verticalSidebar ? .on : .off
+        case #selector(useTitlebarTabs(_:)):
+            menuItem.state = documentStore.tabPresentationMode == .horizontalTitlebar ? .on : .off
+        case #selector(toggleLeftSidebar(_:)):
+            menuItem.state = documentStore.isLeftSidebarVisible ? .on : .off
+        case #selector(toggleRightSidebar(_:)):
+            menuItem.state = documentStore.isRightSidebarVisible ? .on : .off
+        default:
+            break
+        }
+
+        return true
     }
 }

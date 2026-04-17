@@ -6,6 +6,8 @@ final class SplitViewController: NSSplitViewController {
     let readerViewController: ReaderViewController
     let outlineViewController: OutlineViewController
     let titlebarTabsController: TitlebarTabsController
+    private var leftSidebarItem: NSSplitViewItem?
+    private var rightSidebarItem: NSSplitViewItem?
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -48,8 +50,32 @@ final class SplitViewController: NSSplitViewController {
         rightItem.maximumThickness = 320
         rightItem.preferredThicknessFraction = 0.22
 
+        leftSidebarItem = leftItem
+        rightSidebarItem = rightItem
         addSplitViewItem(leftItem)
         addSplitViewItem(centerItem)
         addSplitViewItem(rightItem)
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDocumentStoreDidChange),
+            name: .documentStoreDidChange,
+            object: documentStore
+        )
+        applyStoreState()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc
+    private func handleDocumentStoreDidChange(_ notification: Notification) {
+        applyStoreState()
+    }
+
+    private func applyStoreState() {
+        leftSidebarItem?.isCollapsed = !documentStore.isLeftSidebarVisible
+        rightSidebarItem?.isCollapsed = !documentStore.isRightSidebarVisible
     }
 }

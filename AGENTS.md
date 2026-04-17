@@ -33,6 +33,7 @@ Native macOS PDF reader.
 - Put temporary files in `.tmp/`.
 - Use git, but never commit automatically unless asked.
 - Add tests for core state and persistence logic.
+- Prefer validating UI and interaction changes with real PDFs from `~/Downloads` when available.
 - Prefer clarity and compactness over premature flexibility.
 
 ## Initial Focus
