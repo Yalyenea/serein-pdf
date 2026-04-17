@@ -1,7 +1,10 @@
 import AppKit
 
 class PlaceholderViewController: NSViewController {
-    static let paneBackgroundColor = NSColor(calibratedWhite: 0.955, alpha: 1.0)
+    static let paneBackgroundColor: NSColor = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor(calibratedWhite: isDark ? 0.09 : 0.955, alpha: 1.0)
+    }
     private let titleText: String
     private let detailText: String
 
@@ -45,5 +48,11 @@ class PlaceholderViewController: NSViewController {
         ])
 
         view = container
+    }
+
+    func refreshChromeColors() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.layer?.backgroundColor = Self.paneBackgroundColor.cgColor
+        }
     }
 }

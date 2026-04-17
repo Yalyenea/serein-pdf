@@ -20,6 +20,7 @@ let package = Package(
                 ".tmp",
                 "Tests",
                 "AGENTS.md",
+                "CLAUDE.md",
                 "PROJECT.md",
                 "TASKS.md",
             ],

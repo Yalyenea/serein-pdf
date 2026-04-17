@@ -1,4 +1,4 @@
-struct OutlineNode: Equatable, Sendable {
+struct OutlineNode: Hashable, Sendable {
     var title: String
     var pageIndex: Int?
     var children: [OutlineNode]
