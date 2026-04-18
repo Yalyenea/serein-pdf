@@ -17,6 +17,7 @@ final class ReaderViewController: NSViewController {
     private var isApplyingProgrammaticScale = false
     private var isApplyingHighlightSelection = false
     private var appearanceObservation: NSKeyValueObservation?
+    nonisolated(unsafe) private var leftMouseUpMonitor: Any?
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -50,12 +51,6 @@ final class ReaderViewController: NSViewController {
             name: Notification.Name.PDFViewScaleChanged,
             object: pdfView
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handlePDFViewSelectionChanged),
-            name: Notification.Name.PDFViewSelectionChanged,
-            object: pdfView
-        )
         syncNightModeFromSystem()
         appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated {
@@ -63,6 +58,12 @@ final class ReaderViewController: NSViewController {
                 self.syncNightModeFromSystem()
                 self.applyReaderAppearance()
             }
+        }
+        leftMouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+            MainActor.assumeIsolated {
+                self?.applyHighlightOnMouseUpIfNeeded(event: event)
+            }
+            return event
         }
         refreshDisplayedDocument()
         applyReaderAppearance()
@@ -85,6 +86,9 @@ final class ReaderViewController: NSViewController {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        if let monitor = leftMouseUpMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     override func loadView() {
@@ -307,9 +311,18 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewSelectionChanged(_ notification: Notification) {
-        guard themeManager.readerState.isHighlightModeEnabled,
-              isApplyingHighlightSelection == false else { return }
+        // Auto-highlight has moved to the local mouseUp monitor; selection changes
+        // during an active drag are ignored to avoid stacking highlights.
+    }
 
+    private func applyHighlightOnMouseUpIfNeeded(event: NSEvent) {
+        guard themeManager.readerState.isHighlightModeEnabled,
+              isApplyingHighlightSelection == false,
+              let window = pdfView.window,
+              event.window === window else { return }
+
+        let locationInPDF = pdfView.convert(event.locationInWindow, from: nil)
+        guard pdfView.bounds.contains(locationInPDF) else { return }
         _ = highlightCurrentSelection()
     }
 
@@ -372,7 +385,15 @@ final class ReaderViewController: NSViewController {
 
     private func applyReadingPositionIfNeeded(_ session: DocumentSession, isNewSession: Bool) {
         guard isNewSession || displayedReadingPosition != session.lastReadPosition else { return }
-        guard let page = session.pdfDocument.page(at: session.lastReadPosition.pageIndex) else { return }
+        guard let document = pdfView.document,
+              let page = document.page(at: session.lastReadPosition.pageIndex) else { return }
+
+        if !isNewSession,
+           let currentPage = pdfView.currentPage,
+           document.index(for: currentPage) == session.lastReadPosition.pageIndex {
+            displayedReadingPosition = session.lastReadPosition
+            return
+        }
 
         let destination = PDFDestination(page: page, at: session.lastReadPosition.point)
         pdfView.go(to: destination)
