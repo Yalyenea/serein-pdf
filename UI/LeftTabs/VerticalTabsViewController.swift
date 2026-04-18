@@ -3,7 +3,6 @@ import AppKit
 final class VerticalTabsViewController: NSViewController {
     let documentStore: DocumentStore
     var onCloseSessionRequested: ((UUID) -> Void)?
-    private let titleLabel = NSTextField(labelWithString: "Documents")
     private let countLabel = NSTextField(labelWithString: "0 open")
     private let emptyStateLabel = NSTextField(
         labelWithString: "Open multiple PDFs and switch them here.")
@@ -41,11 +40,10 @@ final class VerticalTabsViewController: NSViewController {
         container.wantsLayer = true
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
 
-        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         countLabel.font = .systemFont(ofSize: 11, weight: .medium)
         countLabel.textColor = .secondaryLabelColor
 
-        let headerStack = NSStackView(views: [titleLabel, NSView(), countLabel])
+        let headerStack = NSStackView(views: [NSView(), countLabel])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 8
@@ -66,7 +64,7 @@ final class VerticalTabsViewController: NSViewController {
 
         NSLayoutConstraint.activate([
             headerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
             headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
 
             emptyStateLabel.leadingAnchor.constraint(
