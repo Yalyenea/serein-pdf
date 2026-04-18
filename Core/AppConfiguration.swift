@@ -51,6 +51,7 @@ struct AppConfiguration: Equatable, Sendable {
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
+            .toggleLeftTabsMode: KeyboardShortcut(key: "l", modifiers: [.command, .shift]),
         ])
     }
 
@@ -225,6 +226,7 @@ navigate_forward = "command+]"
 goto_page = "command+option+g"
 reopen_last_closed = "command+shift+t"
 toggle_all_pages_overview = "command+shift+o"
+toggle_left_tabs_mode = "command+shift+l"
 """
 
     static func render(_ configuration: AppConfiguration) -> String {
@@ -269,6 +271,7 @@ navigate_forward = "\(configuration.shortcuts.bindings[.navigateForward]?.serial
 goto_page = "\(configuration.shortcuts.bindings[.gotoPage]?.serializedValue ?? "command+option+g")"
 reopen_last_closed = "\(configuration.shortcuts.bindings[.reopenLastClosed]?.serializedValue ?? "command+shift+t")"
 toggle_all_pages_overview = "\(configuration.shortcuts.bindings[.toggleAllPagesOverview]?.serializedValue ?? "command+shift+o")"
+toggle_left_tabs_mode = "\(configuration.shortcuts.bindings[.toggleLeftTabsMode]?.serializedValue ?? "command+shift+l")"
 """
     }
 }
@@ -382,6 +385,8 @@ struct AppConfigurationParser {
             configuration.shortcuts.bindings[.reopenLastClosed] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "toggle_all_pages_overview"):
             configuration.shortcuts.bindings[.toggleAllPagesOverview] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "toggle_left_tabs_mode"):
+            configuration.shortcuts.bindings[.toggleLeftTabsMode] = try KeyboardShortcut.parse(parseString(rawValue))
         default:
             break
         }
@@ -462,6 +467,7 @@ struct AppConfigurationStore {
             "goto_page",
             "reopen_last_closed",
             "toggle_all_pages_overview",
+            "toggle_left_tabs_mode",
         ]
 
         var configuration = try parser.parse(existingContent)

@@ -199,6 +199,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.readerViewController.toggleAllPagesOverview()
     }
 
+    func toggleLeftTabsMode() {
+        splitViewController.verticalTabsViewController.toggleMode()
+    }
+
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
         guard let window = window as? ReaderShortcutWindow else { return }
         window.plainShortcutHandler = handler

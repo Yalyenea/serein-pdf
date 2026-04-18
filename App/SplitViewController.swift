@@ -56,19 +56,15 @@ final class SplitViewController: NSSplitViewController {
 
         let leftItem = NSSplitViewItem(viewController: verticalTabsViewController)
         leftItem.canCollapse = true
-        leftItem.minimumThickness = 180
-        leftItem.maximumThickness = 260
-        leftItem.preferredThicknessFraction = 0.18
+        leftItem.minimumThickness = 96
 
         let centerItem = NSSplitViewItem(viewController: readerViewController)
-        centerItem.minimumThickness = 480
+        centerItem.minimumThickness = 320
         centerItem.holdingPriority = .defaultLow
 
         let rightItem = NSSplitViewItem(viewController: outlineViewController)
         rightItem.canCollapse = true
-        rightItem.minimumThickness = 220
-        rightItem.maximumThickness = 320
-        rightItem.preferredThicknessFraction = 0.22
+        rightItem.minimumThickness = 120
 
         leftSidebarItem = leftItem
         rightSidebarItem = rightItem
@@ -92,7 +88,29 @@ final class SplitViewController: NSSplitViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        applyStoreState()
+    }
+
+    override func splitView(
+        _ splitView: NSSplitView,
+        effectiveRect proposedEffectiveRect: NSRect,
+        forDrawnRect drawnRect: NSRect,
+        ofDividerAt dividerIndex: Int
+    ) -> NSRect {
+        let padding: CGFloat = 10
+        if splitView.isVertical {
+            return NSRect(
+                x: drawnRect.minX - padding,
+                y: 0,
+                width: drawnRect.width + padding * 2,
+                height: splitView.bounds.height
+            )
+        }
+        return NSRect(
+            x: 0,
+            y: drawnRect.minY - padding,
+            width: splitView.bounds.width,
+            height: drawnRect.height + padding * 2
+        )
     }
 
     deinit {
@@ -105,8 +123,14 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func applyStoreState() {
-        leftSidebarItem?.isCollapsed = !documentStore.isLeftSidebarVisible
-        rightSidebarItem?.isCollapsed = !documentStore.isRightSidebarVisible
+        let leftShouldCollapse = !documentStore.isLeftSidebarVisible
+        if let leftItem = leftSidebarItem, leftItem.isCollapsed != leftShouldCollapse {
+            leftItem.isCollapsed = leftShouldCollapse
+        }
+        let rightShouldCollapse = !documentStore.isRightSidebarVisible
+        if let rightItem = rightSidebarItem, rightItem.isCollapsed != rightShouldCollapse {
+            rightItem.isCollapsed = rightShouldCollapse
+        }
     }
 
     func refreshChromeColors() {

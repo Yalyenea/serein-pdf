@@ -3,7 +3,7 @@
 ## 1. 项目概述
 
 
-一个面向 macOS 的极简 PDF 阅读器：支持在“左侧垂直文档标签”和“标题栏水平标签”两种 tab 形态之间自由切换；右侧为目录 sidebar，中间为沉浸式 PDF 阅读区，支持高亮与夜间模式，整体强调极简、扁平、紧凑的布局风格。
+一个面向 macOS 的极简 PDF 阅读器：支持在“左侧垂直文档标签”和“标题栏水平标签”两种 tab 形态之间自由切换；左侧栏还可在文档列表与页面缩略图之间切换；右侧为目录 sidebar，中间为沉浸式 PDF 阅读区，并提供 all-pages overview、高亮与夜间模式，整体强调极简、扁平、紧凑的布局风格。
 
 
 ### 1.4 产品原则
@@ -34,7 +34,7 @@
 | 快捷键 | `a` 进入或执行高亮、`Esc` 退出高亮模式、`i` 切换夜间模式、`Cmd+S` 保存批注、可配置文档/布局快捷键 |
 | 保存策略 | 默认 10 分钟自动保存，可切换为永不自动保存 |
 | 设置 | 原生设置窗口，支持默认阅读模式、打开时适应宽度、批注自动保存策略 |
-| 窗口体验 | 三栏布局、左右栏显隐、压缩标题栏、减少顶部控件、标题栏水平 tab |
+| 窗口体验 | 三栏布局、左右栏显隐、侧栏自由调宽、压缩标题栏、减少顶部控件、标题栏水平 tab、all-pages overview |
 
 ### 2.2 V1 明确不做
 
@@ -42,7 +42,7 @@
 |---|---|
 | 自研 PDF 渲染器 | 直接使用 PDFKit，避免无谓复杂度 |
 | 文件树 / Finder 式侧边栏 | 左栏只做 tab，不做资源管理器 |
-| 缩略图面板 | 初版先不分散左栏职责 |
+| 同窗分屏 / 多窗口 | 先把单窗口单阅读区主路径打磨顺手，再进入对比阅读 |
 | 云同步 | 非核心路径，拖重产品 |
 | 书签库 / 知识库 | 超出阅读器第一版边界 |
 | 完美夜间模式 | 成本高，先做够用版本 |
@@ -105,9 +105,9 @@ flowchart LR
 
 | 区域 | 职责 | 设计边界 |
 |---|---|---|
-| 左栏 Vertical Tabs | 在垂直模式下显示已打开 PDF，负责切换 | 不放目录，不放文件树，不放缩略图 |
+| 左栏 Vertical Sidebar | 在垂直模式下显示已打开 PDF，或切到 Pages 查看当前文档缩略图 | 不放目录，不放文件树 |
 | 标题栏 Horizontal Tabs | 在水平模式下承载已打开 PDF 的 tab strip | 使用标题栏区域，不额外新增一行内容区 tab |
-| 中栏 Reader | 负责 PDF 阅读体验 | 显示、滚动、缩放、选择、搜索、批注 |
+| 中栏 Reader | 负责 PDF 阅读体验 | 显示、滚动、缩放、选择、搜索、批注、all-pages overview |
 | 右栏 Outline Sidebar | 显示当前 PDF 目录树 | 只服务当前文档 |
 
 ### 4.2 窗口策略
@@ -117,8 +117,9 @@ flowchart LR
 3. 垂直模式下左侧栏承担文档 tab；水平模式下左侧栏默认可收起，仅保留右侧目录与中间阅读区。
 4. 左右侧栏支持折叠和显隐。
 5. 中间阅读区自适应扩展。
-6. 分栏位置需设置合理约束，避免侧栏被拖到失衡。
-7. 标题栏和 toolbar 尽量压缩，保留必要入口即可。
+6. 左右侧栏允许更自由地调宽，只保留最小宽度与中间阅读区最小宽度约束，避免拖动后回弹。
+7. divider 命中区需明显大于可见分割线，保证拖动顺手。
+8. 标题栏和 toolbar 尽量压缩，保留必要入口即可。
 
 ### 4.3 视觉风格规范
 
@@ -142,14 +143,18 @@ flowchart LR
 | `a` | 若当前已有文本选区，则立即以默认轻粉色创建高亮 |
 | `a` | 若当前没有选区，则进入“高亮模式”，此后选中文字即自动高亮 |
 | `Esc` | 退出高亮模式 |
+| `d` | 删除当前鼠标所在高亮；若该高亮跨多行，则整组一起删除 |
 | `i` | 切换反色夜间模式 |
 | `Cmd+S` | 将当前文档未保存批注写回源 PDF |
+| `Cmd+Shift+O` | 进入 / 退出 all-pages overview；进入时隐藏左右侧栏，退出时恢复 |
+| `Cmd+Shift+L` | 在左栏 `Tabs / Pages` 两种模式间切换 |
 
 ### 4.5 批注保存策略
 
 | 项目 | 约定 |
 |---|---|
 | 默认行为 | 创建、删除高亮后只更新当前 session 与脏状态，不立即写回文件 |
+| 删除语义 | 多行高亮视为一个逻辑块；删除其中任一行时，应整组删除 |
 | 手动保存 | 用户按 `Cmd+S` 时，将当前文档未保存批注覆盖写回源 PDF |
 | 关闭/退出保护 | 关闭 dirty tab 或退出 app 时，必须提示 `Save / Cancel / Discard` |
 | 自动保存默认值 | `10 min` |
@@ -454,22 +459,23 @@ Tests/
 
 1. 菜单上完整显示所有 plain 快捷键（`A`、`I`、`D`、`Esc`）。
 2. 新的删除高亮交互：无需 select，光标或鼠标悬停在高亮处按 `D` 即可删除。
-3. 左侧缩略图模式（替代 / 切换自 tab 列表的"第二视图"）。
-4. 全览模式：一屏平铺所有页面的 grid thumbnail 视图。
+3. 左侧 `Tabs / Pages` 模式切换，Pages 宽度跟随侧栏实时调整。
+4. 全览模式：一屏平铺所有页面的 grid thumbnail 视图，进入时自动隐藏左右侧栏，并支持缩放。
 5. `Cmd+Shift+T` 重新打开上次关闭的文件。
 6. 清理窗口标题栏（去掉和红绿灯重叠的 "Documents" 文字）。
 7. 右侧 Outline 栏底部页码状态栏（形如 `1 / 35`）。
 8. 页面跳转（`Cmd+Option+G`）、Vim 式 `J` / `K` 翻页、PDF 内链接点击跳转、`Cmd+[` / `Cmd+]` 历史前进 / 后退。
 9. 小范围延伸：dirty 点、Find bar 非模态化、缩放快捷键。
+10. 分栏拖动体验修复：左右侧栏自由调宽，divider 热区扩大。
 
 #### 任务拆分
 
 | 编号 | 任务 | 说明 |
 |---|---|---|
 | M6-1 | plain 快捷键菜单可见性 | 把 `A` / `I` / `D` / `Esc` 作为无修饰 `keyEquivalent` 写入菜单项，macOS 即可渲染出快捷键符号 |
-| M6-2 | 高亮删除改为 `D` + 命中检测 | `removeHighlight` 快捷键切 plain `d`；命中点取自 `pdfView` 当前鼠标位置（`NSWindow.mouseLocationOutsideOfEventStream`），找到最近的 `Highlight` annotation 删除；若有选区仍走当前逻辑 |
-| M6-3 | 左栏缩略图模式 | 在 `VerticalTabsViewController` 旁新增 `ThumbnailsViewController`（`PDFThumbnailView` 纵向单列）；左栏顶部加一个 `segmented control`：Tabs / Thumbnails |
-| M6-4 | 全览（grid）模式 | 新增 `AllPagesOverviewController`：Reader 区临时替换为 `PDFThumbnailView` grid；按快捷键进入，按 `Esc` 退出；快捷键 `Cmd+Shift+O`（`P` 已被 highlight pink 占用） |
+| M6-2 | 高亮删除改为 `D` + 命中检测 | `removeHighlight` 快捷键切 plain `d`；命中点取自 `pdfView` 当前鼠标位置（`NSWindow.mouseLocationOutsideOfEventStream`），找到最近的 `Highlight` annotation 删除；若该高亮跨多行，则整组删除 |
+| M6-3 | 左栏 Pages 模式 | 在 `VerticalTabsViewController` 内提供 `Tabs / Pages` 两种模式；顶部加 `segmented control`，并支持 `Cmd+Shift+L` 快速切换 |
+| M6-4 | 全览（grid）模式 | Reader 区切换为 `PDFThumbnailView` grid；按快捷键进入，按 `Esc` 退出；进入时自动隐藏左右侧栏，退出时恢复，并支持缩放；快捷键 `Cmd+Shift+O` |
 | M6-5 | 重开上次关闭的文件 | `DocumentStore` 维护 `recentlyClosedStack: [URL]`；`close(sessionID:)` 推栈；新命令 `ShortcutCommand.reopenLastClosed` + `Cmd+Shift+T` pop-and-open |
 | M6-6 | 清理窗口标题栏 | `window.title` 持续置空或仅用在 menu bar；`titlebarTabsItem.label` / `paletteLabel` 清空；必要时验证 vertical 模式下系统不会再补自动标题 |
 | M6-7 | Outline 底部页码状态栏 | `OutlineViewController` 在底部加 `NSTextField`，监听 `documentStoreDidChange` + `PDFViewPageChanged`，显示 `currentPage / totalPages` |
@@ -481,6 +487,7 @@ Tests/
 | M6-13 | PDF 内链接点击跳转 | 确认 `PDFView` 接管 `Link` annotation 点击；内部跳转走 `go(to:)` 并推入历史栈；外部 URL 用系统默认打开 |
 | M6-14 | 历史前进 / 后退 | `Cmd+[` 后退、`Cmd+]` 前进；走 `PDFView.goBack()` / `goForward()` 并尊重跨页跳转（outline 点击、链接点击、`Cmd+Option+G`、`Cmd+Shift+T` 也应入栈） |
 | M6-15 | 文档同步 | 同步 `PROJECT.md` / `TASKS.md` 的新交互、默认快捷键方案、配置文件字段 |
+| M6-16 | 分栏拖动修复 | 去掉左右侧栏硬上限，只保留最小宽度与中心阅读区最小宽度；扩大 divider 热区，避免拖动不顺手或回弹 |
 
 #### 默认快捷键方案（M6 新增 / 调整）
 
@@ -490,7 +497,7 @@ Tests/
 - `D`：删除当前光标所在位置的高亮（从 `Cmd+Shift+D` 迁移，作为 plain 快捷键）
 - `Cmd+Shift+T`：重新打开上次关闭的文件
 - `Cmd+Shift+O`：进入 / 退出全览模式
-- `Cmd+Shift+L`：切换左栏 Tabs / Thumbnails 模式（可选，也可以仅点击 segmented control）
+- `Cmd+Shift+L`：切换左栏 Tabs / Pages 模式
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`：Find bar + 下一 / 上一 匹配
 - `Cmd+Option+G`：跳转到指定页
 - `J` / `K`：下一页 / 上一页（Vim 式，plain 快捷键，文本输入上下文让路）
@@ -502,9 +509,9 @@ Tests/
 | 编号 | 标准 |
 |---|---|
 | AC-M6-1 | Annotate / View 菜单中 `A`、`I`、`Esc`、`D` 快捷键在文字旁清晰可见 |
-| AC-M6-2 | 不需要先选中高亮，光标位于高亮上时按 `D` 即可删除；原 `Cmd+Shift+D` 不保留 |
-| AC-M6-3 | 左栏可在 Tabs / Thumbnails 之间切换，Thumbnails 单列垂直滚动；点击缩略图跳转当前文档对应页 |
-| AC-M6-4 | 全览模式下所有页面以 grid 形式铺开；点击某页进入该页；`Esc` 可退出 |
+| AC-M6-2 | 不需要先选中高亮，光标位于高亮上时按 `D` 即可删除对应整组高亮；原 `Cmd+Shift+D` 不保留 |
+| AC-M6-3 | 左栏可在 Tabs / Pages 之间切换，Pages 单列垂直滚动；点击缩略图跳转当前文档对应页；`Cmd+Shift+L` 可切换 |
+| AC-M6-4 | 全览模式下所有页面以 grid 形式铺开；点击某页进入该页；`Esc` 可退出；进入时隐藏左右侧栏，退出时恢复；overview 下支持缩放 |
 | AC-M6-5 | `Cmd+Shift+T` 能连续恢复最近关闭的 1–N 个文件（只要未清空栈） |
 | AC-M6-6 | 任一 tab 模式下窗口顶栏不再出现 "Documents" 文字，不与交通灯重叠 |
 | AC-M6-7 | 右侧 Outline 栏底部始终显示当前文档的 `当前页 / 总页数`；文档关闭时隐藏或显示 `—` |
@@ -515,6 +522,7 @@ Tests/
 | AC-M6-12 | `J` / `K` 稳定地前进 / 后退一页，且不干扰文本输入上下文 |
 | AC-M6-13 | PDF 内链接点击能跳转到目标页或目标 URL；跳转后 `Cmd+[` 可回到起跳位置 |
 | AC-M6-14 | `Cmd+[` / `Cmd+]` 能在至少 10 步跨页历史中稳定前进 / 后退 |
+| AC-M6-15 | 左右侧栏支持更自由的宽度范围；divider 更易抓取，拖动后不自动回弹 |
 
 ### 7.7 Milestone 7: 搜索强化与对比阅读
 

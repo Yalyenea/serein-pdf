@@ -16,11 +16,13 @@
 - [ ] 默认高亮颜色是“偏轻、低饱和、清晰”的粉色
 - [ ] `a`：有选区时立即高亮；无选区时进入高亮模式
 - [ ] `Esc`：退出高亮模式
+- [ ] `d`：删除当前鼠标所在高亮；多行高亮按整组删除
 - [ ] `i`：切换反色夜间模式
 - [ ] `Cmd+S`：将当前文档未保存批注写回源 PDF
 - [ ] 默认自动保存策略是 `10 min`
 - [ ] 自动保存策略至少支持 `10 min` 和 `never`
 - [ ] 水平 tab 模式必须复用标题栏，不单独新增一行 tab bar
+- [ ] 左栏支持 `Tabs / Pages` 两种模式，并可用 `Cmd+Shift+L` 切换
 
 ## 3. Milestone 1: MVP 骨架
 
@@ -323,7 +325,7 @@
 完成定义：轻量、扁平、紧凑，当前选中态清晰。
 
 - [x] `M4-013` 优化边距与分栏拖动体验
-完成定义：布局紧凑但不拥挤，拖动行为稳定。
+完成定义：布局紧凑但不拥挤；左右侧栏支持更自由的宽度范围；divider 热区扩大，拖动不回弹。
 
 - [x] `M4-014` 清理多余阴影和装饰
 完成定义：整体视觉不厚重、不拟物。
@@ -344,6 +346,15 @@
 - [x] `NOW-04` 做完 `M1-AC-*` 手测
 - [x] `NOW-05` 再进入 `M2` 的快捷键系统
 - [x] `NOW-06` 推进 `M3` 高亮 / 自动保存闭环
+- [x] `NOW-07` 完成 `M4` 夜间模式与窗口视觉打磨
+- [x] `NOW-08` 完成 `M5` 设置与收口
+- [x] `NOW-09` 完成 `M6` 主路径体验打磨与本轮分栏拖动修复
+- [ ] `NOW-10` 优先推进 `M7-001` 搜索模型升级
+- [ ] `NOW-11` 接着完成 `M7-002` find bar 下挂结果列表
+- [ ] `NOW-12` 补上 `M7-003` 结果导航键绑定
+- [ ] `NOW-13` 做 `M7-004` 搜索性能与 200+ 页 PDF 验证
+- [ ] `NOW-14` 视使用价值决定是否做 `M7-005` 跨文档搜索
+- [ ] `NOW-15` 搜索线稳定后，再进入 `M7-010` 之后的分屏 / 多窗口
 
 ## 8. Milestone 5: 收口、设置与发布前稳固
 
@@ -425,7 +436,7 @@
 完成定义：在 `ReaderViewController` 中新增 `highlightAnnotation(at pointInWindow:)`，将窗口坐标 → `pdfView` → page，过滤 type == "Highlight" 最近的一个。
 
 - [x] `M6-011` `D` 键删除当前悬停高亮
-完成定义：`removeHighlightUnderCursor` 仅基于鼠标悬停位置命中；selection 回退分支已删除；快捷键 plain `d`。
+完成定义：`removeHighlightUnderCursor` 仅基于鼠标悬停位置命中；selection 回退分支已删除；快捷键 plain `d`；若命中的是多行高亮的一部分，则整组一起删除。
 
 - [x] `M6-012` 高亮删除测试
 完成定义：`HighlightServiceTests.testHighlightAnnotationAtPointReturnsCoveringHighlight` 覆盖 point-in-rect 命中；`DocumentStoreTests` 覆盖删除后 `isDirty = true`。
@@ -436,10 +447,10 @@
 完成定义：基于 `PDFThumbnailView`，纵向单列；订阅 `documentStoreDidChange`，跟随 active session 切换文档；点击缩略图跳转对应页。实现落在 `VerticalTabsViewController` 内的 Thumbnails 模式。
 
 - [x] `M6-021` 左栏承载 Tabs / Thumbnails 两种模式
-完成定义：左栏顶部 `NSSegmentedControl`（Tabs / Pages）切换；状态暂存在 controller 内。
+完成定义：左栏顶部 `NSSegmentedControl`（Tabs / Pages）切换；支持 `Cmd+Shift+L` 快速切换；Pages 缩略图宽度跟随侧栏宽度实时调整。
 
 - [x] `M6-022` 全览 Grid 模式
-完成定义：`ReaderViewController` 叠加 `PDFThumbnailView` grid；`Cmd+Shift+O` 切换；`Esc` 退出。
+完成定义：`ReaderViewController` 叠加 `PDFThumbnailView` grid；`Cmd+Shift+O` 切换；`Esc` 退出；进入时自动隐藏左右侧栏，退出时恢复；overview 下支持缩放。
 
 - [ ] `M6-023` 缩略图性能验证
 完成定义：在 200+ 页真实 PDF 上切换 / 滚动 / 跳转不卡顿；必要时使用 `PDFThumbnailView` 的异步渲染选项。
@@ -486,10 +497,13 @@
 - [x] `M6-056` 历史栈与 `Cmd+[` / `Cmd+]`
 完成定义：`pdfView.goBack()` / `goForward()` 挂接到快捷键；验证从 outline 点击、内链跳转、`Cmd+Option+G`、`Cmd+Shift+T` 触发的跳转都可被回退；菜单项根据 `canGoBack` / `canGoForward` 自动 enable / disable。额外修复：`applyReadingPositionIfNeeded` 在 pdfView 已在目标页时跳过 `go(to:)`，避免 store ↔ reader 回环重复入栈。
 
+- [x] `M6-057` 分栏拖动体验修复
+完成定义：去掉左右侧栏硬上限，只保留最小宽度与中心阅读区最小宽度；扩大 divider 热区；同步 `SplitViewController`，避免 store 状态刷新时把正在拖动的侧栏重新顶回去。
+
 ### 9.7 文档与验收
 
 - [x] `M6-060` 同步文档
-完成定义：`PROJECT.md` / `TASKS.md` / `AGENTS.md` 中快捷键、默认配置、交互边界同步；`config.toml` 默认内容更新。
+完成定义：`PROJECT.md` / `TASKS.md` / `AGENTS.md` 中快捷键、默认配置、交互边界同步；`config.toml` 默认内容更新；补齐 `Tabs / Pages`、overview 行为、多行高亮整组删除与分栏拖动规则。
 
 - [x] `M6-061` `swift test` 全量通过
 完成定义：M6 新增测试及回归测试全部通过。
@@ -629,9 +643,9 @@
 - [x] `UAT-09` 自动保存策略默认是 `10 min`，并可切换为 `never`
 - [x] `UAT-10` 按 `i` 切换夜间模式
 - [x] `UAT-11` 菜单中 `A` / `I` / `D` / `Esc` 快捷键文字可见
-- [ ] `UAT-12` 光标悬停在高亮上按 `D` 直接删除该高亮
-- [ ] `UAT-13` 左栏切到 Thumbnails 模式，点击缩略图能跳转
-- [ ] `UAT-14` `Cmd+Shift+O` 进入全览，`Esc` 退出
+- [ ] `UAT-12` 光标悬停在高亮上按 `D` 直接删除对应整组高亮
+- [ ] `UAT-13` 左栏切到 Pages 模式，点击缩略图能跳转，`Cmd+Shift+L` 可切换
+- [ ] `UAT-14` `Cmd+Shift+O` 进入全览并自动隐藏侧栏，`Esc` 退出后恢复
 - [x] `UAT-15` `Cmd+Shift+T` 能重开最近关闭的文件
 - [x] `UAT-16` 窗口顶栏不再出现 "Documents"，红绿灯不被遮挡
 - [x] `UAT-17` 右侧 Outline 底部显示 `当前页 / 总页数`
@@ -639,6 +653,7 @@
 - [x] `UAT-19` 非输入态下 `J` / `K` 稳定地下 / 上翻页
 - [x] `UAT-20` 点击 PDF 内部链接能跳转到目标位置
 - [x] `UAT-21` 跳转后 `Cmd+[` 能回到起跳点，`Cmd+]` 可再前进
+- [x] `UAT-21a` 左右侧栏可自由调宽，右栏拖动后不自动回弹
 - [ ] `UAT-22` find bar 能看到全部匹配项列表，点击可跳转
 - [ ] `UAT-23` 至少 200 页 PDF 搜索常见词不卡顿
 - [ ] `UAT-24` `Cmd+Ctrl+\` 进入同窗分屏，两侧独立切换 session 不污染

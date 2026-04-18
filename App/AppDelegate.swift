@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
                     .pageDown: { [weak self] in self?.goToNextPageAction(nil) },
                     .pageUp: { [weak self] in self?.goToPreviousPageAction(nil) },
+                    .toggleLeftTabsMode: { [weak self] in self?.toggleLeftTabsModeAction(nil) },
                 ]
             }
         )
@@ -360,6 +361,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 command: .toggleAllPagesOverview,
                 action: #selector(toggleAllPagesOverview(_:))
             ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleLeftTabsMode.menuTitle,
+                command: .toggleLeftTabsMode,
+                action: #selector(toggleLeftTabsModeAction(_:))
+            ),
         ]
         viewMenuItem.submenu = viewMenu
         return viewMenuItem
@@ -466,6 +472,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func toggleAllPagesOverview(_ sender: Any?) {
         _ = mainWindowController?.toggleAllPagesOverview()
+    }
+
+    @objc
+    private func toggleLeftTabsModeAction(_ sender: Any?) {
+        mainWindowController?.toggleLeftTabsMode()
     }
 
     @objc
@@ -813,6 +824,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(toggleAllPagesOverview(_:)):
             menuItem.state = mainWindowController?.isAllPagesOverviewActive == true ? .on : .off
             return documentStore.activeSession != nil
+        case #selector(toggleLeftTabsModeAction(_:)):
+            return documentStore.tabPresentationMode == .verticalSidebar && documentStore.isLeftSidebarVisible
         case #selector(useSinglePage(_:)):
             menuItem.state = documentStore.activeSession?.displayMode == .singlePage ? .on : .off
             return documentStore.activeSession != nil

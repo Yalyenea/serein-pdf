@@ -49,6 +49,10 @@ final class VerticalTabItemView: NSView {
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.maximumNumberOfLines = 1
+        titleLabel.cell?.truncatesLastVisibleLine = true
+        titleLabel.cell?.wraps = false
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         closeButton.font = .systemFont(ofSize: 15, weight: .medium)
         closeButton.isBordered = false

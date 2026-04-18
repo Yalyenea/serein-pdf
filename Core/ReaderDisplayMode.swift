@@ -78,6 +78,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case gotoPage = "goto_page"
     case reopenLastClosed = "reopen_last_closed"
     case toggleAllPagesOverview = "toggle_all_pages_overview"
+    case toggleLeftTabsMode = "toggle_left_tabs_mode"
 
     var menuTitle: String {
         switch self {
@@ -139,6 +140,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Reopen Closed Tab"
         case .toggleAllPagesOverview:
             "All Pages Overview"
+        case .toggleLeftTabsMode:
+            "Toggle Tabs / Thumbnails"
         }
     }
 

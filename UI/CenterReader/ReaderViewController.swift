@@ -12,6 +12,10 @@ final class ReaderViewController: NSViewController {
     private let findBarView = FindBarView()
     private var findBarTopConstraint: NSLayoutConstraint?
     private var pdfContainerTopConstraint: NSLayoutConstraint?
+    private var overviewLeadingConstraint: NSLayoutConstraint?
+    private var overviewTrailingConstraint: NSLayoutConstraint?
+    private var overviewTopConstraint: NSLayoutConstraint?
+    private var overviewBottomConstraint: NSLayoutConstraint?
     private var findMatches: [PDFSelection] = []
     private var findMatchIndex: Int?
     private let themeManager = ThemeManager()
@@ -82,6 +86,7 @@ final class ReaderViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        applyOverviewInsets()
 
         guard let session = documentStore.activeSession,
               session.scaleMode == .fitWidth,
@@ -153,6 +158,15 @@ final class ReaderViewController: NSViewController {
         findBarTopConstraint = findBarTop
         pdfContainerTopConstraint = pdfTop
 
+        let overviewLeading = overviewThumbnailView.leadingAnchor.constraint(equalTo: container.leadingAnchor)
+        let overviewTrailing = overviewThumbnailView.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+        let overviewTop = overviewThumbnailView.topAnchor.constraint(equalTo: container.topAnchor)
+        let overviewBottom = overviewThumbnailView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        overviewLeadingConstraint = overviewLeading
+        overviewTrailingConstraint = overviewTrailing
+        overviewTopConstraint = overviewTop
+        overviewBottomConstraint = overviewBottom
+
         NSLayoutConstraint.activate([
             pdfContainerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             pdfContainerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -168,10 +182,10 @@ final class ReaderViewController: NSViewController {
             highlightModeBanner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             highlightModeBanner.heightAnchor.constraint(equalToConstant: 22),
             highlightModeBanner.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
-            overviewThumbnailView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            overviewThumbnailView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            overviewThumbnailView.topAnchor.constraint(equalTo: container.topAnchor),
-            overviewThumbnailView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            overviewLeading,
+            overviewTrailing,
+            overviewTop,
+            overviewBottom,
             findBarView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             findBarView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             findBarTop,
@@ -187,6 +201,10 @@ final class ReaderViewController: NSViewController {
     }
 
     func zoomIn() {
+        if isAllPagesOverviewActive {
+            adjustOverviewZoom(scale: 1.1)
+            return
+        }
         guard let session = documentStore.activeSession,
               session.id == displayedSessionID else { return }
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
@@ -195,6 +213,10 @@ final class ReaderViewController: NSViewController {
     }
 
     func zoomOut() {
+        if isAllPagesOverviewActive {
+            adjustOverviewZoom(scale: 1 / 1.1)
+            return
+        }
         guard let session = documentStore.activeSession,
               session.id == displayedSessionID else { return }
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
@@ -239,14 +261,72 @@ final class ReaderViewController: NSViewController {
         !overviewThumbnailView.isHidden
     }
 
+    private var overviewSavedLeftSidebar: Bool?
+    private var overviewSavedRightSidebar: Bool?
+    private var overviewThumbnailWidth: CGFloat = 140
+
     func setAllPagesOverviewActive(_ active: Bool) {
-        overviewThumbnailView.isHidden = !active
+        guard active != isAllPagesOverviewActive else { return }
+
+        if active {
+            overviewSavedLeftSidebar = documentStore.isLeftSidebarVisible
+            overviewSavedRightSidebar = documentStore.isRightSidebarVisible
+            documentStore.setLeftSidebarVisible(false)
+            documentStore.setRightSidebarVisible(false)
+            configureOverviewGrid()
+            overviewThumbnailView.isHidden = false
+            pdfContainerView.isHidden = true
+            emptyStateLabel.isHidden = true
+        } else {
+            overviewThumbnailView.isHidden = true
+            pdfContainerView.isHidden = false
+            emptyStateLabel.isHidden = documentStore.activeSession != nil
+            if let left = overviewSavedLeftSidebar {
+                documentStore.setLeftSidebarVisible(left)
+            }
+            if let right = overviewSavedRightSidebar {
+                documentStore.setRightSidebarVisible(right)
+            }
+            overviewSavedLeftSidebar = nil
+            overviewSavedRightSidebar = nil
+        }
     }
 
     @discardableResult
     func toggleAllPagesOverview() -> Bool {
         setAllPagesOverviewActive(!isAllPagesOverviewActive)
         return isAllPagesOverviewActive
+    }
+
+    func adjustOverviewZoom(scale: CGFloat) {
+        guard isAllPagesOverviewActive else { return }
+        overviewThumbnailWidth = min(max(overviewThumbnailWidth * scale, 80), 360)
+        overviewThumbnailView.thumbnailSize = NSSize(
+            width: overviewThumbnailWidth,
+            height: overviewThumbnailWidth * 1.414
+        )
+    }
+
+    private func configureOverviewGrid() {
+        let pageCount = pdfView.document?.pageCount ?? 0
+        let columns = max(3, Int(ceil(sqrt(Double(max(pageCount, 1))))))
+        overviewThumbnailView.maximumNumberOfColumns = columns
+        overviewThumbnailView.thumbnailSize = NSSize(
+            width: overviewThumbnailWidth,
+            height: overviewThumbnailWidth * 1.414
+        )
+        applyOverviewInsets()
+    }
+
+    private func applyOverviewInsets() {
+        let width = view.bounds.width
+        let height = view.bounds.height
+        let horizontal = max(width * 0.02, 8)
+        let vertical = max(height * 0.02, 8)
+        overviewLeadingConstraint?.constant = horizontal
+        overviewTrailingConstraint?.constant = -horizontal
+        overviewTopConstraint?.constant = vertical
+        overviewBottomConstraint?.constant = -vertical
     }
 
     var isNightModeEnabled: Bool {
@@ -286,7 +366,8 @@ final class ReaderViewController: NSViewController {
     func removeHighlightUnderCursor() -> Bool {
         guard let session = documentStore.activeSession,
               session.id == displayedSessionID,
-              let window = pdfView.window else { return false }
+              let window = pdfView.window,
+              let document = pdfView.document else { return false }
 
         let mouseInWindow = window.mouseLocationOutsideOfEventStream
         let mouseInPDF = pdfView.convert(mouseInWindow, from: nil)
@@ -296,7 +377,9 @@ final class ReaderViewController: NSViewController {
         let pointOnPage = pdfView.convert(mouseInPDF, to: page)
         guard let target = HighlightService.highlightAnnotation(at: pointOnPage, on: page) else { return false }
 
-        page.removeAnnotation(target)
+        let removed = HighlightService.removeHighlightGroup(containing: target, in: document)
+        guard removed > 0 else { return false }
+
         documentStore.setDirty(true, for: session.id)
         return true
     }

@@ -13,6 +13,7 @@ final class VerticalTabsViewController: NSViewController {
     private let modeSegmented = NSSegmentedControl()
     private let thumbnailView = PDFThumbnailView()
     private var mode: Mode = .tabs
+    private var lastAppliedThumbnailWidth: CGFloat = 0
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -80,6 +81,7 @@ final class VerticalTabsViewController: NSViewController {
         thumbnailView.thumbnailSize = NSSize(width: 96, height: 128)
         thumbnailView.maximumNumberOfColumns = 1
         thumbnailView.backgroundColor = .clear
+        thumbnailView.wantsLayer = true
 
         for view in [modeSegmented, headerStack, emptyStateLabel, listStackView, thumbnailView] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -136,6 +138,30 @@ final class VerticalTabsViewController: NSViewController {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
         }
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        adjustThumbnailSizeForWidth()
+    }
+
+    private func adjustThumbnailSizeForWidth() {
+        let available = max(view.bounds.width - 24, 80)
+        let targetWidth = min(max(available, 80), 220)
+        guard abs(targetWidth - lastAppliedThumbnailWidth) > 1 else { return }
+        lastAppliedThumbnailWidth = targetWidth
+        thumbnailView.thumbnailSize = NSSize(width: targetWidth, height: targetWidth * 1.414)
+    }
+
+    func toggleMode() {
+        let next: Mode = mode == .tabs ? .thumbnails : .tabs
+        setMode(next)
+    }
+
+    func setMode(_ newMode: Mode) {
+        mode = newMode
+        modeSegmented.selectedSegment = newMode.rawValue
+        applyMode()
     }
 
     @objc
