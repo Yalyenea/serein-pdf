@@ -10,7 +10,7 @@ struct TabPresentationState: Equatable, Sendable {
     var mode: TabPresentationMode = .verticalSidebar
 }
 
-enum AnnotationSavePolicy: String, Equatable, Codable, Sendable {
+enum AnnotationSavePolicy: String, CaseIterable, Equatable, Codable, Sendable {
     case after10Minutes = "after_10_minutes"
     case never
 

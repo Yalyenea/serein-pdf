@@ -376,6 +376,10 @@ struct AppConfigurationStore {
         return try parser.parse(content)
     }
 
+    func save(_ configuration: AppConfiguration) throws {
+        try AppConfigurationFile.render(configuration).write(to: fileURL, atomically: true, encoding: .utf8)
+    }
+
     private func bootstrapIfNeeded() throws {
         let directoryURL = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)

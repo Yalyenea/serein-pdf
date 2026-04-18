@@ -87,4 +87,27 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("close_current_tab = \"command+w\""))
         XCTAssertTrue(content.contains("fit_width = \"command+9\""))
     }
+
+    func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+        let store = try AppConfigurationStore(fileURL: fileURL)
+
+        var configuration = try store.load()
+        configuration.reader.defaultDisplayMode = .twoUpContinuous
+        configuration.reader.fitWidthOnOpen = true
+        configuration.annotations.autoSavePolicy = .never
+
+        try store.save(configuration)
+        let reloadedConfiguration = try store.load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .twoUpContinuous)
+        XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
+        XCTAssertEqual(reloadedConfiguration.annotations.autoSavePolicy, .never)
+        XCTAssertTrue(persistedContent.contains("default_display_mode = \"two_up_continuous\""))
+        XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
+        XCTAssertTrue(persistedContent.contains("auto_save = \"never\""))
+    }
 }
