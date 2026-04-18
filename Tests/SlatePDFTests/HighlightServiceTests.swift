@@ -29,23 +29,6 @@ final class HighlightServiceTests: XCTestCase {
         )
     }
 
-    func testRemoveHighlightsOnlyDeletesTheMatchedAnnotation() throws {
-        let document = try makeSearchableDocument(text: "alpha beta")
-        let page = try XCTUnwrap(document.page(at: 0))
-        let alphaSelection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
-        let betaSelection = try XCTUnwrap(document.findString("beta", withOptions: []).first)
-
-        XCTAssertEqual(HighlightService.applyHighlight(to: alphaSelection, color: HighlightColor.pink.nsColor), 1)
-        XCTAssertEqual(HighlightService.applyHighlight(to: betaSelection, color: HighlightColor.green.nsColor), 1)
-        XCTAssertEqual(page.annotations.count, 2)
-
-        let removedCount = HighlightService.removeHighlights(in: alphaSelection)
-
-        XCTAssertEqual(removedCount, 1)
-        XCTAssertEqual(page.annotations.count, 1)
-        XCTAssertEqual(page.annotations.first?.color.cgColor.components, HighlightColor.green.nsColor.cgColor.components)
-    }
-
     func testHighlightAnnotationAtPointReturnsCoveringHighlight() throws {
         let document = try makeSearchableDocument(text: "alpha beta")
         let page = try XCTUnwrap(document.page(at: 0))

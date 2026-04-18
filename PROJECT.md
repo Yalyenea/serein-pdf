@@ -469,7 +469,7 @@ Tests/
 | M6-1 | plain 快捷键菜单可见性 | 把 `A` / `I` / `D` / `Esc` 作为无修饰 `keyEquivalent` 写入菜单项，macOS 即可渲染出快捷键符号 |
 | M6-2 | 高亮删除改为 `D` + 命中检测 | `removeHighlight` 快捷键切 plain `d`；命中点取自 `pdfView` 当前鼠标位置（`NSWindow.mouseLocationOutsideOfEventStream`），找到最近的 `Highlight` annotation 删除；若有选区仍走当前逻辑 |
 | M6-3 | 左栏缩略图模式 | 在 `VerticalTabsViewController` 旁新增 `ThumbnailsViewController`（`PDFThumbnailView` 纵向单列）；左栏顶部加一个 `segmented control`：Tabs / Thumbnails |
-| M6-4 | 全览（grid）模式 | 新增 `AllPagesOverviewController`：Reader 区临时替换为 `PDFThumbnailView` grid；按快捷键进入，按 `Esc` 退出；建议快捷键 `Cmd+Shift+P`（Preview） |
+| M6-4 | 全览（grid）模式 | 新增 `AllPagesOverviewController`：Reader 区临时替换为 `PDFThumbnailView` grid；按快捷键进入，按 `Esc` 退出；快捷键 `Cmd+Shift+O`（`P` 已被 highlight pink 占用） |
 | M6-5 | 重开上次关闭的文件 | `DocumentStore` 维护 `recentlyClosedStack: [URL]`；`close(sessionID:)` 推栈；新命令 `ShortcutCommand.reopenLastClosed` + `Cmd+Shift+T` pop-and-open |
 | M6-6 | 清理窗口标题栏 | `window.title` 持续置空或仅用在 menu bar；`titlebarTabsItem.label` / `paletteLabel` 清空；必要时验证 vertical 模式下系统不会再补自动标题 |
 | M6-7 | Outline 底部页码状态栏 | `OutlineViewController` 在底部加 `NSTextField`，监听 `documentStoreDidChange` + `PDFViewPageChanged`，显示 `currentPage / totalPages` |
@@ -489,7 +489,7 @@ Tests/
 - `I`：切换夜间模式（保持不变，但菜单必须可见）
 - `D`：删除当前光标所在位置的高亮（从 `Cmd+Shift+D` 迁移，作为 plain 快捷键）
 - `Cmd+Shift+T`：重新打开上次关闭的文件
-- `Cmd+Shift+P`：进入 / 退出全览模式
+- `Cmd+Shift+O`：进入 / 退出全览模式
 - `Cmd+Shift+L`：切换左栏 Tabs / Thumbnails 模式（可选，也可以仅点击 segmented control）
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`：Find bar + 下一 / 上一 匹配
 - `Cmd+Option+G`：跳转到指定页

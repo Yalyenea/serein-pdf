@@ -50,6 +50,7 @@ struct AppConfiguration: Equatable, Sendable {
             .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
+            .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
         ])
     }
 
@@ -223,6 +224,7 @@ navigate_back = "command+["
 navigate_forward = "command+]"
 goto_page = "command+option+g"
 reopen_last_closed = "command+shift+t"
+toggle_all_pages_overview = "command+shift+o"
 """
 
     static func render(_ configuration: AppConfiguration) -> String {
@@ -266,6 +268,7 @@ navigate_back = "\(configuration.shortcuts.bindings[.navigateBack]?.serializedVa
 navigate_forward = "\(configuration.shortcuts.bindings[.navigateForward]?.serializedValue ?? "command+]")"
 goto_page = "\(configuration.shortcuts.bindings[.gotoPage]?.serializedValue ?? "command+option+g")"
 reopen_last_closed = "\(configuration.shortcuts.bindings[.reopenLastClosed]?.serializedValue ?? "command+shift+t")"
+toggle_all_pages_overview = "\(configuration.shortcuts.bindings[.toggleAllPagesOverview]?.serializedValue ?? "command+shift+o")"
 """
     }
 }
@@ -377,6 +380,8 @@ struct AppConfigurationParser {
             configuration.shortcuts.bindings[.gotoPage] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "reopen_last_closed"):
             configuration.shortcuts.bindings[.reopenLastClosed] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "toggle_all_pages_overview"):
+            configuration.shortcuts.bindings[.toggleAllPagesOverview] = try KeyboardShortcut.parse(parseString(rawValue))
         default:
             break
         }
@@ -456,11 +461,20 @@ struct AppConfigurationStore {
             "navigate_forward",
             "goto_page",
             "reopen_last_closed",
+            "toggle_all_pages_overview",
         ]
 
-        guard requiredKeys.contains(where: { existingContent.contains($0) == false }) else { return }
+        var configuration = try parser.parse(existingContent)
+        let legacyRemoveHighlight = KeyboardShortcut(key: "d", modifiers: [.command, .shift])
+        var didMigrate = false
+        if configuration.shortcuts.bindings[.removeHighlight] == legacyRemoveHighlight {
+            configuration.shortcuts.bindings[.removeHighlight] = KeyboardShortcut(key: "d", modifiers: [])
+            didMigrate = true
+        }
 
-        let configuration = try parser.parse(existingContent)
+        let missingKeys = requiredKeys.contains(where: { existingContent.contains($0) == false })
+        guard missingKeys || didMigrate else { return }
+
         try AppConfigurationFile.render(configuration).write(to: fileURL, atomically: true, encoding: .utf8)
     }
 

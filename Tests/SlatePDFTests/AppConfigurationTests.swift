@@ -104,6 +104,24 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
     }
 
+    func testBootstrapMigratesLegacyRemoveHighlightShortcut() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(of: "remove_highlight = \"d\"", with: "remove_highlight = \"command+shift+d\"")
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
+        XCTAssertTrue(persistedContent.contains("remove_highlight = \"d\""))
+        XCTAssertFalse(persistedContent.contains("remove_highlight = \"command+shift+d\""))
+    }
+
     func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

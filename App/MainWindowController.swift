@@ -186,6 +186,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     var currentPageCount: Int { splitViewController.readerViewController.currentPageCount }
 
+    var isAllPagesOverviewActive: Bool {
+        splitViewController.readerViewController.isAllPagesOverviewActive
+    }
+
+    func setAllPagesOverviewActive(_ active: Bool) {
+        splitViewController.readerViewController.setAllPagesOverviewActive(active)
+    }
+
+    @discardableResult
+    func toggleAllPagesOverview() -> Bool {
+        splitViewController.readerViewController.toggleAllPagesOverview()
+    }
+
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
         guard let window = window as? ReaderShortcutWindow else { return }
         window.plainShortcutHandler = handler
@@ -304,6 +317,28 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @discardableResult
     func searchCurrentDocument(for query: String) -> Bool {
         splitViewController.readerViewController.search(for: query)
+    }
+
+    func showFindBar() {
+        splitViewController.readerViewController.showFindBar()
+    }
+
+    func hideFindBar() {
+        splitViewController.readerViewController.hideFindBar()
+    }
+
+    var isFindBarVisible: Bool {
+        splitViewController.readerViewController.isFindBarVisible
+    }
+
+    @discardableResult
+    func findNextMatch() -> Bool {
+        splitViewController.readerViewController.findNextMatch()
+    }
+
+    @discardableResult
+    func findPreviousMatch() -> Bool {
+        splitViewController.readerViewController.findPreviousMatch()
     }
 
     var isHighlightModeEnabled: Bool {

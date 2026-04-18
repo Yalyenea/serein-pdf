@@ -8,6 +8,12 @@ final class ReaderViewController: NSViewController {
     private let pdfContainerView = PDFContainerView()
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
     private let highlightModeBanner = NSTextField(labelWithString: "Highlight Mode · Esc to exit")
+    private let overviewThumbnailView = PDFThumbnailView()
+    private let findBarView = FindBarView()
+    private var findBarTopConstraint: NSLayoutConstraint?
+    private var pdfContainerTopConstraint: NSLayoutConstraint?
+    private var findMatches: [PDFSelection] = []
+    private var findMatchIndex: Int?
     private let themeManager = ThemeManager()
     private var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
@@ -125,15 +131,32 @@ final class ReaderViewController: NSViewController {
         highlightModeBanner.isEditable = false
         highlightModeBanner.isBordered = false
 
+        overviewThumbnailView.translatesAutoresizingMaskIntoConstraints = false
+        overviewThumbnailView.thumbnailSize = NSSize(width: 140, height: 180)
+        overviewThumbnailView.backgroundColor = NSColor.windowBackgroundColor
+        overviewThumbnailView.pdfView = pdfView
+        overviewThumbnailView.isHidden = true
+
+        findBarView.translatesAutoresizingMaskIntoConstraints = false
+        findBarView.delegate = self
+        findBarView.isHidden = true
+
         pdfContainerView.embedPDFView(pdfView)
         container.addSubview(pdfContainerView)
         container.addSubview(emptyStateLabel)
         container.addSubview(highlightModeBanner)
+        container.addSubview(overviewThumbnailView)
+        container.addSubview(findBarView)
+
+        let findBarTop = findBarView.topAnchor.constraint(equalTo: container.topAnchor)
+        let pdfTop = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
+        findBarTopConstraint = findBarTop
+        pdfContainerTopConstraint = pdfTop
 
         NSLayoutConstraint.activate([
             pdfContainerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             pdfContainerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor),
+            pdfTop,
             pdfContainerView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             pdfView.leadingAnchor.constraint(equalTo: pdfContainerView.leadingAnchor),
             pdfView.trailingAnchor.constraint(equalTo: pdfContainerView.trailingAnchor),
@@ -145,6 +168,14 @@ final class ReaderViewController: NSViewController {
             highlightModeBanner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             highlightModeBanner.heightAnchor.constraint(equalToConstant: 22),
             highlightModeBanner.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            overviewThumbnailView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            overviewThumbnailView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            overviewThumbnailView.topAnchor.constraint(equalTo: container.topAnchor),
+            overviewThumbnailView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            findBarView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            findBarView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            findBarTop,
+            findBarView.heightAnchor.constraint(equalToConstant: 36),
         ])
 
         view = container
@@ -204,6 +235,20 @@ final class ReaderViewController: NSViewController {
 
     var currentPageCount: Int { pdfView.document?.pageCount ?? 0 }
 
+    var isAllPagesOverviewActive: Bool {
+        !overviewThumbnailView.isHidden
+    }
+
+    func setAllPagesOverviewActive(_ active: Bool) {
+        overviewThumbnailView.isHidden = !active
+    }
+
+    @discardableResult
+    func toggleAllPagesOverview() -> Bool {
+        setAllPagesOverviewActive(!isAllPagesOverviewActive)
+        return isAllPagesOverviewActive
+    }
+
     var isNightModeEnabled: Bool {
         themeManager.readerState.isNightModeEnabled
     }
@@ -240,25 +285,9 @@ final class ReaderViewController: NSViewController {
     @discardableResult
     func removeHighlightUnderCursor() -> Bool {
         guard let session = documentStore.activeSession,
-              session.id == displayedSessionID else { return false }
+              session.id == displayedSessionID,
+              let window = pdfView.window else { return false }
 
-        if removeHighlightAtMouseLocation(sessionID: session.id) {
-            return true
-        }
-
-        guard let selection = pdfView.currentSelection,
-              HighlightService.selectionContainsText(selection) else { return false }
-
-        let removed = HighlightService.removeHighlights(in: selection)
-        guard removed > 0 else { return false }
-
-        documentStore.setDirty(true, for: session.id)
-        pdfView.currentSelection = nil
-        return true
-    }
-
-    private func removeHighlightAtMouseLocation(sessionID: UUID) -> Bool {
-        guard let window = pdfView.window else { return false }
         let mouseInWindow = window.mouseLocationOutsideOfEventStream
         let mouseInPDF = pdfView.convert(mouseInWindow, from: nil)
         guard pdfView.bounds.contains(mouseInPDF),
@@ -268,7 +297,7 @@ final class ReaderViewController: NSViewController {
         guard let target = HighlightService.highlightAnnotation(at: pointOnPage, on: page) else { return false }
 
         page.removeAnnotation(target)
-        documentStore.setDirty(true, for: sessionID)
+        documentStore.setDirty(true, for: session.id)
         return true
     }
 
@@ -295,6 +324,99 @@ final class ReaderViewController: NSViewController {
         pdfView.setCurrentSelection(selection, animate: true)
         pdfView.go(to: selection)
         return true
+    }
+
+    var isFindBarVisible: Bool {
+        findBarView.isHidden == false
+    }
+
+    func showFindBar() {
+        guard let container = view as NSView? else { return }
+        if findBarView.isHidden {
+            findBarView.isHidden = false
+            pdfContainerTopConstraint?.isActive = false
+            pdfContainerTopConstraint = pdfContainerView.topAnchor.constraint(equalTo: findBarView.bottomAnchor)
+            pdfContainerTopConstraint?.isActive = true
+            container.layoutSubtreeIfNeeded()
+        }
+        findBarView.focusQueryField()
+    }
+
+    func hideFindBar() {
+        guard let container = view as NSView? else { return }
+        guard findBarView.isHidden == false else { return }
+        findBarView.isHidden = true
+        pdfContainerTopConstraint?.isActive = false
+        pdfContainerTopConstraint = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
+        pdfContainerTopConstraint?.isActive = true
+        container.layoutSubtreeIfNeeded()
+        pdfView.window?.makeFirstResponder(pdfView)
+        findMatches = []
+        findMatchIndex = nil
+    }
+
+    @discardableResult
+    func findNextMatch() -> Bool {
+        guard findMatches.isEmpty == false else { return false }
+        let next = ((findMatchIndex ?? -1) + 1) % findMatches.count
+        jumpToMatch(at: next)
+        return true
+    }
+
+    @discardableResult
+    func findPreviousMatch() -> Bool {
+        guard findMatches.isEmpty == false else { return false }
+        let previous = ((findMatchIndex ?? 0) - 1 + findMatches.count) % findMatches.count
+        jumpToMatch(at: previous)
+        return true
+    }
+
+    private func updateFindMatches(query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let document = pdfView.document, trimmed.isEmpty == false else {
+            findMatches = []
+            findMatchIndex = nil
+            pdfView.highlightedSelections = nil
+            pdfView.currentSelection = nil
+            findBarView.setStatus(matchIndex: nil, totalMatches: 0)
+            return
+        }
+
+        let matches = document.findString(trimmed, withOptions: .caseInsensitive)
+        findMatches = matches
+        pdfView.highlightedSelections = matches
+
+        if matches.isEmpty {
+            findMatchIndex = nil
+            pdfView.currentSelection = nil
+            findBarView.setStatus(matchIndex: nil, totalMatches: 0)
+            return
+        }
+
+        let targetIndex = startingMatchIndex(for: matches)
+        jumpToMatch(at: targetIndex)
+    }
+
+    private func startingMatchIndex(for matches: [PDFSelection]) -> Int {
+        guard let currentPage = pdfView.currentPage,
+              let document = pdfView.document else { return 0 }
+        let currentPageIndex = document.index(for: currentPage)
+        if let forward = matches.firstIndex(where: { selection in
+            guard let page = selection.pages.first else { return false }
+            return document.index(for: page) >= currentPageIndex
+        }) {
+            return forward
+        }
+        return 0
+    }
+
+    private func jumpToMatch(at index: Int) {
+        guard findMatches.indices.contains(index) else { return }
+        findMatchIndex = index
+        let selection = findMatches[index]
+        pdfView.setCurrentSelection(selection, animate: true)
+        pdfView.go(to: selection)
+        findBarView.setStatus(matchIndex: index, totalMatches: findMatches.count)
     }
 
     @objc
@@ -534,4 +656,22 @@ final class ReaderViewController: NSViewController {
         pdfView.contentFilters = [filter]
     }
 
+}
+
+extension ReaderViewController: FindBarDelegate {
+    func findBar(_ view: FindBarView, didSubmitQuery query: String) {
+        updateFindMatches(query: query)
+    }
+
+    func findBarRequestsNext(_ view: FindBarView) {
+        findNextMatch()
+    }
+
+    func findBarRequestsPrevious(_ view: FindBarView) {
+        findPreviousMatch()
+    }
+
+    func findBarRequestsClose(_ view: FindBarView) {
+        hideFindBar()
+    }
 }

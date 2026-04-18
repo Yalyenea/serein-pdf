@@ -16,6 +16,7 @@ final class SplitViewController: NSSplitViewController {
         outlineViewController = OutlineViewController(documentStore: documentStore)
         titlebarTabsController = TitlebarTabsController(documentStore: documentStore)
         super.init(nibName: nil, bundle: nil)
+        verticalTabsViewController.configure(pdfView: readerViewController.pdfView)
     }
 
     @available(*, unavailable)

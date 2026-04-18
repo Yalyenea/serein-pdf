@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
                     .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
                     .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
-                    .removeHighlight: { [weak self] in self?.removeHighlightInSelection(nil) },
+                    .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
                     .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
                     .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
                     .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
@@ -180,6 +180,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             action: #selector(findInCurrentDocument(_:)),
             keyEquivalent: "f"
         )
+        let findNextItem = NSMenuItem(
+            title: "Find Next",
+            action: #selector(findNextMatchAction(_:)),
+            keyEquivalent: "g"
+        )
+        let findPreviousItem = NSMenuItem(
+            title: "Find Previous",
+            action: #selector(findPreviousMatchAction(_:)),
+            keyEquivalent: "g"
+        )
         let closeItem = makeConfiguredMenuItem(
             title: "Close Current Tab",
             command: .closeCurrentTab,
@@ -204,7 +214,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         openItem.target = self
         findItem.keyEquivalentModifierMask = [.command]
         findItem.target = self
-        fileMenu.items = [settingsItem, .separator(), openItem, recentItem, reopenClosedItem, findItem, saveAnnotationsItem, .separator(), closeItem]
+        findNextItem.keyEquivalentModifierMask = [.command]
+        findNextItem.target = self
+        findPreviousItem.keyEquivalentModifierMask = [.command, .shift]
+        findPreviousItem.target = self
+        fileMenu.items = [settingsItem, .separator(), openItem, recentItem, reopenClosedItem, findItem, findNextItem, findPreviousItem, saveAnnotationsItem, .separator(), closeItem]
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
     }
@@ -275,7 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             makeConfiguredMenuItem(
                 title: ShortcutCommand.removeHighlight.menuTitle,
                 command: .removeHighlight,
-                action: #selector(removeHighlightInSelection(_:))
+                action: #selector(removeHighlightUnderCursorAction(_:))
             ),
         ]
 
@@ -339,6 +353,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 title: ReaderDisplayMode.twoUpContinuous.menuTitle,
                 command: .twoUpContinuous,
                 action: #selector(useTwoUpContinuous(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: "All Pages Overview",
+                command: .toggleAllPagesOverview,
+                action: #selector(toggleAllPagesOverview(_:))
             ),
         ]
         viewMenuItem.submenu = viewMenu
@@ -432,7 +452,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func exitHighlightMode(_ sender: Any?) {
+        if mainWindowController?.isFindBarVisible == true {
+            mainWindowController?.hideFindBar()
+            return
+        }
+        if mainWindowController?.isAllPagesOverviewActive == true {
+            mainWindowController?.setAllPagesOverviewActive(false)
+            return
+        }
         mainWindowController?.exitHighlightMode()
+    }
+
+    @objc
+    private func toggleAllPagesOverview(_ sender: Any?) {
+        _ = mainWindowController?.toggleAllPagesOverview()
     }
 
     @objc
@@ -451,7 +484,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
-    private func removeHighlightInSelection(_ sender: Any?) {
+    private func removeHighlightUnderCursorAction(_ sender: Any?) {
         _ = mainWindowController?.removeHighlightUnderCursor()
     }
 
@@ -597,35 +630,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func findInCurrentDocument(_ sender: Any?) {
         guard documentStore.activeSession != nil else { return }
+        mainWindowController?.showFindBar()
+    }
 
-        let queryField = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        queryField.placeholderString = "Enter search text"
+    @objc
+    private func findNextMatchAction(_ sender: Any?) {
+        _ = mainWindowController?.findNextMatch()
+    }
 
-        let alert = NSAlert()
-        alert.messageText = "Find in Current Document"
-        alert.informativeText = "Search jumps to the first matching result."
-        alert.accessoryView = queryField
-        alert.addButton(withTitle: "Find")
-        alert.addButton(withTitle: "Cancel")
-
-        let response: NSApplication.ModalResponse
-        if let window = mainWindowController?.window ?? NSApp.mainWindow {
-            response = alert.runModal()
-            window.makeFirstResponder(nil)
-        } else {
-            response = alert.runModal()
-        }
-
-        guard response == .alertFirstButtonReturn else { return }
-
-        let didFindResult = mainWindowController?.searchCurrentDocument(for: queryField.stringValue) ?? false
-        guard didFindResult == false else { return }
-
-        let failureAlert = NSAlert()
-        failureAlert.alertStyle = .warning
-        failureAlert.messageText = "No Match Found"
-        failureAlert.informativeText = "SlatePDF could not find that text in the current document."
-        failureAlert.runModal()
+    @objc
+    private func findPreviousMatchAction(_ sender: Any?) {
+        _ = mainWindowController?.findPreviousMatch()
     }
 
     @objc
@@ -749,7 +764,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return documentStore.activeSession != nil
         case #selector(saveAnnotations(_:)):
             return documentStore.activeSession?.isDirty == true
-        case #selector(removeHighlightInSelection(_:)):
+        case #selector(removeHighlightUnderCursorAction(_:)):
             return documentStore.activeSession != nil
         case #selector(setHighlightColorPink(_:)):
             menuItem.state = mainWindowController?.currentHighlightColor == .pink ? .on : .off
@@ -762,6 +777,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return true
         case #selector(findInCurrentDocument(_:)):
             return documentStore.activeSession != nil
+        case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
+            return mainWindowController?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):
             menuItem.state = documentStore.tabPresentationMode == .verticalSidebar ? .on : .off
             return true
@@ -793,6 +810,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return documentStore.activeSession != nil && (mainWindowController?.currentPageCount ?? 0) > 0
         case #selector(reopenLastClosed(_:)):
             return documentStore.recentlyClosedURLs.isEmpty == false
+        case #selector(toggleAllPagesOverview(_:)):
+            menuItem.state = mainWindowController?.isAllPagesOverviewActive == true ? .on : .off
+            return documentStore.activeSession != nil
         case #selector(useSinglePage(_:)):
             menuItem.state = documentStore.activeSession?.displayMode == .singlePage ? .on : .off
             return documentStore.activeSession != nil
