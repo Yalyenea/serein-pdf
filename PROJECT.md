@@ -33,6 +33,7 @@
 | 主题 | UI 深色主题、基础夜间阅读模式、反色切换 |
 | 快捷键 | `a` 进入或执行高亮、`Esc` 退出高亮模式、`i` 切换夜间模式、`Cmd+S` 保存批注、可配置文档/布局快捷键 |
 | 保存策略 | 默认 10 分钟自动保存，可切换为永不自动保存 |
+| 设置 | 原生设置窗口，支持默认阅读模式、打开时适应宽度、批注自动保存策略 |
 | 窗口体验 | 三栏布局、左右栏显隐、压缩标题栏、减少顶部控件、标题栏水平 tab |
 
 ### 2.2 V1 明确不做
@@ -413,6 +414,212 @@ Tests/
 | AC-M4-4 | 顶部空间占用显著低于常规文档应用 |
 | AC-M4-5 | 整体视觉符合极简、扁平、紧凑目标，不出现厚重装饰感 |
 
+### 7.5 Milestone 5: 收口、设置与发布前稳固
+
+目标：把已经完成的主路径真正收成“可以放心常用”的桌面应用。
+
+#### 交付物
+
+1. 一轮基于真实 PDF 的完整 UAT。
+2. 针对 UAT 暴露问题的稳定性修复与回归测试。
+3. 最小设置窗口，至少覆盖阅读默认项和批注自动保存策略。
+4. 文档与行为同步，方便后续继续迭代或发布。
+
+#### 任务拆分
+
+| 编号 | 任务 | 说明 |
+|---|---|---|
+| M5-1 | 真实 PDF 手测 | 使用 `~/Downloads` 中真实 PDF 跑完整主路径 |
+| M5-2 | UAT 问题收敛 | 只修阻断使用、明显困扰或高频路径问题 |
+| M5-3 | 稳定性回归测试 | 为修复点补最小单测或集成测试 |
+| M5-4 | 最小设置窗口 | 提供默认阅读模式、打开时适应宽度、自动保存策略入口 |
+| M5-5 | 设置持久化闭环 | 设置修改后立即写回配置文件，并影响新会话 |
+| M5-6 | 发布前清理 | 同步文档、收口临时行为与说明 |
+
+#### 验收标准
+
+| 编号 | 标准 |
+|---|---|
+| AC-M5-1 | `UAT-01` 到 `UAT-10` 在真实 PDF 上完成并记录结论 |
+| AC-M5-2 | UAT 中发现的关键问题已修复，且有对应回归验证 |
+| AC-M5-3 | 设置窗口可稳定修改默认阅读模式、打开时适应宽度、自动保存策略 |
+| AC-M5-4 | 设置写回 `~/Library/Application Support/SlatePDF/config.toml`，重启后仍生效 |
+| AC-M5-5 | 全部自动化测试通过，手测主路径无阻断问题 |
+
+### 7.6 Milestone 6: 体验打磨与快捷键补齐
+
+目标：在 M1–M5 的能力上，补齐日常使用中暴露的手感缺口 —— 快捷键可见性、高亮删除顺手度、文档全局感（缩略图 / 全览）、窗口标题栏整洁度、阅读时的位置感。
+
+#### 交付物
+
+1. 菜单上完整显示所有 plain 快捷键（`A`、`I`、`D`、`Esc`）。
+2. 新的删除高亮交互：无需 select，光标或鼠标悬停在高亮处按 `D` 即可删除。
+3. 左侧缩略图模式（替代 / 切换自 tab 列表的"第二视图"）。
+4. 全览模式：一屏平铺所有页面的 grid thumbnail 视图。
+5. `Cmd+Shift+T` 重新打开上次关闭的文件。
+6. 清理窗口标题栏（去掉和红绿灯重叠的 "Documents" 文字）。
+7. 右侧 Outline 栏底部页码状态栏（形如 `1 / 35`）。
+8. 页面跳转（`Cmd+Option+G`）、Vim 式 `J` / `K` 翻页、PDF 内链接点击跳转、`Cmd+[` / `Cmd+]` 历史前进 / 后退。
+9. 小范围延伸：dirty 点、Find bar 非模态化、缩放快捷键。
+
+#### 任务拆分
+
+| 编号 | 任务 | 说明 |
+|---|---|---|
+| M6-1 | plain 快捷键菜单可见性 | 把 `A` / `I` / `D` / `Esc` 作为无修饰 `keyEquivalent` 写入菜单项，macOS 即可渲染出快捷键符号 |
+| M6-2 | 高亮删除改为 `D` + 命中检测 | `removeHighlight` 快捷键切 plain `d`；命中点取自 `pdfView` 当前鼠标位置（`NSWindow.mouseLocationOutsideOfEventStream`），找到最近的 `Highlight` annotation 删除；若有选区仍走当前逻辑 |
+| M6-3 | 左栏缩略图模式 | 在 `VerticalTabsViewController` 旁新增 `ThumbnailsViewController`（`PDFThumbnailView` 纵向单列）；左栏顶部加一个 `segmented control`：Tabs / Thumbnails |
+| M6-4 | 全览（grid）模式 | 新增 `AllPagesOverviewController`：Reader 区临时替换为 `PDFThumbnailView` grid；按快捷键进入，按 `Esc` 退出；建议快捷键 `Cmd+Shift+P`（Preview） |
+| M6-5 | 重开上次关闭的文件 | `DocumentStore` 维护 `recentlyClosedStack: [URL]`；`close(sessionID:)` 推栈；新命令 `ShortcutCommand.reopenLastClosed` + `Cmd+Shift+T` pop-and-open |
+| M6-6 | 清理窗口标题栏 | `window.title` 持续置空或仅用在 menu bar；`titlebarTabsItem.label` / `paletteLabel` 清空；必要时验证 vertical 模式下系统不会再补自动标题 |
+| M6-7 | Outline 底部页码状态栏 | `OutlineViewController` 在底部加 `NSTextField`，监听 `documentStoreDidChange` + `PDFViewPageChanged`，显示 `currentPage / totalPages` |
+| M6-8 | Tab dirty 指示 | 垂直 tab / 水平 titlebar tab 上给 `isDirty == true` 的 session 加一个小圆点 |
+| M6-9 | Find 非模态化 | `Cmd+F` 打开内嵌 find bar；`Cmd+G` / `Cmd+Shift+G` 遍历匹配；`Esc` 收起 |
+| M6-10 | 跳转到页 N | `Cmd+Option+G` 输入页码跳转；失败时轻量提示 |
+| M6-11 | 缩放快捷键 | `Cmd+=` 放大、`Cmd+-` 缩小；退出 `fitWidth` 状态保持为 `manual` |
+| M6-12 | Vim 式翻页 `J` / `K` | plain `J` = 下一页，`K` = 上一页；遵循当前 displayMode（连续模式下等同 `pdfView.goToNextPage` / `goToPreviousPage`） |
+| M6-13 | PDF 内链接点击跳转 | 确认 `PDFView` 接管 `Link` annotation 点击；内部跳转走 `go(to:)` 并推入历史栈；外部 URL 用系统默认打开 |
+| M6-14 | 历史前进 / 后退 | `Cmd+[` 后退、`Cmd+]` 前进；走 `PDFView.goBack()` / `goForward()` 并尊重跨页跳转（outline 点击、链接点击、`Cmd+Option+G`、`Cmd+Shift+T` 也应入栈） |
+| M6-15 | 文档同步 | 同步 `PROJECT.md` / `TASKS.md` 的新交互、默认快捷键方案、配置文件字段 |
+
+#### 默认快捷键方案（M6 新增 / 调整）
+
+- `A`：高亮选区或进入高亮模式（保持不变，但菜单必须可见）
+- `Esc`：退出高亮模式 / 关闭全览 / 关闭 Find bar
+- `I`：切换夜间模式（保持不变，但菜单必须可见）
+- `D`：删除当前光标所在位置的高亮（从 `Cmd+Shift+D` 迁移，作为 plain 快捷键）
+- `Cmd+Shift+T`：重新打开上次关闭的文件
+- `Cmd+Shift+P`：进入 / 退出全览模式
+- `Cmd+Shift+L`：切换左栏 Tabs / Thumbnails 模式（可选，也可以仅点击 segmented control）
+- `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`：Find bar + 下一 / 上一 匹配
+- `Cmd+Option+G`：跳转到指定页
+- `J` / `K`：下一页 / 上一页（Vim 式，plain 快捷键，文本输入上下文让路）
+- `Cmd+[` / `Cmd+]`：历史后退 / 前进（跨页跳转历史）
+- `Cmd+=` / `Cmd+-`：放大 / 缩小
+
+#### 验收标准
+
+| 编号 | 标准 |
+|---|---|
+| AC-M6-1 | Annotate / View 菜单中 `A`、`I`、`Esc`、`D` 快捷键在文字旁清晰可见 |
+| AC-M6-2 | 不需要先选中高亮，光标位于高亮上时按 `D` 即可删除；原 `Cmd+Shift+D` 不保留 |
+| AC-M6-3 | 左栏可在 Tabs / Thumbnails 之间切换，Thumbnails 单列垂直滚动；点击缩略图跳转当前文档对应页 |
+| AC-M6-4 | 全览模式下所有页面以 grid 形式铺开；点击某页进入该页；`Esc` 可退出 |
+| AC-M6-5 | `Cmd+Shift+T` 能连续恢复最近关闭的 1–N 个文件（只要未清空栈） |
+| AC-M6-6 | 任一 tab 模式下窗口顶栏不再出现 "Documents" 文字，不与交通灯重叠 |
+| AC-M6-7 | 右侧 Outline 栏底部始终显示当前文档的 `当前页 / 总页数`；文档关闭时隐藏或显示 `—` |
+| AC-M6-8 | 含未保存变更的 tab 视觉上可区分（dirty 点） |
+| AC-M6-9 | `Cmd+F` 走非模态 find bar，支持多匹配循环 |
+| AC-M6-10 | `Cmd+Option+G` 输入页码可跳转；越界输入给出轻量提示 |
+| AC-M6-11 | `Cmd+=` / `Cmd+-` 平滑缩放，且保持缩放状态在 session 中持久化 |
+| AC-M6-12 | `J` / `K` 稳定地前进 / 后退一页，且不干扰文本输入上下文 |
+| AC-M6-13 | PDF 内链接点击能跳转到目标页或目标 URL；跳转后 `Cmd+[` 可回到起跳位置 |
+| AC-M6-14 | `Cmd+[` / `Cmd+]` 能在至少 10 步跨页历史中稳定前进 / 后退 |
+
+### 7.7 Milestone 7: 搜索强化与对比阅读
+
+目标：把搜索从"能找到"升级为"能扫视所有命中"，并支持"同时看两份 PDF 做对比"这个日常阅读中最常缺位的能力。
+
+#### 交付物
+
+1. 搜索结果面板：当前文档内所有匹配项，按页分组，列表可点击跳转。
+2. 跨文档搜索（可选）：在所有已打开 session 中搜索同一关键词。
+3. 同窗分屏：主窗口可切换为"双 Reader"模式，两侧各承载一个 `DocumentSession`，共享 `DocumentStore`。
+4. 多窗口对比：支持"新建窗口"承载独立的 Reader 视图；多个窗口共享 session 列表但各自有 active session。
+
+#### 任务拆分
+
+| 编号 | 任务 | 说明 |
+|---|---|---|
+| M7-1 | 搜索结果面板视图 | 非模态 find bar 下挂一个可折叠 list，按 page 分组显示 `snippet` + 页码；点击跳转并入历史栈 |
+| M7-2 | 搜索模型 | 把 `findString` 的全部结果缓存在当前 session 的临时搜索状态中；切换文档或关闭 bar 时清空 |
+| M7-3 | 跨文档搜索（可选） | find bar 顶部一个 toggle："This Document" / "All Open"；命中项在列表里带文档名 |
+| M7-4 | 分屏 Reader | `SplitViewController` 中栏下层再拆为双 Reader，按 `Cmd+Ctrl+\` 切换进入 / 退出；每个 Reader 持有独立的 active session id |
+| M7-5 | 多窗口 | 新命令 `File > New Window`（`Cmd+Shift+N`）；`MainWindowController` 支持多实例；`DocumentStore` 保持单例但公开多窗口 active session 接口 |
+| M7-6 | 跨窗口拖拽 | 可选：把 vertical tab 拖进另一窗口，把 session 在两个窗口的 active 状态间迁移 |
+| M7-7 | 状态持久化 | 分屏与多窗口的布局在重启后恢复（可降级为默认单窗口） |
+| M7-8 | 文档同步 | 更新 `PROJECT.md` / `TASKS.md` / `config.toml` 默认值 |
+
+#### 默认快捷键方案（M7 新增）
+
+- `Cmd+Ctrl+\`：切换同窗分屏
+- `Cmd+Shift+N`：新建窗口
+- find bar 内 `↑` / `↓`：在结果列表中移动；`Enter` 跳转
+
+#### 验收标准
+
+| 编号 | 标准 |
+|---|---|
+| AC-M7-1 | 非模态 find bar 下可看到当前文档的全部匹配项列表，点击跳转，历史栈更新 |
+| AC-M7-2 | 在至少 200 页的 PDF 上搜索常见词，UI 不卡顿 |
+| AC-M7-3 | 同窗分屏可稳定进入 / 退出，两侧独立切换 session，状态互不污染 |
+| AC-M7-4 | 多窗口下关闭任一窗口不影响其他窗口的 session；`Cmd+Shift+T` 行为保持合理 |
+| AC-M7-5 | 重启后能恢复最后一次的分屏或多窗口布局（或明确降级说明） |
+
+### 7.8 Milestone 8: 批注深度化
+
+目标：把"标高亮 + 保存"的基础批注能力，扩展为"可查看、可导出、可按自己的习惯配置"的批注工作流。
+
+#### 交付物
+
+1. 批注管理器：右栏新增"Annotations"模式，与 Outline 并列，列出当前文档所有高亮。
+2. 批注导出：高亮可导出为 Markdown / 纯文本 / JSON，目标为剪贴板或磁盘文件。
+3. 自定义快捷键 UI：设置窗口新增 Shortcuts 面板，在 GUI 中捕获并写回 `config.toml`。
+
+#### 任务拆分
+
+| 编号 | 任务 | 说明 |
+|---|---|---|
+| M8-1 | 批注模型扩展 | 为每个 highlight 抽取 `snippet`（选中文本）、`pageIndex`、`createdAt`（若可从 PDF 获取）、`color` |
+| M8-2 | 右栏 Annotations 模式 | 右栏顶部 segmented control：Outline / Annotations；列表按页分组，点击跳转 |
+| M8-3 | 批注跳转 | 点击列表项高亮对应 annotation 并滚动到位 |
+| M8-4 | 导出 Markdown / Plain / JSON | 命令 `File > Export Highlights…`；格式可选；JSON 结构化最稳，Markdown 适合知识管理工具 |
+| M8-5 | 剪贴板 / 文件双目标 | `Cmd+Shift+E` 复制到剪贴板；显式 "Save as…" 走 `NSSavePanel` |
+| M8-6 | 自定义快捷键 UI | 设置窗口新增 Shortcuts 面板，用 `NSTextField` 或自定义 key-capture 控件捕获绑定；保存时写回 `config.toml` 并 `updateAppConfiguration` |
+| M8-7 | 冲突检测 | 改绑定时检测同键冲突，阻止或提示 |
+| M8-8 | 文档同步 | 同步 docs、示例 `config.toml`、设置截图（若需要） |
+
+#### 默认快捷键方案（M8 新增）
+
+- `Cmd+Shift+A`：切换右栏 Outline / Annotations
+- `Cmd+Shift+E`：导出当前文档高亮到剪贴板（默认 Markdown）
+
+#### 验收标准
+
+| 编号 | 标准 |
+|---|---|
+| AC-M8-1 | Annotations 面板显示当前文档所有高亮，按页分组，支持点击跳转 |
+| AC-M8-2 | 导出文件格式覆盖 Markdown / 纯文本 / JSON，内容包含 `snippet`、页码、颜色 |
+| AC-M8-3 | 自定义快捷键 UI 改动可写回 `config.toml` 并在新会话生效 |
+| AC-M8-4 | 冲突绑定被拒绝或显式提示，不会覆盖破坏原有命令 |
+
+### 7.9 Milestone 9（长期预研）: 扩展生态
+
+目标：在核心阅读体验稳定后，预研 SlatePDF 的扩展机制，为导出、外接脚本、过滤器、主题等二次开发场景留出口子。本里程碑先产出**设计决策 + 最小可跑示例**，不承诺全量实现。
+
+#### 交付物
+
+1. 扩展机制设计决策（Design Doc）：候选路径比较（进程内 Swift 插件 / URL scheme / 外部 CLI 调用 / WebKit 插件壳 / 其他）。
+2. 最小可跑示例：以 M8 "导出高亮" 为首个插件化用例，验证机制。
+3. Slate Extension API 草稿（若决策继续）。
+
+#### 任务拆分（只做规划，不立 ticket 到具体实现）
+
+| 编号 | 任务 | 说明 |
+|---|---|---|
+| M9-1 | 扩展机制 RFC | 分析 PDF 阅读器常见扩展场景，列选型利弊；给结论 |
+| M9-2 | PoC 实现 | 选一条路径，把"导出高亮"作为首个插件化用例验证 |
+| M9-3 | API 草稿 | 若 PoC 成立，草拟稳定 API 面向后续扩展开发者 |
+| M9-4 | 风险评估 | 安全、沙箱、兼容性、上架审核（若上 MAS）的影响 |
+
+#### 验收标准
+
+| 编号 | 标准 |
+|---|---|
+| AC-M9-1 | 有一份 `docs/extensions-rfc.md` 给出决策与理由 |
+| AC-M9-2 | 至少一个 PoC 扩展能在当前 app 中运行 |
+| AC-M9-3 | 若决策推迟，至少把"为什么现在不做"写清楚，避免后续重复讨论 |
+
 ## 8. 开发顺序建议
 
 按最短闭环推进：
@@ -426,6 +633,7 @@ Tests/
 7. 高亮与保存。
 8. 夜间模式。
 9. 窗口与视觉打磨。
+10. UAT 收口与最小设置入口。
 
 原因：先确保信息架构和主路径成立，再做增强体验，最后做“舒服感”。
 

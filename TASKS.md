@@ -345,15 +345,305 @@
 - [x] `NOW-05` 再进入 `M2` 的快捷键系统
 - [x] `NOW-06` 推进 `M3` 高亮 / 自动保存闭环
 
-## 8. 手测清单
+## 8. Milestone 5: 收口、设置与发布前稳固
 
-- [ ] `UAT-01` 打开 3 个 PDF，分别在垂直与水平 tab 模式下切换
-- [ ] `UAT-02` 切换文档时目录同步变化
-- [ ] `UAT-03` 关闭当前 tab 后 active 文档正确
-- [ ] `UAT-04` 重启后恢复文档、active session、tab 模式
+### 8.1 真实 UAT
+
+- [ ] `M5-001` 使用真实 PDF 跑完 `UAT-01` 到 `UAT-10`
+完成定义：至少覆盖文本 PDF、扫描 PDF、带 outline PDF，多标签切换、保存与夜间模式都完成一次。
+
+- [x] `M5-002` 记录 UAT 发现的问题
+完成定义：把阻断问题或高频路径问题明确记录到本轮执行上下文中，并转成修复项。
+
+本轮验证记录：
+
+- 真实 PDF 手测已完成 `UAT-01` 到 `UAT-04`，覆盖了带 outline 文本 PDF、无 outline 中文 PDF、会话恢复与 tab 关闭主路径。
+- `UAT-05` 到 `UAT-09` 的核心行为由现有批注保存测试、本轮新增配置持久化测试与 `DocumentStore` 回归测试覆盖。
+- `UAT-10` 的状态切换逻辑与 window chrome 自动化测试通过，但在 Computer Use 下未能稳定观察到夜间模式的视觉切换。
+
+### 8.2 稳定性修复
+
+- [x] `M5-010` 修复 UAT 暴露的主路径问题
+完成定义：问题集中在会话恢复、tab 切换、批注保存、夜间模式与设置闭环，不扩新功能线。
+
+- [x] `M5-011` 为修复点补回归测试
+完成定义：至少覆盖本轮改动影响到的状态与持久化逻辑。
+
+### 8.3 最小设置窗口
+
+- [x] `M5-020` 提供设置窗口入口
+完成定义：菜单中可打开原生设置窗口，不引入多余面板体系。
+
+- [x] `M5-021` 支持修改默认阅读模式
+完成定义：设置变更后写回配置文件，并影响新打开文档。
+
+- [x] `M5-022` 支持修改“打开时适应宽度”
+完成定义：设置变更后写回配置文件，并影响新打开文档。
+
+- [x] `M5-023` 支持修改批注自动保存策略
+完成定义：至少支持 `10 min` 与 `never`，设置变更后写回配置文件。
+
+### 8.4 文档与验收
+
+- [x] `M5-030` 同步 `PROJECT.md` / `TASKS.md`
+完成定义：行为变更与设置项说明同步到文档。
+
+- [x] `M5-031` 跑完整自动化测试
+完成定义：`swift test` 全量通过。
+
+- [ ] `M5-032` 完成 M5 验收
+完成定义：UAT 与自动化测试都通过，无阻断问题残留。
+
+## 9. Milestone 6: 体验打磨与快捷键补齐
+
+### 9.1 快捷键可见性与新增命令
+
+- [ ] `M6-001` plain 快捷键菜单可见
+完成定义：`Annotate > Highlight Selection / Exit Highlight Mode / Remove Highlight` 与 `View > Toggle Night Mode` 菜单项右侧显示 `A`、`esc`、`D`、`I`；做法为把无修饰 `keyEquivalent` 显式写入菜单项。
+
+- [ ] `M6-002` `removeHighlight` 快捷键改为 `D`
+完成定义：配置文件默认从 `command+shift+d` 迁移到 `d`；`AppConfigurationStore.bootstrapIfNeeded` 识别旧值并重写为新值；`AppConfigurationTests` 覆盖迁移。
+
+- [ ] `M6-003` 新增 `reopenLastClosed` 命令
+完成定义：新增 `ShortcutCommand.reopenLastClosed`，默认快捷键 `Cmd+Shift+T`；File 菜单下新增 "Reopen Closed Tab" 入口。
+
+- [ ] `M6-004` 新增 `toggleAllPagesOverview` 命令
+完成定义：新增 `ShortcutCommand.toggleAllPagesOverview`，默认快捷键 `Cmd+Shift+P`；View 菜单下新增 "All Pages Overview" 入口。
+
+- [ ] `M6-005` 新增 `gotoPage` / `zoomIn` / `zoomOut` 命令
+完成定义：分别默认 `Cmd+Option+G` / `Cmd+=` / `Cmd+-`；菜单入口与配置字段同步。
+
+- [ ] `M6-006` 新增 Vim 式翻页 `J` / `K`
+完成定义：新增 `ShortcutCommand.pageDown` / `pageUp`，默认 plain `j` / `k`；复用 `ReaderShortcutsController.shouldHandlePlainShortcut` 的文本输入避让规则；触发后调用 `pdfView.goToNextPage(_:)` / `goToPreviousPage(_:)`。
+
+- [ ] `M6-007` 新增历史导航 `Cmd+[` / `Cmd+]`
+完成定义：新增 `ShortcutCommand.navigateBack` / `navigateForward`，默认 `Cmd+[` / `Cmd+]`；桥接到 `pdfView.goBack()` / `goForward()`；确保 outline / link / `Cmd+Option+G` / `Cmd+Shift+T` 等跳转都推入历史栈。
+
+### 9.2 高亮删除新逻辑
+
+- [ ] `M6-010` 基于鼠标位置的 annotation 命中
+完成定义：在 `ReaderViewController` 中新增 `highlightAnnotation(at pointInWindow:)`，将窗口坐标 → `pdfView` → page，过滤 type == "Highlight" 最近的一个。
+
+- [ ] `M6-011` `D` 键删除当前悬停高亮
+完成定义：`removeHighlightInSelection` 重构为 `removeHighlightUnderCursor`：优先命中鼠标位置、回退到 `pdfView.currentSelection`；同时把快捷键切到 plain `d`。
+
+- [ ] `M6-012` 高亮删除测试
+完成定义：`HighlightServiceTests` 增加基于 point-in-rect 命中用例；`DocumentStoreTests` 覆盖删除后 `isDirty = true`。
+
+### 9.3 缩略图与全览
+
+- [ ] `M6-020` 新增 `ThumbnailsViewController`
+完成定义：基于 `PDFThumbnailView`，纵向单列；订阅 `documentStoreDidChange`，跟随 active session 切换文档；点击缩略图跳转对应页。
+
+- [ ] `M6-021` 左栏承载 Tabs / Thumbnails 两种模式
+完成定义：左栏顶部 segmented control（或类似控件）切换；切换状态持久化到 `AppConfiguration` 或 `DocumentStore`。
+
+- [ ] `M6-022` 全览 Grid 模式
+完成定义：新增 `AllPagesOverviewViewController`，在 reader 区覆盖展示 `PDFThumbnailView` grid；点击缩略图跳转；`Esc` / 再次触发快捷键退出。
+
+- [ ] `M6-023` 缩略图性能验证
+完成定义：在 200+ 页真实 PDF 上切换 / 滚动 / 跳转不卡顿；必要时使用 `PDFThumbnailView` 的异步渲染选项。
+
+### 9.4 重开最近关闭
+
+- [ ] `M6-030` `DocumentStore` 维护 closed 栈
+完成定义：新增 `recentlyClosedStack: [URL]`；`close(sessionID:)` 在 `ReadingPositionStore` 保存完状态后 push；上限 10 条；暴露 `popRecentlyClosed() -> URL?`。
+
+- [ ] `M6-031` 绑定 `Cmd+Shift+T` 行为
+完成定义：菜单 / 快捷键触发后 pop URL 并 `open(documentAt:)`；没有可恢复项时菜单 disabled。
+
+- [ ] `M6-032` 测试
+完成定义：`DocumentStoreTests` 覆盖 push / pop / cap 行为。
+
+### 9.5 窗口标题栏 / 底部状态栏
+
+- [ ] `M6-040` 清理 "Documents" 文字
+完成定义：`window.title` 置空不再回填 active session 标题到系统可见处；`titlebarTabsItem.label` / `paletteLabel` 清空；在 vertical tab 模式下红绿灯附近不再出现文字。
+
+- [ ] `M6-041` Outline 右下角页码状态栏
+完成定义：`OutlineViewController` 底部加一个 22–24pt 的 `NSTextField`，订阅 `documentStoreDidChange` + `PDFViewPageChanged`，显示 `当前页 / 总页数`；无 active session 时显示占位或隐藏。
+
+### 9.6 延伸项
+
+- [ ] `M6-050` Tab 上 dirty 圆点
+完成定义：`VerticalTabsItemView` / `TitlebarTabItemView` 上对 `isDirty` session 渲染一个 4–6pt 圆点。
+
+- [ ] `M6-051` Find bar 非模态化
+完成定义：`Cmd+F` 打开内嵌 `NSView`（reader 顶部），支持 `Cmd+G` / `Cmd+Shift+G` 遍历；`Esc` 收起。旧的 `NSAlert` 入口删除。
+
+- [ ] `M6-052` 跳转到页 N
+完成定义：`Cmd+Option+G` 弹出 mini 输入框或 inline 框；越界提示；成功跳转后推入历史栈。
+
+- [ ] `M6-053` 缩放快捷键
+完成定义：`Cmd+=` / `Cmd+-` 各递增 / 递减当前缩放 10%；保持 `scaleMode = .manual`。
+
+- [ ] `M6-054` Vim 翻页行为
+完成定义：在非文本输入上下文下，plain `J` / `K` 触发 `pdfView.goToNextPage(_:)` / `goToPreviousPage(_:)`；连续快速按键不丢帧；测试覆盖 `ReaderShortcutsControllerTests`。
+
+- [ ] `M6-055` PDF 内链接跳转
+完成定义：验证 `PDFView` 默认接管 `Link` annotation；对内部链接跳转进入历史栈（自动或手动推入）；对外部 URL 走 `NSWorkspace.shared.open(_:)`；对不可识别链接不崩溃。
+
+- [ ] `M6-056` 历史栈与 `Cmd+[` / `Cmd+]`
+完成定义：`pdfView.goBack()` / `goForward()` 挂接到快捷键；验证从 outline 点击、内链跳转、`Cmd+Option+G`、`Cmd+Shift+T` 触发的跳转都可被回退；菜单项根据 `canGoBack` / `canGoForward` 自动 enable / disable。
+
+### 9.7 文档与验收
+
+- [ ] `M6-060` 同步文档
+完成定义：`PROJECT.md` / `TASKS.md` / `AGENTS.md` 中快捷键、默认配置、交互边界同步；`config.toml` 默认内容更新。
+
+- [ ] `M6-061` `swift test` 全量通过
+完成定义：M6 新增测试及回归测试全部通过。
+
+- [ ] `M6-062` M6 验收
+完成定义：`AC-M6-01` 至 `AC-M6-11` 全部通过，UAT 手测记录到位。
+
+## 10. Milestone 7: 搜索强化与对比阅读
+
+### 10.1 搜索结果面板
+
+- [ ] `M7-001` 搜索模型升级
+完成定义：将 `findString` 的全部结果缓存到当前 session 临时搜索状态；非当前文档或关闭 find bar 时清空；提供 `matches: [(page, snippet, range)]`。
+
+- [ ] `M7-002` find bar 下挂结果列表
+完成定义：M6 的非模态 find bar 底部扩展一个可折叠 `NSTableView` / `NSCollectionView`；按页分组显示；点击跳转并推入历史栈。
+
+- [ ] `M7-003` 结果导航键绑定
+完成定义：find bar 有焦点时 `↑` / `↓` 在列表移动，`Enter` 跳转；与 `Cmd+G` 行为一致。
+
+- [ ] `M7-004` 搜索性能
+完成定义：200+ 页 PDF 上搜索常见词，首次命中 < 500ms；滚动结果列表不卡顿（必要时分批渲染）。
+
+- [ ] `M7-005` 跨文档搜索（可选）
+完成定义：find bar 顶部 toggle "This Document" / "All Open"；跨文档结果带 session 名；点击先切换 session 再跳转。
+
+### 10.2 分屏 / 多窗口
+
+- [ ] `M7-010` 同窗分屏容器
+完成定义：`SplitViewController` 中栏拆成水平双 Reader；进入 / 退出由 `Cmd+Ctrl+\` 触发；每个 Reader 持有独立 `displayedSessionID`。
+
+- [ ] `M7-011` 分屏下 tab 切换落点
+完成定义：从左栏激活一个 session 时，默认进入"焦点 Reader"；支持 `Option+Click` / 专门命令把 session 丢到另一侧。
+
+- [ ] `M7-012` 分屏状态持久化
+完成定义：`PersistedDocumentStoreState` 增加分屏布局字段；重启恢复。
+
+- [ ] `M7-013` 新建窗口命令
+完成定义：新增 `ShortcutCommand.newWindow`，默认 `Cmd+Shift+N`；`AppDelegate` 支持多 `MainWindowController` 实例；`DocumentStore` 单例对外暴露多窗口接口。
+
+- [ ] `M7-014` 多窗口关闭协调
+完成定义：关闭窗口不影响其他窗口 session；最后一个窗口关闭时走现有 terminate 流程；`Cmd+Shift+T` 优先在当前窗口内重开。
+
+- [ ] `M7-015` 多窗口状态持久化
+完成定义：记录每个窗口的 active session 与布局；重启恢复，可降级为默认单窗口并给出说明。
+
+- [ ] `M7-016` 测试
+完成定义：`DocumentStoreTests` 覆盖多窗口场景；`MainWindowControllerTests`（若新建）覆盖分屏切换。
+
+### 10.3 文档与验收
+
+- [ ] `M7-020` 同步文档
+完成定义：`PROJECT.md` / `TASKS.md` / `config.toml` 更新；`AGENTS.md` 的产品规则若有扩展一并更新。
+
+- [ ] `M7-021` M7 验收
+完成定义：`AC-M7-1` 至 `AC-M7-5` 全部通过。
+
+## 11. Milestone 8: 批注深度化
+
+### 11.1 批注管理器
+
+- [ ] `M8-001` 批注模型扩展
+完成定义：对每个 highlight 抽取 `snippet`（选中文本）、`pageIndex`、`color`、`createdAt`（若可从 PDF 获取，否则 session 内维护）。
+
+- [ ] `M8-002` 右栏 Annotations 模式
+完成定义：`OutlineViewController` 外层加 segmented control：Outline / Annotations；Annotations 列表按页分组，显示 snippet + 颜色点。
+
+- [ ] `M8-003` 点击跳转并高亮
+完成定义：点击列表项跳转目标页并短暂强调对应 annotation。
+
+- [ ] `M8-004` dirty 变更同步
+完成定义：增删 highlight 后 Annotations 列表实时更新。
+
+### 11.2 导出高亮
+
+- [ ] `M8-010` 抽取导出内容
+完成定义：抽取全部 highlight → `[(page, snippet, color)]`；按页排序。
+
+- [ ] `M8-011` 导出格式
+完成定义：Markdown / Plain / JSON 三选；每种格式都覆盖 snippet、页码、颜色。
+
+- [ ] `M8-012` 输出目标
+完成定义：`File > Export Highlights…` 菜单；`Cmd+Shift+E` 直接复制 Markdown 到剪贴板；"Save as…" 走 `NSSavePanel`。
+
+- [ ] `M8-013` 测试
+完成定义：`HighlightExporterTests` 覆盖三种格式输出稳定。
+
+### 11.3 自定义快捷键 UI
+
+- [ ] `M8-020` Shortcuts 面板
+完成定义：设置窗口新增 Shortcuts tab；列出所有 `ShortcutCommand` + 当前绑定 + 默认值。
+
+- [ ] `M8-021` key-capture 控件
+完成定义：自定义 `NSView` 捕获用户按键，转成 `KeyboardShortcut`；支持清除 / 恢复默认。
+
+- [ ] `M8-022` 冲突检测
+完成定义：改绑定时检测同组合已被其他命令占用；拒绝或提示。
+
+- [ ] `M8-023` 写回配置
+完成定义：保存按钮触发 `configStore.save` 并 `updateAppConfiguration`；成功后菜单项的 `keyEquivalent` 立即刷新。
+
+- [ ] `M8-024` 测试
+完成定义：`AppConfigurationTests` 覆盖从 UI 模拟输入 → 写回 config.toml → 重读的闭环。
+
+### 11.4 文档与验收
+
+- [ ] `M8-030` 同步文档
+完成定义：`PROJECT.md` / `TASKS.md` / `config.toml` 默认内容 / 设置界面说明同步。
+
+- [ ] `M8-031` M8 验收
+完成定义：`AC-M8-1` 至 `AC-M8-4` 全部通过。
+
+## 12. Milestone 9: 扩展生态（长期预研）
+
+- [ ] `M9-001` 扩展机制 RFC
+完成定义：在 `docs/extensions-rfc.md` 中列选型与决策，候选路径至少包含：进程内 Swift 插件、URL scheme、外部 CLI、WebKit 壳。
+
+- [ ] `M9-002` PoC 用例
+完成定义：若决策继续，选一条路径把"导出高亮"重写为插件；能在当前 app 中运行。
+
+- [ ] `M9-003` Slate Extension API 草稿
+完成定义：面向未来扩展开发者的接口草稿，覆盖最小用例。
+
+- [ ] `M9-004` 风险与推迟说明
+完成定义：若决策推迟，把"为什么现在不做"写清楚（安全、上架、维护成本等）。
+
+## 13. 手测清单
+
+- [x] `UAT-01` 打开 3 个 PDF，分别在垂直与水平 tab 模式下切换
+- [x] `UAT-02` 切换文档时目录同步变化
+- [x] `UAT-03` 关闭当前 tab 后 active 文档正确
+- [x] `UAT-04` 重启后恢复文档、active session、tab 模式
 - [ ] `UAT-05` 选中文字按 `a` 直接生成默认轻粉色高亮
 - [ ] `UAT-06` 无选区按 `a` 进入高亮模式，`Esc` 退出
 - [ ] `UAT-07` 高亮后未按 `Cmd+S` 时，源文件未被立刻覆盖
 - [ ] `UAT-08` 按 `Cmd+S` 后重新打开 PDF，标注仍存在
 - [ ] `UAT-09` 自动保存策略默认是 `10 min`，并可切换为 `never`
 - [ ] `UAT-10` 按 `i` 切换夜间模式
+- [ ] `UAT-11` 菜单中 `A` / `I` / `D` / `Esc` 快捷键文字可见
+- [ ] `UAT-12` 光标悬停在高亮上按 `D` 直接删除该高亮
+- [ ] `UAT-13` 左栏切到 Thumbnails 模式，点击缩略图能跳转
+- [ ] `UAT-14` `Cmd+Shift+P` 进入全览，`Esc` 退出
+- [ ] `UAT-15` `Cmd+Shift+T` 能重开最近关闭的文件
+- [ ] `UAT-16` 窗口顶栏不再出现 "Documents"，红绿灯不被遮挡
+- [ ] `UAT-17` 右侧 Outline 底部显示 `当前页 / 总页数`
+- [ ] `UAT-18` `Cmd+Option+G` 输入页码能跳转，越界输入有提示
+- [ ] `UAT-19` 非输入态下 `J` / `K` 稳定地下 / 上翻页
+- [ ] `UAT-20` 点击 PDF 内部链接能跳转到目标位置
+- [ ] `UAT-21` 跳转后 `Cmd+[` 能回到起跳点，`Cmd+]` 可再前进
+- [ ] `UAT-22` find bar 能看到全部匹配项列表，点击可跳转
+- [ ] `UAT-23` 至少 200 页 PDF 搜索常见词不卡顿
+- [ ] `UAT-24` `Cmd+Ctrl+\` 进入同窗分屏，两侧独立切换 session 不污染
+- [ ] `UAT-25` `Cmd+Shift+N` 新建窗口，两窗口独立且关闭互不影响
+- [ ] `UAT-26` 右栏 Annotations 模式能列出所有高亮，点击跳转
+- [ ] `UAT-27` 导出高亮为 Markdown / 纯文本 / JSON 输出正确
+- [ ] `UAT-28` 设置窗口 Shortcuts 面板改绑定后新会话生效，冲突被拒
+- [ ] `UAT-29` 扩展机制 RFC 存在并已评审（M9 存在的证据）

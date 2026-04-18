@@ -16,7 +16,7 @@ final class DocumentStore {
     private let persistence: DocumentStorePersistence
     private let readingStateStore: ReadingStateStore
     private let recentFilesStore: RecentFilesStore
-    private let appConfiguration: AppConfiguration
+    private var appConfiguration: AppConfiguration
     private(set) var sessions: [DocumentSession] = []
     private(set) var activeSessionID: UUID?
     private(set) var tabPresentationMode: TabPresentationMode = .verticalSidebar
@@ -220,6 +220,17 @@ final class DocumentStore {
         guard sessions[sessionIndex].annotationSavePolicy != policy else { return }
 
         sessions[sessionIndex].annotationSavePolicy = policy
+        notifyChange()
+    }
+
+    func updateAppConfiguration(_ configuration: AppConfiguration) {
+        guard appConfiguration != configuration else { return }
+        appConfiguration = configuration
+
+        for index in sessions.indices {
+            sessions[index].annotationSavePolicy = configuration.annotations.autoSavePolicy
+        }
+
         notifyChange()
     }
 

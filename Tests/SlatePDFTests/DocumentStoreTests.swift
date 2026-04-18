@@ -465,6 +465,30 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(reopenedDocument?.page(at: 0)?.annotations.count, 1)
     }
 
+    func testUpdateAppConfigurationAppliesNewDefaultsToFutureSessions() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let firstSession = try store.open(documentAt: makeTemporaryPDF(named: "settings-first"))
+
+        store.updateAppConfiguration(
+            AppConfiguration(
+                reader: .init(defaultDisplayMode: .twoUp, fitWidthOnOpen: true),
+                annotations: .init(autoSavePolicy: .never),
+                shortcuts: .default
+            )
+        )
+
+        let secondSession = try store.open(documentAt: makeTemporaryPDF(named: "settings-second"))
+
+        XCTAssertEqual(store.session(for: firstSession.id)?.annotationSavePolicy, .never)
+        XCTAssertEqual(store.session(for: firstSession.id)?.displayMode, .singlePageContinuous)
+        XCTAssertEqual(secondSession.displayMode, .twoUp)
+        XCTAssertEqual(secondSession.scaleMode, .fitWidth)
+        XCTAssertEqual(secondSession.annotationSavePolicy, .never)
+    }
+
     private func makeTemporaryPDF(named name: String) throws -> URL {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

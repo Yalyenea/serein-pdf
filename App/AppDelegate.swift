@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var mainWindowController: MainWindowController?
+    private var settingsWindowController: SettingsWindowController?
     private var documentStore: DocumentStore!
     private var appConfiguration: AppConfiguration = .default
     private var configStore: AppConfigurationStore?
@@ -137,11 +138,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func buildApplicationMenuItem() -> NSMenuItem {
         let appMenuItem = NSMenuItem(title: "SlatePDF", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(showSettings(_:)),
+            keyEquivalent: ","
+        )
+        settingsItem.keyEquivalentModifierMask = [.command]
+        settingsItem.target = self
         appMenu.addItem(
+            settingsItem
+        )
+        appMenu.addItem(.separator())
+        let quitItem = appMenu.addItem(
             withTitle: "Quit SlatePDF",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
+        quitItem.target = NSApp
         appMenuItem.submenu = appMenu
         return appMenuItem
     }
@@ -149,6 +162,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func buildFileMenuItem() -> NSMenuItem {
         let fileMenuItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
         let fileMenu = NSMenu(title: "File")
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(showSettings(_:)),
+            keyEquivalent: ","
+        )
         let openItem = NSMenuItem(
             title: "Open…",
             action: #selector(openDocument(_:)),
@@ -172,11 +190,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let recentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         recentItem.submenu = recentFilesMenu
 
+        settingsItem.keyEquivalentModifierMask = [.command]
+        settingsItem.target = self
         openItem.keyEquivalentModifierMask = [.command]
         openItem.target = self
         findItem.keyEquivalentModifierMask = [.command]
         findItem.target = self
-        fileMenu.items = [openItem, recentItem, findItem, saveAnnotationsItem, .separator(), closeItem]
+        fileMenu.items = [settingsItem, .separator(), openItem, recentItem, findItem, saveAnnotationsItem, .separator(), closeItem]
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
     }
@@ -502,6 +522,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    @objc
+    private func showSettings(_ sender: Any?) {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(
+                configuration: appConfiguration,
+                onConfigurationChanged: { [weak self] configuration in
+                    self?.applyUpdatedConfiguration(configuration)
+                }
+            )
+        }
+
+        settingsWindowController?.sync(configuration: appConfiguration)
+        settingsWindowController?.showWindow(nil)
+        settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func applyUpdatedConfiguration(_ configuration: AppConfiguration) {
+        guard let configStore else { return }
+        let previousConfiguration = appConfiguration
+
+        do {
+            try configStore.save(configuration)
+            appConfiguration = configuration
+            documentStore.updateAppConfiguration(configuration)
+        } catch {
+            appConfiguration = previousConfiguration
+            documentStore.updateAppConfiguration(previousConfiguration)
+            settingsWindowController?.sync(configuration: previousConfiguration)
+            presentConfigurationSaveError(error)
+        }
+    }
+
     private func presentOpenError(_ error: Error) {
         let alert = NSAlert(error: error)
         alert.messageText = "Failed to open PDF"
@@ -518,6 +571,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         alert.messageText = "Failed to load SlatePDF config"
         alert.informativeText = error.localizedDescription
         alert.runModal()
+    }
+
+    private func presentConfigurationSaveError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Failed to save SlatePDF settings"
+        if let window = settingsWindowController?.window ?? mainWindowController?.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
     }
 
     private func presentSaveError(_ error: Error) {
