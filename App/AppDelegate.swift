@@ -192,6 +192,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         )
         let recentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         recentItem.submenu = recentFilesMenu
+        let reopenClosedItem = makeConfiguredMenuItem(
+            title: "Reopen Closed Tab",
+            command: .reopenLastClosed,
+            action: #selector(reopenLastClosed(_:))
+        )
 
         settingsItem.keyEquivalentModifierMask = [.command]
         settingsItem.target = self
@@ -199,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         openItem.target = self
         findItem.keyEquivalentModifierMask = [.command]
         findItem.target = self
-        fileMenu.items = [settingsItem, .separator(), openItem, recentItem, findItem, saveAnnotationsItem, .separator(), closeItem]
+        fileMenu.items = [settingsItem, .separator(), openItem, recentItem, reopenClosedItem, findItem, saveAnnotationsItem, .separator(), closeItem]
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
     }
@@ -635,6 +640,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
+    private func reopenLastClosed(_ sender: Any?) {
+        guard let url = documentStore.popRecentlyClosed() else { return }
+        do {
+            _ = try documentStore.open(documentAt: url)
+        } catch {
+            presentOpenError(error)
+        }
+    }
+
+    @objc
     private func showSettings(_ sender: Any?) {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
@@ -776,6 +791,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return mainWindowController?.canGoForward == true
         case #selector(showGotoPageDialog(_:)):
             return documentStore.activeSession != nil && (mainWindowController?.currentPageCount ?? 0) > 0
+        case #selector(reopenLastClosed(_:)):
+            return documentStore.recentlyClosedURLs.isEmpty == false
         case #selector(useSinglePage(_:)):
             menuItem.state = documentStore.activeSession?.displayMode == .singlePage ? .on : .off
             return documentStore.activeSession != nil

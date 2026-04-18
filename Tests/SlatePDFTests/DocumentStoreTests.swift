@@ -94,6 +94,52 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions.count, 1)
     }
 
+    func testCloseSessionPushesURLOntoRecentlyClosedStack() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let firstURL = try makeTemporaryPDF(named: "closed-alpha")
+        let secondURL = try makeTemporaryPDF(named: "closed-beta")
+        let first = try store.open(documentAt: firstURL)
+        let second = try store.open(documentAt: secondURL)
+
+        store.close(sessionID: first.id)
+        store.close(sessionID: second.id)
+
+        XCTAssertEqual(store.recentlyClosedURLs, [firstURL, secondURL])
+        XCTAssertEqual(store.popRecentlyClosed(), secondURL)
+        XCTAssertEqual(store.recentlyClosedURLs, [firstURL])
+        XCTAssertEqual(store.popRecentlyClosed(), firstURL)
+        XCTAssertNil(store.popRecentlyClosed())
+    }
+
+    func testRecentlyClosedStackCapsAtTenEntriesWithoutDuplicates() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        var urls: [URL] = []
+        for index in 0..<12 {
+            let url = try makeTemporaryPDF(named: "stack-\(index)")
+            urls.append(url)
+            let session = try store.open(documentAt: url)
+            store.close(sessionID: session.id)
+        }
+
+        XCTAssertEqual(store.recentlyClosedURLs.count, 10)
+        XCTAssertEqual(store.recentlyClosedURLs, Array(urls.suffix(10)))
+
+        // Closing an already-tracked URL moves it to the top rather than duplicating.
+        let reopened = try store.open(documentAt: urls[0])
+        store.close(sessionID: reopened.id)
+        XCTAssertEqual(store.recentlyClosedURLs.last, urls[0])
+        XCTAssertEqual(store.recentlyClosedURLs.count, 10)
+        XCTAssertEqual(store.recentlyClosedURLs.filter { $0 == urls[0] }.count, 1)
+    }
+
     func testCloseActiveSessionConvenienceUsesCurrentSelection() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

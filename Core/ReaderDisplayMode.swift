@@ -76,6 +76,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case navigateBack = "navigate_back"
     case navigateForward = "navigate_forward"
     case gotoPage = "goto_page"
+    case reopenLastClosed = "reopen_last_closed"
 
     var menuTitle: String {
         switch self {
@@ -133,6 +134,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Forward"
         case .gotoPage:
             "Go to Page…"
+        case .reopenLastClosed:
+            "Reopen Closed Tab"
         }
     }
 

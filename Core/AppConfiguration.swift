@@ -49,6 +49,7 @@ struct AppConfiguration: Equatable, Sendable {
             .navigateBack: KeyboardShortcut(key: "[", modifiers: [.command]),
             .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
+            .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
         ])
     }
 
@@ -221,6 +222,7 @@ page_up = "k"
 navigate_back = "command+["
 navigate_forward = "command+]"
 goto_page = "command+option+g"
+reopen_last_closed = "command+shift+t"
 """
 
     static func render(_ configuration: AppConfiguration) -> String {
@@ -263,6 +265,7 @@ page_up = "\(configuration.shortcuts.bindings[.pageUp]?.serializedValue ?? "k")"
 navigate_back = "\(configuration.shortcuts.bindings[.navigateBack]?.serializedValue ?? "command+[")"
 navigate_forward = "\(configuration.shortcuts.bindings[.navigateForward]?.serializedValue ?? "command+]")"
 goto_page = "\(configuration.shortcuts.bindings[.gotoPage]?.serializedValue ?? "command+option+g")"
+reopen_last_closed = "\(configuration.shortcuts.bindings[.reopenLastClosed]?.serializedValue ?? "command+shift+t")"
 """
     }
 }
@@ -372,6 +375,8 @@ struct AppConfigurationParser {
             configuration.shortcuts.bindings[.navigateForward] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "goto_page"):
             configuration.shortcuts.bindings[.gotoPage] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "reopen_last_closed"):
+            configuration.shortcuts.bindings[.reopenLastClosed] = try KeyboardShortcut.parse(parseString(rawValue))
         default:
             break
         }
@@ -450,6 +455,7 @@ struct AppConfigurationStore {
             "navigate_back",
             "navigate_forward",
             "goto_page",
+            "reopen_last_closed",
         ]
 
         guard requiredKeys.contains(where: { existingContent.contains($0) == false }) else { return }

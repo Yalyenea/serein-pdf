@@ -23,6 +23,8 @@ final class DocumentStore {
     private(set) var isLeftSidebarVisible = true
     private(set) var isRightSidebarVisible = true
     private(set) var recentDocumentURLs: [URL] = []
+    private(set) var recentlyClosedURLs: [URL] = []
+    private static let recentlyClosedLimit = 10
 
     init(
         persistence: DocumentStorePersistence = UserDefaultsDocumentStorePersistence(),
@@ -75,7 +77,9 @@ final class DocumentStore {
 
     func close(sessionID: UUID) {
         guard let closedIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let closedURL = sessions[closedIndex].url
         sessions.remove(at: closedIndex)
+        pushRecentlyClosed(closedURL)
 
         if activeSessionID == sessionID {
             guard !sessions.isEmpty else {
@@ -89,6 +93,21 @@ final class DocumentStore {
         }
 
         notifyChange()
+    }
+
+    private func pushRecentlyClosed(_ url: URL) {
+        recentlyClosedURLs.removeAll { $0 == url }
+        recentlyClosedURLs.append(url)
+        if recentlyClosedURLs.count > Self.recentlyClosedLimit {
+            recentlyClosedURLs.removeFirst(recentlyClosedURLs.count - Self.recentlyClosedLimit)
+        }
+    }
+
+    func popRecentlyClosed() -> URL? {
+        guard recentlyClosedURLs.isEmpty == false else { return nil }
+        let url = recentlyClosedURLs.removeLast()
+        notifyChange()
+        return url
     }
 
     func closeActiveSession() {
