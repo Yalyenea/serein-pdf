@@ -26,7 +26,7 @@ struct AppConfiguration: Equatable, Sendable {
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
-            .removeHighlight: KeyboardShortcut(key: "d", modifiers: [.command, .shift]),
+            .removeHighlight: KeyboardShortcut(key: "d", modifiers: []),
             .highlightColorPink: KeyboardShortcut(key: "p", modifiers: [.command, .shift]),
             .highlightColorYellow: KeyboardShortcut(key: "y", modifiers: [.command, .shift]),
             .highlightColorGreen: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
@@ -38,10 +38,17 @@ struct AppConfiguration: Equatable, Sendable {
             .previousTab: KeyboardShortcut(key: "[", modifiers: [.command, .shift]),
             .nextTab: KeyboardShortcut(key: "]", modifiers: [.command, .shift]),
             .fitWidth: KeyboardShortcut(key: "0", modifiers: [.command]),
+            .zoomIn: KeyboardShortcut(key: "=", modifiers: [.command]),
+            .zoomOut: KeyboardShortcut(key: "-", modifiers: [.command]),
             .singlePage: KeyboardShortcut(key: "1", modifiers: [.command]),
             .singlePageContinuous: KeyboardShortcut(key: "2", modifiers: [.command]),
             .twoUp: KeyboardShortcut(key: "3", modifiers: [.command]),
             .twoUpContinuous: KeyboardShortcut(key: "4", modifiers: [.command]),
+            .pageDown: KeyboardShortcut(key: "j", modifiers: []),
+            .pageUp: KeyboardShortcut(key: "k", modifiers: []),
+            .navigateBack: KeyboardShortcut(key: "[", modifiers: [.command]),
+            .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
+            .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
         ])
     }
 
@@ -191,7 +198,7 @@ highlight_selection = "a"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 save_annotations = "command+s"
-remove_highlight = "command+shift+d"
+remove_highlight = "d"
 highlight_color_pink = "command+shift+p"
 highlight_color_yellow = "command+shift+y"
 highlight_color_green = "command+shift+g"
@@ -203,10 +210,17 @@ close_current_tab = "command+w"
 previous_tab = "command+shift+["
 next_tab = "command+shift+]"
 fit_width = "command+0"
+zoom_in = "command+="
+zoom_out = "command+-"
 single_page = "command+1"
 single_page_continuous = "command+2"
 two_up = "command+3"
 two_up_continuous = "command+4"
+page_down = "j"
+page_up = "k"
+navigate_back = "command+["
+navigate_forward = "command+]"
+goto_page = "command+option+g"
 """
 
     static func render(_ configuration: AppConfiguration) -> String {
@@ -226,7 +240,7 @@ highlight_selection = "\(configuration.shortcuts.bindings[.highlightSelection]?.
 exit_highlight_mode = "\(configuration.shortcuts.bindings[.exitHighlightMode]?.serializedValue ?? "escape")"
 toggle_night_mode = "\(configuration.shortcuts.bindings[.toggleNightMode]?.serializedValue ?? "i")"
 save_annotations = "\(configuration.shortcuts.bindings[.saveAnnotations]?.serializedValue ?? "command+s")"
-remove_highlight = "\(configuration.shortcuts.bindings[.removeHighlight]?.serializedValue ?? "command+shift+d")"
+remove_highlight = "\(configuration.shortcuts.bindings[.removeHighlight]?.serializedValue ?? "d")"
 highlight_color_pink = "\(configuration.shortcuts.bindings[.highlightColorPink]?.serializedValue ?? "command+shift+p")"
 highlight_color_yellow = "\(configuration.shortcuts.bindings[.highlightColorYellow]?.serializedValue ?? "command+shift+y")"
 highlight_color_green = "\(configuration.shortcuts.bindings[.highlightColorGreen]?.serializedValue ?? "command+shift+g")"
@@ -238,10 +252,17 @@ close_current_tab = "\(configuration.shortcuts.bindings[.closeCurrentTab]?.seria
 previous_tab = "\(configuration.shortcuts.bindings[.previousTab]?.serializedValue ?? "command+shift+[")"
 next_tab = "\(configuration.shortcuts.bindings[.nextTab]?.serializedValue ?? "command+shift+]")"
 fit_width = "\(configuration.shortcuts.bindings[.fitWidth]?.serializedValue ?? "command+0")"
+zoom_in = "\(configuration.shortcuts.bindings[.zoomIn]?.serializedValue ?? "command+=")"
+zoom_out = "\(configuration.shortcuts.bindings[.zoomOut]?.serializedValue ?? "command+-")"
 single_page = "\(configuration.shortcuts.bindings[.singlePage]?.serializedValue ?? "command+1")"
 single_page_continuous = "\(configuration.shortcuts.bindings[.singlePageContinuous]?.serializedValue ?? "command+2")"
 two_up = "\(configuration.shortcuts.bindings[.twoUp]?.serializedValue ?? "command+3")"
 two_up_continuous = "\(configuration.shortcuts.bindings[.twoUpContinuous]?.serializedValue ?? "command+4")"
+page_down = "\(configuration.shortcuts.bindings[.pageDown]?.serializedValue ?? "j")"
+page_up = "\(configuration.shortcuts.bindings[.pageUp]?.serializedValue ?? "k")"
+navigate_back = "\(configuration.shortcuts.bindings[.navigateBack]?.serializedValue ?? "command+[")"
+navigate_forward = "\(configuration.shortcuts.bindings[.navigateForward]?.serializedValue ?? "command+]")"
+goto_page = "\(configuration.shortcuts.bindings[.gotoPage]?.serializedValue ?? "command+option+g")"
 """
     }
 }
@@ -337,6 +358,20 @@ struct AppConfigurationParser {
             configuration.shortcuts.bindings[.twoUp] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "two_up_continuous"):
             configuration.shortcuts.bindings[.twoUpContinuous] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "zoom_in"):
+            configuration.shortcuts.bindings[.zoomIn] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "zoom_out"):
+            configuration.shortcuts.bindings[.zoomOut] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "page_down"):
+            configuration.shortcuts.bindings[.pageDown] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "page_up"):
+            configuration.shortcuts.bindings[.pageUp] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "navigate_back"):
+            configuration.shortcuts.bindings[.navigateBack] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "navigate_forward"):
+            configuration.shortcuts.bindings[.navigateForward] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "goto_page"):
+            configuration.shortcuts.bindings[.gotoPage] = try KeyboardShortcut.parse(parseString(rawValue))
         default:
             break
         }
@@ -408,6 +443,13 @@ struct AppConfigurationStore {
             "close_current_tab",
             "previous_tab",
             "next_tab",
+            "zoom_in",
+            "zoom_out",
+            "page_down",
+            "page_up",
+            "navigate_back",
+            "navigate_forward",
+            "goto_page",
         ]
 
         guard requiredKeys.contains(where: { existingContent.contains($0) == false }) else { return }

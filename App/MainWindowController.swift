@@ -152,6 +152,40 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.readerViewController.fitToWidth()
     }
 
+    func zoomIn() {
+        splitViewController.readerViewController.zoomIn()
+    }
+
+    func zoomOut() {
+        splitViewController.readerViewController.zoomOut()
+    }
+
+    func goToNextPage() {
+        splitViewController.readerViewController.goToNextPage()
+    }
+
+    func goToPreviousPage() {
+        splitViewController.readerViewController.goToPreviousPage()
+    }
+
+    func navigateBack() {
+        splitViewController.readerViewController.navigateBack()
+    }
+
+    func navigateForward() {
+        splitViewController.readerViewController.navigateForward()
+    }
+
+    var canGoBack: Bool { splitViewController.readerViewController.canGoBack }
+    var canGoForward: Bool { splitViewController.readerViewController.canGoForward }
+
+    @discardableResult
+    func goToPage(_ pageIndex: Int) -> Bool {
+        splitViewController.readerViewController.goToPage(pageIndex)
+    }
+
+    var currentPageCount: Int { splitViewController.readerViewController.currentPageCount }
+
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
         guard let window = window as? ReaderShortcutWindow else { return }
         window.plainShortcutHandler = handler

@@ -65,10 +65,17 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case previousTab = "previous_tab"
     case nextTab = "next_tab"
     case fitWidth = "fit_width"
+    case zoomIn = "zoom_in"
+    case zoomOut = "zoom_out"
     case singlePage = "single_page"
     case singlePageContinuous = "single_page_continuous"
     case twoUp = "two_up"
     case twoUpContinuous = "two_up_continuous"
+    case pageDown = "page_down"
+    case pageUp = "page_up"
+    case navigateBack = "navigate_back"
+    case navigateForward = "navigate_forward"
+    case gotoPage = "goto_page"
 
     var menuTitle: String {
         switch self {
@@ -81,7 +88,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .saveAnnotations:
             "Save Annotations"
         case .removeHighlight:
-            "Remove Highlight in Selection"
+            "Remove Highlight"
         case .highlightColorPink:
             "Highlight Color: \(HighlightColor.pink.menuTitle)"
         case .highlightColorYellow:
@@ -104,6 +111,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Next Tab"
         case .fitWidth:
             "Fit Width"
+        case .zoomIn:
+            "Zoom In"
+        case .zoomOut:
+            "Zoom Out"
         case .singlePage:
             ReaderDisplayMode.singlePage.menuTitle
         case .singlePageContinuous:
@@ -112,29 +123,21 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             ReaderDisplayMode.twoUp.menuTitle
         case .twoUpContinuous:
             ReaderDisplayMode.twoUpContinuous.menuTitle
+        case .pageDown:
+            "Next Page"
+        case .pageUp:
+            "Previous Page"
+        case .navigateBack:
+            "Back"
+        case .navigateForward:
+            "Forward"
+        case .gotoPage:
+            "Go to Page…"
         }
     }
 
     var displayMode: ReaderDisplayMode? {
         switch self {
-        case .highlightSelection,
-             .exitHighlightMode,
-             .toggleNightMode,
-             .saveAnnotations,
-             .removeHighlight,
-             .highlightColorPink,
-             .highlightColorYellow,
-             .highlightColorGreen,
-             .toggleLeftSidebar,
-             .toggleRightSidebar,
-             .useSidebarTabs,
-             .useTitlebarTabs,
-             .closeCurrentTab,
-             .previousTab,
-             .nextTab:
-            nil
-        case .fitWidth:
-            nil
         case .singlePage:
             .singlePage
         case .singlePageContinuous:
@@ -143,6 +146,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             .twoUp
         case .twoUpContinuous:
             .twoUpContinuous
+        default:
+            nil
         }
     }
 

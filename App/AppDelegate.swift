@@ -55,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
                     .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
                     .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
+                    .pageDown: { [weak self] in self?.goToNextPageAction(nil) },
+                    .pageUp: { [weak self] in self?.goToPreviousPageAction(nil) },
                 ]
             }
         )
@@ -132,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainMenu.addItem(buildTabsMenuItem())
         mainMenu.addItem(buildAnnotateMenuItem())
         mainMenu.addItem(buildViewMenuItem())
+        mainMenu.addItem(buildNavigateMenuItem())
         NSApp.mainMenu = mainMenu
     }
 
@@ -302,6 +305,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 action: #selector(fitReaderToWidth(_:))
             ),
             makeConfiguredMenuItem(
+                title: "Zoom In",
+                command: .zoomIn,
+                action: #selector(zoomInReader(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: "Zoom Out",
+                command: .zoomOut,
+                action: #selector(zoomOutReader(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
                 title: ReaderDisplayMode.singlePage.menuTitle,
                 command: .singlePage,
                 action: #selector(useSinglePage(_:))
@@ -326,6 +340,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return viewMenuItem
     }
 
+    private func buildNavigateMenuItem() -> NSMenuItem {
+        let navigateMenuItem = NSMenuItem(title: "Navigate", action: nil, keyEquivalent: "")
+        let navigateMenu = NSMenu(title: "Navigate")
+
+        navigateMenu.items = [
+            makeConfiguredMenuItem(
+                title: "Next Page",
+                command: .pageDown,
+                action: #selector(goToNextPageAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: "Previous Page",
+                command: .pageUp,
+                action: #selector(goToPreviousPageAction(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: "Back",
+                command: .navigateBack,
+                action: #selector(navigateBackAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: "Forward",
+                command: .navigateForward,
+                action: #selector(navigateForwardAction(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: "Go to Page…",
+                command: .gotoPage,
+                action: #selector(showGotoPageDialog(_:))
+            ),
+        ]
+
+        navigateMenuItem.submenu = navigateMenu
+        return navigateMenuItem
+    }
+
     private func makeConfiguredMenuItem(
         title: String,
         command: ShortcutCommand,
@@ -336,10 +388,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         item.representedObject = command
 
         if let shortcut = appConfiguration.shortcuts.bindings[command] {
-            if shortcut.isPlainShortcut == false {
-                item.keyEquivalent = shortcut.menuKeyEquivalent
-                item.keyEquivalentModifierMask = shortcut.modifierMask
-            }
+            item.keyEquivalent = shortcut.menuKeyEquivalent
+            item.keyEquivalentModifierMask = shortcut.modifierMask
         }
 
         return item
@@ -418,6 +468,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func fitReaderToWidth(_ sender: Any?) {
         mainWindowController?.fitReaderToWidth()
+    }
+
+    @objc
+    private func zoomInReader(_ sender: Any?) {
+        mainWindowController?.zoomIn()
+    }
+
+    @objc
+    private func zoomOutReader(_ sender: Any?) {
+        mainWindowController?.zoomOut()
+    }
+
+    @objc
+    private func goToNextPageAction(_ sender: Any?) {
+        mainWindowController?.goToNextPage()
+    }
+
+    @objc
+    private func goToPreviousPageAction(_ sender: Any?) {
+        mainWindowController?.goToPreviousPage()
+    }
+
+    @objc
+    private func navigateBackAction(_ sender: Any?) {
+        mainWindowController?.navigateBack()
+    }
+
+    @objc
+    private func navigateForwardAction(_ sender: Any?) {
+        mainWindowController?.navigateForward()
+    }
+
+    @objc
+    private func showGotoPageDialog(_ sender: Any?) {
+        guard let mainWindowController,
+              documentStore.activeSession != nil else { return }
+
+        let pageCount = mainWindowController.currentPageCount
+        guard pageCount > 0 else { return }
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
+        field.placeholderString = "1–\(pageCount)"
+
+        let alert = NSAlert()
+        alert.messageText = "Go to Page"
+        alert.informativeText = "Enter a page number between 1 and \(pageCount)."
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Go")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let pageNumber = Int(field.stringValue.trimmingCharacters(in: .whitespaces)) else { return }
+
+        let index = pageNumber - 1
+        guard mainWindowController.goToPage(index) else {
+            let warn = NSAlert()
+            warn.alertStyle = .warning
+            warn.messageText = "Page Out of Range"
+            warn.informativeText = "Enter a page number between 1 and \(pageCount)."
+            warn.runModal()
+            return
+        }
     }
 
     @objc
@@ -654,6 +766,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(fitReaderToWidth(_:)):
             menuItem.state = documentStore.activeSession?.scaleMode == .fitWidth ? .on : .off
             return documentStore.activeSession != nil
+        case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
+            return documentStore.activeSession != nil
+        case #selector(goToNextPageAction(_:)), #selector(goToPreviousPageAction(_:)):
+            return documentStore.activeSession != nil
+        case #selector(navigateBackAction(_:)):
+            return mainWindowController?.canGoBack == true
+        case #selector(navigateForwardAction(_:)):
+            return mainWindowController?.canGoForward == true
+        case #selector(showGotoPageDialog(_:)):
+            return documentStore.activeSession != nil && (mainWindowController?.currentPageCount ?? 0) > 0
         case #selector(useSinglePage(_:)):
             menuItem.state = documentStore.activeSession?.displayMode == .singlePage ? .on : .off
             return documentStore.activeSession != nil

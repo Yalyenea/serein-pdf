@@ -151,6 +151,55 @@ final class ReaderViewController: NSViewController {
         applyFitWidth(for: session)
     }
 
+    func zoomIn() {
+        guard let session = documentStore.activeSession,
+              session.id == displayedSessionID else { return }
+        let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
+        applyProgrammaticScale(nextScale)
+        documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
+    }
+
+    func zoomOut() {
+        guard let session = documentStore.activeSession,
+              session.id == displayedSessionID else { return }
+        let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
+        applyProgrammaticScale(nextScale)
+        documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
+    }
+
+    func goToNextPage() {
+        pdfView.goToNextPage(nil)
+    }
+
+    func goToPreviousPage() {
+        pdfView.goToPreviousPage(nil)
+    }
+
+    func navigateBack() {
+        guard pdfView.canGoBack else { return }
+        pdfView.goBack(nil)
+    }
+
+    func navigateForward() {
+        guard pdfView.canGoForward else { return }
+        pdfView.goForward(nil)
+    }
+
+    var canGoBack: Bool { pdfView.canGoBack }
+    var canGoForward: Bool { pdfView.canGoForward }
+
+    @discardableResult
+    func goToPage(_ pageIndex: Int) -> Bool {
+        guard let document = pdfView.document,
+              pageIndex >= 0,
+              pageIndex < document.pageCount,
+              let page = document.page(at: pageIndex) else { return false }
+        pdfView.go(to: PDFDestination(page: page, at: .zero))
+        return true
+    }
+
+    var currentPageCount: Int { pdfView.document?.pageCount ?? 0 }
+
     var isNightModeEnabled: Bool {
         themeManager.readerState.isNightModeEnabled
     }

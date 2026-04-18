@@ -11,4 +11,12 @@ final class ReaderShortcutWindow: NSWindow {
 
         super.sendEvent(event)
     }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if modifiers.isEmpty {
+            return false
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 }

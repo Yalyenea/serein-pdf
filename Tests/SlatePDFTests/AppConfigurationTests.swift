@@ -18,9 +18,17 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth]?.key, "0")
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "b", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "w", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.pageDown], KeyboardShortcut(key: "j", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.pageUp], KeyboardShortcut(key: "k", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.navigateBack], KeyboardShortcut(key: "[", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.navigateForward], KeyboardShortcut(key: "]", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
     }
 
     func testLoadTomlOverridesReaderDefaultsAndShortcuts() throws {
@@ -86,6 +94,14 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
         XCTAssertTrue(content.contains("close_current_tab = \"command+w\""))
         XCTAssertTrue(content.contains("fit_width = \"command+9\""))
+        XCTAssertTrue(content.contains("remove_highlight = \"d\""))
+        XCTAssertTrue(content.contains("page_down = \"j\""))
+        XCTAssertTrue(content.contains("page_up = \"k\""))
+        XCTAssertTrue(content.contains("navigate_back = \"command+[\""))
+        XCTAssertTrue(content.contains("navigate_forward = \"command+]\""))
+        XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
+        XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
+        XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
     }
 
     func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {
