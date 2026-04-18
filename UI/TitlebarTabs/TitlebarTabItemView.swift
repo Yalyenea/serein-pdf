@@ -3,9 +3,11 @@ import AppKit
 final class TitlebarTabItemView: NSView {
     private let sessionID: UUID
     private let selectButton = NSButton(title: "", target: nil, action: nil)
+    private let dirtyIndicator = NSView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let dividerView = NSView()
+    private let isDirty: Bool
     private var onSelect: ((UUID) -> Void)?
     private var onClose: ((UUID) -> Void)?
 
@@ -15,7 +17,8 @@ final class TitlebarTabItemView: NSView {
 
     override var intrinsicContentSize: NSSize {
         let titleWidth = min(max(titleLabel.intrinsicContentSize.width, 72), 240)
-        return NSSize(width: titleWidth + 44, height: 28)
+        let dirtyWidth: CGFloat = isDirty ? 12 : 0
+        return NSSize(width: titleWidth + dirtyWidth + 42, height: 28)
     }
 
     init(
@@ -27,12 +30,13 @@ final class TitlebarTabItemView: NSView {
         onClose: @escaping (UUID) -> Void
     ) {
         self.sessionID = sessionID
+        self.isDirty = isDirty
         self.onSelect = onSelect
         self.onClose = onClose
         super.init(frame: .zero)
 
         wantsLayer = true
-        layer?.cornerRadius = 0
+        layer?.cornerRadius = 7
         layer?.borderWidth = 0
 
         selectButton.isBordered = false
@@ -42,7 +46,12 @@ final class TitlebarTabItemView: NSView {
         selectButton.target = self
         selectButton.action = #selector(handleSelect)
 
-        titleLabel.stringValue = isDirty ? "• \(title)" : title
+        dirtyIndicator.wantsLayer = true
+        dirtyIndicator.layer?.cornerRadius = 3
+        dirtyIndicator.translatesAutoresizingMaskIntoConstraints = false
+        dirtyIndicator.isHidden = !isDirty
+
+        titleLabel.stringValue = title
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -57,11 +66,11 @@ final class TitlebarTabItemView: NSView {
 
         dividerView.wantsLayer = true
 
-        let stack = NSStackView(views: [titleLabel, closeButton])
+        let stack = NSStackView(views: [dirtyIndicator, titleLabel, closeButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
+        stack.spacing = 7
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 7)
 
         addSubview(selectButton)
         addSubview(stack)
@@ -83,6 +92,8 @@ final class TitlebarTabItemView: NSView {
             dividerView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             dividerView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
             dividerView.widthAnchor.constraint(equalToConstant: 1),
+            dirtyIndicator.widthAnchor.constraint(equalToConstant: 6),
+            dirtyIndicator.heightAnchor.constraint(equalToConstant: 6),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
             heightAnchor.constraint(equalToConstant: 28),
         ])
@@ -116,7 +127,10 @@ final class TitlebarTabItemView: NSView {
             layer?.backgroundColor = isSelected
                 ? SplitViewController.selectedChromeBackgroundColor.cgColor
                 : NSColor.clear.cgColor
+            layer?.borderColor = isSelected ? SplitViewController.chromeStrokeColor.cgColor : NSColor.clear.cgColor
+            layer?.borderWidth = isSelected ? 1 : 0
             dividerView.layer?.backgroundColor = SplitViewController.dividerBackgroundColor.cgColor
+            dirtyIndicator.layer?.backgroundColor = HighlightColor.pink.nsColor.cgColor
         }
         titleLabel.textColor = isSelected ? .labelColor : .secondaryLabelColor
         closeButton.contentTintColor = isSelected ? .labelColor : .tertiaryLabelColor

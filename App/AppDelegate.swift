@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var readerShortcutsController: ReaderShortcutsController?
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private var autoSaveTimer: Timer?
+    private var reportedAutoSaveFailureURLs: Set<URL> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -81,6 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func runAutoSave() {
         let errors = documentStore.autoSaveDirtySessions()
         guard errors.isEmpty == false else { return }
+        let freshErrors = errors.filter { reportedAutoSaveFailureURLs.contains($0.key) == false }
+        guard freshErrors.isEmpty == false else { return }
+        reportedAutoSaveFailureURLs.formUnion(freshErrors.keys)
+        presentAutoSaveErrors(freshErrors)
         NSLog("SlatePDF auto-save failed for: %@", errors.keys.map(\.lastPathComponent).joined(separator: ", "))
     }
 
@@ -88,8 +93,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        (mainWindowController?.prepareForApplicationTermination() ?? true) ? .terminateNow : .terminateCancel
+    }
+
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        let dirtyURLs = Set(documentStore.sessions.filter(\.isDirty).map(\.url))
+        reportedAutoSaveFailureURLs.formIntersection(dirtyURLs)
         updateRecentFilesMenu()
     }
 
@@ -316,7 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func closeCurrentTab(_ sender: Any?) {
-        documentStore.closeActiveSession()
+        mainWindowController?.requestCloseActiveSession()
     }
 
     @objc
@@ -512,6 +523,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func presentSaveError(_ error: Error) {
         let alert = NSAlert(error: error)
         alert.messageText = "Failed to save annotations"
+        if let window = mainWindowController?.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func presentAutoSaveErrors(_ errors: [URL: Error]) {
+        let sortedFiles = errors.keys.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let fileList = sortedFiles.map(\.lastPathComponent).joined(separator: "\n")
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Auto-save failed"
+        alert.informativeText = "These PDFs still have unsaved highlights:\n\(fileList)"
+        alert.addButton(withTitle: "OK")
+
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {

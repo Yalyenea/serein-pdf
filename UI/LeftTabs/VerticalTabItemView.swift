@@ -3,9 +3,11 @@ import AppKit
 final class VerticalTabItemView: NSView {
     private let sessionID: UUID
     private let selectButton = NSButton(title: "", target: nil, action: nil)
+    private let dirtyIndicator = NSView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let separator = NSBox()
+    private let isDirty: Bool
     private var onSelect: ((UUID) -> Void)?
     private var onClose: ((UUID) -> Void)?
 
@@ -22,12 +24,14 @@ final class VerticalTabItemView: NSView {
         onClose: @escaping (UUID) -> Void
     ) {
         self.sessionID = sessionID
+        self.isDirty = isDirty
         self.onSelect = onSelect
         self.onClose = onClose
         super.init(frame: .zero)
 
         wantsLayer = true
         layer?.cornerRadius = 8
+        layer?.borderWidth = 0
 
         selectButton.isBordered = false
         selectButton.title = ""
@@ -36,7 +40,12 @@ final class VerticalTabItemView: NSView {
         selectButton.target = self
         selectButton.action = #selector(handleSelect)
 
-        titleLabel.stringValue = isDirty ? "• \(title)" : title
+        dirtyIndicator.wantsLayer = true
+        dirtyIndicator.layer?.cornerRadius = 3
+        dirtyIndicator.translatesAutoresizingMaskIntoConstraints = false
+        dirtyIndicator.isHidden = !isDirty
+
+        titleLabel.stringValue = title
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.maximumNumberOfLines = 1
@@ -54,10 +63,10 @@ final class VerticalTabItemView: NSView {
         separator.isTransparent = false
         separator.fillColor = SplitViewController.dividerBackgroundColor
 
-        let row = NSStackView(views: [titleLabel, closeButton])
+        let row = NSStackView(views: [dirtyIndicator, titleLabel, closeButton])
         row.orientation = .horizontal
         row.alignment = .centerY
-        row.spacing = 8
+        row.spacing = 7
         row.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 6)
 
         addSubview(selectButton)
@@ -76,6 +85,8 @@ final class VerticalTabItemView: NSView {
             row.trailingAnchor.constraint(equalTo: trailingAnchor),
             row.topAnchor.constraint(equalTo: topAnchor),
             row.bottomAnchor.constraint(equalTo: bottomAnchor),
+            dirtyIndicator.widthAnchor.constraint(equalToConstant: 6),
+            dirtyIndicator.heightAnchor.constraint(equalToConstant: 6),
             closeButton.widthAnchor.constraint(equalToConstant: 20),
             separator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             separator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
@@ -112,8 +123,12 @@ final class VerticalTabItemView: NSView {
             layer?.backgroundColor = isSelected
                 ? SplitViewController.selectedChromeBackgroundColor.cgColor
                 : NSColor.clear.cgColor
+            layer?.borderColor = isSelected ? SplitViewController.chromeStrokeColor.cgColor : NSColor.clear.cgColor
+            layer?.borderWidth = isSelected ? 1 : 0
+            dirtyIndicator.layer?.backgroundColor = HighlightColor.pink.nsColor.cgColor
         }
         titleLabel.textColor = isSelected ? .labelColor : .secondaryLabelColor
-        closeButton.contentTintColor = isSelected ? .labelColor : .secondaryLabelColor
+        closeButton.contentTintColor = isSelected ? .labelColor : .tertiaryLabelColor
+        separator.isHidden = isSelected
     }
 }

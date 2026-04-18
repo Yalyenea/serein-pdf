@@ -4,12 +4,13 @@ extension NSToolbarItem.Identifier {
     static let titlebarTabs = NSToolbarItem.Identifier("local.yfff.SlatePDF.titlebarTabs")
 }
 
-final class MainWindowController: NSWindowController, NSToolbarDelegate {
+final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
     let documentStore: DocumentStore
     private let splitViewController: SplitViewController
     private let toolbar = NSToolbar(identifier: "MainToolbar")
     private let titlebarTabsItem = NSToolbarItem(itemIdentifier: .titlebarTabs)
     private var isTitlebarTabsItemAttached = false
+    private var allowsTerminationWithoutPrompt = false
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -34,8 +35,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
         super.init(window: window)
 
+        window.delegate = self
         toolbar.delegate = self
         shouldCascadeWindows = true
+        splitViewController.verticalTabsViewController.onCloseSessionRequested = { [weak self] sessionID in
+            self?.requestCloseSession(sessionID)
+        }
+        splitViewController.titlebarTabsController.onCloseSessionRequested = { [weak self] sessionID in
+            self?.requestCloseSession(sessionID)
+        }
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDocumentStoreDidChange),
@@ -49,6 +57,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        applyWindowChromeState()
+        refreshWindowTitle()
     }
 
     deinit {
@@ -76,8 +90,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             !documentStore.isLeftSidebarVisible
 
         splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
-        synchronizeWindowToolbar(isVisible: shouldShowTitlebarTabs)
         synchronizeTitlebarTabsItem(isVisible: shouldShowTitlebarTabs)
+        synchronizeWindowToolbar(isVisible: shouldShowTitlebarTabs)
     }
 
     private func synchronizeWindowToolbar(isVisible: Bool) {
@@ -91,9 +105,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
             return
         }
 
-        if window.toolbar === toolbar {
-            window.toolbar = nil
-        }
+        window.toolbar = nil
     }
 
     private func synchronizeTitlebarTabsItem(isVisible: Bool) {
@@ -145,6 +157,79 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
         window.plainShortcutHandler = handler
     }
 
+    func requestCloseActiveSession() {
+        guard let sessionID = documentStore.activeSessionID else { return }
+        requestCloseSession(sessionID)
+    }
+
+    func requestCloseSession(_ sessionID: UUID) {
+        guard let session = documentStore.session(for: sessionID) else { return }
+        guard session.isDirty else {
+            documentStore.close(sessionID: sessionID)
+            return
+        }
+
+        switch presentUnsavedChangesAlert(
+            title: "Save changes to “\(session.title)” before closing?",
+            detail: "Your highlights are only in memory until you save them."
+        ) {
+        case .save:
+            do {
+                try documentStore.saveAnnotations(for: sessionID)
+                documentStore.close(sessionID: sessionID)
+            } catch {
+                presentSaveError(error)
+            }
+        case .discard:
+            documentStore.close(sessionID: sessionID)
+        case .cancel:
+            return
+        }
+    }
+
+    func prepareForApplicationTermination() -> Bool {
+        if allowsTerminationWithoutPrompt {
+            allowsTerminationWithoutPrompt = false
+            return true
+        }
+
+        let dirtySessions = documentStore.sessions.filter(\.isDirty)
+        guard dirtySessions.isEmpty == false else { return true }
+
+        let detail: String
+        if dirtySessions.count == 1, let session = dirtySessions.first {
+            detail = "“\(session.title)” still has unsaved highlights."
+        } else {
+            let titles = dirtySessions.prefix(3).map(\.title).joined(separator: "\n")
+            let suffix = dirtySessions.count > 3 ? "\n…" : ""
+            detail = "These documents still have unsaved highlights:\n\(titles)\(suffix)"
+        }
+
+        switch presentUnsavedChangesAlert(
+            title: "Save changes before quitting SlatePDF?",
+            detail: detail
+        ) {
+        case .save:
+            do {
+                try dirtySessions.forEach { try documentStore.saveAnnotations(for: $0.id) }
+                allowsTerminationWithoutPrompt = true
+                return true
+            } catch {
+                presentSaveError(error)
+                return false
+            }
+        case .discard:
+            allowsTerminationWithoutPrompt = true
+            return true
+        case .cancel:
+            return false
+        }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        prepareForApplicationTermination()
+    }
+
     @discardableResult
     func triggerHighlightShortcut() -> Bool {
         splitViewController.readerViewController.triggerHighlightShortcut()
@@ -193,5 +278,36 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate {
 
     var isNightModeEnabled: Bool {
         splitViewController.readerViewController.isNightModeEnabled
+    }
+
+    private enum UnsavedChangesDecision {
+        case save
+        case discard
+        case cancel
+    }
+
+    private func presentUnsavedChangesAlert(title: String, detail: String) -> UnsavedChangesDecision {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Discard")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return .save
+        case .alertThirdButtonReturn:
+            return .discard
+        default:
+            return .cancel
+        }
+    }
+
+    private func presentSaveError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Failed to save annotations"
+        alert.runModal()
     }
 }

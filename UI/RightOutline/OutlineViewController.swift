@@ -41,7 +41,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         container.wantsLayer = true
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
 
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
         emptyStateLabel.textColor = .secondaryLabelColor
@@ -52,7 +52,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.outlineTableColumn = outlineColumn
         outlineView.headerView = nil
         outlineView.rowSizeStyle = .small
-        outlineView.rowHeight = 24
+        outlineView.rowHeight = 22
         outlineView.indentationPerLevel = 12
         outlineView.floatsGroupRows = false
         outlineView.selectionHighlightStyle = .regular
@@ -72,17 +72,17 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         }
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
-            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
 
-            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-            emptyStateLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 16),
+            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            emptyStateLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 14),
 
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
-            scrollView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
+            scrollView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
         ])
 

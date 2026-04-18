@@ -41,7 +41,8 @@ enum HighlightService {
                 guard selectionBounds.isNull == false, selectionBounds.isEmpty == false else { continue }
 
                 let highlights = page.annotations.filter { annotation in
-                    annotation.type == "Highlight" && annotation.bounds.intersects(selectionBounds)
+                    annotation.type == "Highlight" &&
+                    shouldRemoveHighlight(annotationBounds: annotation.bounds, selectionBounds: selectionBounds)
                 }
 
                 for annotation in highlights {
@@ -57,5 +58,29 @@ enum HighlightService {
     private static func explodedSelections(_ selection: PDFSelection) -> [PDFSelection] {
         let lineSelections = selection.selectionsByLine()
         return lineSelections.isEmpty ? [selection] : lineSelections
+    }
+
+    private static func shouldRemoveHighlight(annotationBounds: NSRect, selectionBounds: NSRect) -> Bool {
+        guard annotationBounds.intersects(selectionBounds) else { return false }
+
+        let intersection = annotationBounds.intersection(selectionBounds)
+        let overlapArea = area(of: intersection)
+        guard overlapArea > 0 else { return false }
+
+        let annotationArea = area(of: annotationBounds)
+        let selectionArea = area(of: selectionBounds)
+        if annotationArea > 0, overlapArea / annotationArea >= 0.6 { return true }
+        if selectionArea > 0, overlapArea / selectionArea >= 0.6 { return true }
+
+        return annotationBounds.contains(center(of: selectionBounds)) ||
+            selectionBounds.contains(center(of: annotationBounds))
+    }
+
+    private static func area(of rect: NSRect) -> CGFloat {
+        max(rect.width, 0) * max(rect.height, 0)
+    }
+
+    private static func center(of rect: NSRect) -> NSPoint {
+        NSPoint(x: rect.midX, y: rect.midY)
     }
 }

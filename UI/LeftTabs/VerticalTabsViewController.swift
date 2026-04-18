@@ -2,6 +2,7 @@ import AppKit
 
 final class VerticalTabsViewController: NSViewController {
     let documentStore: DocumentStore
+    var onCloseSessionRequested: ((UUID) -> Void)?
     private let titleLabel = NSTextField(labelWithString: "Documents")
     private let countLabel = NSTextField(labelWithString: "0 open")
     private let emptyStateLabel = NSTextField(
@@ -40,14 +41,14 @@ final class VerticalTabsViewController: NSViewController {
         container.wantsLayer = true
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
 
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        countLabel.font = .systemFont(ofSize: 11, weight: .regular)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        countLabel.font = .systemFont(ofSize: 11, weight: .medium)
         countLabel.textColor = .secondaryLabelColor
 
-        let headerStack = NSStackView(views: [titleLabel, countLabel])
-        headerStack.orientation = .vertical
-        headerStack.alignment = .leading
-        headerStack.spacing = 2
+        let headerStack = NSStackView(views: [titleLabel, NSView(), countLabel])
+        headerStack.orientation = .horizontal
+        headerStack.alignment = .centerY
+        headerStack.spacing = 8
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
         emptyStateLabel.textColor = .secondaryLabelColor
@@ -55,7 +56,7 @@ final class VerticalTabsViewController: NSViewController {
 
         listStackView.orientation = .vertical
         listStackView.alignment = .leading
-        listStackView.spacing = 6
+        listStackView.spacing = 5
         listStackView.translatesAutoresizingMaskIntoConstraints = false
 
         for view in [headerStack, emptyStateLabel, listStackView] {
@@ -64,20 +65,20 @@ final class VerticalTabsViewController: NSViewController {
         }
 
         NSLayoutConstraint.activate([
-            headerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
-            headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+            headerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
 
             emptyStateLabel.leadingAnchor.constraint(
-                equalTo: container.leadingAnchor, constant: 14),
+                equalTo: container.leadingAnchor, constant: 12),
             emptyStateLabel.trailingAnchor.constraint(
-                equalTo: container.trailingAnchor, constant: -14),
-            emptyStateLabel.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 16),
+                equalTo: container.trailingAnchor, constant: -12),
+            emptyStateLabel.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 14),
 
             listStackView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
             listStackView.trailingAnchor.constraint(
                 equalTo: container.trailingAnchor, constant: -8),
-            listStackView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 12),
+            listStackView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 10),
             listStackView.bottomAnchor.constraint(
                 lessThanOrEqualTo: container.bottomAnchor, constant: -8),
         ])
@@ -120,7 +121,7 @@ final class VerticalTabsViewController: NSViewController {
                     self?.documentStore.activate(sessionID: sessionID)
                 },
                 onClose: { [weak self] sessionID in
-                    self?.documentStore.close(sessionID: sessionID)
+                    self?.onCloseSessionRequested?(sessionID)
                 }
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false

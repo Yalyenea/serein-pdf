@@ -30,12 +30,17 @@ final class SplitViewController: NSSplitViewController {
 
     static let dividerBackgroundColor: NSColor = NSColor(name: nil) { appearance in
         let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor(calibratedWhite: isDark ? 0.05 : 0.86, alpha: 1.0)
+        return NSColor(calibratedWhite: isDark ? 0.12 : 0.88, alpha: 1.0)
     }
 
     static let selectedChromeBackgroundColor: NSColor = NSColor(name: nil) { appearance in
         let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor(calibratedWhite: isDark ? 0.20 : 0.90, alpha: 1.0)
+        return NSColor(calibratedWhite: isDark ? 0.19 : 0.915, alpha: 1.0)
+    }
+
+    static let chromeStrokeColor: NSColor = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor(calibratedWhite: isDark ? 0.28 : 0.82, alpha: 1.0)
     }
 
     override func viewDidLoad() {
@@ -76,6 +81,16 @@ final class SplitViewController: NSSplitViewController {
             name: .documentStoreDidChange,
             object: documentStore
         )
+        applyStoreState()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        applyStoreState()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
         applyStoreState()
     }
 

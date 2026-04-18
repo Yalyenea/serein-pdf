@@ -23,6 +23,21 @@ struct WindowChromeTests {
     }
 
     @Test
+    func horizontalTabsHideWhenLeftSidebarReturns() {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+
+        store.setTabPresentationMode(.horizontalTitlebar)
+        controller.window?.layoutIfNeeded()
+        #expect(controller.window?.toolbar != nil)
+
+        store.setLeftSidebarVisible(true)
+        controller.window?.layoutIfNeeded()
+        #expect(controller.window?.toolbar == nil)
+    }
+
+    @Test
     func nightModeKeepsLivePDFViewAvailableForSnapshots() {
         let app = NSApplication.shared
         let previousAppearance = app.appearance

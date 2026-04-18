@@ -2,6 +2,7 @@ import AppKit
 
 final class TitlebarTabsController: NSViewController {
     let documentStore: DocumentStore
+    var onCloseSessionRequested: ((UUID) -> Void)?
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let documentContainerView = NSView()
@@ -126,7 +127,7 @@ final class TitlebarTabsController: NSViewController {
                     self?.documentStore.activate(sessionID: sessionID)
                 },
                 onClose: { [weak self] sessionID in
-                    self?.documentStore.close(sessionID: sessionID)
+                    self?.onCloseSessionRequested?(sessionID)
                 }
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false
