@@ -447,7 +447,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func removeHighlightInSelection(_ sender: Any?) {
-        _ = mainWindowController?.removeHighlightInSelection()
+        _ = mainWindowController?.removeHighlightUnderCursor()
     }
 
     @objc

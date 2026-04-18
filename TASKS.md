@@ -398,10 +398,10 @@
 
 ### 9.1 快捷键可见性与新增命令
 
-- [ ] `M6-001` plain 快捷键菜单可见
+- [x] `M6-001` plain 快捷键菜单可见
 完成定义：`Annotate > Highlight Selection / Exit Highlight Mode / Remove Highlight` 与 `View > Toggle Night Mode` 菜单项右侧显示 `A`、`esc`、`D`、`I`；做法为把无修饰 `keyEquivalent` 显式写入菜单项。
 
-- [ ] `M6-002` `removeHighlight` 快捷键改为 `D`
+- [x] `M6-002` `removeHighlight` 快捷键改为 `D`
 完成定义：配置文件默认从 `command+shift+d` 迁移到 `d`；`AppConfigurationStore.bootstrapIfNeeded` 识别旧值并重写为新值；`AppConfigurationTests` 覆盖迁移。
 
 - [ ] `M6-003` 新增 `reopenLastClosed` 命令
@@ -410,14 +410,14 @@
 - [ ] `M6-004` 新增 `toggleAllPagesOverview` 命令
 完成定义：新增 `ShortcutCommand.toggleAllPagesOverview`，默认快捷键 `Cmd+Shift+P`；View 菜单下新增 "All Pages Overview" 入口。
 
-- [ ] `M6-005` 新增 `gotoPage` / `zoomIn` / `zoomOut` 命令
+- [x] `M6-005` 新增 `gotoPage` / `zoomIn` / `zoomOut` 命令
 完成定义：分别默认 `Cmd+Option+G` / `Cmd+=` / `Cmd+-`；菜单入口与配置字段同步。
 
-- [ ] `M6-006` 新增 Vim 式翻页 `J` / `K`
+- [x] `M6-006` 新增 Vim 式翻页 `J` / `K`
 完成定义：新增 `ShortcutCommand.pageDown` / `pageUp`，默认 plain `j` / `k`；复用 `ReaderShortcutsController.shouldHandlePlainShortcut` 的文本输入避让规则；触发后调用 `pdfView.goToNextPage(_:)` / `goToPreviousPage(_:)`。
 
-- [ ] `M6-007` 新增历史导航 `Cmd+[` / `Cmd+]`
-完成定义：新增 `ShortcutCommand.navigateBack` / `navigateForward`，默认 `Cmd+[` / `Cmd+]`；桥接到 `pdfView.goBack()` / `goForward()`；确保 outline / link / `Cmd+Option+G` / `Cmd+Shift+T` 等跳转都推入历史栈。
+- [x] `M6-007` 新增历史导航 `Cmd+[` / `Cmd+]`
+完成定义：新增 `ShortcutCommand.navigateBack` / `navigateForward`，默认 `Cmd+[` / `Cmd+]`；桥接到 `pdfView.goBack()` / `goForward()`；确保 outline / link / `Cmd+Option+G` / `Cmd+Shift+T` 等跳转都推入历史栈。同时修复 `applyReadingPositionIfNeeded` 重复入栈导致的双击返回问题。
 
 ### 9.2 高亮删除新逻辑
 
@@ -471,20 +471,20 @@
 - [ ] `M6-051` Find bar 非模态化
 完成定义：`Cmd+F` 打开内嵌 `NSView`（reader 顶部），支持 `Cmd+G` / `Cmd+Shift+G` 遍历；`Esc` 收起。旧的 `NSAlert` 入口删除。
 
-- [ ] `M6-052` 跳转到页 N
+- [x] `M6-052` 跳转到页 N
 完成定义：`Cmd+Option+G` 弹出 mini 输入框或 inline 框；越界提示；成功跳转后推入历史栈。
 
-- [ ] `M6-053` 缩放快捷键
+- [x] `M6-053` 缩放快捷键
 完成定义：`Cmd+=` / `Cmd+-` 各递增 / 递减当前缩放 10%；保持 `scaleMode = .manual`。
 
-- [ ] `M6-054` Vim 翻页行为
+- [x] `M6-054` Vim 翻页行为
 完成定义：在非文本输入上下文下，plain `J` / `K` 触发 `pdfView.goToNextPage(_:)` / `goToPreviousPage(_:)`；连续快速按键不丢帧；测试覆盖 `ReaderShortcutsControllerTests`。
 
-- [ ] `M6-055` PDF 内链接跳转
+- [x] `M6-055` PDF 内链接跳转
 完成定义：验证 `PDFView` 默认接管 `Link` annotation；对内部链接跳转进入历史栈（自动或手动推入）；对外部 URL 走 `NSWorkspace.shared.open(_:)`；对不可识别链接不崩溃。
 
-- [ ] `M6-056` 历史栈与 `Cmd+[` / `Cmd+]`
-完成定义：`pdfView.goBack()` / `goForward()` 挂接到快捷键；验证从 outline 点击、内链跳转、`Cmd+Option+G`、`Cmd+Shift+T` 触发的跳转都可被回退；菜单项根据 `canGoBack` / `canGoForward` 自动 enable / disable。
+- [x] `M6-056` 历史栈与 `Cmd+[` / `Cmd+]`
+完成定义：`pdfView.goBack()` / `goForward()` 挂接到快捷键；验证从 outline 点击、内链跳转、`Cmd+Option+G`、`Cmd+Shift+T` 触发的跳转都可被回退；菜单项根据 `canGoBack` / `canGoForward` 自动 enable / disable。额外修复：`applyReadingPositionIfNeeded` 在 pdfView 已在目标页时跳过 `go(to:)`，避免 store ↔ reader 回环重复入栈。
 
 ### 9.7 文档与验收
 

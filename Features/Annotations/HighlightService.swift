@@ -55,6 +55,12 @@ enum HighlightService {
         return removedAnnotations
     }
 
+    static func highlightAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
+        page.annotations.first { annotation in
+            annotation.type == "Highlight" && annotation.bounds.contains(pointOnPage)
+        }
+    }
+
     private static func explodedSelections(_ selection: PDFSelection) -> [PDFSelection] {
         let lineSelections = selection.selectionsByLine()
         return lineSelections.isEmpty ? [selection] : lineSelections

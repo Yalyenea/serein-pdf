@@ -238,10 +238,15 @@ final class ReaderViewController: NSViewController {
     }
 
     @discardableResult
-    func removeHighlightInSelection() -> Bool {
+    func removeHighlightUnderCursor() -> Bool {
         guard let session = documentStore.activeSession,
-              session.id == displayedSessionID,
-              let selection = pdfView.currentSelection,
+              session.id == displayedSessionID else { return false }
+
+        if removeHighlightAtMouseLocation(sessionID: session.id) {
+            return true
+        }
+
+        guard let selection = pdfView.currentSelection,
               HighlightService.selectionContainsText(selection) else { return false }
 
         let removed = HighlightService.removeHighlights(in: selection)
@@ -249,6 +254,21 @@ final class ReaderViewController: NSViewController {
 
         documentStore.setDirty(true, for: session.id)
         pdfView.currentSelection = nil
+        return true
+    }
+
+    private func removeHighlightAtMouseLocation(sessionID: UUID) -> Bool {
+        guard let window = pdfView.window else { return false }
+        let mouseInWindow = window.mouseLocationOutsideOfEventStream
+        let mouseInPDF = pdfView.convert(mouseInWindow, from: nil)
+        guard pdfView.bounds.contains(mouseInPDF),
+              let page = pdfView.page(for: mouseInPDF, nearest: false) else { return false }
+
+        let pointOnPage = pdfView.convert(mouseInPDF, to: page)
+        guard let target = HighlightService.highlightAnnotation(at: pointOnPage, on: page) else { return false }
+
+        page.removeAnnotation(target)
+        documentStore.setDirty(true, for: sessionID)
         return true
     }
 

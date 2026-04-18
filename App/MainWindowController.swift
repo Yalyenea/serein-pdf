@@ -278,8 +278,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @discardableResult
-    func removeHighlightInSelection() -> Bool {
-        splitViewController.readerViewController.removeHighlightInSelection()
+    func removeHighlightUnderCursor() -> Bool {
+        splitViewController.readerViewController.removeHighlightUnderCursor()
     }
 
     var currentHighlightColor: HighlightColor {
