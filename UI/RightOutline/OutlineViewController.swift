@@ -7,6 +7,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     private let scrollView = NSScrollView()
     private let outlineView = NSOutlineView()
     private let outlineColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("OutlineColumn"))
+    private let pageCounterLabel = NSTextField(labelWithString: "")
     private var nodes: [OutlineNode] = []
 
     init(documentStore: DocumentStore) {
@@ -30,6 +31,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             object: documentStore
         )
         reloadOutline()
+        updatePageCounter()
     }
 
     deinit {
@@ -46,6 +48,10 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         emptyStateLabel.font = .systemFont(ofSize: 12)
         emptyStateLabel.textColor = .secondaryLabelColor
         emptyStateLabel.maximumNumberOfLines = 0
+
+        pageCounterLabel.font = .systemFont(ofSize: 11, weight: .regular)
+        pageCounterLabel.textColor = .secondaryLabelColor
+        pageCounterLabel.alignment = .right
 
         outlineColumn.title = "Outline"
         outlineView.addTableColumn(outlineColumn)
@@ -66,7 +72,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         scrollView.hasVerticalScroller = true
         scrollView.documentView = outlineView
 
-        for view in [titleLabel, emptyStateLabel, scrollView] {
+        for view in [titleLabel, emptyStateLabel, scrollView, pageCounterLabel] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -83,7 +89,11 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
             scrollView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
-            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+            scrollView.bottomAnchor.constraint(equalTo: pageCounterLabel.topAnchor, constant: -4),
+
+            pageCounterLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            pageCounterLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+            pageCounterLabel.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 12),
         ])
 
         view = container
@@ -99,6 +109,21 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         reloadOutline()
+        updatePageCounter()
+    }
+
+    private func updatePageCounter() {
+        guard let session = documentStore.activeSession else {
+            pageCounterLabel.stringValue = ""
+            return
+        }
+        let total = session.pdfDocument.pageCount
+        guard total > 0 else {
+            pageCounterLabel.stringValue = ""
+            return
+        }
+        let current = min(max(session.currentPageIndex + 1, 1), total)
+        pageCounterLabel.stringValue = "\(current) / \(total)"
     }
 
     private func reloadOutline() {

@@ -78,8 +78,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func configureTitlebarTabsItemIfNeeded() {
         let tabsView = splitViewController.titlebarTabsController.view
         tabsView.frame = NSRect(x: 0, y: 0, width: 760, height: 28)
-        titlebarTabsItem.label = "Open Documents"
-        titlebarTabsItem.paletteLabel = "Open Documents"
+        titlebarTabsItem.label = ""
+        titlebarTabsItem.paletteLabel = ""
         titlebarTabsItem.view = tabsView
         titlebarTabsItem.visibilityPriority = .high
     }
