@@ -21,12 +21,6 @@ Native macOS PDF reader.
 - Prefer simple native AppKit solutions over abstraction-heavy designs.
 - Keep left tab UI and titlebar tab UI on one shared document/session model.
 - Default highlight color: light, low-saturation pink.
-- `a`: highlight now, or enter highlight mode if no selection.
-- `Esc`: exit highlight mode.
-- `i`: toggle inverted night mode.
-- `Cmd+S`: save annotations to the source PDF.
-- Annotation edits should mark dirty state first, not save immediately.
-- Auto-save policy defaults to `10 min` and must support `never`.
 
 ## Engineering Rules
 
@@ -36,14 +30,3 @@ Native macOS PDF reader.
 - Runtime config file lives at `~/Library/Application Support/SlatePDF/config.toml`; keep docs and defaults aligned with it.
 - Prefer validating UI and interaction changes with real PDFs from `~/Downloads` when available.
 - Prefer clarity and compactness over premature flexibility.
-
-## Initial Focus
-
-Build the smallest correct loop first:
-
-1. app skeleton
-2. split view window
-3. PDF open + render
-4. shared document store
-5. switchable tab presentation
-6. outline sidebar
