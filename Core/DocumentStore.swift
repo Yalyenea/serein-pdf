@@ -246,10 +246,18 @@ final class DocumentStore {
 
     func updateAppConfiguration(_ configuration: AppConfiguration) {
         guard appConfiguration != configuration else { return }
+        let previousFitWidthOnOpen = appConfiguration.reader.fitWidthOnOpen
         appConfiguration = configuration
+
+        let fitWidthChanged = previousFitWidthOnOpen != configuration.reader.fitWidthOnOpen
+        let targetScaleMode: ReaderScaleMode = configuration.reader.fitWidthOnOpen ? .fitWidth : .manual
 
         for index in sessions.indices {
             sessions[index].annotationSavePolicy = configuration.annotations.autoSavePolicy
+            if fitWidthChanged, sessions[index].scaleMode != targetScaleMode {
+                sessions[index].scaleMode = targetScaleMode
+                persistReadingState(for: sessions[index])
+            }
         }
 
         notifyChange()

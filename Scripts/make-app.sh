@@ -30,6 +30,13 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 cp "$EXECUTABLE" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 
+ICON_SRC="$PROJECT_ROOT/Resources/AppIcon.icns"
+if [[ ! -f "$ICON_SRC" ]]; then
+    echo "==> generating AppIcon.icns"
+    "$PROJECT_ROOT/Scripts/make-icon.sh"
+fi
+cp "$ICON_SRC" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+
 # Ad-hoc sign so Gatekeeper / Launch Services accept the bundle locally.
 codesign --force --sign - --timestamp=none "$APP_BUNDLE" >/dev/null
 

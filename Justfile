@@ -25,6 +25,10 @@ run:
 build:
     ./Scripts/make-app.sh {{BUILD_DIR}}
 
+# Regenerate Resources/AppIcon.icns from Resources/AppIcon.png.
+icon:
+    ./Scripts/make-icon.sh
+
 # Copy the built .app into /Applications (overwrites existing install).
 install: build
     @echo "==> installing {{APP_BUNDLE}} -> {{INSTALL_DIR}}/{{APP_NAME}}.app"

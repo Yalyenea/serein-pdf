@@ -8,6 +8,10 @@
     <string>SlatePDF</string>
     <key>CFBundleExecutable</key>
     <string>SlatePDF</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>local.yfff.SlatePDF</string>
     <key>CFBundleInfoDictionaryVersion</key>

@@ -534,9 +534,71 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(store.session(for: firstSession.id)?.annotationSavePolicy, .never)
         XCTAssertEqual(store.session(for: firstSession.id)?.displayMode, .singlePageContinuous)
+        XCTAssertEqual(store.session(for: firstSession.id)?.scaleMode, .fitWidth)
         XCTAssertEqual(secondSession.displayMode, .twoUp)
         XCTAssertEqual(secondSession.scaleMode, .fitWidth)
         XCTAssertEqual(secondSession.annotationSavePolicy, .never)
+    }
+
+    func testUpdateAppConfigurationDisablingFitWidthFlipsExistingSessionsToManual() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            appConfiguration: AppConfiguration(
+                reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: true),
+                annotations: .default,
+                shortcuts: .default,
+                layout: .default
+            )
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "fit-width-off"))
+        XCTAssertEqual(session.scaleMode, .fitWidth)
+
+        store.setScaleMode(.fitWidth, scaleFactor: 1.75, for: session.id)
+
+        store.updateAppConfiguration(
+            AppConfiguration(
+                reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: false),
+                annotations: .default,
+                shortcuts: .default,
+                layout: .default
+            )
+        )
+
+        let updated = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertEqual(updated.scaleMode, .manual)
+        XCTAssertEqual(updated.zoomScale, 1.75)
+    }
+
+    func testUserZoomAfterFitWidthOnOpenPinsManualScale() throws {
+        let readingStateStore = InMemoryReadingStateStore()
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore,
+            appConfiguration: AppConfiguration(
+                reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: true),
+                annotations: .default,
+                shortcuts: .default,
+                layout: .default
+            )
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "zoom-pins-manual"))
+        XCTAssertEqual(session.scaleMode, .fitWidth)
+
+        // User zoom gesture: handlePDFViewScaleChanged calls setScaleMode(.manual, ...).
+        store.setScaleMode(.manual, scaleFactor: 2.3, for: session.id)
+
+        // Page turn fires updateReadingPosition, which must not resurrect fitWidth.
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 2, point: .zero),
+            scaleFactor: 2.3,
+            for: session.id
+        )
+
+        let updated = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertEqual(updated.scaleMode, .manual)
+        XCTAssertEqual(updated.zoomScale, 2.3)
+        XCTAssertEqual(readingStateStore.states[session.url]?.scaleMode, .manual)
     }
 
     private func makeTemporaryPDF(named name: String) throws -> URL {

@@ -29,6 +29,7 @@ final class ReaderViewController: NSViewController {
     private var appearanceObservation: NSKeyValueObservation?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
     private var pendingFitWidthSessionID: UUID?
+    private var lastAppliedFitBoundsWidth: CGFloat = 0
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -89,14 +90,17 @@ final class ReaderViewController: NSViewController {
         super.viewDidLayout()
         applyOverviewInsets()
 
-        guard let pendingID = pendingFitWidthSessionID,
-              let session = documentStore.activeSession,
-              session.id == pendingID,
-              session.scaleMode == .fitWidth,
+        guard let session = documentStore.activeSession,
               displayedSessionID == session.id,
+              session.scaleMode == .fitWidth,
               pdfView.bounds.width > 0 else { return }
 
+        let isPending = pendingFitWidthSessionID == session.id
+        let boundsChanged = abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) > 0.5
+        guard isPending || boundsChanged else { return }
+
         pendingFitWidthSessionID = nil
+        lastAppliedFitBoundsWidth = pdfView.bounds.width
         applyFitWidth(for: session)
     }
 
@@ -526,15 +530,12 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewScaleChanged(_ notification: Notification) {
-        guard isApplyingStoreState == false,
+        guard isApplyingProgrammaticScale == false,
               let session = documentStore.activeSession,
               session.id == displayedSessionID else { return }
 
-        guard isApplyingProgrammaticScale == false else { return }
-
-        // Any user-driven zoom exits fit-width and preserves the chosen scale.
-        let nextScaleMode: ReaderScaleMode = .manual
-        documentStore.setScaleMode(nextScaleMode, scaleFactor: pdfView.scaleFactor, for: session.id)
+        // User-driven zoom always exits fit-width and pins the chosen scale.
+        documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
 
         if let position = currentReadingPosition() {
             documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
@@ -608,12 +609,14 @@ final class ReaderViewController: NSViewController {
         case .fitWidth:
             if pdfView.bounds.width > 0 {
                 pendingFitWidthSessionID = nil
+                lastAppliedFitBoundsWidth = pdfView.bounds.width
                 applyFitWidth(for: session)
             } else {
                 pendingFitWidthSessionID = session.id
             }
         case .manual:
             pendingFitWidthSessionID = nil
+            lastAppliedFitBoundsWidth = 0
             guard displayedScaleMode != .manual || abs(pdfView.scaleFactor - session.zoomScale) > 0.001 else { return }
             applyProgrammaticScale(session.zoomScale)
         }
