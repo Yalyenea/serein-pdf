@@ -23,6 +23,10 @@ let package = Package(
                 "CLAUDE.md",
                 "PROJECT.md",
                 "TASKS.md",
+                "Justfile",
+                "Resources",
+                "Scripts",
+                "build",
             ],
             sources: [
                 "App",
