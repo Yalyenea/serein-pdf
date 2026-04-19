@@ -363,7 +363,8 @@ final class DocumentStoreTests: XCTestCase {
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .singlePage, fitWidthOnOpen: false),
                 annotations: .default,
-                shortcuts: .default
+                shortcuts: .default,
+                layout: .default
             )
         )
 
@@ -392,7 +393,8 @@ final class DocumentStoreTests: XCTestCase {
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: false),
                 annotations: .default,
-                shortcuts: .default
+                shortcuts: .default,
+                layout: .default
             )
         )
 
@@ -427,7 +429,8 @@ final class DocumentStoreTests: XCTestCase {
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .twoUp, fitWidthOnOpen: false),
                 annotations: .default,
-                shortcuts: .default
+                shortcuts: .default,
+                layout: .default
             )
         )
 
@@ -522,7 +525,8 @@ final class DocumentStoreTests: XCTestCase {
             AppConfiguration(
                 reader: .init(defaultDisplayMode: .twoUp, fitWidthOnOpen: true),
                 annotations: .init(autoSavePolicy: .never),
-                shortcuts: .default
+                shortcuts: .default,
+                layout: .default
             )
         )
 

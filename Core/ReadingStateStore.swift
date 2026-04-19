@@ -6,6 +6,8 @@ struct PersistedReadingState: Codable, Equatable, Sendable {
     var scaleMode: ReaderScaleMode
     var scaleFactor: CGFloat
     var readingPosition: ReadingPosition
+    var leftSidebarWidth: CGFloat?
+    var rightSidebarWidth: CGFloat?
 }
 
 protocol ReadingStateStore {

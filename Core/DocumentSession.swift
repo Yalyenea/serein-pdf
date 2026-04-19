@@ -47,6 +47,8 @@ struct DocumentSession {
     var sidebarState: SidebarState
     var tabPresentationState: TabPresentationState
     var annotationSavePolicy: AnnotationSavePolicy
+    var leftSidebarWidth: CGFloat?
+    var rightSidebarWidth: CGFloat?
 
     init(
         id: UUID = UUID(),
@@ -63,7 +65,9 @@ struct DocumentSession {
         dirtySince: Date? = nil,
         sidebarState: SidebarState = SidebarState(),
         tabPresentationState: TabPresentationState = TabPresentationState(),
-        annotationSavePolicy: AnnotationSavePolicy = .default
+        annotationSavePolicy: AnnotationSavePolicy = .default,
+        leftSidebarWidth: CGFloat? = nil,
+        rightSidebarWidth: CGFloat? = nil
     ) {
         self.id = id
         self.url = url
@@ -80,5 +84,7 @@ struct DocumentSession {
         self.sidebarState = sidebarState
         self.tabPresentationState = tabPresentationState
         self.annotationSavePolicy = annotationSavePolicy
+        self.leftSidebarWidth = leftSidebarWidth
+        self.rightSidebarWidth = rightSidebarWidth
     }
 }

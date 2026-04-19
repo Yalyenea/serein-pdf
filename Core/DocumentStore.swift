@@ -16,7 +16,7 @@ final class DocumentStore {
     private let persistence: DocumentStorePersistence
     private let readingStateStore: ReadingStateStore
     private let recentFilesStore: RecentFilesStore
-    private var appConfiguration: AppConfiguration
+    private(set) var appConfiguration: AppConfiguration
     private(set) var sessions: [DocumentSession] = []
     private(set) var activeSessionID: UUID?
     private(set) var tabPresentationMode: TabPresentationMode = .verticalSidebar
@@ -65,7 +65,9 @@ final class DocumentStore {
                 isRightSidebarVisible: isRightSidebarVisible
             ),
             tabPresentationState: TabPresentationState(mode: tabPresentationMode),
-            annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
+            annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
+            leftSidebarWidth: restoredState?.leftSidebarWidth,
+            rightSidebarWidth: restoredState?.rightSidebarWidth
         )
 
         sessions.append(session)
@@ -311,7 +313,9 @@ final class DocumentStore {
                         isRightSidebarVisible: isRightSidebarVisible
                     ),
                     tabPresentationState: TabPresentationState(mode: tabPresentationMode),
-                    annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
+                    annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
+                    leftSidebarWidth: restoredState?.leftSidebarWidth,
+                    rightSidebarWidth: restoredState?.rightSidebarWidth
                 )
             )
         }
@@ -364,9 +368,27 @@ final class DocumentStore {
                 displayMode: session.displayMode,
                 scaleMode: session.scaleMode,
                 scaleFactor: session.zoomScale,
-                readingPosition: session.lastReadPosition
+                readingPosition: session.lastReadPosition,
+                leftSidebarWidth: session.leftSidebarWidth,
+                rightSidebarWidth: session.rightSidebarWidth
             )
         )
+    }
+
+    func updateSidebarWidths(
+        left leftWidth: CGFloat?,
+        right rightWidth: CGFloat?,
+        for sessionID: UUID
+    ) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let needsUpdate =
+            sessions[sessionIndex].leftSidebarWidth != leftWidth ||
+            sessions[sessionIndex].rightSidebarWidth != rightWidth
+        guard needsUpdate else { return }
+
+        sessions[sessionIndex].leftSidebarWidth = leftWidth
+        sessions[sessionIndex].rightSidebarWidth = rightWidth
+        persistReadingState(for: sessions[sessionIndex])
     }
 }
 

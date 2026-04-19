@@ -28,6 +28,7 @@ final class ReaderViewController: NSViewController {
     private var isApplyingHighlightSelection = false
     private var appearanceObservation: NSKeyValueObservation?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
+    private var pendingFitWidthSessionID: UUID?
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -88,10 +89,14 @@ final class ReaderViewController: NSViewController {
         super.viewDidLayout()
         applyOverviewInsets()
 
-        guard let session = documentStore.activeSession,
+        guard let pendingID = pendingFitWidthSessionID,
+              let session = documentStore.activeSession,
+              session.id == pendingID,
               session.scaleMode == .fitWidth,
-              displayedSessionID == session.id else { return }
+              displayedSessionID == session.id,
+              pdfView.bounds.width > 0 else { return }
 
+        pendingFitWidthSessionID = nil
         applyFitWidth(for: session)
     }
 
@@ -433,6 +438,8 @@ final class ReaderViewController: NSViewController {
         pdfContainerTopConstraint = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
         pdfContainerTopConstraint?.isActive = true
         container.layoutSubtreeIfNeeded()
+        pdfView.highlightedSelections = nil
+        pdfView.currentSelection = nil
         pdfView.window?.makeFirstResponder(pdfView)
         findMatches = []
         findMatchIndex = nil
@@ -599,8 +606,14 @@ final class ReaderViewController: NSViewController {
     private func applyScaleIfNeeded(_ session: DocumentSession) {
         switch session.scaleMode {
         case .fitWidth:
-            applyFitWidth(for: session)
+            if pdfView.bounds.width > 0 {
+                pendingFitWidthSessionID = nil
+                applyFitWidth(for: session)
+            } else {
+                pendingFitWidthSessionID = session.id
+            }
         case .manual:
+            pendingFitWidthSessionID = nil
             guard displayedScaleMode != .manual || abs(pdfView.scaleFactor - session.zoomScale) > 0.001 else { return }
             applyProgrammaticScale(session.zoomScale)
         }

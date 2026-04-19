@@ -1,6 +1,11 @@
 import AppKit
 
 final class SplitViewController: NSSplitViewController {
+    private static let legacyAutosaveNames = [
+        "MainSplitView",
+        "SlatePDFSplit.v2",
+        "SlatePDFSplit.v3",
+    ]
     let documentStore: DocumentStore
     let verticalTabsViewController: VerticalTabsViewController
     let readerViewController: ReaderViewController
@@ -8,6 +13,8 @@ final class SplitViewController: NSSplitViewController {
     let titlebarTabsController: TitlebarTabsController
     private var leftSidebarItem: NSSplitViewItem?
     private var rightSidebarItem: NSSplitViewItem?
+    private var appliedWidthsForSessionID: UUID?
+    private var isApplyingSidebarWidths = false
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -47,16 +54,24 @@ final class SplitViewController: NSSplitViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        purgeLegacyAutosaveKeys()
         view.wantsLayer = true
         splitView.isVertical = true
         splitView.dividerStyle = .thin
-        splitView.autosaveName = "MainSplitView"
+        splitView.autosaveName = nil
         splitView.wantsLayer = true
         applyChromeColors()
 
+        let sidebarHoldingPriority = NSLayoutConstraint.Priority(
+            rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue + 10
+        )
+        let layout = documentStore.appConfiguration.layout
+
         let leftItem = NSSplitViewItem(viewController: verticalTabsViewController)
         leftItem.canCollapse = true
-        leftItem.minimumThickness = 96
+        leftItem.minimumThickness = layout.leftSidebarMinWidth
+        leftItem.maximumThickness = layout.leftSidebarMaxWidth
+        leftItem.holdingPriority = sidebarHoldingPriority
 
         let centerItem = NSSplitViewItem(viewController: readerViewController)
         centerItem.minimumThickness = 320
@@ -64,7 +79,9 @@ final class SplitViewController: NSSplitViewController {
 
         let rightItem = NSSplitViewItem(viewController: outlineViewController)
         rightItem.canCollapse = true
-        rightItem.minimumThickness = 120
+        rightItem.minimumThickness = layout.rightSidebarMinWidth
+        rightItem.maximumThickness = layout.rightSidebarMaxWidth
+        rightItem.holdingPriority = sidebarHoldingPriority
 
         leftSidebarItem = leftItem
         rightSidebarItem = rightItem
@@ -88,6 +105,28 @@ final class SplitViewController: NSSplitViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        applySidebarWidthsForActiveSession()
+    }
+
+    override func splitViewDidResizeSubviews(_ notification: Notification) {
+        super.splitViewDidResizeSubviews(notification)
+        guard isApplyingSidebarWidths == false,
+              appliedWidthsForSessionID != nil,
+              let sessionID = documentStore.activeSessionID,
+              appliedWidthsForSessionID == sessionID else { return }
+
+        let leftWidth = leftSidebarItem?.isCollapsed == true
+            ? nil
+            : splitView.arrangedSubviews[safe: 0]?.frame.width
+        let rightWidth = rightSidebarItem?.isCollapsed == true
+            ? nil
+            : splitView.arrangedSubviews[safe: 2]?.frame.width
+
+        documentStore.updateSidebarWidths(
+            left: leftWidth,
+            right: rightWidth,
+            for: sessionID
+        )
     }
 
     override func splitView(
@@ -120,6 +159,7 @@ final class SplitViewController: NSSplitViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         applyStoreState()
+        applySidebarWidthsForActiveSession()
     }
 
     private func applyStoreState() {
@@ -131,6 +171,49 @@ final class SplitViewController: NSSplitViewController {
         if let rightItem = rightSidebarItem, rightItem.isCollapsed != rightShouldCollapse {
             rightItem.isCollapsed = rightShouldCollapse
         }
+    }
+
+    private func applySidebarWidthsForActiveSession() {
+        guard splitView.bounds.width > 0,
+              splitView.arrangedSubviews.count >= 3 else { return }
+
+        let layout = documentStore.appConfiguration.layout
+        let targetLeft: CGFloat
+        let targetRight: CGFloat
+        let sessionID = documentStore.activeSessionID
+
+        if let session = documentStore.activeSession {
+            targetLeft = session.leftSidebarWidth ?? layout.leftSidebarWidth
+            targetRight = session.rightSidebarWidth ?? layout.rightSidebarWidth
+        } else {
+            targetLeft = layout.leftSidebarWidth
+            targetRight = layout.rightSidebarWidth
+        }
+
+        if appliedWidthsForSessionID == sessionID {
+            // Already applied for this session; avoid fighting the user's drag.
+            return
+        }
+
+        let clampedLeft = min(max(targetLeft, layout.leftSidebarMinWidth), layout.leftSidebarMaxWidth)
+        let clampedRight = min(max(targetRight, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
+
+        isApplyingSidebarWidths = true
+        defer { isApplyingSidebarWidths = false }
+
+        let total = splitView.bounds.width
+        splitView.setPosition(clampedLeft, ofDividerAt: 0)
+        splitView.setPosition(total - clampedRight, ofDividerAt: 1)
+
+        appliedWidthsForSessionID = sessionID
+    }
+
+    private func purgeLegacyAutosaveKeys() {
+        Self.legacyAutosaveNames.forEach { name in
+            UserDefaults.standard.removeObject(forKey: "NSSplitView Subview Frames \(name)")
+        }
+        UserDefaults.standard.removeObject(forKey: "SlatePDF.Layout.lastConfigLeftWidth")
+        UserDefaults.standard.removeObject(forKey: "SlatePDF.Layout.lastConfigRightWidth")
     }
 
     func refreshChromeColors() {
@@ -145,5 +228,11 @@ final class SplitViewController: NSSplitViewController {
             view.layer?.backgroundColor = Self.splitBackgroundColor.cgColor
             splitView.layer?.backgroundColor = Self.dividerBackgroundColor.cgColor
         }
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

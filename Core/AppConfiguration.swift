@@ -18,6 +18,24 @@ struct AppConfiguration: Equatable, Sendable {
         static let `default` = Annotations(autoSavePolicy: .default)
     }
 
+    struct Layout: Equatable, Sendable {
+        var leftSidebarWidth: CGFloat
+        var leftSidebarMinWidth: CGFloat
+        var leftSidebarMaxWidth: CGFloat
+        var rightSidebarWidth: CGFloat
+        var rightSidebarMinWidth: CGFloat
+        var rightSidebarMaxWidth: CGFloat
+
+        static let `default` = Layout(
+            leftSidebarWidth: 220,
+            leftSidebarMinWidth: 60,
+            leftSidebarMaxWidth: 520,
+            rightSidebarWidth: 320,
+            rightSidebarMinWidth: 120,
+            rightSidebarMaxWidth: 720
+        )
+    }
+
     struct Shortcuts: Equatable, Sendable {
         var bindings: [ShortcutCommand: KeyboardShortcut]
 
@@ -58,11 +76,13 @@ struct AppConfiguration: Equatable, Sendable {
     var reader: Reader
     var annotations: Annotations
     var shortcuts: Shortcuts
+    var layout: Layout
 
     static let `default` = AppConfiguration(
         reader: .default,
         annotations: .default,
-        shortcuts: .default
+        shortcuts: .default,
+        layout: .default
     )
 }
 
@@ -167,6 +187,7 @@ enum AppConfigurationError: LocalizedError {
     case invalidDisplayMode(String)
     case invalidShortcut(String)
     case invalidAnnotationSavePolicy(String)
+    case invalidWidth(String)
 
     var errorDescription: String? {
         switch self {
@@ -180,6 +201,8 @@ enum AppConfigurationError: LocalizedError {
             "Invalid keyboard shortcut in config: \(value)"
         case let .invalidAnnotationSavePolicy(value):
             "Invalid annotation auto-save policy in config: \(value)"
+        case let .invalidWidth(value):
+            "Invalid sidebar width in config: \(value)"
         }
     }
 }
@@ -195,6 +218,14 @@ fit_width_on_open = false
 
 [annotations]
 auto_save = "after_10_minutes"
+
+[layout]
+left_sidebar_width = 220
+left_sidebar_min_width = 60
+left_sidebar_max_width = 520
+right_sidebar_width = 320
+right_sidebar_min_width = 120
+right_sidebar_max_width = 720
 
 [shortcuts]
 highlight_selection = "a"
@@ -240,6 +271,14 @@ fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
 
 [annotations]
 auto_save = "\(configuration.annotations.autoSavePolicy.rawValue)"
+
+[layout]
+left_sidebar_width = \(Int(configuration.layout.leftSidebarWidth.rounded()))
+left_sidebar_min_width = \(Int(configuration.layout.leftSidebarMinWidth.rounded()))
+left_sidebar_max_width = \(Int(configuration.layout.leftSidebarMaxWidth.rounded()))
+right_sidebar_width = \(Int(configuration.layout.rightSidebarWidth.rounded()))
+right_sidebar_min_width = \(Int(configuration.layout.rightSidebarMinWidth.rounded()))
+right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounded()))
 
 [shortcuts]
 highlight_selection = "\(configuration.shortcuts.bindings[.highlightSelection]?.serializedValue ?? "a")"
@@ -335,6 +374,18 @@ struct AppConfigurationParser {
                 throw AppConfigurationError.invalidAnnotationSavePolicy(value)
             }
             configuration.annotations.autoSavePolicy = policy
+        case ("layout", "left_sidebar_width"):
+            configuration.layout.leftSidebarWidth = try parseWidth(rawValue)
+        case ("layout", "left_sidebar_min_width"):
+            configuration.layout.leftSidebarMinWidth = try parseWidth(rawValue)
+        case ("layout", "left_sidebar_max_width"):
+            configuration.layout.leftSidebarMaxWidth = try parseWidth(rawValue)
+        case ("layout", "right_sidebar_width"):
+            configuration.layout.rightSidebarWidth = try parseWidth(rawValue)
+        case ("layout", "right_sidebar_min_width"):
+            configuration.layout.rightSidebarMinWidth = try parseWidth(rawValue)
+        case ("layout", "right_sidebar_max_width"):
+            configuration.layout.rightSidebarMaxWidth = try parseWidth(rawValue)
         case ("shortcuts", "remove_highlight"):
             configuration.shortcuts.bindings[.removeHighlight] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "highlight_color_pink"):
@@ -406,6 +457,14 @@ struct AppConfigurationParser {
             throw AppConfigurationError.invalidBoolean(rawValue)
         }
     }
+
+    private func parseWidth(_ rawValue: String) throws -> CGFloat {
+        let trimmed = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        guard let value = Double(trimmed), value > 0 else {
+            throw AppConfigurationError.invalidWidth(rawValue)
+        }
+        return CGFloat(value)
+    }
 }
 
 struct AppConfigurationStore {
@@ -443,6 +502,13 @@ struct AppConfigurationStore {
         let requiredKeys = [
             "[annotations]",
             "auto_save",
+            "[layout]",
+            "left_sidebar_width",
+            "left_sidebar_min_width",
+            "left_sidebar_max_width",
+            "right_sidebar_width",
+            "right_sidebar_min_width",
+            "right_sidebar_max_width",
             "highlight_selection",
             "exit_highlight_mode",
             "toggle_night_mode",

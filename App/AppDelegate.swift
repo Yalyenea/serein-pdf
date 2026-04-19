@@ -428,6 +428,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func closeCurrentTab(_ sender: Any?) {
+        if let keyWindow = NSApp.keyWindow,
+           keyWindow !== mainWindowController?.window {
+            keyWindow.performClose(sender)
+            return
+        }
         mainWindowController?.requestCloseActiveSession()
     }
 

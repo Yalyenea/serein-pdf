@@ -77,11 +77,15 @@ final class VerticalTabsViewController: NSViewController {
         modeSegmented.segmentStyle = .rounded
         modeSegmented.target = self
         modeSegmented.action = #selector(modeChanged(_:))
+        modeSegmented.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        modeSegmented.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         thumbnailView.thumbnailSize = NSSize(width: 96, height: 128)
         thumbnailView.maximumNumberOfColumns = 1
         thumbnailView.backgroundColor = .clear
         thumbnailView.wantsLayer = true
+        thumbnailView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        thumbnailView.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         for view in [modeSegmented, headerStack, emptyStateLabel, listStackView, thumbnailView] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -89,8 +93,9 @@ final class VerticalTabsViewController: NSViewController {
         }
 
         NSLayoutConstraint.activate([
-            modeSegmented.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            modeSegmented.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            modeSegmented.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            modeSegmented.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 6),
+            modeSegmented.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -6),
             modeSegmented.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
 
             headerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
@@ -146,8 +151,8 @@ final class VerticalTabsViewController: NSViewController {
     }
 
     private func adjustThumbnailSizeForWidth() {
-        let available = max(view.bounds.width - 24, 80)
-        let targetWidth = min(max(available, 80), 220)
+        let available = max(view.bounds.width - 12, 36)
+        let targetWidth = min(available, 220)
         guard abs(targetWidth - lastAppliedThumbnailWidth) > 1 else { return }
         lastAppliedThumbnailWidth = targetWidth
         thumbnailView.thumbnailSize = NSSize(width: targetWidth, height: targetWidth * 1.414)
