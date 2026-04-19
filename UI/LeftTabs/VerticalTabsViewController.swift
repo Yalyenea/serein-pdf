@@ -1,19 +1,18 @@
 import AppKit
-import PDFKit
+
+private final class CollapsibleContainerView: NSView {
+    override var fittingSize: NSSize {
+        NSSize(width: 1, height: super.fittingSize.height)
+    }
+}
 
 final class VerticalTabsViewController: NSViewController {
-    enum Mode: Int { case tabs = 0, thumbnails = 1 }
-
     let documentStore: DocumentStore
     var onCloseSessionRequested: ((UUID) -> Void)?
     private let countLabel = NSTextField(labelWithString: "0 open")
     private let emptyStateLabel = NSTextField(
         labelWithString: "Open multiple PDFs and switch them here.")
     private let listStackView = NSStackView()
-    private let modeSegmented = NSSegmentedControl()
-    private let thumbnailView = PDFThumbnailView()
-    private var mode: Mode = .tabs
-    private var lastAppliedThumbnailWidth: CGFloat = 0
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -26,10 +25,6 @@ final class VerticalTabsViewController: NSViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(pdfView: PDFView) {
-        thumbnailView.pdfView = pdfView
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -40,7 +35,7 @@ final class VerticalTabsViewController: NSViewController {
             object: documentStore
         )
         rebuildList()
-        applyMode()
+        applyEmptyState()
     }
 
     deinit {
@@ -48,12 +43,14 @@ final class VerticalTabsViewController: NSViewController {
     }
 
     override func loadView() {
-        let container = NSView()
+        let container = CollapsibleContainerView()
         container.wantsLayer = true
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+        container.layer?.masksToBounds = true
 
         countLabel.font = .systemFont(ofSize: 11, weight: .medium)
         countLabel.textColor = .secondaryLabelColor
+        countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let headerStack = NSStackView(views: [NSView(), countLabel])
         headerStack.orientation = .horizontal
@@ -63,43 +60,22 @@ final class VerticalTabsViewController: NSViewController {
         emptyStateLabel.font = .systemFont(ofSize: 12)
         emptyStateLabel.textColor = .secondaryLabelColor
         emptyStateLabel.maximumNumberOfLines = 0
+        emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         listStackView.orientation = .vertical
         listStackView.alignment = .leading
         listStackView.spacing = 5
         listStackView.translatesAutoresizingMaskIntoConstraints = false
+        listStackView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        modeSegmented.segmentCount = 2
-        modeSegmented.setLabel("Tabs", forSegment: 0)
-        modeSegmented.setLabel("Pages", forSegment: 1)
-        modeSegmented.selectedSegment = 0
-        modeSegmented.controlSize = .small
-        modeSegmented.segmentStyle = .rounded
-        modeSegmented.target = self
-        modeSegmented.action = #selector(modeChanged(_:))
-        modeSegmented.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        modeSegmented.setContentHuggingPriority(.defaultLow, for: .horizontal)
-
-        thumbnailView.thumbnailSize = NSSize(width: 96, height: 128)
-        thumbnailView.maximumNumberOfColumns = 1
-        thumbnailView.backgroundColor = .clear
-        thumbnailView.wantsLayer = true
-        thumbnailView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        thumbnailView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-
-        for view in [modeSegmented, headerStack, emptyStateLabel, listStackView, thumbnailView] {
+        for view in [headerStack, emptyStateLabel, listStackView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
 
-        NSLayoutConstraint.activate([
-            modeSegmented.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            modeSegmented.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 6),
-            modeSegmented.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -6),
-            modeSegmented.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
-
+        let pinned: [NSLayoutConstraint] = [
             headerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            headerStack.topAnchor.constraint(equalTo: modeSegmented.bottomAnchor, constant: 10),
+            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
             headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
 
             emptyStateLabel.leadingAnchor.constraint(
@@ -114,29 +90,11 @@ final class VerticalTabsViewController: NSViewController {
             listStackView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 10),
             listStackView.bottomAnchor.constraint(
                 lessThanOrEqualTo: container.bottomAnchor, constant: -8),
-
-            thumbnailView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            thumbnailView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            thumbnailView.topAnchor.constraint(equalTo: modeSegmented.bottomAnchor, constant: 10),
-            thumbnailView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
+        ]
+        pinned.forEach { $0.priority = .defaultHigh }
+        NSLayoutConstraint.activate(pinned)
 
         view = container
-    }
-
-    @objc
-    private func modeChanged(_ sender: NSSegmentedControl) {
-        mode = Mode(rawValue: sender.selectedSegment) ?? .tabs
-        applyMode()
-    }
-
-    private func applyMode() {
-        let isTabs = mode == .tabs
-        let noSessions = documentStore.sessions.isEmpty
-        listStackView.isHidden = !isTabs || noSessions
-        emptyStateLabel.isHidden = !isTabs || !noSessions
-        countLabel.isHidden = !isTabs
-        thumbnailView.isHidden = isTabs
     }
 
     func refreshChromeColors() {
@@ -145,34 +103,16 @@ final class VerticalTabsViewController: NSViewController {
         }
     }
 
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        adjustThumbnailSizeForWidth()
-    }
-
-    private func adjustThumbnailSizeForWidth() {
-        let available = max(view.bounds.width - 12, 36)
-        let targetWidth = min(available, 220)
-        guard abs(targetWidth - lastAppliedThumbnailWidth) > 1 else { return }
-        lastAppliedThumbnailWidth = targetWidth
-        thumbnailView.thumbnailSize = NSSize(width: targetWidth, height: targetWidth * 1.414)
-    }
-
-    func toggleMode() {
-        let next: Mode = mode == .tabs ? .thumbnails : .tabs
-        setMode(next)
-    }
-
-    func setMode(_ newMode: Mode) {
-        mode = newMode
-        modeSegmented.selectedSegment = newMode.rawValue
-        applyMode()
-    }
-
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         rebuildList()
-        applyMode()
+        applyEmptyState()
+    }
+
+    private func applyEmptyState() {
+        let noSessions = documentStore.sessions.isEmpty
+        listStackView.isHidden = noSessions
+        emptyStateLabel.isHidden = !noSessions
     }
 
     private func rebuildList() {
@@ -201,7 +141,9 @@ final class VerticalTabsViewController: NSViewController {
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false
             listStackView.addArrangedSubview(itemView)
-            itemView.widthAnchor.constraint(equalTo: listStackView.widthAnchor).isActive = true
+            let widthMatch = itemView.widthAnchor.constraint(equalTo: listStackView.widthAnchor)
+            widthMatch.priority = .defaultHigh
+            widthMatch.isActive = true
         }
     }
 }

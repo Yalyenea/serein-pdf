@@ -49,6 +49,7 @@ struct DocumentSession {
     var annotationSavePolicy: AnnotationSavePolicy
     var leftSidebarWidth: CGFloat?
     var rightSidebarWidth: CGFloat?
+    var undoStack: [HighlightUndoOperation] = []
 
     init(
         id: UUID = UUID(),

@@ -57,7 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
                     .pageDown: { [weak self] in self?.goToNextPageAction(nil) },
                     .pageUp: { [weak self] in self?.goToPreviousPageAction(nil) },
-                    .toggleLeftTabsMode: { [weak self] in self?.toggleLeftTabsModeAction(nil) },
+                    .toggleRightSidebarMode: { [weak self] in self?.toggleRightSidebarModeAction(nil) },
+                    .swapSidebars: { [weak self] in self?.swapSidebarsAction(nil) },
                 ]
             }
         )
@@ -292,6 +293,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 command: .removeHighlight,
                 action: #selector(removeHighlightUnderCursorAction(_:))
             ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.undoLastHighlight.menuTitle,
+                command: .undoLastHighlight,
+                action: #selector(undoLastHighlightAction(_:))
+            ),
         ]
 
         annotateMenuItem.submenu = annotateMenu
@@ -362,9 +368,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 action: #selector(toggleAllPagesOverview(_:))
             ),
             makeConfiguredMenuItem(
-                title: ShortcutCommand.toggleLeftTabsMode.menuTitle,
-                command: .toggleLeftTabsMode,
-                action: #selector(toggleLeftTabsModeAction(_:))
+                title: ShortcutCommand.toggleRightSidebarMode.menuTitle,
+                command: .toggleRightSidebarMode,
+                action: #selector(toggleRightSidebarModeAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.swapSidebars.menuTitle,
+                command: .swapSidebars,
+                action: #selector(swapSidebarsAction(_:))
             ),
         ]
         viewMenuItem.submenu = viewMenu
@@ -480,8 +491,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
-    private func toggleLeftTabsModeAction(_ sender: Any?) {
-        mainWindowController?.toggleLeftTabsMode()
+    private func toggleRightSidebarModeAction(_ sender: Any?) {
+        mainWindowController?.toggleRightSidebarMode()
+    }
+
+    @objc
+    private func swapSidebarsAction(_ sender: Any?) {
+        var newConfiguration = appConfiguration
+        newConfiguration.layout.sidebarsSwapped.toggle()
+        applyUpdatedConfiguration(newConfiguration)
     }
 
     @objc
@@ -502,6 +520,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func removeHighlightUnderCursorAction(_ sender: Any?) {
         _ = mainWindowController?.removeHighlightUnderCursor()
+    }
+
+    @objc
+    private func undoLastHighlightAction(_ sender: Any?) {
+        _ = mainWindowController?.undoLastHighlight()
     }
 
     @objc
@@ -700,11 +723,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func applyUpdatedConfiguration(_ configuration: AppConfiguration) {
         guard let configStore else { return }
         let previousConfiguration = appConfiguration
+        var newConfiguration = configuration
+
+        if previousConfiguration.layout.sidebarsSwapped != newConfiguration.layout.sidebarsSwapped {
+            swap(&newConfiguration.layout.leftSidebarWidth, &newConfiguration.layout.rightSidebarWidth)
+            swap(&newConfiguration.layout.leftSidebarMinWidth, &newConfiguration.layout.rightSidebarMinWidth)
+            swap(&newConfiguration.layout.leftSidebarMaxWidth, &newConfiguration.layout.rightSidebarMaxWidth)
+        }
 
         do {
-            try configStore.save(configuration)
-            appConfiguration = configuration
-            documentStore.updateAppConfiguration(configuration)
+            try configStore.save(newConfiguration)
+            appConfiguration = newConfiguration
+            documentStore.updateAppConfiguration(newConfiguration)
         } catch {
             appConfiguration = previousConfiguration
             documentStore.updateAppConfiguration(previousConfiguration)
@@ -782,6 +812,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return documentStore.activeSession?.isDirty == true
         case #selector(removeHighlightUnderCursorAction(_:)):
             return documentStore.activeSession != nil
+        case #selector(undoLastHighlightAction(_:)):
+            return mainWindowController?.hasUndoableHighlight == true
         case #selector(setHighlightColorPink(_:)):
             menuItem.state = mainWindowController?.currentHighlightColor == .pink ? .on : .off
             return true
@@ -829,8 +861,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(toggleAllPagesOverview(_:)):
             menuItem.state = mainWindowController?.isAllPagesOverviewActive == true ? .on : .off
             return documentStore.activeSession != nil
-        case #selector(toggleLeftTabsModeAction(_:)):
-            return documentStore.tabPresentationMode == .verticalSidebar && documentStore.isLeftSidebarVisible
+        case #selector(toggleRightSidebarModeAction(_:)):
+            return documentStore.isRightSidebarVisible
+        case #selector(swapSidebarsAction(_:)):
+            return true
         case #selector(useSinglePage(_:)):
             menuItem.state = documentStore.activeSession?.displayMode == .singlePage ? .on : .off
             return documentStore.activeSession != nil

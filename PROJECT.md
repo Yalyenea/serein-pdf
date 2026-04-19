@@ -3,7 +3,7 @@
 ## 1. 项目概述
 
 
-一个面向 macOS 的极简 PDF 阅读器：支持在“左侧垂直文档标签”和“标题栏水平标签”两种 tab 形态之间自由切换；左侧栏还可在文档列表与页面缩略图之间切换；右侧为目录 sidebar，中间为沉浸式 PDF 阅读区，并提供 all-pages overview、高亮与夜间模式，整体强调极简、扁平、紧凑的布局风格。
+一个面向 macOS 的极简 PDF 阅读器：支持在"左侧垂直文档标签"和"标题栏水平标签"两种 tab 形态之间自由切换；右侧边栏同时承载 Outline 与 Pages 两种模式，中间为沉浸式 PDF 阅读区，并提供 all-pages overview、高亮与夜间模式。左右侧栏可整体互换位置（配置或快捷键触发）。整体强调极简、扁平、紧凑的布局风格。
 
 
 ### 1.4 产品原则
@@ -70,15 +70,17 @@
 ```mermaid
 flowchart LR
     A["MainWindowController"] --> B["SplitViewController"]
-    B --> C["LeftTabsViewController"]
+    B --> C["VerticalTabsViewController (Tabs)"]
     B --> D["ReaderViewController"]
-    B --> E["OutlineViewController"]
+    B --> E["RightSidebarViewController"]
+    E --> E1["OutlineViewController"]
+    E --> E2["PDFThumbnailView (Pages)"]
     C --> F["DocumentStore"]
     D --> F
     E --> F
     F --> G["DocumentSession"]
     D --> H["PDFView / PDFDocument / PDFKit"]
-    E --> I["OutlineNode Tree"]
+    E1 --> I["OutlineNode Tree"]
     F --> J["ReadingPositionStore"]
     F --> K["RecentFilesStore"]
     D --> L["HighlightService"]
@@ -98,6 +100,7 @@ flowchart LR
 | 自动保存 | 提供自动保存策略，默认 `10 min`，允许设为 `never` |
 | 夜间模式 | V1 先做基础版，不深挖自定义渲染管线 |
 | 状态恢复 | 每个 session 持有阅读状态，持久化到 store |
+| 左右互换 | `layout.sidebarsSwapped` 为全局 flag；翻转时 split items 重排，per-session 宽度 / 可见状态原子对调，保证"tabs 窄 / outline 宽"的语义 |
 
 ## 4. 信息架构与界面结构
 
@@ -105,10 +108,11 @@ flowchart LR
 
 | 区域 | 职责 | 设计边界 |
 |---|---|---|
-| 左栏 Vertical Sidebar | 在垂直模式下显示已打开 PDF，或切到 Pages 查看当前文档缩略图 | 不放目录，不放文件树 |
+| 左栏 Vertical Sidebar | 在垂直模式下显示已打开 PDF 的 tab 列表 | 不放目录、不放缩略图、不放文件树 |
 | 标题栏 Horizontal Tabs | 在水平模式下承载已打开 PDF 的 tab strip | 使用标题栏区域，不额外新增一行内容区 tab |
 | 中栏 Reader | 负责 PDF 阅读体验 | 显示、滚动、缩放、选择、搜索、批注、all-pages overview |
-| 右栏 Outline Sidebar | 显示当前 PDF 目录树 | 只服务当前文档 |
+| 右栏 Sidebar | 承载 Outline 与 Pages 两种模式 | 顶部 segmented 切换，只服务当前文档 |
+| 左右互换 | 通过配置或快捷键互换左右侧栏位置；宽度与可见状态随内容迁移 | 不改变上面四个区域的职责，仅改变物理位置 |
 
 ### 4.2 窗口策略
 
@@ -146,8 +150,10 @@ flowchart LR
 | `d` | 删除当前鼠标所在高亮；若该高亮跨多行，则整组一起删除 |
 | `i` | 切换反色夜间模式 |
 | `Cmd+S` | 将当前文档未保存批注写回源 PDF |
+| `Cmd+Z` | 撤销最近一次高亮新增或删除操作；每个文档独立栈，上限 50，不做 redo |
 | `Cmd+Shift+O` | 进入 / 退出 all-pages overview；进入时隐藏左右侧栏，退出时恢复 |
-| `Cmd+Shift+L` | 在左栏 `Tabs / Pages` 两种模式间切换 |
+| `Cmd+Shift+L` | 切换右侧栏 `Outline / Pages` 两种模式 |
+| `Cmd+Shift+X` | 互换左右侧栏位置（宽度与可见状态随内容迁移） |
 
 ### 4.5 批注保存策略
 
@@ -238,9 +244,11 @@ UI/CenterReader/
 UI/RightOutline/
   OutlineViewController.swift
   OutlineNode.swift
+  RightSidebarViewController.swift
 
 Features/Annotations/
   HighlightService.swift
+  HighlightUndoOperation.swift
 
 Features/Theme/
   ThemeManager.swift

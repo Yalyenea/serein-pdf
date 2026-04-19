@@ -9,7 +9,7 @@ final class SettingsWindowController: NSWindowController {
     ) {
         settingsViewController = SettingsViewController(configuration: configuration)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 468, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 468, height: 260),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -46,6 +46,11 @@ private final class SettingsViewController: NSViewController {
         action: nil
     )
     private let autoSavePopUp = NSPopUpButton()
+    private let swapSidebarsCheckbox = NSButton(
+        checkboxWithTitle: "Swap left and right sidebars",
+        target: nil,
+        action: nil
+    )
     private let footnoteLabel = NSTextField(
         wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Auto-save applies immediately to open PDFs."
     )
@@ -80,6 +85,11 @@ private final class SettingsViewController: NSViewController {
         autoSavePopUp.target = self
         autoSavePopUp.action = #selector(handleControlChanged(_:))
 
+        swapSidebarsCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        swapSidebarsCheckbox.controlSize = .small
+        swapSidebarsCheckbox.target = self
+        swapSidebarsCheckbox.action = #selector(handleControlChanged(_:))
+
         footnoteLabel.translatesAutoresizingMaskIntoConstraints = false
         footnoteLabel.font = .systemFont(ofSize: 11)
         footnoteLabel.textColor = .secondaryLabelColor
@@ -89,6 +99,7 @@ private final class SettingsViewController: NSViewController {
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
+            [makeRowLabel("Layout"), swapSidebarsCheckbox],
         ])
         grid.translatesAutoresizingMaskIntoConstraints = false
         grid.rowSpacing = 14
@@ -146,6 +157,7 @@ private final class SettingsViewController: NSViewController {
             in: autoSavePopUp,
             matching: configuration.annotations.autoSavePolicy.rawValue
         )
+        swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
     }
 
     @objc
@@ -162,6 +174,7 @@ private final class SettingsViewController: NSViewController {
         updatedConfiguration.reader.defaultDisplayMode = displayMode
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
         updatedConfiguration.annotations.autoSavePolicy = autoSavePolicy
+        updatedConfiguration.layout.sidebarsSwapped = swapSidebarsCheckbox.state == .on
 
         guard updatedConfiguration != configuration else { return }
         configuration = updatedConfiguration

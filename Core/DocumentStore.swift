@@ -25,6 +25,7 @@ final class DocumentStore {
     private(set) var recentDocumentURLs: [URL] = []
     private(set) var recentlyClosedURLs: [URL] = []
     private static let recentlyClosedLimit = 10
+    static let undoStackLimit = 50
 
     init(
         persistence: DocumentStorePersistence = UserDefaultsDocumentStorePersistence(),
@@ -146,11 +147,22 @@ final class DocumentStore {
     func setTabPresentationMode(_ mode: TabPresentationMode) {
         guard tabPresentationMode != mode else { return }
         tabPresentationMode = mode
-        isLeftSidebarVisible = mode == .verticalSidebar
+
+        let tabsPaneShouldBeVisible = mode == .verticalSidebar
+        let tabsOnRight = appConfiguration.layout.sidebarsSwapped
+        if tabsOnRight {
+            isRightSidebarVisible = tabsPaneShouldBeVisible
+        } else {
+            isLeftSidebarVisible = tabsPaneShouldBeVisible
+        }
 
         for index in sessions.indices {
             sessions[index].tabPresentationState.mode = mode
-            sessions[index].sidebarState.isLeftSidebarVisible = isLeftSidebarVisible
+            if tabsOnRight {
+                sessions[index].sidebarState.isRightSidebarVisible = tabsPaneShouldBeVisible
+            } else {
+                sessions[index].sidebarState.isLeftSidebarVisible = tabsPaneShouldBeVisible
+            }
         }
 
         notifyChange()
@@ -236,6 +248,42 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func recordHighlightUndo(_ operation: HighlightUndoOperation, for sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[sessionIndex].undoStack.append(operation)
+        let overflow = sessions[sessionIndex].undoStack.count - Self.undoStackLimit
+        if overflow > 0 {
+            sessions[sessionIndex].undoStack.removeFirst(overflow)
+        }
+    }
+
+    func hasUndoableHighlight(for sessionID: UUID) -> Bool {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
+        return session.undoStack.isEmpty == false
+    }
+
+    @discardableResult
+    func undoLastHighlight(for sessionID: UUID) -> Bool {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+              let operation = sessions[sessionIndex].undoStack.popLast() else { return false }
+
+        let document = sessions[sessionIndex].pdfDocument
+        switch operation {
+        case let .added(records):
+            HighlightService.removeHighlights(records, in: document)
+        case let .removed(records):
+            HighlightService.reinsertHighlights(records, in: document)
+        }
+
+        let now = Date()
+        if sessions[sessionIndex].isDirty == false {
+            sessions[sessionIndex].isDirty = true
+            sessions[sessionIndex].dirtySince = now
+        }
+        notifyChange()
+        return true
+    }
+
     func setAnnotationSavePolicy(_ policy: AnnotationSavePolicy, for sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[sessionIndex].annotationSavePolicy != policy else { return }
@@ -247,15 +295,30 @@ final class DocumentStore {
     func updateAppConfiguration(_ configuration: AppConfiguration) {
         guard appConfiguration != configuration else { return }
         let previousFitWidthOnOpen = appConfiguration.reader.fitWidthOnOpen
+        let previousSwapped = appConfiguration.layout.sidebarsSwapped
+        let newSwapped = configuration.layout.sidebarsSwapped
         appConfiguration = configuration
 
         let fitWidthChanged = previousFitWidthOnOpen != configuration.reader.fitWidthOnOpen
         let targetScaleMode: ReaderScaleMode = configuration.reader.fitWidthOnOpen ? .fitWidth : .manual
 
+        if previousSwapped != newSwapped {
+            swap(&isLeftSidebarVisible, &isRightSidebarVisible)
+        }
+
         for index in sessions.indices {
             sessions[index].annotationSavePolicy = configuration.annotations.autoSavePolicy
             if fitWidthChanged, sessions[index].scaleMode != targetScaleMode {
                 sessions[index].scaleMode = targetScaleMode
+                persistReadingState(for: sessions[index])
+            }
+            if previousSwapped != newSwapped {
+                let storedLeftWidth = sessions[index].leftSidebarWidth
+                sessions[index].leftSidebarWidth = sessions[index].rightSidebarWidth
+                sessions[index].rightSidebarWidth = storedLeftWidth
+                let storedLeftVisible = sessions[index].sidebarState.isLeftSidebarVisible
+                sessions[index].sidebarState.isLeftSidebarVisible = sessions[index].sidebarState.isRightSidebarVisible
+                sessions[index].sidebarState.isRightSidebarVisible = storedLeftVisible
                 persistReadingState(for: sessions[index])
             }
         }
@@ -296,10 +359,19 @@ final class DocumentStore {
         guard let persistedState = try persistence.loadState() else { return }
 
         tabPresentationMode = persistedState.tabPresentationMode
-        isLeftSidebarVisible = persistedState.tabPresentationMode == .verticalSidebar
-            ? true
-            : persistedState.isLeftSidebarVisible
-        isRightSidebarVisible = persistedState.isRightSidebarVisible
+        let tabsPaneShouldBeVisible = persistedState.tabPresentationMode == .verticalSidebar
+        let tabsOnRight = appConfiguration.layout.sidebarsSwapped
+        if tabsOnRight {
+            isLeftSidebarVisible = persistedState.isLeftSidebarVisible
+            isRightSidebarVisible = tabsPaneShouldBeVisible
+                ? true
+                : persistedState.isRightSidebarVisible
+        } else {
+            isLeftSidebarVisible = tabsPaneShouldBeVisible
+                ? true
+                : persistedState.isLeftSidebarVisible
+            isRightSidebarVisible = persistedState.isRightSidebarVisible
+        }
         sessions = []
         activeSessionID = nil
 

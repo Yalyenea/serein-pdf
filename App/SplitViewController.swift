@@ -9,10 +9,12 @@ final class SplitViewController: NSSplitViewController {
     let documentStore: DocumentStore
     let verticalTabsViewController: VerticalTabsViewController
     let readerViewController: ReaderViewController
-    let outlineViewController: OutlineViewController
+    let rightSidebarViewController: RightSidebarViewController
     let titlebarTabsController: TitlebarTabsController
-    private var leftSidebarItem: NSSplitViewItem?
-    private var rightSidebarItem: NSSplitViewItem?
+    private var tabsSidebarItem: NSSplitViewItem!
+    private var outlineSidebarItem: NSSplitViewItem!
+    private var centerItem: NSSplitViewItem!
+    private var appliedSwapped: Bool?
     private var appliedWidthsForSessionID: UUID?
     private var isApplyingSidebarWidths = false
 
@@ -20,10 +22,10 @@ final class SplitViewController: NSSplitViewController {
         self.documentStore = documentStore
         verticalTabsViewController = VerticalTabsViewController(documentStore: documentStore)
         readerViewController = ReaderViewController(documentStore: documentStore)
-        outlineViewController = OutlineViewController(documentStore: documentStore)
+        rightSidebarViewController = RightSidebarViewController(documentStore: documentStore)
         titlebarTabsController = TitlebarTabsController(documentStore: documentStore)
         super.init(nibName: nil, bundle: nil)
-        verticalTabsViewController.configure(pdfView: readerViewController.pdfView)
+        rightSidebarViewController.configure(pdfView: readerViewController.pdfView)
     }
 
     @available(*, unavailable)
@@ -65,29 +67,20 @@ final class SplitViewController: NSSplitViewController {
         let sidebarHoldingPriority = NSLayoutConstraint.Priority(
             rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue + 10
         )
-        let layout = documentStore.appConfiguration.layout
 
-        let leftItem = NSSplitViewItem(viewController: verticalTabsViewController)
-        leftItem.canCollapse = true
-        leftItem.minimumThickness = layout.leftSidebarMinWidth
-        leftItem.maximumThickness = layout.leftSidebarMaxWidth
-        leftItem.holdingPriority = sidebarHoldingPriority
+        tabsSidebarItem = NSSplitViewItem(viewController: verticalTabsViewController)
+        tabsSidebarItem.canCollapse = true
+        tabsSidebarItem.holdingPriority = sidebarHoldingPriority
 
-        let centerItem = NSSplitViewItem(viewController: readerViewController)
+        centerItem = NSSplitViewItem(viewController: readerViewController)
         centerItem.minimumThickness = 320
         centerItem.holdingPriority = .defaultLow
 
-        let rightItem = NSSplitViewItem(viewController: outlineViewController)
-        rightItem.canCollapse = true
-        rightItem.minimumThickness = layout.rightSidebarMinWidth
-        rightItem.maximumThickness = layout.rightSidebarMaxWidth
-        rightItem.holdingPriority = sidebarHoldingPriority
+        outlineSidebarItem = NSSplitViewItem(viewController: rightSidebarViewController)
+        outlineSidebarItem.canCollapse = true
+        outlineSidebarItem.holdingPriority = sidebarHoldingPriority
 
-        leftSidebarItem = leftItem
-        rightSidebarItem = rightItem
-        addSplitViewItem(leftItem)
-        addSplitViewItem(centerItem)
-        addSplitViewItem(rightItem)
+        rebuildSplitItems()
 
         NotificationCenter.default.addObserver(
             self,
@@ -115,10 +108,13 @@ final class SplitViewController: NSSplitViewController {
               let sessionID = documentStore.activeSessionID,
               appliedWidthsForSessionID == sessionID else { return }
 
-        let leftWidth = leftSidebarItem?.isCollapsed == true
+        let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
+        let leftItem = swapped ? outlineSidebarItem : tabsSidebarItem
+        let rightItem = swapped ? tabsSidebarItem : outlineSidebarItem
+        let leftWidth = leftItem?.isCollapsed == true
             ? nil
             : splitView.arrangedSubviews[safe: 0]?.frame.width
-        let rightWidth = rightSidebarItem?.isCollapsed == true
+        let rightWidth = rightItem?.isCollapsed == true
             ? nil
             : splitView.arrangedSubviews[safe: 2]?.frame.width
 
@@ -158,18 +154,53 @@ final class SplitViewController: NSSplitViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        rebuildSplitItemsIfSwapChanged()
         applyStoreState()
         applySidebarWidthsForActiveSession()
     }
 
+    private func rebuildSplitItemsIfSwapChanged() {
+        let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
+        guard appliedSwapped != swapped else { return }
+        rebuildSplitItems()
+    }
+
+    private func rebuildSplitItems() {
+        let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
+        let layout = documentStore.appConfiguration.layout
+
+        for item in splitViewItems {
+            removeSplitViewItem(item)
+        }
+
+        let leftItem: NSSplitViewItem = swapped ? outlineSidebarItem : tabsSidebarItem
+        let rightItem: NSSplitViewItem = swapped ? tabsSidebarItem : outlineSidebarItem
+
+        leftItem.minimumThickness = layout.leftSidebarMinWidth
+        leftItem.maximumThickness = layout.leftSidebarMaxWidth
+        rightItem.minimumThickness = layout.rightSidebarMinWidth
+        rightItem.maximumThickness = layout.rightSidebarMaxWidth
+
+        addSplitViewItem(leftItem)
+        addSplitViewItem(centerItem)
+        addSplitViewItem(rightItem)
+
+        appliedSwapped = swapped
+        appliedWidthsForSessionID = nil
+    }
+
     private func applyStoreState() {
+        let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
+        let physicalLeft: NSSplitViewItem = swapped ? outlineSidebarItem : tabsSidebarItem
+        let physicalRight: NSSplitViewItem = swapped ? tabsSidebarItem : outlineSidebarItem
+
         let leftShouldCollapse = !documentStore.isLeftSidebarVisible
-        if let leftItem = leftSidebarItem, leftItem.isCollapsed != leftShouldCollapse {
-            leftItem.isCollapsed = leftShouldCollapse
+        if physicalLeft.isCollapsed != leftShouldCollapse {
+            physicalLeft.isCollapsed = leftShouldCollapse
         }
         let rightShouldCollapse = !documentStore.isRightSidebarVisible
-        if let rightItem = rightSidebarItem, rightItem.isCollapsed != rightShouldCollapse {
-            rightItem.isCollapsed = rightShouldCollapse
+        if physicalRight.isCollapsed != rightShouldCollapse {
+            physicalRight.isCollapsed = rightShouldCollapse
         }
     }
 
@@ -191,7 +222,6 @@ final class SplitViewController: NSSplitViewController {
         }
 
         if appliedWidthsForSessionID == sessionID {
-            // Already applied for this session; avoid fighting the user's drag.
             return
         }
 
@@ -219,7 +249,7 @@ final class SplitViewController: NSSplitViewController {
     func refreshChromeColors() {
         applyChromeColors()
         verticalTabsViewController.refreshChromeColors()
-        outlineViewController.refreshChromeColors()
+        rightSidebarViewController.refreshChromeColors()
         titlebarTabsController.refreshChromeColors()
     }
 

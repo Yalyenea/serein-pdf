@@ -25,14 +25,16 @@ struct AppConfiguration: Equatable, Sendable {
         var rightSidebarWidth: CGFloat
         var rightSidebarMinWidth: CGFloat
         var rightSidebarMaxWidth: CGFloat
+        var sidebarsSwapped: Bool
 
         static let `default` = Layout(
             leftSidebarWidth: 220,
-            leftSidebarMinWidth: 60,
+            leftSidebarMinWidth: 36,
             leftSidebarMaxWidth: 520,
             rightSidebarWidth: 320,
             rightSidebarMinWidth: 120,
-            rightSidebarMaxWidth: 720
+            rightSidebarMaxWidth: 720,
+            sidebarsSwapped: false
         )
     }
 
@@ -69,7 +71,9 @@ struct AppConfiguration: Equatable, Sendable {
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
-            .toggleLeftTabsMode: KeyboardShortcut(key: "l", modifiers: [.command, .shift]),
+            .toggleRightSidebarMode: KeyboardShortcut(key: "l", modifiers: [.command, .shift]),
+            .swapSidebars: KeyboardShortcut(key: "x", modifiers: [.command, .shift]),
+            .undoLastHighlight: KeyboardShortcut(key: "z", modifiers: [.command]),
         ])
     }
 
@@ -221,11 +225,12 @@ auto_save = "after_10_minutes"
 
 [layout]
 left_sidebar_width = 220
-left_sidebar_min_width = 60
+left_sidebar_min_width = 36
 left_sidebar_max_width = 520
 right_sidebar_width = 320
 right_sidebar_min_width = 120
 right_sidebar_max_width = 720
+sidebars_swapped = false
 
 [shortcuts]
 highlight_selection = "a"
@@ -257,7 +262,9 @@ navigate_forward = "command+]"
 goto_page = "command+option+g"
 reopen_last_closed = "command+shift+t"
 toggle_all_pages_overview = "command+shift+o"
-toggle_left_tabs_mode = "command+shift+l"
+toggle_right_sidebar_mode = "command+shift+l"
+swap_sidebars = "command+shift+x"
+undo_last_highlight = "command+z"
 """
 
     static func render(_ configuration: AppConfiguration) -> String {
@@ -279,6 +286,7 @@ left_sidebar_max_width = \(Int(configuration.layout.leftSidebarMaxWidth.rounded(
 right_sidebar_width = \(Int(configuration.layout.rightSidebarWidth.rounded()))
 right_sidebar_min_width = \(Int(configuration.layout.rightSidebarMinWidth.rounded()))
 right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounded()))
+sidebars_swapped = \(configuration.layout.sidebarsSwapped ? "true" : "false")
 
 [shortcuts]
 highlight_selection = "\(configuration.shortcuts.bindings[.highlightSelection]?.serializedValue ?? "a")"
@@ -310,7 +318,9 @@ navigate_forward = "\(configuration.shortcuts.bindings[.navigateForward]?.serial
 goto_page = "\(configuration.shortcuts.bindings[.gotoPage]?.serializedValue ?? "command+option+g")"
 reopen_last_closed = "\(configuration.shortcuts.bindings[.reopenLastClosed]?.serializedValue ?? "command+shift+t")"
 toggle_all_pages_overview = "\(configuration.shortcuts.bindings[.toggleAllPagesOverview]?.serializedValue ?? "command+shift+o")"
-toggle_left_tabs_mode = "\(configuration.shortcuts.bindings[.toggleLeftTabsMode]?.serializedValue ?? "command+shift+l")"
+toggle_right_sidebar_mode = "\(configuration.shortcuts.bindings[.toggleRightSidebarMode]?.serializedValue ?? "command+shift+l")"
+swap_sidebars = "\(configuration.shortcuts.bindings[.swapSidebars]?.serializedValue ?? "command+shift+x")"
+undo_last_highlight = "\(configuration.shortcuts.bindings[.undoLastHighlight]?.serializedValue ?? "command+z")"
 """
     }
 }
@@ -386,6 +396,8 @@ struct AppConfigurationParser {
             configuration.layout.rightSidebarMinWidth = try parseWidth(rawValue)
         case ("layout", "right_sidebar_max_width"):
             configuration.layout.rightSidebarMaxWidth = try parseWidth(rawValue)
+        case ("layout", "sidebars_swapped"):
+            configuration.layout.sidebarsSwapped = try parseBool(rawValue)
         case ("shortcuts", "remove_highlight"):
             configuration.shortcuts.bindings[.removeHighlight] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "highlight_color_pink"):
@@ -436,8 +448,12 @@ struct AppConfigurationParser {
             configuration.shortcuts.bindings[.reopenLastClosed] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "toggle_all_pages_overview"):
             configuration.shortcuts.bindings[.toggleAllPagesOverview] = try KeyboardShortcut.parse(parseString(rawValue))
-        case ("shortcuts", "toggle_left_tabs_mode"):
-            configuration.shortcuts.bindings[.toggleLeftTabsMode] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "toggle_right_sidebar_mode"), ("shortcuts", "toggle_left_tabs_mode"):
+            configuration.shortcuts.bindings[.toggleRightSidebarMode] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "swap_sidebars"):
+            configuration.shortcuts.bindings[.swapSidebars] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "undo_last_highlight"):
+            configuration.shortcuts.bindings[.undoLastHighlight] = try KeyboardShortcut.parse(parseString(rawValue))
         default:
             break
         }
@@ -509,6 +525,7 @@ struct AppConfigurationStore {
             "right_sidebar_width",
             "right_sidebar_min_width",
             "right_sidebar_max_width",
+            "sidebars_swapped",
             "highlight_selection",
             "exit_highlight_mode",
             "toggle_night_mode",
@@ -533,7 +550,9 @@ struct AppConfigurationStore {
             "goto_page",
             "reopen_last_closed",
             "toggle_all_pages_overview",
-            "toggle_left_tabs_mode",
+            "toggle_right_sidebar_mode",
+            "swap_sidebars",
+            "undo_last_highlight",
         ]
 
         var configuration = try parser.parse(existingContent)

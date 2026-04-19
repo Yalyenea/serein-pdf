@@ -85,9 +85,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func applyWindowChromeState() {
+        let tabsOnRight = documentStore.appConfiguration.layout.sidebarsSwapped
+        let tabsPaneVisible = tabsOnRight
+            ? documentStore.isRightSidebarVisible
+            : documentStore.isLeftSidebarVisible
         let shouldShowTitlebarTabs =
             documentStore.tabPresentationMode == .horizontalTitlebar &&
-            !documentStore.isLeftSidebarVisible
+            !tabsPaneVisible
 
         splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
         synchronizeTitlebarTabsItem(isVisible: shouldShowTitlebarTabs)
@@ -199,8 +203,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.readerViewController.toggleAllPagesOverview()
     }
 
-    func toggleLeftTabsMode() {
-        splitViewController.verticalTabsViewController.toggleMode()
+    func toggleRightSidebarMode() {
+        splitViewController.rightSidebarViewController.toggleMode()
     }
 
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
@@ -297,6 +301,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @discardableResult
     func removeHighlightUnderCursor() -> Bool {
         splitViewController.readerViewController.removeHighlightUnderCursor()
+    }
+
+    @discardableResult
+    func undoLastHighlight() -> Bool {
+        splitViewController.readerViewController.undoLastHighlight()
+    }
+
+    var hasUndoableHighlight: Bool {
+        splitViewController.readerViewController.hasUndoableHighlight
     }
 
     var currentHighlightColor: HighlightColor {

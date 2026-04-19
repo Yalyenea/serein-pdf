@@ -601,6 +601,40 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(readingStateStore.states[session.url]?.scaleMode, .manual)
     }
 
+    func testUpdateAppConfigurationSwapsPerSessionWidthsAndVisibilities() throws {
+        let readingStateStore = InMemoryReadingStateStore()
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore,
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "swap-widths"))
+        store.updateSidebarWidths(left: 40, right: 320, for: session.id)
+        store.setLeftSidebarVisible(true)
+        store.setRightSidebarVisible(false)
+
+        var swappedConfig = store.appConfiguration
+        swappedConfig.layout.sidebarsSwapped = true
+        store.updateAppConfiguration(swappedConfig)
+
+        let swapped = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertEqual(swapped.leftSidebarWidth, 320)
+        XCTAssertEqual(swapped.rightSidebarWidth, 40)
+        XCTAssertFalse(store.isLeftSidebarVisible)
+        XCTAssertTrue(store.isRightSidebarVisible)
+
+        var unswappedConfig = store.appConfiguration
+        unswappedConfig.layout.sidebarsSwapped = false
+        store.updateAppConfiguration(unswappedConfig)
+
+        let restored = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertEqual(restored.leftSidebarWidth, 40)
+        XCTAssertEqual(restored.rightSidebarWidth, 320)
+        XCTAssertTrue(store.isLeftSidebarVisible)
+        XCTAssertFalse(store.isRightSidebarVisible)
+    }
+
     private func makeTemporaryPDF(named name: String) throws -> URL {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

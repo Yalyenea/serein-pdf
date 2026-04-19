@@ -386,11 +386,28 @@ final class ReaderViewController: NSViewController {
         let pointOnPage = pdfView.convert(mouseInPDF, to: page)
         guard let target = HighlightService.highlightAnnotation(at: pointOnPage, on: page) else { return false }
 
-        let removed = HighlightService.removeHighlightGroup(containing: target, in: document)
-        guard removed > 0 else { return false }
+        let records = HighlightService.removeHighlightGroup(containing: target, in: document)
+        guard records.isEmpty == false else { return false }
 
+        documentStore.recordHighlightUndo(.removed(records), for: session.id)
         documentStore.setDirty(true, for: session.id)
         return true
+    }
+
+    @discardableResult
+    func undoLastHighlight() -> Bool {
+        guard let session = documentStore.activeSession,
+              session.id == displayedSessionID else { return false }
+        let didUndo = documentStore.undoLastHighlight(for: session.id)
+        if didUndo {
+            pdfView.needsDisplay = true
+        }
+        return didUndo
+    }
+
+    var hasUndoableHighlight: Bool {
+        guard let sessionID = documentStore.activeSessionID else { return false }
+        return documentStore.hasUndoableHighlight(for: sessionID)
     }
 
     func toggleNightMode() {
@@ -709,12 +726,13 @@ final class ReaderViewController: NSViewController {
         isApplyingHighlightSelection = true
         defer { isApplyingHighlightSelection = false }
 
-        let appliedAnnotations = HighlightService.applyHighlight(
+        let appliedRecords = HighlightService.applyHighlight(
             to: selection,
             color: themeManager.readerState.highlightColor.nsColor
         )
-        guard appliedAnnotations > 0 else { return false }
+        guard appliedRecords.isEmpty == false else { return false }
 
+        documentStore.recordHighlightUndo(.added(appliedRecords), for: session.id)
         documentStore.setDirty(true, for: session.id)
         pdfView.currentSelection = nil
         return true

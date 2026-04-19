@@ -22,7 +22,8 @@
 - [ ] 默认自动保存策略是 `10 min`
 - [ ] 自动保存策略至少支持 `10 min` 和 `never`
 - [ ] 水平 tab 模式必须复用标题栏，不单独新增一行 tab bar
-- [ ] 左栏支持 `Tabs / Pages` 两种模式，并可用 `Cmd+Shift+L` 切换
+- [ ] 右栏支持 `Outline / Pages` 两种模式，并可用 `Cmd+Shift+L` 切换
+- [ ] 左右侧栏可通过 `Cmd+Shift+X` 或设置窗口整体互换，宽度 / 可见状态随内容迁移
 
 ## 3. Milestone 1: MVP 骨架
 
@@ -500,6 +501,9 @@
 - [x] `M6-057` 分栏拖动体验修复
 完成定义：去掉左右侧栏硬上限，只保留最小宽度与中心阅读区最小宽度；扩大 divider 热区；同步 `SplitViewController`，避免 store 状态刷新时把正在拖动的侧栏重新顶回去。
 
+- [x] `M6-058` Cmd+Z 撤销上一次高亮
+完成定义：新建 `Features/Annotations/HighlightUndoOperation.swift`；`HighlightService.applyHighlight` / `removeHighlightGroup` 返回 `[HighlightAnnotationRecord]` 并新增 `reinsertHighlights` / `removeHighlights`；`DocumentSession.undoStack` 上限 50；`DocumentStore.recordHighlightUndo` / `undoLastHighlight` / `hasUndoableHighlight`；`ShortcutCommand.undoLastHighlight` 默认 `Cmd+Z`，配置/菜单/校验同步；`HighlightUndoTests` 覆盖 add/remove 还原、栈上限、session 隔离、空栈 false。
+
 ### 9.7 文档与验收
 
 - [x] `M6-060` 同步文档
@@ -510,6 +514,26 @@
 
 - [ ] `M6-062` M6 验收
 完成定义：`AC-M6-01` 至 `AC-M6-14` 全部通过，UAT 手测记录到位（待真实 PDF 手测：UAT-11 至 UAT-21）。
+
+### 9.8 侧栏结构重排（M6 后期补档）
+
+- [x] `M6-070` Pages 迁移至右栏
+完成定义：`VerticalTabsViewController` 退化为纯 Tabs；新建 `RightSidebarViewController` 内嵌 `OutlineViewController` + `PDFThumbnailView`，顶部 segmented 切换 Outline / Pages；`SplitViewController` 右侧 split item 换成新 VC；缩略图根据宽度自适应并居中。
+
+- [x] `M6-071` 模式切换快捷键语义调整
+完成定义：`ShortcutCommand.toggleLeftTabsMode` → `toggleRightSidebarMode`（保留默认 `Cmd+Shift+L`）；`AppConfigurationParser` 兼容旧 key `toggle_left_tabs_mode` 并在 bootstrap 时迁移；菜单项标题改为 `Toggle Outline / Pages`。
+
+- [x] `M6-072` 左右侧栏可互换
+完成定义：新增 `layout.sidebarsSwapped` 配置项与 `ShortcutCommand.swapSidebars`（默认 `Cmd+Shift+X`）；`DocumentStore.updateAppConfiguration` 翻转时原子对调 per-session 宽度 / 可见性，`AppDelegate.applyUpdatedConfiguration` 同步对调 layout 默认宽度；`SplitViewController` 监听 flag 并重排 split items；`MainWindowController.applyWindowChromeState` 与 `setTabPresentationMode` 按 swap 状态判断 tabs pane 所在物理侧。
+
+- [x] `M6-073` 设置窗口新增 layout 行
+完成定义：`SettingsViewController` 加 "Swap left and right sidebars" checkbox；翻转走统一 `applyUpdatedConfiguration` 路径。
+
+- [x] `M6-074` 侧栏最小宽度真正放开
+完成定义：`VerticalTabsViewController` 与 `RightSidebarViewController` 的 container 覆盖 `fittingSize.width`；内部 pin 约束下调优先级到 `.defaultHigh`，允许容器收窄到 `layout.leftSidebarMinWidth`（默认 36）而不受 NSSplitView 隐式下限阻挡。
+
+- [x] `M6-075` 测试与文档
+完成定义：`AppConfigurationTests` 覆盖默认值、legacy 迁移、`sidebarsSwapped` 持久化；`DocumentStoreTests` 覆盖翻转对调；`PROJECT.md` / `TASKS.md` / `README.md` 同步新 IA、快捷键、配置字段。
 
 ## 10. Milestone 7: 搜索强化与对比阅读
 
@@ -644,7 +668,7 @@
 - [x] `UAT-10` 按 `i` 切换夜间模式
 - [x] `UAT-11` 菜单中 `A` / `I` / `D` / `Esc` 快捷键文字可见
 - [ ] `UAT-12` 光标悬停在高亮上按 `D` 直接删除对应整组高亮
-- [ ] `UAT-13` 左栏切到 Pages 模式，点击缩略图能跳转，`Cmd+Shift+L` 可切换
+- [ ] `UAT-13` 右栏可在 Outline / Pages 间切换，`Cmd+Shift+L` 可触发；缩略图宽度随侧栏实时调整并居中
 - [ ] `UAT-14` `Cmd+Shift+O` 进入全览并自动隐藏侧栏，`Esc` 退出后恢复
 - [x] `UAT-15` `Cmd+Shift+T` 能重开最近关闭的文件
 - [x] `UAT-16` 窗口顶栏不再出现 "Documents"，红绿灯不被遮挡
@@ -654,6 +678,7 @@
 - [x] `UAT-20` 点击 PDF 内部链接能跳转到目标位置
 - [x] `UAT-21` 跳转后 `Cmd+[` 能回到起跳点，`Cmd+]` 可再前进
 - [x] `UAT-21a` 左右侧栏可自由调宽，右栏拖动后不自动回弹
+- [ ] `UAT-21b` `Cmd+Shift+X` 或设置窗口勾选后左右侧栏整体互换，宽度 / 可见状态随内容迁移
 - [ ] `UAT-22` find bar 能看到全部匹配项列表，点击可跳转
 - [ ] `UAT-23` 至少 200 页 PDF 搜索常见词不卡顿
 - [ ] `UAT-24` `Cmd+Ctrl+\` 进入同窗分屏，两侧独立切换 session 不污染

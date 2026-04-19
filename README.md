@@ -9,7 +9,8 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
-- Right-side outline pane with PDF bookmarks and current-page counter
+- Right pane hosts **Outline + Pages** with a one-key switch (`cmd+shift+l`)
+- Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Pink-first highlight workflow (`a` to highlight, `i` to toggle inverted night mode)
 - Find bar (`cmd+f`), Esc clears selection and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
@@ -62,11 +63,12 @@ auto_save = "after_10_minutes"   # or "never"
 
 [layout]
 left_sidebar_width = 220
-left_sidebar_min_width = 60
+left_sidebar_min_width = 36
 left_sidebar_max_width = 520
 right_sidebar_width = 320
 right_sidebar_min_width = 120
 right_sidebar_max_width = 720
+sidebars_swapped = false
 
 [shortcuts]
 # ...
@@ -74,6 +76,8 @@ right_sidebar_max_width = 720
 
 - Layout defaults apply to **newly opened** PDFs. Dragging a sidebar remembers
   that width per PDF.
+- `sidebars_swapped = true` flips the left and right panes — widths travel
+  with the panes so your narrow tabs pane stays narrow after the swap.
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
@@ -94,7 +98,10 @@ Defined in `[shortcuts]` above. Highlights:
 | Reopen closed tab | `cmd+shift+t` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |
 | Toggle left / right sidebar | `cmd+b` / `cmd+option+b` |
+| Toggle right sidebar: Outline / Pages | `cmd+shift+l` |
+| Swap left and right sidebars | `cmd+shift+x` |
 | All-pages overview | `cmd+shift+o` |
+| Undo last highlight edit | `cmd+z` |
 
 ## Repo layout
 

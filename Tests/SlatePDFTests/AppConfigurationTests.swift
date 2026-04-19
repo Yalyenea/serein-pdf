@@ -29,6 +29,11 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.undoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleRightSidebarMode], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.swapSidebars], KeyboardShortcut(key: "x", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.layout.leftSidebarMinWidth, 36)
+        XCTAssertFalse(configuration.layout.sidebarsSwapped)
     }
 
     func testLoadTomlOverridesReaderDefaultsAndShortcuts() throws {
@@ -102,6 +107,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
+        XCTAssertTrue(content.contains("undo_last_highlight = \"command+z\""))
     }
 
     func testBootstrapMigratesLegacyRemoveHighlightShortcut() throws {
@@ -143,5 +149,47 @@ fit_width = "command+9"
         XCTAssertTrue(persistedContent.contains("default_display_mode = \"two_up_continuous\""))
         XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
         XCTAssertTrue(persistedContent.contains("auto_save = \"never\""))
+    }
+
+    func testLegacyToggleLeftTabsModeMigratesToRightSidebarMode() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(
+                of: "toggle_right_sidebar_mode = \"command+shift+l\"",
+                with: "toggle_left_tabs_mode = \"command+shift+k\""
+            )
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(
+            configuration.shortcuts.bindings[.toggleRightSidebarMode],
+            KeyboardShortcut(key: "k", modifiers: [.command, .shift])
+        )
+        XCTAssertTrue(persistedContent.contains("toggle_right_sidebar_mode = \"command+shift+k\""))
+        XCTAssertFalse(persistedContent.contains("toggle_left_tabs_mode"))
+    }
+
+    func testSidebarsSwappedPersistsAndRoundTrips() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+        let store = try AppConfigurationStore(fileURL: fileURL)
+
+        var configuration = try store.load()
+        XCTAssertFalse(configuration.layout.sidebarsSwapped)
+        configuration.layout.sidebarsSwapped = true
+
+        try store.save(configuration)
+        let reloadedConfiguration = try store.load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertTrue(reloadedConfiguration.layout.sidebarsSwapped)
+        XCTAssertTrue(persistedContent.contains("sidebars_swapped = true"))
     }
 }

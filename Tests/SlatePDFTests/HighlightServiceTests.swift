@@ -34,8 +34,8 @@ final class HighlightServiceTests: XCTestCase {
         let page = try XCTUnwrap(document.page(at: 0))
         let alphaSelection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
         let betaSelection = try XCTUnwrap(document.findString("beta", withOptions: []).first)
-        XCTAssertEqual(HighlightService.applyHighlight(to: alphaSelection, color: HighlightColor.pink.nsColor), 1)
-        XCTAssertEqual(HighlightService.applyHighlight(to: betaSelection, color: HighlightColor.green.nsColor), 1)
+        XCTAssertEqual(HighlightService.applyHighlight(to: alphaSelection, color: HighlightColor.pink.nsColor).count, 1)
+        XCTAssertEqual(HighlightService.applyHighlight(to: betaSelection, color: HighlightColor.green.nsColor).count, 1)
 
         let alphaBounds = alphaSelection.bounds(for: page)
         let alphaCenter = NSPoint(x: alphaBounds.midX, y: alphaBounds.midY)
