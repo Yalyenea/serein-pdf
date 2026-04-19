@@ -54,7 +54,7 @@ final class VerticalTabItemView: NSView {
         titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        closeButton.font = .systemFont(ofSize: 15, weight: .medium)
+        closeButton.font = .systemFont(ofSize: 13, weight: .regular)
         closeButton.isBordered = false
         closeButton.bezelStyle = .regularSquare
         closeButton.focusRingType = .none
@@ -62,6 +62,8 @@ final class VerticalTabItemView: NSView {
         closeButton.action = #selector(handleClose)
         closeButton.contentTintColor = .secondaryLabelColor
         closeButton.setButtonType(.momentaryChange)
+        closeButton.setContentHuggingPriority(.required, for: .horizontal)
+        closeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         separator.boxType = .custom
         separator.isTransparent = false
@@ -70,6 +72,7 @@ final class VerticalTabItemView: NSView {
         let row = NSStackView(views: [dirtyIndicator, titleLabel, closeButton])
         row.orientation = .horizontal
         row.alignment = .centerY
+        row.distribution = .fill
         row.spacing = 7
         row.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 6)
 
