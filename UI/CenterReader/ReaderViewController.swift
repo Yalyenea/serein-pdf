@@ -18,6 +18,7 @@ final class ReaderViewController: NSViewController {
     private var overviewBottomConstraint: NSLayoutConstraint?
     private var findMatches: [PDFSelection] = []
     private var findMatchIndex: Int?
+    private var lastSubmittedFindQuery: String?
     private let themeManager = ThemeManager()
     private var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
@@ -464,6 +465,7 @@ final class ReaderViewController: NSViewController {
         pdfView.window?.makeFirstResponder(pdfView)
         findMatches = []
         findMatchIndex = nil
+        lastSubmittedFindQuery = nil
     }
 
     @discardableResult
@@ -777,7 +779,18 @@ final class ReaderViewController: NSViewController {
 
 extension ReaderViewController: FindBarDelegate {
     func findBar(_ view: FindBarView, didSubmitQuery query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            lastSubmittedFindQuery = nil
+            updateFindMatches(query: query)
+            return
+        }
+        if trimmed == lastSubmittedFindQuery, findMatches.isEmpty == false {
+            findNextMatch()
+            return
+        }
         updateFindMatches(query: query)
+        lastSubmittedFindQuery = trimmed
     }
 
     func findBarRequestsNext(_ view: FindBarView) {

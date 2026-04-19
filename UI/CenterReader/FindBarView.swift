@@ -127,13 +127,13 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     // MARK: - NSTextFieldDelegate
 
     func controlTextDidChange(_ obj: Notification) {
-        delegate?.findBar(self, didSubmitQuery: queryField.stringValue)
+        statusLabel.stringValue = ""
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
         case #selector(NSResponder.insertNewline(_:)):
-            delegate?.findBarRequestsNext(self)
+            delegate?.findBar(self, didSubmitQuery: queryField.stringValue)
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             delegate?.findBarRequestsClose(self)
