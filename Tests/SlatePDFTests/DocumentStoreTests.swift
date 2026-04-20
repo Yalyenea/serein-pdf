@@ -635,6 +635,261 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertFalse(store.isRightSidebarVisible)
     }
 
+    func testSplitWorkspaceRoutesActiveSessionByFocusedPane() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "split-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "split-second"))
+        let windowID = store.defaultWindowID
+
+        store.setSplitEnabled(true, in: windowID)
+
+        XCTAssertTrue(store.isSplitEnabled(in: windowID))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), second.id)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), first.id)
+        XCTAssertEqual(store.activeSessionID(in: windowID), second.id)
+
+        store.setFocusedPane(.secondary, in: windowID)
+        XCTAssertEqual(store.activeSessionID(in: windowID), first.id)
+
+        store.activate(sessionID: second.id, in: windowID, targetPane: .secondary)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), second.id)
+        XCTAssertEqual(store.activeSessionID(in: windowID), second.id)
+    }
+
+    func testCreateWindowCopiesWorkspaceButKeepsIndependentUIState() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "window-copy-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "window-copy-second"))
+        let sourceWindowID = store.defaultWindowID
+
+        store.setSplitEnabled(true, in: sourceWindowID)
+        store.activate(sessionID: first.id, in: sourceWindowID, targetPane: .secondary)
+        store.setFocusedPane(.secondary, in: sourceWindowID)
+        store.setTabPresentationMode(.horizontalTitlebar, in: sourceWindowID)
+        store.setLeftSidebarVisible(false, in: sourceWindowID)
+
+        let copiedWindowID = store.createWindow(copyingFrom: sourceWindowID)
+
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: copiedWindowID), second.id)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: copiedWindowID), first.id)
+        XCTAssertEqual(store.focusedPane(in: copiedWindowID), .secondary)
+        XCTAssertEqual(store.tabPresentationMode(in: copiedWindowID), .horizontalTitlebar)
+        XCTAssertFalse(store.isLeftSidebarVisible(in: copiedWindowID))
+        XCTAssertTrue(store.recentlyClosedURLs(in: copiedWindowID).isEmpty)
+
+        store.setLeftSidebarVisible(true, in: copiedWindowID)
+        store.setFocusedPane(.primary, in: copiedWindowID)
+
+        XCTAssertFalse(store.isLeftSidebarVisible(in: sourceWindowID))
+        XCTAssertEqual(store.focusedPane(in: sourceWindowID), .secondary)
+    }
+
+    func testAllOpenSearchBuildsSectionsAcrossSessions() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let alphaURL = try makeSearchableTemporaryPDF(
+            named: "alpha-search",
+            pages: ["alpha needle one", "shared beta needle"]
+        )
+        let betaURL = try makeSearchableTemporaryPDF(
+            named: "beta-search",
+            pages: ["shared beta needle", "gamma"]
+        )
+
+        _ = try store.open(documentAt: alphaURL)
+        _ = try store.open(documentAt: betaURL)
+
+        store.updateSearch(query: "needle", scope: .allOpen, in: store.defaultWindowID)
+
+        let sections = store.searchSections(in: store.defaultWindowID)
+        XCTAssertEqual(sections.count, 2)
+        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 3)
+        XCTAssertEqual(Set(sections.map(\.title)), ["alpha-search", "beta-search"])
+        XCTAssertTrue(sections.allSatisfy { $0.matches.isEmpty == false })
+    }
+
+    func testClearSearchResetsCachesAndSidebarMode() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let firstURL = try makeSearchableTemporaryPDF(
+            named: "clear-search-first",
+            pages: ["clearable token", "second token"]
+        )
+        let secondURL = try makeSearchableTemporaryPDF(
+            named: "clear-search-second",
+            pages: ["clearable token too"]
+        )
+        _ = try store.open(documentAt: firstURL)
+        _ = try store.open(documentAt: secondURL)
+
+        store.updateSearch(query: "token", scope: .allOpen, in: store.defaultWindowID)
+        XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), .search)
+        XCTAssertTrue(store.sessions.contains { $0.searchCache.matches.isEmpty == false })
+
+        store.clearSearch(in: store.defaultWindowID)
+
+        XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "")
+        XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), .outline)
+        XCTAssertTrue(store.sessions.allSatisfy { $0.searchCache.query.isEmpty && $0.searchCache.matches.isEmpty })
+    }
+
+    func testCurrentDocumentSearchOnTwoHundredPagesStaysUnderHalfSecond() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let pages = (0..<220).map { index in
+            "performance needle page \(index) repeated needle"
+        }
+        let url = try makeSearchableTemporaryPDF(named: "search-perf", pages: pages)
+        _ = try store.open(documentAt: url)
+
+        let start = CFAbsoluteTimeGetCurrent()
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        let duration = CFAbsoluteTimeGetCurrent() - start
+
+        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 440)
+        XCTAssertLessThan(duration, 0.5, "search took \(duration)s")
+    }
+
+    func testRestorePersistedStateReopensMultipleWindowsWithSplitSearchState() throws {
+        let firstURL = try makeTemporaryPDF(named: "restore-window-first")
+        let secondURL = try makeTemporaryPDF(named: "restore-window-second")
+        let windowA = UUID()
+        let windowB = UUID()
+        let persistence = InMemoryDocumentStorePersistence()
+        persistence.state = PersistedDocumentStoreState(
+            sessions: [
+                .init(url: firstURL),
+                .init(url: secondURL),
+            ],
+            windows: [
+                .init(
+                    id: windowA,
+                    tabPresentationMode: .horizontalTitlebar,
+                    isLeftSidebarVisible: false,
+                    isRightSidebarVisible: true,
+                    rightSidebarMode: .search,
+                    searchQuery: "needle",
+                    searchScope: .allOpen,
+                    splitState: .init(
+                        isEnabled: true,
+                        primarySessionURL: firstURL,
+                        secondarySessionURL: secondURL,
+                        focusedPane: .secondary
+                    ),
+                    recentlyClosedURLs: [secondURL]
+                ),
+                .init(
+                    id: windowB,
+                    tabPresentationMode: .verticalSidebar,
+                    isLeftSidebarVisible: true,
+                    isRightSidebarVisible: false,
+                    rightSidebarMode: .pages,
+                    searchQuery: "",
+                    searchScope: .currentDocument,
+                    splitState: .init(
+                        isEnabled: false,
+                        primarySessionURL: secondURL,
+                        secondarySessionURL: nil,
+                        focusedPane: .primary
+                    ),
+                    recentlyClosedURLs: []
+                ),
+            ]
+        )
+
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+
+        try store.restorePersistedState()
+
+        let firstSessionID = try XCTUnwrap(store.sessions.first(where: { $0.url == firstURL })?.id)
+        let secondSessionID = try XCTUnwrap(store.sessions.first(where: { $0.url == secondURL })?.id)
+
+        XCTAssertEqual(Set(store.windowIDs()), [windowA, windowB])
+        XCTAssertEqual(store.tabPresentationMode(in: windowA), .horizontalTitlebar)
+        XCTAssertEqual(store.rightSidebarMode(in: windowA), .search)
+        XCTAssertEqual(store.searchQuery(in: windowA), "needle")
+        XCTAssertEqual(store.searchScope(in: windowA), .allOpen)
+        XCTAssertTrue(store.isSplitEnabled(in: windowA))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowA), firstSessionID)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowA), secondSessionID)
+        XCTAssertEqual(store.focusedPane(in: windowA), .secondary)
+        XCTAssertEqual(store.recentlyClosedURLs(in: windowA), [secondURL])
+
+        XCTAssertEqual(store.tabPresentationMode(in: windowB), .verticalSidebar)
+        XCTAssertEqual(store.rightSidebarMode(in: windowB), .pages)
+        XCTAssertFalse(store.isSplitEnabled(in: windowB))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowB), secondSessionID)
+        XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowB))
+    }
+
+    func testRestorePersistedStateAllowsDuplicateURLsWithDistinctSessionIDs() throws {
+        let duplicateURL = try makeTemporaryPDF(named: "restore-duplicate-url")
+        let firstSessionID = UUID()
+        let secondSessionID = UUID()
+        let windowID = UUID()
+        let persistence = InMemoryDocumentStorePersistence()
+        persistence.state = PersistedDocumentStoreState(
+            sessions: [
+                .init(id: firstSessionID, url: duplicateURL),
+                .init(id: secondSessionID, url: duplicateURL),
+            ],
+            windows: [
+                .init(
+                    id: windowID,
+                    tabPresentationMode: .verticalSidebar,
+                    isLeftSidebarVisible: true,
+                    isRightSidebarVisible: true,
+                    rightSidebarMode: .outline,
+                    searchQuery: "",
+                    searchScope: .currentDocument,
+                    splitState: .init(
+                        isEnabled: true,
+                        primarySessionID: firstSessionID,
+                        secondarySessionID: secondSessionID,
+                        primarySessionURL: duplicateURL,
+                        secondarySessionURL: duplicateURL,
+                        focusedPane: .secondary
+                    ),
+                    recentlyClosedURLs: []
+                ),
+            ]
+        )
+
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+
+        try store.restorePersistedState()
+
+        XCTAssertEqual(store.sessions.count, 2)
+        XCTAssertEqual(store.sessions.map(\.url), [duplicateURL, duplicateURL])
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), firstSessionID)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), secondSessionID)
+    }
+
     private func makeTemporaryPDF(named name: String) throws -> URL {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -656,6 +911,52 @@ final class DocumentStoreTests: XCTestCase {
         document.insert(page!, at: 0)
 
         XCTAssertTrue(document.write(to: url))
+        return url
+    }
+
+    private func makeSearchableTemporaryPDF(named name: String, pages: [String]) throws -> URL {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let url = temporaryDirectory.appendingPathComponent("\(name).pdf")
+        var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let context = CGContext(url as CFURL, mediaBox: &mediaBox, nil) else {
+            XCTFail("Failed to create PDF context")
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 20, weight: .regular),
+            .foregroundColor: NSColor.black,
+            .paragraphStyle: paragraph,
+        ]
+
+        for pageText in pages {
+            context.beginPDFPage(nil)
+            let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = graphicsContext
+            NSColor.white.setFill()
+            NSBezierPath(rect: mediaBox).fill()
+            NSString(string: pageText).draw(
+                in: NSRect(x: 72, y: 520, width: 468, height: 160),
+                withAttributes: attributes
+            )
+            NSGraphicsContext.restoreGraphicsState()
+            context.endPDFPage()
+        }
+        context.closePDF()
+
+        guard let document = PDFDocument(url: url), document.pageCount == pages.count else {
+            XCTFail("Failed to read generated searchable PDF")
+            throw CocoaError(.fileReadCorruptFile)
+        }
         return url
     }
 }

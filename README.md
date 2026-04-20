@@ -9,10 +9,13 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
-- Right pane hosts **Outline + Pages** with a one-key switch (`cmd+shift+l`)
+- Right pane hosts **Outline + Pages + Search**, and all search previews stay on the right
+- Find bar supports `This Document` / `All Open`; typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
+- Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
+- Multi-window workspaces (`cmd+shift+n`) with per-window split, sidebar, search, and recently-closed state
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Pink-first highlight workflow (`a` to highlight, `i` to toggle inverted night mode)
-- Find bar (`cmd+f`), Esc clears selection and exits
+- Find bar (`cmd+f`), Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
 - Per-PDF memory: scale, page, sidebar widths persist across launches
 - Config-driven defaults via `~/Library/Application Support/SlatePDF/config.toml`
@@ -96,8 +99,10 @@ Defined in `[shortcuts]` above. Highlights:
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Close tab / window | `cmd+w` |
 | Reopen closed tab | `cmd+shift+t` |
+| New window | `cmd+shift+n` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |
 | Toggle left / right sidebar | `cmd+b` / `cmd+option+b` |
+| Toggle compare split | `cmd+ctrl+\` |
 | Toggle right sidebar: Outline / Pages | `cmd+shift+l` |
 | Swap left and right sidebars | `cmd+shift+x` |
 | All-pages overview | `cmd+shift+o` |

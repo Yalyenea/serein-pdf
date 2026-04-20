@@ -2,9 +2,25 @@ import AppKit
 import CoreImage
 import PDFKit
 
+enum FindNavigationAction: Equatable {
+    case selectNext
+    case selectPrevious
+    case activateSelected
+    case activateNext
+    case activatePrevious
+}
+
+private struct SubmittedSearchKey: Equatable {
+    let query: String
+    let scope: SearchScope
+}
+
 final class ReaderViewController: NSViewController {
     let documentStore: DocumentStore
+    let windowID: UUID
     let pdfView = PDFView()
+    var onFocusRequested: (() -> Void)?
+    var onFindActionRequested: ((FindNavigationAction) -> Void)?
     private let pdfContainerView = PDFContainerView()
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
     private let highlightModeBanner = NSTextField(labelWithString: "Highlight Mode · Esc to exit")
@@ -16,11 +32,8 @@ final class ReaderViewController: NSViewController {
     private var overviewTrailingConstraint: NSLayoutConstraint?
     private var overviewTopConstraint: NSLayoutConstraint?
     private var overviewBottomConstraint: NSLayoutConstraint?
-    private var findMatches: [PDFSelection] = []
-    private var findMatchIndex: Int?
-    private var lastSubmittedFindQuery: String?
     private let themeManager = ThemeManager()
-    private var displayedSessionID: UUID?
+    private(set) var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
     private var displayedDisplayMode: ReaderDisplayMode?
     private var displayedScaleMode: ReaderScaleMode?
@@ -28,14 +41,27 @@ final class ReaderViewController: NSViewController {
     private var isApplyingProgrammaticScale = false
     private var isApplyingHighlightSelection = false
     private var appearanceObservation: NSKeyValueObservation?
+    nonisolated(unsafe) private var leftMouseDownMonitor: Any?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
     private var pendingFitWidthSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
+    private var lastSubmittedSearchKey: SubmittedSearchKey?
+    var targetSessionID: UUID? {
+        didSet {
+            guard oldValue != targetSessionID else { return }
+            refreshDisplayedDocument()
+        }
+    }
 
-    init(documentStore: DocumentStore) {
+    init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
+        self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
         title = "Reader"
+    }
+
+    convenience init(documentStore: DocumentStore) {
+        self.init(documentStore: documentStore, windowID: documentStore.defaultWindowID)
     }
 
     @available(*, unavailable)
@@ -72,6 +98,12 @@ final class ReaderViewController: NSViewController {
                 self.applyReaderAppearance()
             }
         }
+        leftMouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            MainActor.assumeIsolated {
+                self?.requestFocusIfNeeded(event: event)
+            }
+            return event
+        }
         leftMouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
             MainActor.assumeIsolated {
                 self?.applyHighlightOnMouseUpIfNeeded(event: event)
@@ -91,7 +123,7 @@ final class ReaderViewController: NSViewController {
         super.viewDidLayout()
         applyOverviewInsets()
 
-        guard let session = documentStore.activeSession,
+        guard let session = targetSession(),
               displayedSessionID == session.id,
               session.scaleMode == .fitWidth,
               pdfView.bounds.width > 0 else { return }
@@ -107,6 +139,9 @@ final class ReaderViewController: NSViewController {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        if let monitor = leftMouseDownMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
         if let monitor = leftMouseUpMonitor {
             NSEvent.removeMonitor(monitor)
         }
@@ -206,7 +241,7 @@ final class ReaderViewController: NSViewController {
     }
 
     func fitToWidth() {
-        guard let session = documentStore.activeSession else { return }
+        guard let session = targetSession() else { return }
         applyFitWidth(for: session)
     }
 
@@ -215,7 +250,7 @@ final class ReaderViewController: NSViewController {
             adjustOverviewZoom(scale: 1.1)
             return
         }
-        guard let session = documentStore.activeSession,
+        guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
         applyProgrammaticScale(nextScale)
@@ -227,7 +262,7 @@ final class ReaderViewController: NSViewController {
             adjustOverviewZoom(scale: 1 / 1.1)
             return
         }
-        guard let session = documentStore.activeSession,
+        guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
         applyProgrammaticScale(nextScale)
@@ -279,10 +314,10 @@ final class ReaderViewController: NSViewController {
         guard active != isAllPagesOverviewActive else { return }
 
         if active {
-            overviewSavedLeftSidebar = documentStore.isLeftSidebarVisible
-            overviewSavedRightSidebar = documentStore.isRightSidebarVisible
-            documentStore.setLeftSidebarVisible(false)
-            documentStore.setRightSidebarVisible(false)
+            overviewSavedLeftSidebar = documentStore.isLeftSidebarVisible(in: windowID)
+            overviewSavedRightSidebar = documentStore.isRightSidebarVisible(in: windowID)
+            documentStore.setLeftSidebarVisible(false, in: windowID)
+            documentStore.setRightSidebarVisible(false, in: windowID)
             configureOverviewGrid()
             overviewThumbnailView.isHidden = false
             pdfContainerView.isHidden = true
@@ -290,12 +325,12 @@ final class ReaderViewController: NSViewController {
         } else {
             overviewThumbnailView.isHidden = true
             pdfContainerView.isHidden = false
-            emptyStateLabel.isHidden = documentStore.activeSession != nil
+            emptyStateLabel.isHidden = targetSession() != nil
             if let left = overviewSavedLeftSidebar {
-                documentStore.setLeftSidebarVisible(left)
+                documentStore.setLeftSidebarVisible(left, in: windowID)
             }
             if let right = overviewSavedRightSidebar {
-                documentStore.setRightSidebarVisible(right)
+                documentStore.setRightSidebarVisible(right, in: windowID)
             }
             overviewSavedLeftSidebar = nil
             overviewSavedRightSidebar = nil
@@ -374,7 +409,7 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func removeHighlightUnderCursor() -> Bool {
-        guard let session = documentStore.activeSession,
+        guard let session = targetSession(),
               session.id == displayedSessionID,
               let window = pdfView.window,
               let document = pdfView.document else { return false }
@@ -397,7 +432,7 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func undoLastHighlight() -> Bool {
-        guard let session = documentStore.activeSession,
+        guard let session = targetSession(),
               session.id == displayedSessionID else { return false }
         let didUndo = documentStore.undoLastHighlight(for: session.id)
         if didUndo {
@@ -407,7 +442,7 @@ final class ReaderViewController: NSViewController {
     }
 
     var hasUndoableHighlight: Bool {
-        guard let sessionID = documentStore.activeSessionID else { return false }
+        guard let sessionID = targetSessionID else { return false }
         return documentStore.hasUndoableHighlight(for: sessionID)
     }
 
@@ -417,23 +452,14 @@ final class ReaderViewController: NSViewController {
     }
 
     func saveAnnotations() throws {
-        guard let sessionID = documentStore.activeSessionID else { return }
+        guard let sessionID = targetSessionID else { return }
         try documentStore.saveAnnotations(for: sessionID)
     }
 
     @discardableResult
     func search(for query: String) -> Bool {
-        guard let document = pdfView.document else { return false }
-
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false,
-              let selection = document.findString(trimmedQuery, withOptions: .caseInsensitive).first else {
-            return false
-        }
-
-        pdfView.setCurrentSelection(selection, animate: true)
-        pdfView.go(to: selection)
-        return true
+        documentStore.updateSearch(query: query, scope: findBarView.scope, in: windowID)
+        return documentStore.totalSearchMatches(in: windowID) > 0
     }
 
     var isFindBarVisible: Bool {
@@ -442,6 +468,7 @@ final class ReaderViewController: NSViewController {
 
     func showFindBar() {
         guard let container = view as NSView? else { return }
+        onFocusRequested?()
         if findBarView.isHidden {
             findBarView.isHidden = false
             pdfContainerTopConstraint?.isActive = false
@@ -449,6 +476,9 @@ final class ReaderViewController: NSViewController {
             pdfContainerTopConstraint?.isActive = true
             container.layoutSubtreeIfNeeded()
         }
+        findBarView.setScope(documentStore.searchScope(in: windowID))
+        findBarView.setQuery(documentStore.searchQuery(in: windowID))
+        syncFindBarStatus()
         findBarView.focusQueryField()
     }
 
@@ -460,87 +490,48 @@ final class ReaderViewController: NSViewController {
         pdfContainerTopConstraint = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
         pdfContainerTopConstraint?.isActive = true
         container.layoutSubtreeIfNeeded()
-        pdfView.highlightedSelections = nil
-        pdfView.currentSelection = nil
+        documentStore.clearSearch(in: windowID)
+        clearSearchResults()
+        lastSubmittedSearchKey = nil
         pdfView.window?.makeFirstResponder(pdfView)
-        findMatches = []
-        findMatchIndex = nil
-        lastSubmittedFindQuery = nil
     }
 
     @discardableResult
     func findNextMatch() -> Bool {
-        guard findMatches.isEmpty == false else { return false }
-        let next = ((findMatchIndex ?? -1) + 1) % findMatches.count
-        jumpToMatch(at: next)
+        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        onFindActionRequested?(.activateNext)
         return true
     }
 
     @discardableResult
     func findPreviousMatch() -> Bool {
-        guard findMatches.isEmpty == false else { return false }
-        let previous = ((findMatchIndex ?? 0) - 1 + findMatches.count) % findMatches.count
-        jumpToMatch(at: previous)
+        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        onFindActionRequested?(.activatePrevious)
         return true
     }
 
-    private func updateFindMatches(query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let document = pdfView.document, trimmed.isEmpty == false else {
-            findMatches = []
-            findMatchIndex = nil
-            pdfView.highlightedSelections = nil
-            pdfView.currentSelection = nil
-            findBarView.setStatus(matchIndex: nil, totalMatches: 0)
-            return
-        }
-
-        let matches = document.findString(trimmed, withOptions: .caseInsensitive)
-        findMatches = matches
-        pdfView.highlightedSelections = matches
-
-        if matches.isEmpty {
-            findMatchIndex = nil
-            pdfView.currentSelection = nil
-            findBarView.setStatus(matchIndex: nil, totalMatches: 0)
-            return
-        }
-
-        let targetIndex = startingMatchIndex(for: matches)
-        jumpToMatch(at: targetIndex)
+    func updateFindStatus(matchIndex: Int?, totalMatches: Int) {
+        guard isFindBarVisible else { return }
+        findBarView.setStatus(matchIndex: matchIndex, totalMatches: totalMatches)
     }
 
-    private func startingMatchIndex(for matches: [PDFSelection]) -> Int {
-        guard let currentPage = pdfView.currentPage,
-              let document = pdfView.document else { return 0 }
-        let currentPageIndex = document.index(for: currentPage)
-        if let forward = matches.firstIndex(where: { selection in
-            guard let page = selection.pages.first else { return false }
-            return document.index(for: page) >= currentPageIndex
-        }) {
-            return forward
-        }
-        return 0
-    }
-
-    private func jumpToMatch(at index: Int) {
-        guard findMatches.indices.contains(index) else { return }
-        findMatchIndex = index
-        let selection = findMatches[index]
-        pdfView.setCurrentSelection(selection, animate: true)
-        pdfView.go(to: selection)
-        findBarView.setStatus(matchIndex: index, totalMatches: findMatches.count)
+    private func syncFindBarStatus() {
+        guard isFindBarVisible else { return }
+        findBarView.setQuery(documentStore.searchQuery(in: windowID))
+        findBarView.setScope(documentStore.searchScope(in: windowID))
+        findBarView.setStatus(matchIndex: nil, totalMatches: documentStore.totalSearchMatches(in: windowID))
     }
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         refreshDisplayedDocument()
+        syncFindBarStatus()
     }
 
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
         guard isApplyingStoreState == false,
-              let session = documentStore.activeSession,
+              let session = targetSession(),
               session.id == displayedSessionID,
               let position = currentReadingPosition() else { return }
 
@@ -550,7 +541,7 @@ final class ReaderViewController: NSViewController {
     @objc
     private func handlePDFViewScaleChanged(_ notification: Notification) {
         guard isApplyingProgrammaticScale == false,
-              let session = documentStore.activeSession,
+              let session = targetSession(),
               session.id == displayedSessionID else { return }
 
         // User-driven zoom always exits fit-width and pins the chosen scale.
@@ -578,10 +569,18 @@ final class ReaderViewController: NSViewController {
         _ = highlightCurrentSelection()
     }
 
+    private func requestFocusIfNeeded(event: NSEvent) {
+        guard let window = view.window,
+              event.window === window else { return }
+        let location = view.convert(event.locationInWindow, from: nil)
+        guard view.bounds.contains(location) else { return }
+        onFocusRequested?()
+    }
+
     private func refreshDisplayedDocument() {
         guard isViewLoaded else { return }
 
-        guard let session = documentStore.activeSession else {
+        guard let session = targetSession() else {
             pdfView.document = nil
             pdfView.isHidden = true
             emptyStateLabel.isHidden = false
@@ -589,6 +588,8 @@ final class ReaderViewController: NSViewController {
             displayedReadingPosition = nil
             displayedDisplayMode = nil
             displayedScaleMode = nil
+            pdfView.highlightedSelections = nil
+            pdfView.currentSelection = nil
             return
         }
 
@@ -612,6 +613,29 @@ final class ReaderViewController: NSViewController {
 
         pdfView.isHidden = false
         emptyStateLabel.isHidden = true
+    }
+
+    func applySearchResults(_ matches: [DocumentSearchMatch], selectedMatchIndex: Int?) {
+        pdfView.highlightedSelections = matches.map(\.selection)
+        if isFindBarVisible {
+            findBarView.setStatus(matchIndex: selectedMatchIndex, totalMatches: matches.count)
+        }
+        guard let selectedMatchIndex,
+              matches.indices.contains(selectedMatchIndex) else {
+            pdfView.currentSelection = nil
+            return
+        }
+        pdfView.setCurrentSelection(matches[selectedMatchIndex].selection, animate: false)
+    }
+
+    func clearSearchResults() {
+        pdfView.highlightedSelections = nil
+        pdfView.currentSelection = nil
+    }
+
+    func go(to selection: PDFSelection) {
+        pdfView.setCurrentSelection(selection, animate: true)
+        pdfView.go(to: selection)
     }
 
     private func applyDisplayModeIfNeeded(_ session: DocumentSession) {
@@ -718,9 +742,14 @@ final class ReaderViewController: NSViewController {
         return ReadingPosition(pageIndex: document.index(for: page), point: .zero)
     }
 
+    private func targetSession() -> DocumentSession? {
+        guard let targetSessionID else { return nil }
+        return documentStore.session(for: targetSessionID)
+    }
+
     @discardableResult
     private func highlightCurrentSelection() -> Bool {
-        guard let session = documentStore.activeSession,
+        guard let session = targetSession(),
               session.id == displayedSessionID,
               let selection = pdfView.currentSelection,
               HighlightService.selectionContainsText(selection) else { return false }
@@ -778,27 +807,56 @@ final class ReaderViewController: NSViewController {
 }
 
 extension ReaderViewController: FindBarDelegate {
-    func findBar(_ view: FindBarView, didSubmitQuery query: String) {
+    func findBar(_ view: FindBarView, didSubmitQuery query: String, scope: SearchScope) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submittedKey = SubmittedSearchKey(query: trimmed, scope: scope)
+        let currentQuery = documentStore.searchQuery(in: windowID)
+        let currentScope = documentStore.searchScope(in: windowID)
+
         if trimmed.isEmpty {
-            lastSubmittedFindQuery = nil
-            updateFindMatches(query: query)
+            lastSubmittedSearchKey = nil
+            if currentQuery.isEmpty == false || currentScope != scope {
+                documentStore.updateSearch(query: "", scope: scope, in: windowID)
+            }
+            syncFindBarStatus()
             return
         }
-        if trimmed == lastSubmittedFindQuery, findMatches.isEmpty == false {
-            findNextMatch()
+
+        if lastSubmittedSearchKey == submittedKey,
+           currentQuery == trimmed,
+           currentScope == scope,
+           documentStore.totalSearchMatches(in: windowID) > 0 {
+            onFindActionRequested?(.activateNext)
             return
         }
-        updateFindMatches(query: query)
-        lastSubmittedFindQuery = trimmed
+
+        if trimmed != currentQuery || scope != currentScope {
+            documentStore.updateSearch(query: trimmed, scope: scope, in: windowID)
+        }
+
+        lastSubmittedSearchKey = submittedKey
+        syncFindBarStatus()
+        onFindActionRequested?(.activateSelected)
+    }
+
+    func findBarRequestsSelectNext(_ view: FindBarView) {
+        onFindActionRequested?(.selectNext)
+    }
+
+    func findBarRequestsSelectPrevious(_ view: FindBarView) {
+        onFindActionRequested?(.selectPrevious)
+    }
+
+    func findBarRequestsActivateSelection(_ view: FindBarView) {
+        onFindActionRequested?(.activateSelected)
     }
 
     func findBarRequestsNext(_ view: FindBarView) {
-        findNextMatch()
+        onFindActionRequested?(.activateNext)
     }
 
     func findBarRequestsPrevious(_ view: FindBarView) {
-        findPreviousMatch()
+        onFindActionRequested?(.activatePrevious)
     }
 
     func findBarRequestsClose(_ view: FindBarView) {

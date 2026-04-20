@@ -24,6 +24,7 @@ let package = Package(
                 "PROJECT.md",
                 "TASKS.md",
                 "Justfile",
+                "README.md",
                 "Resources",
                 "Scripts",
                 "build",

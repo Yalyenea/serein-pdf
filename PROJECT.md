@@ -1,6 +1,6 @@
 # PDF Reader for macOS
 
-面向 macOS 的极简 PDF 阅读器。左侧文档 tabs(可切换到标题栏水平 tabs),右侧 Outline / Pages,中间沉浸式阅读区。风格:极简、扁平、紧凑。
+面向 macOS 的极简 PDF 阅读器。左侧文档 tabs(可切换到标题栏水平 tabs),右侧 Outline / Pages / Search,中间沉浸式阅读区(支持同窗分屏与多窗口)。风格:极简、扁平、紧凑。
 
 ## 1. 产品原则
 
@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ Outline / 会话恢复 / 当前文档搜索 / 文本高亮 / 删除高亮 / 手动 & 自动保存 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步)。
+文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 删除高亮 / 手动 & 自动保存 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
 
 ### 2.2 V1 明确不做
 
@@ -41,21 +41,31 @@
 
 ```mermaid
 flowchart LR
-    A["MainWindowController"] --> B["SplitViewController"]
-    B --> C["VerticalTabsViewController"]
-    B --> D["ReaderViewController"]
-    B --> E["RightSidebarViewController"]
-    E --> E1["OutlineViewController"]
-    E --> E2["PDFThumbnailView (Pages)"]
-    C --> F["DocumentStore"]
-    D --> F
-    E --> F
-    F --> G["DocumentSession"]
-    D --> H["PDFView / PDFDocument"]
-    D --> L["HighlightService + Undo"]
-    D --> M["ThemeManager"]
-    F --> J["ReadingStateStore"]
-    F --> K["RecentFilesStore"]
+    A["AppDelegate"] --> B["MainWindowController * N"]
+    B --> C["SplitViewController"]
+    C --> D["VerticalTabsViewController"]
+    C --> E["ReaderWorkspaceViewController"]
+    C --> F["RightSidebarViewController"]
+    C --> G["TitlebarTabsController"]
+    E --> E1["Primary ReaderViewController"]
+    E --> E2["Secondary ReaderViewController"]
+    F --> F1["OutlineViewController"]
+    F --> F2["PDFThumbnailView (Pages)"]
+    F --> F3["SearchResultsViewController"]
+    D --> H["DocumentStore"]
+    E --> H
+    F --> H
+    G --> H
+    H --> I["DocumentSession"]
+    H --> J["WindowWorkspace"]
+    E1 --> K["PDFView / PDFDocument"]
+    E2 --> K
+    E1 --> L["HighlightService + Undo"]
+    E2 --> L
+    E1 --> M["ThemeManager"]
+    E2 --> M
+    H --> N["ReadingStateStore"]
+    H --> O["RecentFilesStore"]
 ```
 
 ### 3.3 关键设计决策
@@ -63,12 +73,15 @@ flowchart LR
 | 决策 | 结论 |
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
+| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`,窗口只承载视图与交互 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
-| 中栏承载 | 单 `ReaderViewController` 按 active session 切换文档 |
+| 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
 | 目录来源 | `PDFDocument.outlineRoot` → `OutlineNode` |
+| 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
+| 搜索范围 | `This Document` / `All Open`,跨文档命中点击先切 session 再跳转 |
 | 批注存储 | 内存 + dirty;`Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
-| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 都挂在 `DocumentSession` |
+| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;窗口 UI 状态挂在 `WindowWorkspace` |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,per-session 宽度 / 可见状态原子对调 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
@@ -81,8 +94,8 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader | PDF 渲染、选择、搜索、批注、find bar、全览 | 单 Reader |
-| 右栏 Sidebar | Outline / Pages (segmented 切换) | 仅服务当前文档 |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader,焦点 pane 决定 tab 落点 |
+| 右栏 Sidebar | Outline / Pages / Search (segmented 切换) | 所有预览类内容都在右栏,不回流到中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
@@ -112,18 +125,22 @@ flowchart LR
 - `Cmd+Option+G`:跳转到页 N(越界给轻量提示)
 - `Cmd+[` / `Cmd+]`:历史后退 / 前进
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar / 下一 / 上一 匹配
+- Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
 - `I`:切换反色夜间模式
 
 **文档与 tab**
 - `Cmd+O`:打开
 - `Cmd+W`:关闭当前 tab
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
+- `Cmd+Shift+N`:新建窗口
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
+- `Option+Click` tab:丢到另一 pane(必要时自动开分屏)
 
 **布局**
 - `Cmd+B` / `Cmd+Option+B`:切换左 / 右侧栏
 - `Cmd+Shift+1` / `Cmd+Shift+2`:垂直 sidebar tabs / 水平 titlebar tabs
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
+- `Cmd+Ctrl+\`:切换同窗分屏
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
 
@@ -156,16 +173,30 @@ flowchart LR
 | `tabPresentationState` | 当前 tab 模式下的局部状态 |
 | `annotationSavePolicy` | `after10Minutes` / `never` |
 | `undoStack` | 高亮撤销栈,上限 50 |
+| `searchCache` | 当前 query 的匹配缓存(snippet + page + selection) |
 
 ### 5.2 `DocumentStore`
 
 - 管理 sessions(open / close / activate / reorder)
+- 维护多个 `WindowWorkspace`,驱动多窗口 / 分屏 / 焦点 pane / 右栏模式 / 搜索 scope
 - 维护 active session,驱动左栏 tab 与中栏 reader 联动
-- 持久化阅读状态 / 最近文件 / 最近关闭栈(上限 10)
+- 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - 提供 tab 模式切换
 - 左右互换时对调 per-session 宽度 / 可见状态
 
-### 5.3 辅助模型
+### 5.3 `WindowWorkspace`
+
+| 字段 | 说明 |
+|---|---|
+| `id: UUID` | window 唯一标识 |
+| `tabPresentationMode` | 当前窗口 tabs 形态 |
+| `rightSidebarMode` | `outline` / `pages` / `search` |
+| `searchQuery` / `searchScope` | 当前窗口搜索上下文 |
+| `isSplitEnabled` | 是否双 Reader |
+| `primarySessionID` / `secondarySessionID` | 两个 pane 当前展示的 session |
+| `focusedPane` | tab 激活与搜索跳转的落点 |
+| `recentlyClosedURLs` | 本窗最近关闭栈 |
+### 5.4 辅助模型
 
 | 模型 | 用途 |
 |---|---|
@@ -189,6 +220,7 @@ App/
 
 Core/
   AppConfiguration.swift
+  DocumentSearch.swift
   DocumentSession.swift
   DocumentStore.swift
   DocumentStorePersistence.swift
@@ -199,6 +231,7 @@ Core/
   RecentFilesStore.swift
   OutlineNode.swift
   OutlineExtractor.swift
+  WindowWorkspace.swift
 
 UI/LeftTabs/
   VerticalTabsViewController.swift
@@ -210,6 +243,7 @@ UI/TitlebarTabs/
 
 UI/CenterReader/
   ReaderViewController.swift
+  ReaderWorkspaceViewController.swift
   PDFContainerView.swift
   ReaderShortcutsController.swift
   FindBarView.swift
@@ -217,6 +251,7 @@ UI/CenterReader/
 UI/RightOutline/
   OutlineViewController.swift
   RightSidebarViewController.swift
+  SearchResultsViewController.swift
 
 UI/Shared/
   PlaceholderViewController.swift
@@ -240,56 +275,35 @@ Tests/SlatePDFTests/
 | M2 阅读体验 | ✅ | 四种阅读模式、适应宽度、搜索、最近文件、阅读位置持久化、快捷键系统 |
 | M3 高亮批注 | ✅ | 选区 + 键盘 `a` 高亮、`D` 删除、手动 / 自动保存、默认粉色 |
 | M4 夜间与打磨 | ✅ | `ThemeManager`、反色夜间、压缩标题栏、视觉减重 |
-| M5 设置与收口 | ✅ 主体 | 设置窗口(默认阅读模式 / fit-width / 自动保存策略);UAT-01~10 完成 |
-| M6 体验打磨 | ✅ 主体 | plain 快捷键菜单可见、全览 grid、find bar、历史栈、Vim 翻页、缩放、页跳转、左右互换、高亮 undo |
+| M5 设置与收口 | ✅ | 设置窗口(默认阅读模式 / fit-width / 自动保存策略);综合验收通过 |
+| M6 体验打磨 | ✅ | plain 快捷键菜单可见、全览 grid、find bar、历史栈、Vim 翻页、缩放、页跳转、左右互换、高亮 undo;真实 PDF 手测与 200+ 页缩略图验证通过 |
+| M7 搜索强化与对比阅读 | ✅ | 右栏 Search 面板、This Document / All Open、同窗分屏、多窗口、窗口级持久化、搜索与分屏状态测试补齐 |
 
 已完成细项以 commit 历史为准,不在本文件展开。
 
-**M5 / M6 遗留**(详见 TASKS.md):
-- `M5-032` 综合验收收口
-- `M6-023` 缩略图 200+ 页性能验证
-- `M6-062` 真实 PDF 手测(UAT-12 / 13 / 14 / 21b)
-
 ## 8. 待开发里程碑
 
-### 8.1 Milestone 7:搜索强化与对比阅读
+### 8.1 Milestone 8:批注深度化
 
-目标:把搜索从"能找到"升级为"扫视所有命中",并支持"同时看两份 PDF 做对比"。
-
-**交付物**
-1. find bar 下挂结果面板(按页分组,点击跳转入历史栈)
-2. 跨文档搜索(可选 toggle "All Open")
-3. 同窗分屏:中栏拆成双 Reader,`Cmd+Ctrl+\` 切换
-4. 多窗口:`Cmd+Shift+N` 新建窗口,共享 `DocumentStore`
-5. 布局持久化(可降级为单窗口并给出说明)
-
-**关键快捷键**
-- `Cmd+Ctrl+\`:切换同窗分屏
-- `Cmd+Shift+N`:新建窗口
-- find bar 内 `↑` / `↓` / `Enter`:结果导航与跳转
-
-**验收要点**
-- 200+ 页 PDF 搜索常见词不卡顿(首次命中 < 500ms)
-- 分屏两侧 session 状态互不污染
-- 多窗口关闭互不影响,重启可恢复布局或明确降级说明
-
-### 8.2 Milestone 8:批注深度化
+目标:把当前高亮从"能做"升级为"能管理、能导出、能配置"。
 
 **交付物**
-1. 右栏 Annotations 模式:与 Outline 并列,列表按页分组,点击跳转并强调 annotation
-2. 批注导出:Markdown / Plain / JSON,目标为剪贴板或磁盘
-3. 设置窗口新增 Shortcuts 面板(GUI 改快捷键,冲突检测,写回 `config.toml`)
-
-**关键快捷键**
-- `Cmd+Shift+A`:切换右栏 Outline / Annotations
-- `Cmd+Shift+E`:导出当前文档高亮(默认 Markdown 到剪贴板)
+1. 右栏 Annotations 模式,按页列所有高亮并支持点击跳转
+2. Markdown / Plain / JSON 三种高亮导出
+3. Shortcuts 面板与快捷键冲突检测
+4. 配置改动即时写回 `config.toml` 并刷新菜单
 
 **验收要点**
 - Annotations 面板按页分组并支持跳转
 - 三种导出格式均包含 snippet / 页码 / 颜色
-- Shortcuts UI 写回配置文件并实时生效;冲突绑定被拒
+- Shortcuts UI 写回配置文件并实时生效,冲突绑定被拒
 
-### 8.3 Milestone 9(长期预研):扩展生态
+**建议执行顺序**
+1. 先做右栏 Annotations 与 dirty 同步
+2. 再做 Markdown / Plain / JSON 导出
+3. 最后做 Shortcuts GUI 与冲突检测
+
+### 8.2 Milestone 9(长期预研):扩展生态
 
 只产出**设计决策 + 最小 PoC**,不承诺全量实现。
 
@@ -306,7 +320,7 @@ Tests/SlatePDFTests/
 | 多文档状态污染 | 状态严格挂 `DocumentSession`,视图层无业务状态 |
 | 双 tab 模式分叉 | 共享同一套 `DocumentStore` 与切换命令 |
 | 批注写回失败 | 保留 dirty + 显式提示,不静默 |
-| 侧栏职责膨胀 | 严守"左栏只 tabs / 右栏只 outline+pages" |
+| 侧栏职责膨胀 | 严守"左栏只 tabs / 右栏只 outline+pages+search/annotations" |
 | UI 过早打磨 | 主路径优先于视觉;新功能进 M7+ |
 
 ## 10. 开发约束

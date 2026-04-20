@@ -77,7 +77,9 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case navigateForward = "navigate_forward"
     case gotoPage = "goto_page"
     case reopenLastClosed = "reopen_last_closed"
+    case newWindow = "new_window"
     case toggleAllPagesOverview = "toggle_all_pages_overview"
+    case toggleReaderSplit = "toggle_reader_split"
     case toggleRightSidebarMode = "toggle_right_sidebar_mode"
     case swapSidebars = "swap_sidebars"
     case undoLastHighlight = "undo_last_highlight"
@@ -140,8 +142,12 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Go to Page…"
         case .reopenLastClosed:
             "Reopen Closed Tab"
+        case .newWindow:
+            "New Window"
         case .toggleAllPagesOverview:
             "All Pages Overview"
+        case .toggleReaderSplit:
+            "Toggle Compare Split"
         case .toggleRightSidebarMode:
             "Toggle Outline / Pages"
         case .swapSidebars:

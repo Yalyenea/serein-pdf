@@ -2,14 +2,169 @@ import Foundation
 
 struct PersistedDocumentStoreState: Codable, Equatable {
     struct SessionReference: Codable, Equatable {
+        var id: UUID
         var url: URL
+
+        init(id: UUID = UUID(), url: URL) {
+            self.id = id
+            self.url = url
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case url
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+            url = try container.decode(URL.self, forKey: .url)
+        }
+    }
+
+    struct SplitStateRecord: Codable, Equatable {
+        var isEnabled: Bool
+        var primarySessionID: UUID?
+        var secondarySessionID: UUID?
+        var primarySessionURL: URL?
+        var secondarySessionURL: URL?
+        var focusedPane: ReaderPane
+
+        init(
+            isEnabled: Bool,
+            primarySessionID: UUID? = nil,
+            secondarySessionID: UUID? = nil,
+            primarySessionURL: URL?,
+            secondarySessionURL: URL?,
+            focusedPane: ReaderPane
+        ) {
+            self.isEnabled = isEnabled
+            self.primarySessionID = primarySessionID
+            self.secondarySessionID = secondarySessionID
+            self.primarySessionURL = primarySessionURL
+            self.secondarySessionURL = secondarySessionURL
+            self.focusedPane = focusedPane
+        }
+    }
+
+    struct WindowRecord: Codable, Equatable {
+        var id: UUID
+        var tabPresentationMode: TabPresentationMode
+        var isLeftSidebarVisible: Bool
+        var isRightSidebarVisible: Bool
+        var rightSidebarMode: RightSidebarMode
+        var searchQuery: String
+        var searchScope: SearchScope
+        var splitState: SplitStateRecord
+        var recentlyClosedURLs: [URL]
     }
 
     var sessions: [SessionReference]
-    var activeSessionURL: URL?
-    var tabPresentationMode: TabPresentationMode
-    var isLeftSidebarVisible: Bool
-    var isRightSidebarVisible: Bool
+    var windows: [WindowRecord]
+
+    init(sessions: [SessionReference], windows: [WindowRecord]) {
+        self.sessions = sessions
+        self.windows = windows
+    }
+
+    init(
+        sessions: [SessionReference],
+        activeSessionURL: URL?,
+        tabPresentationMode: TabPresentationMode,
+        isLeftSidebarVisible: Bool,
+        isRightSidebarVisible: Bool
+    ) {
+        self.sessions = sessions
+        self.windows = [
+            WindowRecord(
+                id: UUID(),
+                tabPresentationMode: tabPresentationMode,
+                isLeftSidebarVisible: isLeftSidebarVisible,
+                isRightSidebarVisible: isRightSidebarVisible,
+                rightSidebarMode: .outline,
+                searchQuery: "",
+                searchScope: .currentDocument,
+                splitState: SplitStateRecord(
+                    isEnabled: false,
+                    primarySessionID: nil,
+                    secondarySessionID: nil,
+                    primarySessionURL: activeSessionURL,
+                    secondarySessionURL: nil,
+                    focusedPane: .primary
+                ),
+                recentlyClosedURLs: []
+            )
+        ]
+    }
+
+    var activeSessionURL: URL? {
+        windows.first?.splitState.primarySessionURL
+    }
+
+    var tabPresentationMode: TabPresentationMode {
+        windows.first?.tabPresentationMode ?? .verticalSidebar
+    }
+
+    var isLeftSidebarVisible: Bool {
+        windows.first?.isLeftSidebarVisible ?? true
+    }
+
+    var isRightSidebarVisible: Bool {
+        windows.first?.isRightSidebarVisible ?? true
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case sessions
+        case windows
+        case activeSessionURL
+        case tabPresentationMode
+        case isLeftSidebarVisible
+        case isRightSidebarVisible
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sessions = try container.decode([SessionReference].self, forKey: .sessions)
+
+        if let windows = try container.decodeIfPresent([WindowRecord].self, forKey: .windows),
+           windows.isEmpty == false {
+            self.windows = windows
+            return
+        }
+
+        let activeSessionURL = try container.decodeIfPresent(URL.self, forKey: .activeSessionURL)
+        let tabPresentationMode = try container.decodeIfPresent(TabPresentationMode.self, forKey: .tabPresentationMode)
+            ?? .verticalSidebar
+        let isLeftSidebarVisible = try container.decodeIfPresent(Bool.self, forKey: .isLeftSidebarVisible) ?? true
+        let isRightSidebarVisible = try container.decodeIfPresent(Bool.self, forKey: .isRightSidebarVisible) ?? true
+
+        windows = [
+            WindowRecord(
+                id: UUID(),
+                tabPresentationMode: tabPresentationMode,
+                isLeftSidebarVisible: isLeftSidebarVisible,
+                isRightSidebarVisible: isRightSidebarVisible,
+                rightSidebarMode: .outline,
+                searchQuery: "",
+                searchScope: .currentDocument,
+                splitState: SplitStateRecord(
+                    isEnabled: false,
+                    primarySessionID: nil,
+                    secondarySessionID: nil,
+                    primarySessionURL: activeSessionURL,
+                    secondarySessionURL: nil,
+                    focusedPane: .primary
+                ),
+                recentlyClosedURLs: []
+            )
+        ]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sessions, forKey: .sessions)
+        try container.encode(windows, forKey: .windows)
+    }
 }
 
 protocol DocumentStorePersistence {

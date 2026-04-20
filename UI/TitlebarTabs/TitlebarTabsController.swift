@@ -1,18 +1,26 @@
 import AppKit
 
 final class TitlebarTabsController: NSViewController {
+    static let visibleStripSize = NSSize(width: 760, height: 28)
     let documentStore: DocumentStore
+    let windowID: UUID
     var onCloseSessionRequested: ((UUID) -> Void)?
+    var onAlternateSessionActivationRequested: ((UUID) -> Void)?
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let documentContainerView = NSView()
     private let bottomBorderView = NSView()
     private var isTabsStripVisible = true
 
-    init(documentStore: DocumentStore) {
+    init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
+        self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
-        preferredContentSize = NSSize(width: 720, height: 28)
+        preferredContentSize = Self.visibleStripSize
+    }
+
+    convenience init(documentStore: DocumentStore) {
+        self.init(documentStore: documentStore, windowID: documentStore.defaultWindowID)
     }
 
     @available(*, unavailable)
@@ -38,7 +46,7 @@ final class TitlebarTabsController: NSViewController {
 
     override func loadView() {
         let container = NSView()
-        container.frame = NSRect(x: 0, y: 0, width: 720, height: 28)
+        container.frame = NSRect(origin: .zero, size: Self.visibleStripSize)
         container.wantsLayer = true
 
         stackView.orientation = .horizontal
@@ -74,7 +82,8 @@ final class TitlebarTabsController: NSViewController {
             bottomBorderView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             bottomBorderView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             bottomBorderView.heightAnchor.constraint(equalToConstant: 1),
-            container.heightAnchor.constraint(equalToConstant: 28),
+            container.widthAnchor.constraint(equalToConstant: Self.visibleStripSize.width),
+            container.heightAnchor.constraint(equalToConstant: Self.visibleStripSize.height),
             stackView.leadingAnchor.constraint(equalTo: documentContainerView.leadingAnchor, constant: 6),
             stackView.trailingAnchor.constraint(equalTo: documentContainerView.trailingAnchor, constant: -6),
             stackView.topAnchor.constraint(equalTo: documentContainerView.topAnchor),
@@ -121,10 +130,15 @@ final class TitlebarTabsController: NSViewController {
             let itemView = TitlebarTabItemView(
                 sessionID: session.id,
                 title: session.title,
-                isSelected: documentStore.activeSessionID == session.id,
+                isSelected: documentStore.activeSessionID(in: windowID) == session.id,
                 isDirty: session.isDirty,
                 onSelect: { [weak self] sessionID in
-                    self?.documentStore.activate(sessionID: sessionID)
+                    guard let self else { return }
+                    self.documentStore.clearSearch(in: self.windowID)
+                    self.documentStore.activate(sessionID: sessionID, in: self.windowID)
+                },
+                onAlternateSelect: { [weak self] sessionID in
+                    self?.onAlternateSessionActivationRequested?(sessionID)
                 },
                 onClose: { [weak self] sessionID in
                     self?.onCloseSessionRequested?(sessionID)
@@ -145,7 +159,7 @@ final class TitlebarTabsController: NSViewController {
 
     func setTabsStripVisible(_ isVisible: Bool) {
         isTabsStripVisible = isVisible
-        preferredContentSize = isVisible ? NSSize(width: 720, height: 28) : NSSize(width: 1, height: 1)
+        preferredContentSize = isVisible ? Self.visibleStripSize : NSSize(width: 1, height: 1)
         guard isViewLoaded else { return }
         applyVisibilityState()
     }

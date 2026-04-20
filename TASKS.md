@@ -21,7 +21,7 @@
 - `Cmd+S`:写回源 PDF
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 水平 tab 复用标题栏,不单独开行
-- 右栏支持 Outline / Pages,`Cmd+Shift+L` 切换
+- 右栏支持 Outline / Pages / Search,`Cmd+Shift+L` 在 Outline / Pages 间切换
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
 
 ## 3. 当前进度
@@ -32,34 +32,45 @@
 | M2 阅读体验 | ✅ |
 | M3 高亮批注 | ✅ |
 | M4 夜间与打磨 | ✅ |
-| M5 设置与收口 | 主体 ✅,`M5-032` 待收口 |
-| M6 体验打磨 | 主体 ✅,`M6-023` / `M6-062` 待 |
-| M7 搜索 + 对比 | 未开始 |
+| M5 设置与收口 | ✅ |
+| M6 体验打磨 | ✅ |
+| M7 搜索 + 对比 | ✅ |
 | M8 批注深度化 | 未开始 |
 | M9 扩展生态(预研) | 未开始 |
+
+## 4. 下一步执行顺序
+
+- Wave 1 批注面板：先做 `M8-001` ~ `M8-004`，把右栏扩成可管理的高亮列表。
+- Wave 2 导出闭环：再做 `M8-010` ~ `M8-013`，补 Markdown / Plain / JSON 导出。
+- Wave 3 快捷键 GUI：最后做 `M8-020` ~ `M8-024`，把配置编辑从手改 `toml` 升级到 UI。
+- M9 继续保持预研状态，先不抢占实现资源。
 
 
 ## 5. Milestone 7:搜索强化与对比阅读
 
 ### 5.1 搜索结果面板
 
-- [ ] `M7-005` 跨文档搜索(可选):find bar 顶部 toggle "This Document" / "All Open";跨文档结果带 session 名,点击先切 session 再跳转。
-- [ ] 查找多页预览
+- [x] `M7-001` 搜索模型升级:缓存当前 session / all-open 匹配项,关闭 find bar 或切 tab 时清空。
+- [x] `M7-002` 右栏 Search 面板:按页或按 session 分组显示 snippet + 页码,点击跳转并推入历史栈。
+- [x] `M7-003` 结果导航键绑定:find bar 焦点下 `↑` / `↓` 移动列表,`Enter` 跳转,`Cmd+G` / `Cmd+Shift+G` 循环激活。
+- [x] `M7-004` 搜索性能:本地 220 页合成 PDF 搜索测试通过,首次缓存命中 < 500ms。
+- [x] `M7-005` 跨文档搜索:find bar 顶部 toggle `This Document` / `All Open`;跨文档结果带 session 名,点击先切 session 再跳转。
+- [x] 所有预览相关内容统一放入右侧边栏。
 
 ### 5.2 同窗分屏 / 多窗口
 
-- [ ] `M7-010` 同窗分屏容器:中栏拆水平双 Reader;`Cmd+Ctrl+\` 切换;各 Reader 独立 `displayedSessionID`。
-- [ ] `M7-011` 分屏 tab 切换落点:从左栏激活进焦点 Reader;`Option+Click` 或专门命令丢到另一侧。
-- [ ] `M7-012` 分屏状态持久化:`PersistedDocumentStoreState` 增加布局字段;重启恢复。
-- [ ] `M7-013` 新建窗口命令:`ShortcutCommand.newWindow`,默认 `Cmd+Shift+N`;`AppDelegate` 支持多 `MainWindowController`;`DocumentStore` 单例暴露多窗口接口。
-- [ ] `M7-014` 多窗口关闭协调:关闭一窗不影响其他;最后一窗关闭走 terminate;`Cmd+Shift+T` 优先本窗内重开。
-- [ ] `M7-015` 多窗口状态持久化:记录各窗口 active session 与布局;可降级单窗口并明示。
-- [ ] `M7-016` 测试:`DocumentStoreTests` 覆盖多窗口场景。
+- [x] `M7-010` 同窗分屏容器:中栏拆水平双 Reader;`Cmd+Ctrl+\` 切换;各 Reader 独立 `displayedSessionID`。
+- [x] `M7-011` 分屏 tab 切换落点:从左栏激活进焦点 Reader;`Option+Click` 丢到另一侧。
+- [x] `M7-012` 分屏状态持久化:`PersistedDocumentStoreState` 持久化窗口 split 状态并恢复。
+- [x] `M7-013` 新建窗口命令:`ShortcutCommand.newWindow`,默认 `Cmd+Shift+N`;`AppDelegate` 支持多 `MainWindowController`;`DocumentStore` 暴露多窗口接口。
+- [x] `M7-014` 多窗口关闭协调:关闭一窗不影响其他;最后一窗关闭走 terminate;`Cmd+Shift+T` 优先本窗内重开。
+- [x] `M7-015` 多窗口状态持久化:记录各窗口 active session / split / search / sidebar 布局。
+- [x] `M7-016` 测试:`DocumentStoreTests` 覆盖多窗口、分屏、搜索缓存、恢复与性能基线。
 
 ### 5.3 文档与验收
 
-- [ ] `M7-020` 同步 `PROJECT.md` / `TASKS.md` / `config.toml` / `AGENTS.md`。
-- [ ] `M7-021` M7 验收:`AC-M7-1` ~ `AC-M7-5` 通过。
+- [x] `M7-020` 同步 `PROJECT.md` / `TASKS.md` / `README.md`。
+- [x] `M7-021` M7 手测验收:`AC-M7-1` ~ `AC-M7-5` 通过。
 
 ## 6. Milestone 8:批注深度化
 
@@ -99,11 +110,14 @@
 
 ## 8. 手测清单(尚未覆盖)
 
-- [ ] `UAT-24` `Cmd+Ctrl+\` 进入同窗分屏,两侧独立切换 session 不污染
-- [ ] `UAT-25` `Cmd+Shift+N` 新建窗口,两窗口独立且关闭互不影响
-- [ ] `UAT-26` 右栏 Annotations 能列出所有高亮,点击跳转
-- [ ] `UAT-27` 导出 Markdown / Plain / JSON 输出正确
-- [ ] `UAT-28` Shortcuts 面板改绑定后新会话生效,冲突被拒
-- [ ] `UAT-29` 扩展机制 RFC 存在并评审(M9 证据)
+- [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
+- [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
+- [x] `UAT-26` `This Document` / `All Open` 切换正确,跨文档命中会先切 session 再跳转
+- [x] `UAT-27` `Cmd+Ctrl+\` 进入同窗分屏,两侧独立切换 session 不污染
+- [x] `UAT-28` `Cmd+Shift+N` 新建窗口,两窗口独立且关闭互不影响,重启后恢复
+- [ ] `UAT-29` 右栏 Annotations 能列出所有高亮,点击跳转
+- [ ] `UAT-30` 导出 Markdown / Plain / JSON 输出正确
+- [ ] `UAT-31` Shortcuts 面板改绑定后新会话生效,冲突被拒
+- [ ] `UAT-32` 扩展机制 RFC 存在并评审(M9 证据)
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

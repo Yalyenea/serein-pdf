@@ -2,7 +2,10 @@ import AppKit
 
 @MainActor
 protocol FindBarDelegate: AnyObject {
-    func findBar(_ view: FindBarView, didSubmitQuery query: String)
+    func findBar(_ view: FindBarView, didSubmitQuery query: String, scope: SearchScope)
+    func findBarRequestsSelectNext(_ view: FindBarView)
+    func findBarRequestsSelectPrevious(_ view: FindBarView)
+    func findBarRequestsActivateSelection(_ view: FindBarView)
     func findBarRequestsNext(_ view: FindBarView)
     func findBarRequestsPrevious(_ view: FindBarView)
     func findBarRequestsClose(_ view: FindBarView)
@@ -12,6 +15,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     weak var delegate: FindBarDelegate?
 
     private let queryField = NSTextField()
+    private let scopeControl = NSSegmentedControl(labels: ["This Document", "All Open"], trackingMode: .selectOne, target: nil, action: nil)
     private let statusLabel = NSTextField(labelWithString: "")
     private let previousButton = NSButton(title: "↑", target: nil, action: nil)
     private let nextButton = NSButton(title: "↓", target: nil, action: nil)
@@ -22,17 +26,28 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         queryField.stringValue
     }
 
+    var scope: SearchScope {
+        scopeControl.selectedSegment == 1 ? .allOpen : .currentDocument
+    }
+
     init() {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-        queryField.placeholderString = "Find in document"
+        queryField.placeholderString = SearchScope.currentDocument.placeholder
         queryField.focusRingType = .none
         queryField.bezelStyle = .roundedBezel
         queryField.delegate = self
         queryField.font = .systemFont(ofSize: 12, weight: .regular)
         queryField.translatesAutoresizingMaskIntoConstraints = false
+
+        scopeControl.segmentStyle = .capsule
+        scopeControl.controlSize = .small
+        scopeControl.selectedSegment = 0
+        scopeControl.target = self
+        scopeControl.action = #selector(handleScopeChanged)
+        scopeControl.translatesAutoresizingMaskIntoConstraints = false
 
         statusLabel.font = .systemFont(ofSize: 11, weight: .regular)
         statusLabel.textColor = .secondaryLabelColor
@@ -60,6 +75,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         divider.fillColor = SplitViewController.dividerBackgroundColor
         divider.translatesAutoresizingMaskIntoConstraints = false
 
+        addSubview(scopeControl)
         addSubview(queryField)
         addSubview(statusLabel)
         addSubview(previousButton)
@@ -68,9 +84,13 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         addSubview(divider)
 
         NSLayoutConstraint.activate([
-            queryField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            scopeControl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            scopeControl.centerYAnchor.constraint(equalTo: centerYAnchor),
+            scopeControl.widthAnchor.constraint(equalToConstant: 188),
+
+            queryField.leadingAnchor.constraint(equalTo: scopeControl.trailingAnchor, constant: 8),
             queryField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            queryField.widthAnchor.constraint(equalToConstant: 260),
+            queryField.widthAnchor.constraint(equalToConstant: 220),
 
             statusLabel.leadingAnchor.constraint(equalTo: queryField.trailingAnchor, constant: 8),
             statusLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -112,6 +132,11 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         queryField.stringValue = text
     }
 
+    func setScope(_ scope: SearchScope) {
+        scopeControl.selectedSegment = scope == .allOpen ? 1 : 0
+        queryField.placeholderString = scope.placeholder
+    }
+
     func setStatus(matchIndex: Int?, totalMatches: Int) {
         if queryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             statusLabel.stringValue = ""
@@ -132,8 +157,14 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
+        case #selector(NSResponder.moveUp(_:)):
+            delegate?.findBarRequestsSelectPrevious(self)
+            return true
+        case #selector(NSResponder.moveDown(_:)):
+            delegate?.findBarRequestsSelectNext(self)
+            return true
         case #selector(NSResponder.insertNewline(_:)):
-            delegate?.findBar(self, didSubmitQuery: queryField.stringValue)
+            delegate?.findBar(self, didSubmitQuery: queryField.stringValue, scope: scope)
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             delegate?.findBarRequestsClose(self)
@@ -158,5 +189,17 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     @objc
     private func handleClose() {
         delegate?.findBarRequestsClose(self)
+    }
+
+    @objc
+    private func handleScopeChanged() {
+        let scope = scope
+        queryField.placeholderString = scope.placeholder
+        let trimmed = queryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else {
+            statusLabel.stringValue = ""
+            return
+        }
+        delegate?.findBar(self, didSubmitQuery: queryField.stringValue, scope: scope)
     }
 }

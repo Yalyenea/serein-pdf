@@ -6,15 +6,18 @@ extension NSToolbarItem.Identifier {
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
     let documentStore: DocumentStore
+    let windowID: UUID
     private let splitViewController: SplitViewController
     private let toolbar = NSToolbar(identifier: "MainToolbar")
     private let titlebarTabsItem = NSToolbarItem(itemIdentifier: .titlebarTabs)
-    private var isTitlebarTabsItemAttached = false
     private var allowsTerminationWithoutPrompt = false
+    var shouldCloseHandler: ((MainWindowController) -> Bool)?
+    var didCloseHandler: ((MainWindowController) -> Void)?
 
-    init(documentStore: DocumentStore) {
+    init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
-        splitViewController = SplitViewController(documentStore: documentStore)
+        self.windowID = windowID
+        splitViewController = SplitViewController(documentStore: documentStore, windowID: windowID)
         let window = ReaderShortcutWindow(contentViewController: splitViewController)
 
         window.title = "SlatePDF"
@@ -54,6 +57,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         refreshWindowTitle()
     }
 
+    convenience init(documentStore: DocumentStore) {
+        self.init(documentStore: documentStore, windowID: documentStore.defaultWindowID)
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -77,7 +84,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func configureTitlebarTabsItemIfNeeded() {
         let tabsView = splitViewController.titlebarTabsController.view
-        tabsView.frame = NSRect(x: 0, y: 0, width: 760, height: 28)
         titlebarTabsItem.label = ""
         titlebarTabsItem.paletteLabel = ""
         titlebarTabsItem.view = tabsView
@@ -87,15 +93,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func applyWindowChromeState() {
         let tabsOnRight = documentStore.appConfiguration.layout.sidebarsSwapped
         let tabsPaneVisible = tabsOnRight
-            ? documentStore.isRightSidebarVisible
-            : documentStore.isLeftSidebarVisible
+            ? documentStore.isRightSidebarVisible(in: windowID)
+            : documentStore.isLeftSidebarVisible(in: windowID)
         let shouldShowTitlebarTabs =
-            documentStore.tabPresentationMode == .horizontalTitlebar &&
+            documentStore.tabPresentationMode(in: windowID) == .horizontalTitlebar &&
             !tabsPaneVisible
 
         splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
-        synchronizeTitlebarTabsItem(isVisible: shouldShowTitlebarTabs)
         synchronizeWindowToolbar(isVisible: shouldShowTitlebarTabs)
+        synchronizeTitlebarTabsItem(isVisible: shouldShowTitlebarTabs)
     }
 
     private func synchronizeWindowToolbar(isVisible: Bool) {
@@ -113,25 +119,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func synchronizeTitlebarTabsItem(isVisible: Bool) {
+        let itemIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == .titlebarTabs })
+
         if isVisible {
             configureTitlebarTabsItemIfNeeded()
-            if isTitlebarTabsItemAttached == false {
+            if itemIndex == nil {
                 toolbar.insertItem(withItemIdentifier: .titlebarTabs, at: 0)
-                isTitlebarTabsItemAttached = true
             }
             toolbar.centeredItemIdentifier = .titlebarTabs
             return
         }
 
         toolbar.centeredItemIdentifier = nil
-        if let itemIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == .titlebarTabs }) {
+        if let itemIndex {
             toolbar.removeItem(at: itemIndex)
         }
-        isTitlebarTabsItemAttached = false
     }
 
     private func refreshWindowTitle() {
-        window?.title = documentStore.activeSession?.title ?? "SlatePDF"
+        window?.title = documentStore.activeSession(in: windowID)?.title ?? "SlatePDF"
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -153,31 +159,31 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func fitReaderToWidth() {
-        splitViewController.readerViewController.fitToWidth()
+        splitViewController.fitToWidth()
     }
 
     func zoomIn() {
-        splitViewController.readerViewController.zoomIn()
+        splitViewController.zoomIn()
     }
 
     func zoomOut() {
-        splitViewController.readerViewController.zoomOut()
+        splitViewController.zoomOut()
     }
 
     func goToNextPage() {
-        splitViewController.readerViewController.goToNextPage()
+        splitViewController.goToNextPage()
     }
 
     func goToPreviousPage() {
-        splitViewController.readerViewController.goToPreviousPage()
+        splitViewController.goToPreviousPage()
     }
 
     func navigateBack() {
-        splitViewController.readerViewController.navigateBack()
+        splitViewController.navigateBack()
     }
 
     func navigateForward() {
-        splitViewController.readerViewController.navigateForward()
+        splitViewController.navigateForward()
     }
 
     var canGoBack: Bool { splitViewController.readerViewController.canGoBack }
@@ -185,7 +191,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @discardableResult
     func goToPage(_ pageIndex: Int) -> Bool {
-        splitViewController.readerViewController.goToPage(pageIndex)
+        splitViewController.goToPage(pageIndex)
     }
 
     var currentPageCount: Int { splitViewController.readerViewController.currentPageCount }
@@ -207,20 +213,28 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.rightSidebarViewController.toggleMode()
     }
 
+    func toggleReaderSplit() {
+        splitViewController.readerWorkspaceViewController.toggleSplit()
+    }
+
+    var isReaderSplitEnabled: Bool {
+        documentStore.isSplitEnabled(in: windowID)
+    }
+
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
         guard let window = window as? ReaderShortcutWindow else { return }
         window.plainShortcutHandler = handler
     }
 
     func requestCloseActiveSession() {
-        guard let sessionID = documentStore.activeSessionID else { return }
+        guard let sessionID = documentStore.activeSessionID(in: windowID) else { return }
         requestCloseSession(sessionID)
     }
 
     func requestCloseSession(_ sessionID: UUID) {
         guard let session = documentStore.session(for: sessionID) else { return }
         guard session.isDirty else {
-            documentStore.close(sessionID: sessionID)
+            documentStore.close(sessionID: sessionID, from: windowID)
             return
         }
 
@@ -231,12 +245,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .save:
             do {
                 try documentStore.saveAnnotations(for: sessionID)
-                documentStore.close(sessionID: sessionID)
+                documentStore.close(sessionID: sessionID, from: windowID)
             } catch {
                 presentSaveError(error)
             }
         case .discard:
-            documentStore.close(sessionID: sessionID)
+            documentStore.close(sessionID: sessionID, from: windowID)
         case .cancel:
             return
         }
@@ -282,30 +296,34 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        prepareForApplicationTermination()
+        shouldCloseHandler?(self) ?? true
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        didCloseHandler?(self)
     }
 
     @discardableResult
     func triggerHighlightShortcut() -> Bool {
-        splitViewController.readerViewController.triggerHighlightShortcut()
+        splitViewController.triggerHighlightShortcut()
     }
 
     func exitHighlightMode() {
-        splitViewController.readerViewController.exitHighlightMode()
+        splitViewController.exitHighlightMode()
     }
 
     func setHighlightColor(_ color: HighlightColor) {
-        splitViewController.readerViewController.setHighlightColor(color)
+        splitViewController.setHighlightColor(color)
     }
 
     @discardableResult
     func removeHighlightUnderCursor() -> Bool {
-        splitViewController.readerViewController.removeHighlightUnderCursor()
+        splitViewController.removeHighlightUnderCursor()
     }
 
     @discardableResult
     func undoLastHighlight() -> Bool {
-        splitViewController.readerViewController.undoLastHighlight()
+        splitViewController.undoLastHighlight()
     }
 
     var hasUndoableHighlight: Bool {
@@ -317,7 +335,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func toggleNightMode() {
-        splitViewController.readerViewController.toggleNightMode()
+        splitViewController.toggleNightMode()
         applyNightAppearance()
     }
 
@@ -328,7 +346,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func saveAnnotations() throws {
-        try splitViewController.readerViewController.saveAnnotations()
+        try splitViewController.saveAnnotations()
     }
 
     @discardableResult
@@ -337,11 +355,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func showFindBar() {
-        splitViewController.readerViewController.showFindBar()
+        splitViewController.showFindBar()
     }
 
     func hideFindBar() {
-        splitViewController.readerViewController.hideFindBar()
+        splitViewController.hideFindBar()
     }
 
     var isFindBarVisible: Bool {
@@ -350,12 +368,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @discardableResult
     func findNextMatch() -> Bool {
-        splitViewController.readerViewController.findNextMatch()
+        splitViewController.findNextMatch()
     }
 
     @discardableResult
     func findPreviousMatch() -> Bool {
-        splitViewController.readerViewController.findPreviousMatch()
+        splitViewController.findPreviousMatch()
     }
 
     var isHighlightModeEnabled: Bool {

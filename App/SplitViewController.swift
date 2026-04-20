@@ -7,8 +7,9 @@ final class SplitViewController: NSSplitViewController {
         "SlatePDFSplit.v3",
     ]
     let documentStore: DocumentStore
+    let windowID: UUID
     let verticalTabsViewController: VerticalTabsViewController
-    let readerViewController: ReaderViewController
+    let readerWorkspaceViewController: ReaderWorkspaceViewController
     let rightSidebarViewController: RightSidebarViewController
     let titlebarTabsController: TitlebarTabsController
     private var tabsSidebarItem: NSSplitViewItem!
@@ -18,19 +19,32 @@ final class SplitViewController: NSSplitViewController {
     private var appliedWidthsForSessionID: UUID?
     private var isApplyingSidebarWidths = false
 
-    init(documentStore: DocumentStore) {
+    var readerViewController: ReaderViewController {
+        readerWorkspaceViewController.activeReaderViewController()
+    }
+
+    init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
-        verticalTabsViewController = VerticalTabsViewController(documentStore: documentStore)
-        readerViewController = ReaderViewController(documentStore: documentStore)
-        rightSidebarViewController = RightSidebarViewController(documentStore: documentStore)
-        titlebarTabsController = TitlebarTabsController(documentStore: documentStore)
+        self.windowID = windowID
+        verticalTabsViewController = VerticalTabsViewController(documentStore: documentStore, windowID: windowID)
+        readerWorkspaceViewController = ReaderWorkspaceViewController(
+            documentStore: documentStore,
+            windowID: windowID
+        )
+        rightSidebarViewController = RightSidebarViewController(documentStore: documentStore, windowID: windowID)
+        titlebarTabsController = TitlebarTabsController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
-        rightSidebarViewController.configure(pdfView: readerViewController.pdfView)
+        wireInteractions()
+        rightSidebarViewController.configure(pdfView: readerWorkspaceViewController.activeReaderViewController().pdfView)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    convenience init(documentStore: DocumentStore) {
+        self.init(documentStore: documentStore, windowID: documentStore.defaultWindowID)
     }
 
     static let splitBackgroundColor: NSColor = NSColor(name: nil) { appearance in
@@ -72,7 +86,7 @@ final class SplitViewController: NSSplitViewController {
         tabsSidebarItem.canCollapse = true
         tabsSidebarItem.holdingPriority = sidebarHoldingPriority
 
-        centerItem = NSSplitViewItem(viewController: readerViewController)
+        centerItem = NSSplitViewItem(viewController: readerWorkspaceViewController)
         centerItem.minimumThickness = 320
         centerItem.holdingPriority = .defaultLow
 
@@ -105,7 +119,7 @@ final class SplitViewController: NSSplitViewController {
         super.splitViewDidResizeSubviews(notification)
         guard isApplyingSidebarWidths == false,
               appliedWidthsForSessionID != nil,
-              let sessionID = documentStore.activeSessionID,
+              let sessionID = documentStore.activeSessionID(in: windowID),
               appliedWidthsForSessionID == sessionID else { return }
 
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
@@ -194,14 +208,16 @@ final class SplitViewController: NSSplitViewController {
         let physicalLeft: NSSplitViewItem = swapped ? outlineSidebarItem : tabsSidebarItem
         let physicalRight: NSSplitViewItem = swapped ? tabsSidebarItem : outlineSidebarItem
 
-        let leftShouldCollapse = !documentStore.isLeftSidebarVisible
+        let leftShouldCollapse = !documentStore.isLeftSidebarVisible(in: windowID)
         if physicalLeft.isCollapsed != leftShouldCollapse {
             physicalLeft.isCollapsed = leftShouldCollapse
         }
-        let rightShouldCollapse = !documentStore.isRightSidebarVisible
+        let rightShouldCollapse = !documentStore.isRightSidebarVisible(in: windowID)
         if physicalRight.isCollapsed != rightShouldCollapse {
             physicalRight.isCollapsed = rightShouldCollapse
         }
+
+        rightSidebarViewController.applyStateFromStore()
     }
 
     private func applySidebarWidthsForActiveSession() {
@@ -211,9 +227,9 @@ final class SplitViewController: NSSplitViewController {
         let layout = documentStore.appConfiguration.layout
         let targetLeft: CGFloat
         let targetRight: CGFloat
-        let sessionID = documentStore.activeSessionID
+        let sessionID = documentStore.activeSessionID(in: windowID)
 
-        if let session = documentStore.activeSession {
+        if let session = documentStore.activeSession(in: windowID) {
             targetLeft = session.leftSidebarWidth ?? layout.leftSidebarWidth
             targetRight = session.rightSidebarWidth ?? layout.rightSidebarWidth
         } else {
@@ -253,11 +269,162 @@ final class SplitViewController: NSSplitViewController {
         titlebarTabsController.refreshChromeColors()
     }
 
+    func fitToWidth() {
+        readerWorkspaceViewController.fitToWidth()
+    }
+
+    func zoomIn() {
+        readerWorkspaceViewController.zoomIn()
+    }
+
+    func zoomOut() {
+        readerWorkspaceViewController.zoomOut()
+    }
+
+    func goToNextPage() {
+        readerWorkspaceViewController.goToNextPage()
+    }
+
+    func goToPreviousPage() {
+        readerWorkspaceViewController.goToPreviousPage()
+    }
+
+    func navigateBack() {
+        readerWorkspaceViewController.navigateBack()
+    }
+
+    func navigateForward() {
+        readerWorkspaceViewController.navigateForward()
+    }
+
+    @discardableResult
+    func goToPage(_ pageIndex: Int) -> Bool {
+        readerWorkspaceViewController.goToPage(pageIndex)
+    }
+
+    @discardableResult
+    func triggerHighlightShortcut() -> Bool {
+        readerWorkspaceViewController.triggerHighlightShortcut()
+    }
+
+    func exitHighlightMode() {
+        readerWorkspaceViewController.exitHighlightMode()
+    }
+
+    func setHighlightColor(_ color: HighlightColor) {
+        readerWorkspaceViewController.setHighlightColor(color)
+    }
+
+    @discardableResult
+    func removeHighlightUnderCursor() -> Bool {
+        readerWorkspaceViewController.removeHighlightUnderCursor()
+    }
+
+    @discardableResult
+    func undoLastHighlight() -> Bool {
+        readerWorkspaceViewController.undoLastHighlight()
+    }
+
+    func toggleNightMode() {
+        readerWorkspaceViewController.toggleNightMode()
+    }
+
+    func saveAnnotations() throws {
+        try readerWorkspaceViewController.saveAnnotations()
+    }
+
+    func showFindBar() {
+        readerWorkspaceViewController.showFindBar()
+        syncFindStatus()
+    }
+
+    func hideFindBar() {
+        readerWorkspaceViewController.hideFindBar()
+    }
+
+    @discardableResult
+    func findNextMatch() -> Bool {
+        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        _ = rightSidebarViewController.selectNextSearchMatch(activate: true)
+        syncFindStatus()
+        return true
+    }
+
+    @discardableResult
+    func findPreviousMatch() -> Bool {
+        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        _ = rightSidebarViewController.selectPreviousSearchMatch(activate: true)
+        syncFindStatus()
+        return true
+    }
+
     private func applyChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = Self.splitBackgroundColor.cgColor
             splitView.layer?.backgroundColor = Self.dividerBackgroundColor.cgColor
         }
+    }
+
+    private func wireInteractions() {
+        let alternateActivation: (UUID) -> Void = { [weak self] sessionID in
+            guard let self else { return }
+            let targetPane = self.documentStore.focusedPane(in: self.windowID).other
+            self.documentStore.activate(sessionID: sessionID, in: self.windowID, targetPane: targetPane)
+        }
+        verticalTabsViewController.onAlternateSessionActivationRequested = alternateActivation
+        titlebarTabsController.onAlternateSessionActivationRequested = alternateActivation
+
+        readerWorkspaceViewController.onFocusedReaderDidChange = { [weak self] pdfView in
+            self?.rightSidebarViewController.configure(pdfView: pdfView)
+            self?.syncFindStatus()
+        }
+
+        for reader in [
+            readerWorkspaceViewController.primaryReaderViewController,
+            readerWorkspaceViewController.secondaryReaderViewController,
+        ] {
+            reader.onFindActionRequested = { [weak self] action in
+                self?.handleFindAction(action)
+            }
+        }
+
+        rightSidebarViewController.onActivateSearchMatch = { [weak self] match in
+            self?.activateSearchMatch(match)
+        }
+        rightSidebarViewController.onSearchSelectionDidChange = { [weak self] _, _ in
+            self?.syncFindStatus()
+        }
+    }
+
+    private func handleFindAction(_ action: FindNavigationAction) {
+        switch action {
+        case .selectNext:
+            _ = rightSidebarViewController.selectNextSearchMatch(activate: false)
+        case .selectPrevious:
+            _ = rightSidebarViewController.selectPreviousSearchMatch(activate: false)
+        case .activateSelected:
+            _ = rightSidebarViewController.activateSelectedSearchMatch()
+        case .activateNext:
+            _ = rightSidebarViewController.selectNextSearchMatch(activate: true)
+        case .activatePrevious:
+            _ = rightSidebarViewController.selectPreviousSearchMatch(activate: true)
+        }
+        syncFindStatus()
+    }
+
+    private func activateSearchMatch(_ match: SearchSidebarMatch) {
+        let targetPane = documentStore.focusedPane(in: windowID)
+        documentStore.activate(sessionID: match.sessionID, in: windowID, targetPane: targetPane)
+        readerWorkspaceViewController.activeReaderViewController().go(to: match.selection)
+        syncFindStatus()
+    }
+
+    private func syncFindStatus() {
+        let summary = rightSidebarViewController.searchResultsViewController.selectionSummary()
+        readerWorkspaceViewController.activeReaderViewController().updateFindStatus(
+            matchIndex: summary.selectedIndex,
+            totalMatches: summary.totalMatches
+        )
     }
 }
 

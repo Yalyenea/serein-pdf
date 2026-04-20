@@ -40,6 +40,22 @@ struct WindowChromeTests {
     }
 
     @Test
+    func horizontalTabsUseStableToolbarStripSize() {
+        let controller = TitlebarTabsController(documentStore: DocumentStore(appConfiguration: .default))
+        controller.loadViewIfNeeded()
+
+        #expect(controller.preferredContentSize == TitlebarTabsController.visibleStripSize)
+        #expect(controller.view.frame.size == TitlebarTabsController.visibleStripSize)
+
+        controller.setTabsStripVisible(false)
+        #expect(controller.preferredContentSize == NSSize(width: 1, height: 1))
+
+        controller.setTabsStripVisible(true)
+        #expect(controller.preferredContentSize == TitlebarTabsController.visibleStripSize)
+        #expect(controller.view.frame.size == TitlebarTabsController.visibleStripSize)
+    }
+
+    @Test
     func nightModeKeepsLivePDFViewAvailableForSnapshots() {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
@@ -118,6 +134,56 @@ struct WindowChromeTests {
 
         #expect(rightSidebarWidthBefore > 120)
         #expect(abs(rightSidebarWidthAfter - rightSidebarWidthBefore) < 0.5)
+    }
+
+    @Test
+    func readerSplitToggleCanEnableAndDisableAgain() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "split-toggle"))
+        controller.window?.layoutIfNeeded()
+
+        #expect(controller.isReaderSplitEnabled == false)
+
+        controller.toggleReaderSplit()
+        controller.window?.layoutIfNeeded()
+        #expect(controller.isReaderSplitEnabled == true)
+
+        controller.toggleReaderSplit()
+        controller.window?.layoutIfNeeded()
+        #expect(controller.isReaderSplitEnabled == false)
+    }
+
+    @Test
+    func horizontalTitlebarModeCanOpenDocument() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+
+        store.setTabPresentationMode(.horizontalTitlebar)
+        store.setLeftSidebarVisible(false)
+        controller.window?.layoutIfNeeded()
+        #expect(controller.window?.toolbar != nil)
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-open"))
+        controller.window?.layoutIfNeeded()
+
+        #expect(controller.window?.toolbar != nil)
+    }
+
+    @Test
+    func fitWidthOnOpenCanOpenWindowBackedDocument() throws {
+        _ = NSApplication.shared
+        var configuration = AppConfiguration.default
+        configuration.reader.fitWidthOnOpen = true
+        let store = DocumentStore(appConfiguration: configuration)
+        let controller = MainWindowController(documentStore: store)
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "fit-width-open"))
+        controller.window?.layoutIfNeeded()
+
+        #expect(controller.window != nil)
     }
 }
 

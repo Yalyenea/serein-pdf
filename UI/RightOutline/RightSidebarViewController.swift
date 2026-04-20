@@ -8,27 +8,32 @@ private final class CollapsibleContainerView: NSView {
 }
 
 final class RightSidebarViewController: NSViewController {
-    enum Mode: Int { case outline = 0, pages = 1 }
-
     let documentStore: DocumentStore
+    let windowID: UUID
     let outlineViewController: OutlineViewController
+    let searchResultsViewController: SearchResultsViewController
+    var onActivateSearchMatch: ((SearchSidebarMatch) -> Void)?
+    var onSearchSelectionDidChange: ((Int?, Int) -> Void)?
     private let thumbnailView = PDFThumbnailView()
     private let modeSegmented = NSSegmentedControl()
-    private var mode: Mode = .outline
     private var lastAppliedThumbnailWidth: CGFloat = 0
     private var lastAppliedThumbnailColumns: Int = 1
     private var outlineModeConstraints: [NSLayoutConstraint] = []
     private var pagesModeConstraints: [NSLayoutConstraint] = []
+    private var searchModeConstraints: [NSLayoutConstraint] = []
     private var thumbnailContentWidth: NSLayoutConstraint?
 
     private static let thumbnailCellSpacing: CGFloat = 4
 
-    init(documentStore: DocumentStore) {
+    init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
-        self.outlineViewController = OutlineViewController(documentStore: documentStore)
+        self.windowID = windowID
+        self.outlineViewController = OutlineViewController(documentStore: documentStore, windowID: windowID)
+        self.searchResultsViewController = SearchResultsViewController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
         title = "Outline"
         addChild(outlineViewController)
+        addChild(searchResultsViewController)
     }
 
     @available(*, unavailable)
@@ -42,7 +47,23 @@ final class RightSidebarViewController: NSViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDocumentStoreDidChange),
+            name: .documentStoreDidChange,
+            object: documentStore
+        )
+        searchResultsViewController.onActivateMatch = { [weak self] match in
+            self?.onActivateSearchMatch?(match)
+        }
+        searchResultsViewController.onSelectionChanged = { [weak self] selectedIndex, total in
+            self?.onSearchSelectionDidChange?(selectedIndex, total)
+        }
         applyMode()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     override func loadView() {
@@ -51,17 +72,22 @@ final class RightSidebarViewController: NSViewController {
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
         container.layer?.masksToBounds = true
 
-        modeSegmented.segmentCount = 2
+        modeSegmented.segmentCount = 3
         modeSegmented.setImage(
             NSImage(systemSymbolName: "list.bullet.indent", accessibilityDescription: "Outline"),
             forSegment: 0)
         modeSegmented.setImage(
             NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "Pages"),
             forSegment: 1)
+        modeSegmented.setImage(
+            NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search"),
+            forSegment: 2)
         modeSegmented.setWidth(26, forSegment: 0)
         modeSegmented.setWidth(26, forSegment: 1)
+        modeSegmented.setWidth(26, forSegment: 2)
         modeSegmented.setToolTip("Outline", forSegment: 0)
         modeSegmented.setToolTip("Pages", forSegment: 1)
+        modeSegmented.setToolTip("Search", forSegment: 2)
         modeSegmented.selectedSegment = 0
         modeSegmented.controlSize = .mini
         modeSegmented.segmentStyle = .rounded
@@ -79,8 +105,10 @@ final class RightSidebarViewController: NSViewController {
 
         let outlineView = outlineViewController.view
         outlineView.translatesAutoresizingMaskIntoConstraints = false
+        let searchView = searchResultsViewController.view
+        searchView.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [modeSegmented, outlineView, thumbnailView] {
+        for view in [modeSegmented, outlineView, thumbnailView, searchView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -122,6 +150,13 @@ final class RightSidebarViewController: NSViewController {
             widthConstraint,
         ]
 
+        searchModeConstraints = [
+            searchView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            searchView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            searchView.topAnchor.constraint(equalTo: modeSegmented.bottomAnchor, constant: 10),
+            searchView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ]
+
         NSLayoutConstraint.activate(outlineModeConstraints)
 
         view = container
@@ -129,23 +164,36 @@ final class RightSidebarViewController: NSViewController {
 
     @objc
     private func modeChanged(_ sender: NSSegmentedControl) {
-        mode = Mode(rawValue: sender.selectedSegment) ?? .outline
-        applyMode()
+        setMode(RightSidebarMode(rawValue: sender.selectedSegment) ?? .outline)
+    }
+
+    @objc
+    private func handleDocumentStoreDidChange(_ notification: Notification) {
+        applyStateFromStore()
+        let summary = searchResultsViewController.selectionSummary()
+        onSearchSelectionDidChange?(summary.selectedIndex, summary.totalMatches)
     }
 
     private func applyMode() {
-        let isOutline = mode == .outline
-
-        if isOutline {
+        switch documentStore.rightSidebarMode(in: windowID) {
+        case .outline:
             NSLayoutConstraint.deactivate(pagesModeConstraints)
+            NSLayoutConstraint.deactivate(searchModeConstraints)
             NSLayoutConstraint.activate(outlineModeConstraints)
-        } else {
+        case .pages:
             NSLayoutConstraint.deactivate(outlineModeConstraints)
+            NSLayoutConstraint.deactivate(searchModeConstraints)
             NSLayoutConstraint.activate(pagesModeConstraints)
+        case .search:
+            NSLayoutConstraint.deactivate(outlineModeConstraints)
+            NSLayoutConstraint.deactivate(pagesModeConstraints)
+            NSLayoutConstraint.activate(searchModeConstraints)
         }
 
-        outlineViewController.view.isHidden = !isOutline
-        thumbnailView.isHidden = isOutline
+        let mode = documentStore.rightSidebarMode(in: windowID)
+        outlineViewController.view.isHidden = mode != .outline
+        thumbnailView.isHidden = mode != .pages
+        searchResultsViewController.view.isHidden = mode != .search
 
         view.needsLayout = true
     }
@@ -155,6 +203,7 @@ final class RightSidebarViewController: NSViewController {
             view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
         }
         outlineViewController.refreshChromeColors()
+        searchResultsViewController.refreshChromeColors()
     }
 
     override func viewDidLayout() {
@@ -193,12 +242,36 @@ final class RightSidebarViewController: NSViewController {
     }
 
     func toggleMode() {
-        setMode(mode == .outline ? .pages : .outline)
+        documentStore.toggleRightSidebarMode(in: windowID)
     }
 
-    func setMode(_ newMode: Mode) {
-        mode = newMode
-        modeSegmented.selectedSegment = newMode.rawValue
+    func setMode(_ newMode: RightSidebarMode) {
+        documentStore.setRightSidebarMode(newMode, in: windowID)
+    }
+
+    func applyStateFromStore() {
+        let mode = documentStore.rightSidebarMode(in: windowID)
+        modeSegmented.selectedSegment = mode.rawValue
         applyMode()
+    }
+
+    func selectNextSearchMatch(activate: Bool) -> SearchSidebarMatch? {
+        let match = searchResultsViewController.selectNextMatch()
+        if activate, let selected = match {
+            onActivateSearchMatch?(selected)
+        }
+        return match
+    }
+
+    func selectPreviousSearchMatch(activate: Bool) -> SearchSidebarMatch? {
+        let match = searchResultsViewController.selectPreviousMatch()
+        if activate, let selected = match {
+            onActivateSearchMatch?(selected)
+        }
+        return match
+    }
+
+    func activateSelectedSearchMatch() -> SearchSidebarMatch? {
+        searchResultsViewController.activateSelectedMatch()
     }
 }

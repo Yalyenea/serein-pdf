@@ -8,14 +8,17 @@ private final class CollapsibleContainerView: NSView {
 
 final class VerticalTabsViewController: NSViewController {
     let documentStore: DocumentStore
+    let windowID: UUID
     var onCloseSessionRequested: ((UUID) -> Void)?
+    var onAlternateSessionActivationRequested: ((UUID) -> Void)?
     private let countLabel = NSTextField(labelWithString: "0 open")
     private let emptyStateLabel = NSTextField(
         labelWithString: "Open multiple PDFs and switch them here.")
     private let listStackView = NSStackView()
 
-    init(documentStore: DocumentStore) {
+    init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
+        self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
         title = "Documents"
     }
@@ -130,10 +133,15 @@ final class VerticalTabsViewController: NSViewController {
             let itemView = VerticalTabItemView(
                 sessionID: session.id,
                 title: session.title,
-                isSelected: documentStore.activeSessionID == session.id,
+                isSelected: documentStore.activeSessionID(in: windowID) == session.id,
                 isDirty: session.isDirty,
                 onSelect: { [weak self] sessionID in
-                    self?.documentStore.activate(sessionID: sessionID)
+                    guard let self else { return }
+                    self.documentStore.clearSearch(in: self.windowID)
+                    self.documentStore.activate(sessionID: sessionID, in: self.windowID)
+                },
+                onAlternateSelect: { [weak self] sessionID in
+                    self?.onAlternateSessionActivationRequested?(sessionID)
                 },
                 onClose: { [weak self] sessionID in
                     self?.onCloseSessionRequested?(sessionID)

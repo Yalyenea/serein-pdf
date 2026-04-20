@@ -70,7 +70,9 @@ struct AppConfiguration: Equatable, Sendable {
             .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
+            .newWindow: KeyboardShortcut(key: "n", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
+            .toggleReaderSplit: KeyboardShortcut(key: "\\", modifiers: [.command, .control]),
             .toggleRightSidebarMode: KeyboardShortcut(key: "l", modifiers: [.command, .shift]),
             .swapSidebars: KeyboardShortcut(key: "x", modifiers: [.command, .shift]),
             .undoLastHighlight: KeyboardShortcut(key: "z", modifiers: [.command]),
@@ -261,7 +263,9 @@ navigate_back = "command+["
 navigate_forward = "command+]"
 goto_page = "command+option+g"
 reopen_last_closed = "command+shift+t"
+new_window = "command+shift+n"
 toggle_all_pages_overview = "command+shift+o"
+toggle_reader_split = "command+control+\\"
 toggle_right_sidebar_mode = "command+shift+l"
 swap_sidebars = "command+shift+x"
 undo_last_highlight = "command+z"
@@ -317,7 +321,9 @@ navigate_back = "\(configuration.shortcuts.bindings[.navigateBack]?.serializedVa
 navigate_forward = "\(configuration.shortcuts.bindings[.navigateForward]?.serializedValue ?? "command+]")"
 goto_page = "\(configuration.shortcuts.bindings[.gotoPage]?.serializedValue ?? "command+option+g")"
 reopen_last_closed = "\(configuration.shortcuts.bindings[.reopenLastClosed]?.serializedValue ?? "command+shift+t")"
+new_window = "\(configuration.shortcuts.bindings[.newWindow]?.serializedValue ?? "command+shift+n")"
 toggle_all_pages_overview = "\(configuration.shortcuts.bindings[.toggleAllPagesOverview]?.serializedValue ?? "command+shift+o")"
+toggle_reader_split = "\(configuration.shortcuts.bindings[.toggleReaderSplit]?.serializedValue ?? "command+control+\\")"
 toggle_right_sidebar_mode = "\(configuration.shortcuts.bindings[.toggleRightSidebarMode]?.serializedValue ?? "command+shift+l")"
 swap_sidebars = "\(configuration.shortcuts.bindings[.swapSidebars]?.serializedValue ?? "command+shift+x")"
 undo_last_highlight = "\(configuration.shortcuts.bindings[.undoLastHighlight]?.serializedValue ?? "command+z")"
@@ -446,8 +452,12 @@ struct AppConfigurationParser {
             configuration.shortcuts.bindings[.gotoPage] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "reopen_last_closed"):
             configuration.shortcuts.bindings[.reopenLastClosed] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "new_window"):
+            configuration.shortcuts.bindings[.newWindow] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "toggle_all_pages_overview"):
             configuration.shortcuts.bindings[.toggleAllPagesOverview] = try KeyboardShortcut.parse(parseString(rawValue))
+        case ("shortcuts", "toggle_reader_split"):
+            configuration.shortcuts.bindings[.toggleReaderSplit] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "toggle_right_sidebar_mode"), ("shortcuts", "toggle_left_tabs_mode"):
             configuration.shortcuts.bindings[.toggleRightSidebarMode] = try KeyboardShortcut.parse(parseString(rawValue))
         case ("shortcuts", "swap_sidebars"):
@@ -549,7 +559,9 @@ struct AppConfigurationStore {
             "navigate_forward",
             "goto_page",
             "reopen_last_closed",
+            "new_window",
             "toggle_all_pages_overview",
+            "toggle_reader_split",
             "toggle_right_sidebar_mode",
             "swap_sidebars",
             "undo_last_highlight",

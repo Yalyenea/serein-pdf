@@ -2,6 +2,7 @@ import AppKit
 
 final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     let documentStore: DocumentStore
+    let windowID: UUID
     private let titleLabel = NSTextField(labelWithString: "Outline")
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF with a table of contents to see it here.")
     private let scrollView = NSScrollView()
@@ -10,8 +11,9 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     private let pageCounterLabel = NSTextField(labelWithString: "")
     private var nodes: [OutlineNode] = []
 
-    init(documentStore: DocumentStore) {
+    init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
+        self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
         title = "Outline"
     }
@@ -113,7 +115,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     private func updatePageCounter() {
-        guard let session = documentStore.activeSession else {
+        guard let session = documentStore.activeSession(in: windowID) else {
             pageCounterLabel.stringValue = ""
             return
         }
@@ -129,13 +131,13 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     private func reloadOutline() {
         guard isViewLoaded else { return }
 
-        nodes = documentStore.activeSession?.outlineTree ?? []
+        nodes = documentStore.activeSession(in: windowID)?.outlineTree ?? []
         outlineView.deselectAll(nil)
         outlineView.reloadData()
         expandAllNodes()
 
         let isEmpty = nodes.isEmpty
-        if documentStore.activeSession == nil {
+        if documentStore.activeSession(in: windowID) == nil {
             emptyStateLabel.stringValue = "Open a PDF to inspect its outline."
         } else {
             emptyStateLabel.stringValue = "This PDF has no outline."
@@ -201,7 +203,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         guard row >= 0,
               let node = outlineView.item(atRow: row) as? OutlineNode,
               let pageIndex = node.pageIndex,
-              let sessionID = documentStore.activeSessionID else { return }
+              let sessionID = documentStore.activeSessionID(in: windowID) else { return }
 
         documentStore.updateCurrentPage(index: pageIndex, for: sessionID)
     }

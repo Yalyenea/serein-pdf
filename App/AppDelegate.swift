@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
-    private var mainWindowController: MainWindowController?
+    private var mainWindowControllers: [UUID: MainWindowController] = [:]
     private var settingsWindowController: SettingsWindowController?
     private var documentStore: DocumentStore!
     private var appConfiguration: AppConfiguration = .default
@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private var autoSaveTimer: Timer?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
+    private var mainWindowController: MainWindowController? {
+        currentWindowController()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -27,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
 
         documentStore = DocumentStore(appConfiguration: appConfiguration)
+        try? documentStore.restorePersistedState()
         installMainMenu()
         NotificationCenter.default.addObserver(
             self,
@@ -34,12 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             name: .documentStoreDidChange,
             object: documentStore
         )
-
-        let windowController = MainWindowController(documentStore: documentStore)
-        windowController.showWindow(nil)
-        windowController.window?.makeKeyAndOrderFront(nil)
-
-        mainWindowController = windowController
         readerShortcutsController = ReaderShortcutsController(
             shortcutsProvider: { [weak self] in
                 self?.appConfiguration.shortcuts.bindings ?? [:]
@@ -57,17 +55,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
                     .pageDown: { [weak self] in self?.goToNextPageAction(nil) },
                     .pageUp: { [weak self] in self?.goToPreviousPageAction(nil) },
+                    .newWindow: { [weak self] in self?.newWindow(nil) },
+                    .toggleReaderSplit: { [weak self] in self?.toggleReaderSplitAction(nil) },
                     .toggleRightSidebarMode: { [weak self] in self?.toggleRightSidebarModeAction(nil) },
                     .swapSidebars: { [weak self] in self?.swapSidebarsAction(nil) },
                 ]
             }
         )
-        windowController.installPlainShortcutHandler { [weak self] event, window in
-            guard let self,
-                  let readerShortcutsController = self.readerShortcutsController else { return false }
-            return readerShortcutsController.handlePlainShortcut(for: event, in: window)
+
+        for windowID in documentStore.windowIDs() {
+            let controller = makeWindowController(windowID: windowID)
+            controller.showWindow(nil)
+            controller.window?.orderFront(nil)
         }
-        try? documentStore.restorePersistedState()
+        currentWindowController()?.window?.makeKeyAndOrderFront(nil)
         updateRecentFilesMenu()
         startAutoSaveTimer()
         NSApp.activate(ignoringOtherApps: true)
@@ -99,7 +100,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        (mainWindowController?.prepareForApplicationTermination() ?? true) ? .terminateNow : .terminateCancel
+        (currentWindowController() ?? mainWindowControllers.values.first)?.prepareForApplicationTermination() == false
+            ? .terminateCancel
+            : .terminateNow
     }
 
     @objc
@@ -109,8 +112,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         updateRecentFilesMenu()
     }
 
+    private func makeWindowController(windowID: UUID) -> MainWindowController {
+        if let existing = mainWindowControllers[windowID] {
+            return existing
+        }
+
+        let controller = MainWindowController(documentStore: documentStore, windowID: windowID)
+        controller.shouldCloseHandler = { [weak self] controller in
+            self?.handleWindowShouldClose(controller) ?? true
+        }
+        controller.didCloseHandler = { [weak self] controller in
+            self?.handleWindowDidClose(controller)
+        }
+        controller.installPlainShortcutHandler { [weak self] event, window in
+            guard let self,
+                  let readerShortcutsController = self.readerShortcutsController else { return false }
+            return readerShortcutsController.handlePlainShortcut(for: event, in: window)
+        }
+        mainWindowControllers[windowID] = controller
+        return controller
+    }
+
+    private func currentWindowController() -> MainWindowController? {
+        if let keyWindow = NSApp.keyWindow,
+           let controller = controller(for: keyWindow) {
+            return controller
+        }
+        if let mainWindow = NSApp.mainWindow,
+           let controller = controller(for: mainWindow) {
+            return controller
+        }
+        return mainWindowControllers.values.first
+    }
+
+    private func controller(for window: NSWindow?) -> MainWindowController? {
+        guard let window else { return nil }
+        return mainWindowControllers.values.first { $0.window === window }
+    }
+
+    private func handleWindowShouldClose(_ controller: MainWindowController) -> Bool {
+        let isLastWindow = mainWindowControllers.count <= 1
+        if isLastWindow {
+            return controller.prepareForApplicationTermination()
+        }
+        documentStore.closeWindow(id: controller.windowID)
+        return true
+    }
+
+    private func handleWindowDidClose(_ controller: MainWindowController) {
+        mainWindowControllers.removeValue(forKey: controller.windowID)
+    }
+
     @objc
     func openDocument(_ sender: Any?) {
+        mainWindowController?.hideFindBar()
+        let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]
         panel.allowsMultipleSelection = true
@@ -122,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         do {
             for url in panel.urls {
-                _ = try documentStore.open(documentAt: url)
+                _ = try documentStore.open(documentAt: url, in: targetWindowID)
             }
         } catch {
             presentOpenError(error)
@@ -172,6 +228,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             action: #selector(showSettings(_:)),
             keyEquivalent: ","
         )
+        let newWindowItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.newWindow.menuTitle,
+            command: .newWindow,
+            action: #selector(newWindow(_:))
+        )
         let openItem = NSMenuItem(
             title: "Open…",
             action: #selector(openDocument(_:)),
@@ -220,7 +281,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         findNextItem.target = self
         findPreviousItem.keyEquivalentModifierMask = [.command, .shift]
         findPreviousItem.target = self
-        fileMenu.items = [settingsItem, .separator(), openItem, recentItem, reopenClosedItem, findItem, findNextItem, findPreviousItem, saveAnnotationsItem, .separator(), closeItem]
+        fileMenu.items = [
+            settingsItem,
+            .separator(),
+            newWindowItem,
+            openItem,
+            recentItem,
+            reopenClosedItem,
+            findItem,
+            findNextItem,
+            findPreviousItem,
+            saveAnnotationsItem,
+            .separator(),
+            closeItem,
+        ]
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
     }
@@ -368,6 +442,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 action: #selector(toggleAllPagesOverview(_:))
             ),
             makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleReaderSplit.menuTitle,
+                command: .toggleReaderSplit,
+                action: #selector(toggleReaderSplitAction(_:))
+            ),
+            makeConfiguredMenuItem(
                 title: ShortcutCommand.toggleRightSidebarMode.menuTitle,
                 command: .toggleRightSidebarMode,
                 action: #selector(toggleRightSidebarModeAction(_:))
@@ -440,7 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func closeCurrentTab(_ sender: Any?) {
         if let keyWindow = NSApp.keyWindow,
-           keyWindow !== mainWindowController?.window {
+           controller(for: keyWindow) == nil {
             keyWindow.performClose(sender)
             return
         }
@@ -449,22 +528,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func activatePreviousTab(_ sender: Any?) {
-        documentStore.activatePreviousSession()
+        guard let controller = mainWindowController else { return }
+        documentStore.clearSearch(in: controller.windowID)
+        documentStore.activatePreviousSession(in: controller.windowID)
     }
 
     @objc
     private func activateNextTab(_ sender: Any?) {
-        documentStore.activateNextSession()
+        guard let controller = mainWindowController else { return }
+        documentStore.clearSearch(in: controller.windowID)
+        documentStore.activateNextSession(in: controller.windowID)
     }
 
     @objc
     private func useSidebarTabs(_ sender: Any?) {
-        documentStore.setTabPresentationMode(.verticalSidebar)
+        guard let controller = mainWindowController else { return }
+        documentStore.setTabPresentationMode(.verticalSidebar, in: controller.windowID)
     }
 
     @objc
     private func useTitlebarTabs(_ sender: Any?) {
-        documentStore.setTabPresentationMode(.horizontalTitlebar)
+        guard let controller = mainWindowController else { return }
+        documentStore.setTabPresentationMode(.horizontalTitlebar, in: controller.windowID)
+    }
+
+    @objc
+    private func newWindow(_ sender: Any?) {
+        let sourceWindowID = mainWindowController?.windowID
+        let windowID = documentStore.createWindow(copyingFrom: sourceWindowID)
+        let controller = makeWindowController(windowID: windowID)
+        controller.showWindow(sender)
+        controller.window?.makeKeyAndOrderFront(sender)
     }
 
     @objc
@@ -493,6 +587,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func toggleRightSidebarModeAction(_ sender: Any?) {
         mainWindowController?.toggleRightSidebarMode()
+    }
+
+    @objc
+    private func toggleReaderSplitAction(_ sender: Any?) {
+        mainWindowController?.toggleReaderSplit()
     }
 
     @objc
@@ -529,12 +628,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func toggleLeftSidebar(_ sender: Any?) {
-        documentStore.setLeftSidebarVisible(!documentStore.isLeftSidebarVisible)
+        guard let controller = mainWindowController else { return }
+        let isVisible = documentStore.isLeftSidebarVisible(in: controller.windowID)
+        documentStore.setLeftSidebarVisible(!isVisible, in: controller.windowID)
     }
 
     @objc
     private func toggleRightSidebar(_ sender: Any?) {
-        documentStore.setRightSidebarVisible(!documentStore.isRightSidebarVisible)
+        guard let controller = mainWindowController else { return }
+        let isVisible = documentStore.isRightSidebarVisible(in: controller.windowID)
+        documentStore.setRightSidebarVisible(!isVisible, in: controller.windowID)
     }
 
     @objc
@@ -580,7 +683,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func showGotoPageDialog(_ sender: Any?) {
         guard let mainWindowController,
-              documentStore.activeSession != nil else { return }
+              documentStore.activeSession(in: mainWindowController.windowID) != nil else { return }
 
         let pageCount = mainWindowController.currentPageCount
         guard pageCount > 0 else { return }
@@ -639,7 +742,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func setActiveReaderDisplayMode(_ mode: ReaderDisplayMode) {
-        guard let sessionID = documentStore.activeSessionID else { return }
+        guard let controller = mainWindowController,
+              let sessionID = documentStore.activeSessionID(in: controller.windowID) else { return }
         documentStore.setDisplayMode(mode, for: sessionID)
     }
 
@@ -668,7 +772,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func findInCurrentDocument(_ sender: Any?) {
-        guard documentStore.activeSession != nil else { return }
+        guard let controller = mainWindowController,
+              documentStore.activeSession(in: controller.windowID) != nil else { return }
         mainWindowController?.showFindBar()
     }
 
@@ -685,9 +790,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func openRecentDocument(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
+        mainWindowController?.hideFindBar()
+        let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
 
         do {
-            _ = try documentStore.open(documentAt: url)
+            _ = try documentStore.open(documentAt: url, in: targetWindowID)
         } catch {
             presentOpenError(error)
         }
@@ -695,9 +802,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func reopenLastClosed(_ sender: Any?) {
-        guard let url = documentStore.popRecentlyClosed() else { return }
+        guard let controller = mainWindowController,
+              let url = documentStore.popRecentlyClosed(in: controller.windowID) else { return }
+        controller.hideFindBar()
         do {
-            _ = try documentStore.open(documentAt: url)
+            _ = try documentStore.open(documentAt: url, in: controller.windowID)
         } catch {
             presentOpenError(error)
         }
@@ -799,84 +908,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        let controller = mainWindowController
+        let windowID = controller?.windowID
+        let activeSession = windowID.flatMap { documentStore.activeSession(in: $0) }
+
         switch menuItem.action {
+        case #selector(newWindow(_:)):
+            return true
         case #selector(highlightSelection(_:)):
-            return documentStore.activeSession != nil
+            return activeSession != nil
         case #selector(exitHighlightMode(_:)):
-            menuItem.state = mainWindowController?.isHighlightModeEnabled == true ? .on : .off
-            return mainWindowController?.isHighlightModeEnabled == true
+            menuItem.state = controller?.isHighlightModeEnabled == true ? .on : .off
+            return controller?.isHighlightModeEnabled == true
         case #selector(toggleNightMode(_:)):
-            menuItem.state = mainWindowController?.isNightModeEnabled == true ? .on : .off
-            return documentStore.activeSession != nil
+            menuItem.state = controller?.isNightModeEnabled == true ? .on : .off
+            return activeSession != nil
         case #selector(saveAnnotations(_:)):
-            return documentStore.activeSession?.isDirty == true
+            return activeSession?.isDirty == true
         case #selector(removeHighlightUnderCursorAction(_:)):
-            return documentStore.activeSession != nil
+            return activeSession != nil
         case #selector(undoLastHighlightAction(_:)):
-            return mainWindowController?.hasUndoableHighlight == true
+            return controller?.hasUndoableHighlight == true
         case #selector(setHighlightColorPink(_:)):
-            menuItem.state = mainWindowController?.currentHighlightColor == .pink ? .on : .off
+            menuItem.state = controller?.currentHighlightColor == .pink ? .on : .off
             return true
         case #selector(setHighlightColorYellow(_:)):
-            menuItem.state = mainWindowController?.currentHighlightColor == .yellow ? .on : .off
+            menuItem.state = controller?.currentHighlightColor == .yellow ? .on : .off
             return true
         case #selector(setHighlightColorGreen(_:)):
-            menuItem.state = mainWindowController?.currentHighlightColor == .green ? .on : .off
+            menuItem.state = controller?.currentHighlightColor == .green ? .on : .off
             return true
         case #selector(findInCurrentDocument(_:)):
-            return documentStore.activeSession != nil
+            return activeSession != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
-            return mainWindowController?.isFindBarVisible == true
+            return controller?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):
-            menuItem.state = documentStore.tabPresentationMode == .verticalSidebar ? .on : .off
+            menuItem.state = windowID.map { documentStore.tabPresentationMode(in: $0) == .verticalSidebar } == true ? .on : .off
             return true
         case #selector(useTitlebarTabs(_:)):
-            menuItem.state = documentStore.tabPresentationMode == .horizontalTitlebar ? .on : .off
+            menuItem.state = windowID.map { documentStore.tabPresentationMode(in: $0) == .horizontalTitlebar } == true ? .on : .off
             return true
         case #selector(toggleLeftSidebar(_:)):
-            menuItem.state = documentStore.isLeftSidebarVisible ? .on : .off
+            menuItem.state = windowID.map { documentStore.isLeftSidebarVisible(in: $0) } == true ? .on : .off
             return true
         case #selector(toggleRightSidebar(_:)):
-            menuItem.state = documentStore.isRightSidebarVisible ? .on : .off
+            menuItem.state = windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true ? .on : .off
             return true
         case #selector(closeCurrentTab(_:)):
-            return documentStore.activeSession != nil
+            return activeSession != nil
         case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
             return documentStore.sessions.count > 1
         case #selector(fitReaderToWidth(_:)):
-            menuItem.state = documentStore.activeSession?.scaleMode == .fitWidth ? .on : .off
-            return documentStore.activeSession != nil
+            menuItem.state = activeSession?.scaleMode == .fitWidth ? .on : .off
+            return activeSession != nil
         case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
-            return documentStore.activeSession != nil
+            return activeSession != nil
         case #selector(goToNextPageAction(_:)), #selector(goToPreviousPageAction(_:)):
-            return documentStore.activeSession != nil
+            return activeSession != nil
         case #selector(navigateBackAction(_:)):
-            return mainWindowController?.canGoBack == true
+            return controller?.canGoBack == true
         case #selector(navigateForwardAction(_:)):
-            return mainWindowController?.canGoForward == true
+            return controller?.canGoForward == true
         case #selector(showGotoPageDialog(_:)):
-            return documentStore.activeSession != nil && (mainWindowController?.currentPageCount ?? 0) > 0
+            return activeSession != nil && (controller?.currentPageCount ?? 0) > 0
         case #selector(reopenLastClosed(_:)):
-            return documentStore.recentlyClosedURLs.isEmpty == false
+            return windowID.map { documentStore.recentlyClosedURLs(in: $0).isEmpty == false } == true
         case #selector(toggleAllPagesOverview(_:)):
-            menuItem.state = mainWindowController?.isAllPagesOverviewActive == true ? .on : .off
-            return documentStore.activeSession != nil
+            menuItem.state = controller?.isAllPagesOverviewActive == true ? .on : .off
+            return activeSession != nil
+        case #selector(toggleReaderSplitAction(_:)):
+            menuItem.state = controller?.isReaderSplitEnabled == true ? .on : .off
+            return activeSession != nil
         case #selector(toggleRightSidebarModeAction(_:)):
-            return documentStore.isRightSidebarVisible
+            return windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true
         case #selector(swapSidebarsAction(_:)):
             return true
         case #selector(useSinglePage(_:)):
-            menuItem.state = documentStore.activeSession?.displayMode == .singlePage ? .on : .off
-            return documentStore.activeSession != nil
+            menuItem.state = activeSession?.displayMode == .singlePage ? .on : .off
+            return activeSession != nil
         case #selector(useSinglePageContinuous(_:)):
-            menuItem.state = documentStore.activeSession?.displayMode == .singlePageContinuous ? .on : .off
-            return documentStore.activeSession != nil
+            menuItem.state = activeSession?.displayMode == .singlePageContinuous ? .on : .off
+            return activeSession != nil
         case #selector(useTwoUp(_:)):
-            menuItem.state = documentStore.activeSession?.displayMode == .twoUp ? .on : .off
-            return documentStore.activeSession != nil
+            menuItem.state = activeSession?.displayMode == .twoUp ? .on : .off
+            return activeSession != nil
         case #selector(useTwoUpContinuous(_:)):
-            menuItem.state = documentStore.activeSession?.displayMode == .twoUpContinuous ? .on : .off
-            return documentStore.activeSession != nil
+            menuItem.state = activeSession?.displayMode == .twoUpContinuous ? .on : .off
+            return activeSession != nil
         default:
             return true
         }

@@ -9,6 +9,7 @@ final class VerticalTabItemView: NSView {
     private let separator = NSBox()
     private let isDirty: Bool
     private var onSelect: ((UUID) -> Void)?
+    private var onAlternateSelect: ((UUID) -> Void)?
     private var onClose: ((UUID) -> Void)?
 
     var isSelected: Bool = false {
@@ -21,11 +22,13 @@ final class VerticalTabItemView: NSView {
         isSelected: Bool,
         isDirty: Bool,
         onSelect: @escaping (UUID) -> Void,
+        onAlternateSelect: @escaping (UUID) -> Void,
         onClose: @escaping (UUID) -> Void
     ) {
         self.sessionID = sessionID
         self.isDirty = isDirty
         self.onSelect = onSelect
+        self.onAlternateSelect = onAlternateSelect
         self.onClose = onClose
         super.init(frame: .zero)
 
@@ -112,7 +115,12 @@ final class VerticalTabItemView: NSView {
 
     @objc
     private func handleSelect() {
-        onSelect?(sessionID)
+        let isAlternate = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        if isAlternate {
+            onAlternateSelect?(sessionID)
+        } else {
+            onSelect?(sessionID)
+        }
     }
 
     @objc
