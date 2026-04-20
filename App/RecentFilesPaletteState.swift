@@ -23,9 +23,14 @@ struct RecentFilesPaletteItem: Equatable, Sendable {
 
     private static func normalize(_ string: String) -> String {
         String(
-            string.lowercased()
+            string
+                .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
                 .unicodeScalars
-                .filter { CharacterSet.alphanumerics.contains($0) }
+                .filter { scalar in
+                    CharacterSet.whitespacesAndNewlines.contains(scalar) == false &&
+                    CharacterSet.punctuationCharacters.contains(scalar) == false &&
+                    CharacterSet.symbols.contains(scalar) == false
+                }
         )
     }
 }

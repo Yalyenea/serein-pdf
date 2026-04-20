@@ -15,6 +15,19 @@ final class RecentFilesPaletteStateTests: XCTestCase {
         XCTAssertEqual(state.filteredItems.map(\.url), [beta])
     }
 
+    func testFilteringSupportsChineseTitleAndPath() {
+        let paper = URL(fileURLWithPath: "/tmp/论文/毫米波雷达综述.pdf")
+        let note = URL(fileURLWithPath: "/tmp/notes/beamspace.pdf")
+        var state = RecentFilesPaletteState(recentURLs: [paper, note])
+
+        state.appendToQuery("毫米波")
+        XCTAssertEqual(state.filteredItems.map(\.url), [paper])
+
+        state = RecentFilesPaletteState(recentURLs: [paper, note])
+        state.appendToQuery("论文")
+        XCTAssertEqual(state.filteredItems.map(\.url), [paper])
+    }
+
     func testSpaceLikeToggleSelectionKeepsFilteredOrderForOpenTargets() {
         let first = URL(fileURLWithPath: "/tmp/first.pdf")
         let second = URL(fileURLWithPath: "/tmp/second.pdf")
