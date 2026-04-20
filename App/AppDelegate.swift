@@ -155,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if isLastWindow {
             return controller.prepareForApplicationTermination()
         }
+        guard controller.prepareForWindowClosure() else { return false }
         documentStore.closeWindow(id: controller.windowID)
         return true
     }
@@ -1122,7 +1123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(closeCurrentTab(_:)):
             return activeSession != nil
         case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
-            return documentStore.sessions.count > 1
+            return windowID.map { documentStore.sessionCount(in: $0) > 1 } == true
         case #selector(fitReaderToWidth(_:)):
             menuItem.state = activeSession?.scaleMode == .fitWidth ? .on : .off
             return activeSession != nil

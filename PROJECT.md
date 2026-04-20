@@ -74,12 +74,12 @@ flowchart LR
 | 决策 | 结论 |
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
-| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`,窗口只承载视图与交互 |
+| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,窗口只承载视图与交互 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
 | 目录来源 | `PDFDocument.outlineRoot` → `OutlineNode` |
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
-| 搜索范围 | `This Document` / `All Open`,跨文档命中点击先切 session 再跳转 |
+| 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口与跨启动恢复默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
@@ -182,6 +182,7 @@ flowchart LR
 
 - 管理 sessions(open / close / activate / reorder)
 - 维护多个 `WindowWorkspace`,驱动多窗口 / 分屏 / 焦点 pane / 右栏模式 / 搜索 scope
+- 每个 `WindowWorkspace` 独立维护自己的 session/tab 集合,open/close 不跨窗扩散
 - 维护 active session,驱动左栏 tab 与中栏 reader 联动
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - 提供 tab 模式切换
@@ -192,6 +193,7 @@ flowchart LR
 | 字段 | 说明 |
 |---|---|
 | `id: UUID` | window 唯一标识 |
+| `sessionIDs: [UUID]` | 当前窗口拥有的 tab 顺序 |
 | `tabPresentationMode` | 当前窗口 tabs 形态 |
 | `rightSidebarMode` | `outline` / `pages` / `search` |
 | `searchQuery` / `searchScope` | 当前窗口搜索上下文 |

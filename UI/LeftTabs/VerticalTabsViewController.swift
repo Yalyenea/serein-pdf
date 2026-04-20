@@ -113,7 +113,7 @@ final class VerticalTabsViewController: NSViewController {
     }
 
     private func applyEmptyState() {
-        let noSessions = documentStore.sessions.isEmpty
+        let noSessions = documentStore.sessions(in: windowID).isEmpty
         listStackView.isHidden = noSessions
         emptyStateLabel.isHidden = !noSessions
     }
@@ -126,7 +126,7 @@ final class VerticalTabsViewController: NSViewController {
             subview.removeFromSuperview()
         }
 
-        let sessions = documentStore.sessions
+        let sessions = documentStore.sessions(in: windowID)
         countLabel.stringValue = "\(sessions.count) open"
 
         for session in sessions {

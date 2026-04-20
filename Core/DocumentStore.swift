@@ -94,10 +94,26 @@ final class DocumentStore {
         windowWorkspaces.first { $0.id == windowID }
     }
 
+    func sessions(in windowID: UUID) -> [DocumentSession] {
+        guard let workspace = windowWorkspace(for: windowID) else { return [] }
+        return workspace.sessionIDs.compactMap(session(for:))
+    }
+
+    func sessionCount(in windowID: UUID) -> Int {
+        windowWorkspace(for: windowID)?.sessionIDs.count ?? 0
+    }
+
+    func exclusiveDirtySessions(in windowID: UUID) -> [DocumentSession] {
+        sessions(in: windowID).filter { session in
+            session.isDirty && isSessionReferencedOutsideWindow(session.id, excluding: windowID) == false
+        }
+    }
+
     func createWindow(copyingFrom sourceWindowID: UUID? = nil) -> UUID {
         let source = sourceWindowID.flatMap(windowWorkspace(for:)) ?? windowWorkspaces.first ?? WindowWorkspace()
-        var copy = source
-        copy = WindowWorkspace(
+        let copiedSessionIDs = source.activeSessionID.map { [$0] } ?? []
+        var copy = WindowWorkspace(
+            sessionIDs: copiedSessionIDs,
             tabPresentationMode: source.tabPresentationMode,
             isLeftSidebarVisible: source.isLeftSidebarVisible,
             isRightSidebarVisible: source.isRightSidebarVisible,
@@ -120,6 +136,7 @@ final class DocumentStore {
         guard windowWorkspaces.count > 1,
               let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         windowWorkspaces.remove(at: index)
+        removeUnreferencedSessions()
         notifyChange()
     }
 
@@ -193,6 +210,7 @@ final class DocumentStore {
 
         sessions.append(session)
         recentDocumentURLs = (try? recentFilesStore.recordOpen(for: url)) ?? recentDocumentURLs
+        attach(sessionID: session.id, to: windowID)
         activate(sessionID: session.id, in: windowID, targetPane: targetPane)
         updateSearchCachesAfterOpen(for: session.id)
         notifyChange()
@@ -204,11 +222,20 @@ final class DocumentStore {
     }
 
     func close(sessionID: UUID, from windowID: UUID) {
-        guard let closedIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        let closedURL = sessions[closedIndex].url
-        sessions.remove(at: closedIndex)
+        guard let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              let closedURL = session(for: sessionID)?.url,
+              let sessionIndexInWindow = windowWorkspaces[workspaceIndex].sessionIDs.firstIndex(of: sessionID) else { return }
+
+        windowWorkspaces[workspaceIndex].sessionIDs.remove(at: sessionIndexInWindow)
         pushRecentlyClosed(closedURL, in: windowID)
-        normalizeAllWorkspaces(preferredSessionIndex: min(closedIndex, max(sessions.count - 1, 0)))
+        let remainingWindowSessionIDs = windowWorkspaces[workspaceIndex].sessionIDs
+        let preferredSessionID = remainingWindowSessionIDs.isEmpty
+            ? nil
+            : remainingWindowSessionIDs[min(max(sessionIndexInWindow - 1, 0), remainingWindowSessionIDs.count - 1)]
+        if isSessionReferenced(sessionID) == false {
+            discardSession(sessionID)
+        }
+        normalizeWorkspace(&windowWorkspaces[workspaceIndex], preferredSessionID: preferredSessionID)
         notifyChange()
     }
 
@@ -242,6 +269,7 @@ final class DocumentStore {
               let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
 
         var workspace = windowWorkspaces[workspaceIndex]
+        guard workspace.sessionIDs.contains(sessionID) else { return }
         let pane = resolvedTargetPane(for: targetPane, in: workspace)
 
         if pane == .secondary, workspace.isSplitEnabled == false {
@@ -250,7 +278,7 @@ final class DocumentStore {
                 workspace.primarySessionID = sessionID
             }
             if workspace.secondarySessionID == nil {
-                workspace.secondarySessionID = preferredSecondarySession(excluding: workspace.primarySessionID)
+                workspace.secondarySessionID = preferredSecondarySession(in: workspace, excluding: workspace.primarySessionID)
             }
         }
 
@@ -273,11 +301,12 @@ final class DocumentStore {
     }
 
     func activatePreviousSession(in windowID: UUID) {
-        guard let activeSessionID = activeSessionID(in: windowID),
-              let currentIndex = sessions.firstIndex(where: { $0.id == activeSessionID }),
-              sessions.count > 1 else { return }
-        let previousIndex = (currentIndex - 1 + sessions.count) % sessions.count
-        activate(sessionID: sessions[previousIndex].id, in: windowID)
+        guard let workspace = windowWorkspace(for: windowID),
+              let activeSessionID = workspace.activeSessionID,
+              let currentIndex = workspace.sessionIDs.firstIndex(of: activeSessionID),
+              workspace.sessionIDs.count > 1 else { return }
+        let previousIndex = (currentIndex - 1 + workspace.sessionIDs.count) % workspace.sessionIDs.count
+        activate(sessionID: workspace.sessionIDs[previousIndex], in: windowID)
     }
 
     func activateNextSession() {
@@ -285,11 +314,12 @@ final class DocumentStore {
     }
 
     func activateNextSession(in windowID: UUID) {
-        guard let activeSessionID = activeSessionID(in: windowID),
-              let currentIndex = sessions.firstIndex(where: { $0.id == activeSessionID }),
-              sessions.count > 1 else { return }
-        let nextIndex = (currentIndex + 1) % sessions.count
-        activate(sessionID: sessions[nextIndex].id, in: windowID)
+        guard let workspace = windowWorkspace(for: windowID),
+              let activeSessionID = workspace.activeSessionID,
+              let currentIndex = workspace.sessionIDs.firstIndex(of: activeSessionID),
+              workspace.sessionIDs.count > 1 else { return }
+        let nextIndex = (currentIndex + 1) % workspace.sessionIDs.count
+        activate(sessionID: workspace.sessionIDs[nextIndex], in: windowID)
     }
 
     func setFocusedPane(_ pane: ReaderPane, in windowID: UUID) {
@@ -315,10 +345,10 @@ final class DocumentStore {
 
         if isEnabled {
             if workspace.primarySessionID == nil {
-                workspace.primarySessionID = sessions.first?.id
+                workspace.primarySessionID = workspace.sessionIDs.first
             }
             if workspace.secondarySessionID == nil || workspace.secondarySessionID == workspace.primarySessionID {
-                workspace.secondarySessionID = preferredSecondarySession(excluding: workspace.primarySessionID)
+                workspace.secondarySessionID = preferredSecondarySession(in: workspace, excluding: workspace.primarySessionID)
                     ?? workspace.primarySessionID
             }
         } else {
@@ -496,7 +526,7 @@ final class DocumentStore {
                     )
                 }
         case .allOpen:
-            return sessions.compactMap { session in
+            return sessions(in: windowID).compactMap { session in
                 guard session.searchCache.query == query,
                       session.searchCache.matches.isEmpty == false else { return nil }
                 return SearchSidebarSection(
@@ -733,6 +763,7 @@ final class DocumentStore {
             let secondarySessionID =
                 record.splitState.secondarySessionID.flatMap { sessionIDByPersistedID[$0] }
                 ?? record.splitState.secondarySessionURL.flatMap { firstSessionIDByURL[$0] }
+            let restoredSessionIDs = restoredSessionIDs(for: record, sessionIDByPersistedID: sessionIDByPersistedID, firstSessionIDByURL: firstSessionIDByURL)
             let restoredActiveSessionID = {
                 if record.splitState.isEnabled, record.splitState.focusedPane == .secondary {
                     return secondarySessionID ?? primarySessionID
@@ -741,6 +772,7 @@ final class DocumentStore {
             }()
             return WindowWorkspace(
                 id: record.id,
+                sessionIDs: restoredSessionIDs,
                 tabPresentationMode: record.tabPresentationMode,
                 isLeftSidebarVisible: record.isLeftSidebarVisible,
                 isRightSidebarVisible: record.isRightSidebarVisible,
@@ -756,7 +788,7 @@ final class DocumentStore {
         }
 
         windowWorkspaces = restoredWindows
-        normalizeAllWorkspaces(preferredSessionIndex: sessions.indices.last ?? 0)
+        normalizeAllWorkspaces()
         notifyChange()
     }
 
@@ -778,37 +810,63 @@ final class DocumentStore {
         }
     }
 
-    private func preferredSecondarySession(excluding sessionID: UUID?) -> UUID? {
-        sessions.first(where: { $0.id != sessionID })?.id ?? sessionID
+    private func attach(sessionID: UUID, to windowID: UUID) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
+        if windowWorkspaces[index].sessionIDs.contains(sessionID) == false {
+            windowWorkspaces[index].sessionIDs.append(sessionID)
+        }
     }
 
-    private func normalizeAllWorkspaces(preferredSessionIndex: Int) {
+    private func isSessionReferenced(_ sessionID: UUID) -> Bool {
+        windowWorkspaces.contains { $0.sessionIDs.contains(sessionID) }
+    }
+
+    private func isSessionReferencedOutsideWindow(_ sessionID: UUID, excluding windowID: UUID) -> Bool {
+        windowWorkspaces.contains { $0.id != windowID && $0.sessionIDs.contains(sessionID) }
+    }
+
+    private func removeUnreferencedSessions() {
+        sessions.removeAll { session in
+            isSessionReferenced(session.id) == false
+        }
+    }
+
+    private func discardSession(_ sessionID: UUID) {
+        sessions.removeAll { $0.id == sessionID }
+    }
+
+    private func preferredSecondarySession(in workspace: WindowWorkspace, excluding sessionID: UUID?) -> UUID? {
+        workspace.sessionIDs.first(where: { $0 != sessionID }) ?? sessionID
+    }
+
+    private func normalizeAllWorkspaces() {
         guard windowWorkspaces.isEmpty == false else {
             windowWorkspaces = [WindowWorkspace()]
             return
         }
         for index in windowWorkspaces.indices {
             var workspace = windowWorkspaces[index]
-            normalizeWorkspace(&workspace, preferredSessionIndex: preferredSessionIndex)
+            normalizeWorkspace(&workspace)
             windowWorkspaces[index] = workspace
         }
     }
 
-    private func normalizeWorkspace(_ workspace: inout WindowWorkspace, preferredSessionIndex: Int? = nil) {
+    private func normalizeWorkspace(_ workspace: inout WindowWorkspace, preferredSessionID: UUID? = nil) {
         let validIDs = Set(sessions.map(\.id))
-        let fallback = fallbackSessionID(
-            preferredIndex: preferredSessionIndex,
-            excluding: workspace.isSplitEnabled ? workspace.secondarySessionID : nil
-        )
+        workspace.sessionIDs = workspace.sessionIDs.filter { validIDs.contains($0) }
+        var seenSessionIDs: Set<UUID> = []
+        workspace.sessionIDs.removeAll { seenSessionIDs.insert($0).inserted == false }
+        let fallback = fallbackSessionID(in: workspace, preferredSessionID: preferredSessionID, excluding: workspace.isSplitEnabled ? workspace.secondarySessionID : nil)
 
-        if workspace.primarySessionID.map({ validIDs.contains($0) }) != true {
+        if workspace.primarySessionID.map({ workspace.sessionIDs.contains($0) }) != true {
             workspace.primarySessionID = fallback
         }
 
         if workspace.isSplitEnabled {
-            if workspace.secondarySessionID.map({ validIDs.contains($0) }) != true || workspace.secondarySessionID == nil {
+            if workspace.secondarySessionID.map({ workspace.sessionIDs.contains($0) }) != true || workspace.secondarySessionID == nil {
                 workspace.secondarySessionID = fallbackSessionID(
-                    preferredIndex: preferredSessionIndex,
+                    in: workspace,
+                    preferredSessionID: preferredSessionID,
                     excluding: workspace.primarySessionID
                 ) ?? workspace.primarySessionID
             }
@@ -821,9 +879,9 @@ final class DocumentStore {
         }
 
         if workspace.activeSessionID == nil {
-            workspace.primarySessionID = fallbackSessionID(preferredIndex: preferredSessionIndex, excluding: nil)
+            workspace.primarySessionID = fallbackSessionID(in: workspace, preferredSessionID: preferredSessionID, excluding: nil)
             workspace.secondarySessionID = workspace.isSplitEnabled
-                ? (fallbackSessionID(preferredIndex: preferredSessionIndex, excluding: workspace.primarySessionID)
+                ? (fallbackSessionID(in: workspace, preferredSessionID: preferredSessionID, excluding: workspace.primarySessionID)
                     ?? workspace.primarySessionID)
                 : nil
             workspace.focusedPane = .primary
@@ -839,17 +897,16 @@ final class DocumentStore {
         }
     }
 
-    private func fallbackSessionID(preferredIndex: Int?, excluding excludedID: UUID?) -> UUID? {
-        guard sessions.isEmpty == false else { return nil }
+    private func fallbackSessionID(in workspace: WindowWorkspace, preferredSessionID: UUID?, excluding excludedID: UUID?) -> UUID? {
+        guard workspace.sessionIDs.isEmpty == false else { return nil }
 
-        if let preferredIndex, sessions.indices.contains(preferredIndex) {
-            let preferredID = sessions[preferredIndex].id
-            if preferredID != excludedID {
-                return preferredID
-            }
+        if let preferredSessionID,
+           workspace.sessionIDs.contains(preferredSessionID),
+           preferredSessionID != excludedID {
+            return preferredSessionID
         }
 
-        return sessions.first(where: { $0.id != excludedID })?.id ?? excludedID
+        return workspace.sessionIDs.first(where: { $0 != excludedID }) ?? excludedID
     }
 
     private func trimUndoStack(for sessionIndex: Int) {
@@ -876,7 +933,7 @@ final class DocumentStore {
         case .currentDocument:
             targetSessionIDs = activeSessionID(in: windowID).map { [$0] } ?? []
         case .allOpen:
-            targetSessionIDs = sessions.map(\.id)
+            targetSessionIDs = windowWorkspace(for: windowID)?.sessionIDs ?? []
         }
 
         for sessionID in targetSessionIDs {
@@ -908,11 +965,37 @@ final class DocumentStore {
         for index in windowWorkspaces.indices {
             let query = windowWorkspaces[index].searchQuery
             guard query.isEmpty == false else { continue }
-            if windowWorkspaces[index].searchScope == .allOpen ||
-                windowWorkspaces[index].activeSessionID == sessionID {
+            if windowWorkspaces[index].sessionIDs.contains(sessionID) &&
+                (windowWorkspaces[index].searchScope == .allOpen ||
+                 windowWorkspaces[index].activeSessionID == sessionID) {
                 rebuildSearchCache(for: sessionID, query: query)
             }
         }
+    }
+
+    private func restoredSessionIDs(
+        for record: PersistedDocumentStoreState.WindowRecord,
+        sessionIDByPersistedID: [UUID: UUID],
+        firstSessionIDByURL: [URL: UUID]
+    ) -> [UUID] {
+        let restoredIDs = record.sessionIDs.compactMap { sessionIDByPersistedID[$0] }
+        if restoredIDs.isEmpty == false {
+            return restoredIDs
+        }
+
+        let restoredURLs = record.sessionURLs.compactMap { firstSessionIDByURL[$0] }
+        if restoredURLs.isEmpty == false {
+            return restoredURLs
+        }
+
+        let fallbackIDs = [
+            record.splitState.primarySessionID.flatMap { sessionIDByPersistedID[$0] }
+                ?? record.splitState.primarySessionURL.flatMap { firstSessionIDByURL[$0] },
+            record.splitState.secondarySessionID.flatMap { sessionIDByPersistedID[$0] }
+                ?? record.splitState.secondarySessionURL.flatMap { firstSessionIDByURL[$0] },
+        ].compactMap { $0 }
+        var seen: Set<UUID> = []
+        return fallbackIDs.filter { seen.insert($0).inserted }
     }
 
     private func clearSearchCaches() {
@@ -930,6 +1013,8 @@ final class DocumentStore {
                 windows: windowWorkspaces.map { workspace in
                     PersistedDocumentStoreState.WindowRecord(
                         id: workspace.id,
+                        sessionIDs: workspace.sessionIDs,
+                        sessionURLs: workspace.sessionIDs.compactMap { session(for: $0)?.url },
                         tabPresentationMode: workspace.tabPresentationMode,
                         isLeftSidebarVisible: workspace.isLeftSidebarVisible,
                         isRightSidebarVisible: workspace.isRightSidebarVisible,

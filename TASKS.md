@@ -53,7 +53,7 @@
 - [x] `M7-002` 右栏 Search 面板:按页或按 session 分组显示 snippet + 页码,点击跳转并推入历史栈。
 - [x] `M7-003` 结果导航键绑定:find bar 焦点下 `↑` / `↓` 移动列表,`Enter` 跳转,`Cmd+G` / `Cmd+Shift+G` 循环激活。
 - [x] `M7-004` 搜索性能:本地 220 页合成 PDF 搜索测试通过,首次缓存命中 < 500ms。
-- [x] `M7-005` 跨文档搜索:find bar 顶部 toggle `This Document` / `All Open`;跨文档结果带 session 名,点击先切 session 再跳转。
+- [x] `M7-005` 跨文档搜索:find bar 顶部 toggle `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档结果带 session 名,点击先切 session 再跳转。
 - [x] 所有预览相关内容统一放入右侧边栏。
 
 ### 5.2 同窗分屏 / 多窗口
@@ -63,7 +63,7 @@
 - [x] `M7-012` 分屏状态持久化:`PersistedDocumentStoreState` 持久化窗口 split 状态并恢复。
 - [x] `M7-013` 新建窗口命令:`ShortcutCommand.newWindow`,默认 `Cmd+Shift+N`;`AppDelegate` 支持多 `MainWindowController`;`DocumentStore` 暴露多窗口接口。
 - [x] `M7-014` 多窗口关闭协调:关闭一窗不影响其他;最后一窗关闭走 terminate;`Cmd+Shift+T` 优先本窗内重开。
-- [x] `M7-015` 多窗口状态持久化:记录各窗口 active session / split / search / sidebar 布局。
+- [x] `M7-015` 多窗口状态持久化:记录各窗口 session 集合 / active session / split / search / sidebar 布局。
 - [x] `M7-016` 测试:`DocumentStoreTests` 覆盖多窗口、分屏、搜索缓存、恢复与性能基线。
 
 ### 5.3 文档与验收

@@ -126,7 +126,7 @@ final class TitlebarTabsController: NSViewController {
             subview.removeFromSuperview()
         }
 
-        for session in documentStore.sessions {
+        for session in documentStore.sessions(in: windowID) {
             let itemView = TitlebarTabItemView(
                 sessionID: session.id,
                 title: session.title,

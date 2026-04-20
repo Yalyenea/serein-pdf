@@ -10,10 +10,10 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
 - Right pane hosts **Outline + Pages + Search + Annotations**, and all search / annotation previews stay on the right
-- Find bar supports `This Document` / `All Open`; typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
+- Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
 - New windows and relaunch restore start in single-pane mode; split stays an explicit in-session toggle
-- Multi-window workspaces (`cmd+shift+n`) with per-window sidebar, search, and recently-closed state
+- Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Pink-first highlight workflow (`a` to highlight, `i` to toggle inverted night mode)
 - Highlights can carry comments in the right sidebar, and exports include those comments

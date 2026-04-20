@@ -50,6 +50,7 @@ enum ReaderPane: String, CaseIterable, Codable, Sendable {
 
 struct WindowWorkspace: Equatable, Sendable {
     let id: UUID
+    var sessionIDs: [UUID]
     var tabPresentationMode: TabPresentationMode
     var isLeftSidebarVisible: Bool
     var isRightSidebarVisible: Bool
@@ -64,6 +65,7 @@ struct WindowWorkspace: Equatable, Sendable {
 
     init(
         id: UUID = UUID(),
+        sessionIDs: [UUID] = [],
         tabPresentationMode: TabPresentationMode = .verticalSidebar,
         isLeftSidebarVisible: Bool = true,
         isRightSidebarVisible: Bool = true,
@@ -77,6 +79,7 @@ struct WindowWorkspace: Equatable, Sendable {
         recentlyClosedURLs: [URL] = []
     ) {
         self.id = id
+        self.sessionIDs = sessionIDs
         self.tabPresentationMode = tabPresentationMode
         self.isLeftSidebarVisible = isLeftSidebarVisible
         self.isRightSidebarVisible = isRightSidebarVisible

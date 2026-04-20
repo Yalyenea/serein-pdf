@@ -49,6 +49,8 @@ struct PersistedDocumentStoreState: Codable, Equatable {
 
     struct WindowRecord: Codable, Equatable {
         var id: UUID
+        var sessionIDs: [UUID]
+        var sessionURLs: [URL]
         var tabPresentationMode: TabPresentationMode
         var isLeftSidebarVisible: Bool
         var isRightSidebarVisible: Bool
@@ -57,6 +59,61 @@ struct PersistedDocumentStoreState: Codable, Equatable {
         var searchScope: SearchScope
         var splitState: SplitStateRecord
         var recentlyClosedURLs: [URL]
+
+        init(
+            id: UUID,
+            sessionIDs: [UUID] = [],
+            sessionURLs: [URL] = [],
+            tabPresentationMode: TabPresentationMode,
+            isLeftSidebarVisible: Bool,
+            isRightSidebarVisible: Bool,
+            rightSidebarMode: RightSidebarMode,
+            searchQuery: String,
+            searchScope: SearchScope,
+            splitState: SplitStateRecord,
+            recentlyClosedURLs: [URL]
+        ) {
+            self.id = id
+            self.sessionIDs = sessionIDs
+            self.sessionURLs = sessionURLs
+            self.tabPresentationMode = tabPresentationMode
+            self.isLeftSidebarVisible = isLeftSidebarVisible
+            self.isRightSidebarVisible = isRightSidebarVisible
+            self.rightSidebarMode = rightSidebarMode
+            self.searchQuery = searchQuery
+            self.searchScope = searchScope
+            self.splitState = splitState
+            self.recentlyClosedURLs = recentlyClosedURLs
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case sessionIDs
+            case sessionURLs
+            case tabPresentationMode
+            case isLeftSidebarVisible
+            case isRightSidebarVisible
+            case rightSidebarMode
+            case searchQuery
+            case searchScope
+            case splitState
+            case recentlyClosedURLs
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(UUID.self, forKey: .id)
+            sessionIDs = try container.decodeIfPresent([UUID].self, forKey: .sessionIDs) ?? []
+            sessionURLs = try container.decodeIfPresent([URL].self, forKey: .sessionURLs) ?? []
+            tabPresentationMode = try container.decode(TabPresentationMode.self, forKey: .tabPresentationMode)
+            isLeftSidebarVisible = try container.decode(Bool.self, forKey: .isLeftSidebarVisible)
+            isRightSidebarVisible = try container.decode(Bool.self, forKey: .isRightSidebarVisible)
+            rightSidebarMode = try container.decode(RightSidebarMode.self, forKey: .rightSidebarMode)
+            searchQuery = try container.decode(String.self, forKey: .searchQuery)
+            searchScope = try container.decode(SearchScope.self, forKey: .searchScope)
+            splitState = try container.decode(SplitStateRecord.self, forKey: .splitState)
+            recentlyClosedURLs = try container.decode([URL].self, forKey: .recentlyClosedURLs)
+        }
     }
 
     var sessions: [SessionReference]
@@ -78,6 +135,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
         self.windows = [
             WindowRecord(
                 id: UUID(),
+                sessionURLs: activeSessionURL.map { [$0] } ?? [],
                 tabPresentationMode: tabPresentationMode,
                 isLeftSidebarVisible: isLeftSidebarVisible,
                 isRightSidebarVisible: isRightSidebarVisible,
@@ -141,6 +199,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
         windows = [
             WindowRecord(
                 id: UUID(),
+                sessionURLs: activeSessionURL.map { [$0] } ?? [],
                 tabPresentationMode: tabPresentationMode,
                 isLeftSidebarVisible: isLeftSidebarVisible,
                 isRightSidebarVisible: isRightSidebarVisible,

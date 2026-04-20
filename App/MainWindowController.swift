@@ -324,6 +324,38 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
+    func prepareForWindowClosure() -> Bool {
+        let dirtySessions = documentStore.exclusiveDirtySessions(in: windowID)
+        guard dirtySessions.isEmpty == false else { return true }
+
+        let detail: String
+        if dirtySessions.count == 1, let session = dirtySessions.first {
+            detail = "“\(session.title)” 只在当前窗口打开，关闭窗口会丢失未保存高亮。"
+        } else {
+            let titles = dirtySessions.prefix(3).map(\.title).joined(separator: "\n")
+            let suffix = dirtySessions.count > 3 ? "\n…" : ""
+            detail = "这些文档只在当前窗口打开，关闭窗口会丢失未保存高亮:\n\(titles)\(suffix)"
+        }
+
+        switch presentUnsavedChangesAlert(
+            title: "Save changes before closing this window?",
+            detail: detail
+        ) {
+        case .save:
+            do {
+                try dirtySessions.forEach { try documentStore.saveAnnotations(for: $0.id) }
+                return true
+            } catch {
+                presentSaveError(error)
+                return false
+            }
+        case .discard:
+            return true
+        case .cancel:
+            return false
+        }
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         shouldCloseHandler?(self) ?? true
     }
