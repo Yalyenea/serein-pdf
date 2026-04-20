@@ -77,6 +77,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case navigateBack = "navigate_back"
     case navigateForward = "navigate_forward"
     case gotoPage = "goto_page"
+    case showRecentFilesPalette = "show_recent_files_palette"
     case reopenLastClosed = "reopen_last_closed"
     case newWindow = "new_window"
     case toggleAllPagesOverview = "toggle_all_pages_overview"
@@ -143,6 +144,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Forward"
         case .gotoPage:
             "Go to Page…"
+        case .showRecentFilesPalette:
+            "Open Recent Quickly…"
         case .reopenLastClosed:
             "Reopen Closed Tab"
         case .newWindow:

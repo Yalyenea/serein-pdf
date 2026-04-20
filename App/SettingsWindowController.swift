@@ -145,9 +145,16 @@ private final class ShortcutCaptureButton: NSButton {
             NSSound.beep()
             return
         }
-        let key = characters == "\u{1b}" ? "escape" : characters
+        let key = switch characters {
+        case "\u{1b}":
+            "escape"
+        case " ":
+            "space"
+        default:
+            characters
+        }
 
-        guard key.count == 1 || key == "escape" else {
+        guard key.count == 1 || key == "escape" || key == "space" else {
             NSSound.beep()
             return
         }
@@ -613,6 +620,8 @@ private extension KeyboardShortcut {
         switch key {
         case "escape":
             keyDisplay = "Esc"
+        case "space":
+            keyDisplay = "Space"
         default:
             keyDisplay = key.uppercased()
         }

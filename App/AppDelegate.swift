@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var appConfiguration: AppConfiguration = .default
     private var configStore: AppConfigurationStore?
     private var readerShortcutsController: ReaderShortcutsController?
+    private var recentFilesPaletteController: RecentFilesPaletteController?
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private var autoSaveTimer: Timer?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
@@ -240,6 +241,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             action: #selector(openDocument(_:)),
             keyEquivalent: "o"
         )
+        let quickOpenRecentItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.showRecentFilesPalette.menuTitle,
+            command: .showRecentFilesPalette,
+            action: #selector(showRecentFilesPalette(_:))
+        )
         let findItem = NSMenuItem(
             title: "Find…",
             action: #selector(findInCurrentDocument(_:)),
@@ -299,6 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .separator(),
             newWindowItem,
             openItem,
+            quickOpenRecentItem,
             recentItem,
             reopenClosedItem,
             findItem,
@@ -614,6 +621,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
+    private func showRecentFilesPalette(_ sender: Any?) {
+        if recentFilesPaletteController == nil {
+            recentFilesPaletteController = RecentFilesPaletteController { [weak self] urls in
+                self?.openRecentDocuments(urls)
+            }
+        }
+        recentFilesPaletteController?.show(
+            with: documentStore.recentDocumentURLs,
+            relativeTo: mainWindowController?.window
+        )
+    }
+
+    @objc
     private func highlightSelection(_ sender: Any?) {
         _ = mainWindowController?.triggerHighlightShortcut()
     }
@@ -880,11 +900,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func openRecentDocument(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
+        openRecentDocuments([url])
+    }
+
+    private func openRecentDocuments(_ urls: [URL]) {
+        guard urls.isEmpty == false else { return }
         mainWindowController?.hideFindBar()
         let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
 
         do {
-            _ = try documentStore.open(documentAt: url, in: targetWindowID)
+            for url in urls {
+                _ = try documentStore.open(documentAt: url, in: targetWindowID)
+            }
         } catch {
             presentOpenError(error)
         }
@@ -1111,6 +1138,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return true
         case #selector(findInCurrentDocument(_:)):
             return activeSession != nil
+        case #selector(showRecentFilesPalette(_:)):
+            return documentStore.recentDocumentURLs.isEmpty == false
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
             return controller?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):

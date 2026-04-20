@@ -136,6 +136,7 @@ flowchart LR
 - `Cmd+W`:关闭当前 tab
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
 - `Cmd+Shift+N`:新建窗口
+- `Cmd+Shift+Space`:最近文件启动器
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
 - `Option+Click` tab:丢到另一 pane(必要时自动开分屏)
 
@@ -287,7 +288,7 @@ Tests/SlatePDFTests/
 | M6 体验打磨 | ✅ | plain 快捷键菜单可见、全览 grid、find bar、历史栈、Vim 翻页、缩放、页跳转、左右互换、高亮 undo;真实 PDF 手测与 200+ 页缩略图验证通过 |
 | M7 搜索强化与对比阅读 | ✅ | 右栏 Search 面板、This Document / All Open、同窗分屏、多窗口、窗口级持久化、搜索与分屏状态测试补齐 |
 | M8 批注深度化 | ✅ 开发完成,待手测 | 右栏 Annotations、评论编辑、Markdown / Plain / JSON 导出、Shortcuts 页、`none` 清空绑定、批注测试补齐 |
-| M9 最近文件启动器 | 进行中 | Spotlight 风格 recent-files palette,支持搜索、空格多选、回车打开、`?` 帮助 |
+| M9 最近文件启动器 | ✅ 开发完成,待手测 | Spotlight 风格 recent-files palette,支持搜索、空格多选、回车打开、`?` 帮助 |
 
 已完成细项以 commit 历史为准,不在本文件展开。
 
@@ -325,6 +326,11 @@ Tests/SlatePDFTests/
 - 空窗口也能直接拉起并打开最近文件
 - 最近文件结果保持最近优先,搜索后仍可纯键盘完成
 - `?` 帮助在面板内完成,不打断主流程
+
+**当前状态**
+1. `Cmd+Shift+Space` 面板、文件名 / 路径搜索、`Space` 多选、`Enter` 打开与 `?` 帮助已完成
+2. 状态模型与快捷键配置测试已补齐
+3. 下一步只剩真实 PDF 手测
 
 ### 8.3 Milestone 10(长期预研):扩展生态
 

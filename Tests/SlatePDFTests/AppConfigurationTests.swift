@@ -28,6 +28,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.navigateBack], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.navigateForward], KeyboardShortcut(key: "]", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.undoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command]))
@@ -58,6 +59,7 @@ close_current_tab = "command+e"
 fit_width = "command+shift+9"
 previous_tab = "command+["
 two_up = "command+option+8"
+show_recent_files_palette = "command+space"
 """.write(to: fileURL, atomically: true, encoding: .utf8)
 
         let configuration = try AppConfigurationStore(fileURL: fileURL).load()
@@ -73,6 +75,7 @@ two_up = "command+option+8"
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth], KeyboardShortcut(key: "9", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.previousTab], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.twoUp], KeyboardShortcut(key: "8", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command]))
     }
 
     func testExistingConfigGetsMissingShortcutKeysBackfilled() throws {
@@ -107,6 +110,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("navigate_back = \"command+[\""))
         XCTAssertTrue(content.contains("navigate_forward = \"command+]\""))
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
+        XCTAssertTrue(content.contains("show_recent_files_palette = \"command+shift+space\""))
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
         XCTAssertTrue(content.contains("undo_last_highlight = \"command+z\""))

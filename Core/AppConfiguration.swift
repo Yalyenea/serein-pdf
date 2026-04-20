@@ -70,6 +70,7 @@ struct AppConfiguration: Equatable, Sendable {
             .navigateBack: KeyboardShortcut(key: "[", modifiers: [.command]),
             .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
+            .showRecentFilesPalette: KeyboardShortcut(key: "space", modifiers: [.command, .shift]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
             .newWindow: KeyboardShortcut(key: "n", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
@@ -136,6 +137,8 @@ struct KeyboardShortcut: Equatable, Sendable {
         switch key {
         case "escape":
             "\u{1b}"
+        case "space":
+            " "
         default:
             key
         }
@@ -149,6 +152,8 @@ struct KeyboardShortcut: Equatable, Sendable {
         let normalizedKey = switch characters {
         case "\u{1b}":
             "escape"
+        case " ":
+            "space"
         default:
             characters
         }
@@ -160,7 +165,8 @@ struct KeyboardShortcut: Equatable, Sendable {
         let orderedModifiers = KeyboardShortcutModifier.allCases
             .filter { modifiers.contains($0) }
             .map(\.rawValue)
-        return (orderedModifiers + [key]).joined(separator: "+")
+        let serializedKey = key == " " ? "space" : key
+        return (orderedModifiers + [serializedKey]).joined(separator: "+")
     }
 
     static func parse(_ rawValue: String) throws -> KeyboardShortcut {
@@ -180,11 +186,12 @@ struct KeyboardShortcut: Equatable, Sendable {
             return modifier
         })
 
-        return KeyboardShortcut(key: key, modifiers: modifiers)
+        let normalizedKey = key == "space" ? "space" : key
+        return KeyboardShortcut(key: normalizedKey, modifiers: modifiers)
     }
 
     private static func isSupportedKeyToken(_ token: String) -> Bool {
-        token.count == 1 || token == "escape"
+        token.count == 1 || token == "escape" || token == "space"
     }
 }
 
@@ -264,6 +271,7 @@ page_up = "k"
 navigate_back = "command+["
 navigate_forward = "command+]"
 goto_page = "command+option+g"
+show_recent_files_palette = "command+shift+space"
 reopen_last_closed = "command+shift+t"
 new_window = "command+shift+n"
 toggle_all_pages_overview = "command+shift+o"
@@ -323,6 +331,7 @@ page_up = "\(serializedShortcut(.pageUp, configuration: configuration))"
 navigate_back = "\(serializedShortcut(.navigateBack, configuration: configuration))"
 navigate_forward = "\(serializedShortcut(.navigateForward, configuration: configuration))"
 goto_page = "\(serializedShortcut(.gotoPage, configuration: configuration))"
+show_recent_files_palette = "\(serializedShortcut(.showRecentFilesPalette, configuration: configuration))"
 reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
 new_window = "\(serializedShortcut(.newWindow, configuration: configuration))"
 toggle_all_pages_overview = "\(serializedShortcut(.toggleAllPagesOverview, configuration: configuration))"
@@ -462,6 +471,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .navigateForward, to: &configuration)
         case ("shortcuts", "goto_page"):
             try applyShortcut(rawValue, command: .gotoPage, to: &configuration)
+        case ("shortcuts", "show_recent_files_palette"):
+            try applyShortcut(rawValue, command: .showRecentFilesPalette, to: &configuration)
         case ("shortcuts", "reopen_last_closed"):
             try applyShortcut(rawValue, command: .reopenLastClosed, to: &configuration)
         case ("shortcuts", "new_window"):
