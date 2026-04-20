@@ -287,6 +287,7 @@ Tests/SlatePDFTests/
 | M6 体验打磨 | ✅ | plain 快捷键菜单可见、全览 grid、find bar、历史栈、Vim 翻页、缩放、页跳转、左右互换、高亮 undo;真实 PDF 手测与 200+ 页缩略图验证通过 |
 | M7 搜索强化与对比阅读 | ✅ | 右栏 Search 面板、This Document / All Open、同窗分屏、多窗口、窗口级持久化、搜索与分屏状态测试补齐 |
 | M8 批注深度化 | ✅ 开发完成,待手测 | 右栏 Annotations、评论编辑、Markdown / Plain / JSON 导出、Shortcuts 页、`none` 清空绑定、批注测试补齐 |
+| M9 最近文件启动器 | 进行中 | Spotlight 风格 recent-files palette,支持搜索、空格多选、回车打开、`?` 帮助 |
 
 已完成细项以 commit 历史为准,不在本文件展开。
 
@@ -311,7 +312,21 @@ Tests/SlatePDFTests/
 1. 开发与自动化测试已完成
 2. 下一步只剩手测 `Annotations / Export / Shortcuts`
 
-### 8.2 Milestone 9(长期预研):扩展生态
+### 8.2 Milestone 9:最近文件启动器
+
+目标:补一个像 Spotlight 的最近文件启动器,把“打开最近文件”从菜单提升为键盘主路径。
+
+**交付物**
+1. `Cmd+Shift+Space` 拉起最近文件面板
+2. 面板基于最近打开列表支持文件名 / 路径搜索
+3. `Space` 多选,`Enter` 打开选中项,`?` 显示快捷键帮助
+
+**验收要点**
+- 空窗口也能直接拉起并打开最近文件
+- 最近文件结果保持最近优先,搜索后仍可纯键盘完成
+- `?` 帮助在面板内完成,不打断主流程
+
+### 8.3 Milestone 10(长期预研):扩展生态
 
 只产出**设计决策 + 最小 PoC**,不承诺全量实现。
 
