@@ -42,6 +42,8 @@ final class ReaderWorkspaceViewController: NSViewController {
     private let splitView = NSSplitView()
     private let primaryHostView = ReaderPaneHostView()
     private let secondaryHostView = ReaderPaneHostView()
+    private var appliedSplitEnabled: Bool?
+    private var pendingSplitGeometryUpdate = false
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -82,6 +84,11 @@ final class ReaderWorkspaceViewController: NSViewController {
             object: documentStore
         )
         syncFromStore()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        applyPendingSplitGeometryUpdate()
     }
 
     deinit {
@@ -194,6 +201,10 @@ final class ReaderWorkspaceViewController: NSViewController {
         try activeReaderViewController().saveAnnotations()
     }
 
+    func focus(on highlight: DocumentHighlightGroup) {
+        activeReaderViewController().focus(on: highlight)
+    }
+
     func showFindBar() {
         activeReaderViewController().showFindBar()
     }
@@ -221,14 +232,13 @@ final class ReaderWorkspaceViewController: NSViewController {
         )
 
         let splitEnabled = documentStore.isSplitEnabled(in: windowID)
+        let splitStateChanged = appliedSplitEnabled != splitEnabled
         secondaryHostView.isHidden = !splitEnabled
-        if splitEnabled == false {
-            splitView.setPosition(view.bounds.width, ofDividerAt: 0)
-        } else if splitView.subviews.count > 1 {
+        if splitEnabled, splitView.subviews.count > 1 {
             splitView.subviews[1].isHidden = false
-            if splitView.bounds.width > 0 {
-                splitView.setPosition(splitView.bounds.width / 2, ofDividerAt: 0)
-            }
+        }
+        if splitStateChanged {
+            scheduleSplitGeometryUpdateIfNeeded()
         }
 
         let focusedPane = documentStore.focusedPane(in: windowID)
@@ -260,5 +270,29 @@ final class ReaderWorkspaceViewController: NSViewController {
             childView.topAnchor.constraint(equalTo: hostView.topAnchor),
             childView.bottomAnchor.constraint(equalTo: hostView.bottomAnchor),
         ])
+    }
+
+    private func scheduleSplitGeometryUpdateIfNeeded() {
+        guard pendingSplitGeometryUpdate == false else { return }
+        pendingSplitGeometryUpdate = true
+        DispatchQueue.main.async { [weak self] in
+            self?.applyPendingSplitGeometryUpdate()
+        }
+    }
+
+    private func applyPendingSplitGeometryUpdate() {
+        guard pendingSplitGeometryUpdate else { return }
+        guard splitView.subviews.count > 1, splitView.bounds.width > 0 else { return }
+
+        pendingSplitGeometryUpdate = false
+        let splitEnabled = documentStore.isSplitEnabled(in: windowID)
+        if splitEnabled {
+            splitView.subviews[1].isHidden = false
+            splitView.setPosition(splitView.bounds.width / 2, ofDividerAt: 0)
+        } else {
+            splitView.setPosition(splitView.bounds.width, ofDividerAt: 0)
+        }
+        splitView.adjustSubviews()
+        appliedSplitEnabled = splitEnabled
     }
 }

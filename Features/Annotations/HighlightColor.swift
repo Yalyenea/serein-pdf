@@ -25,4 +25,20 @@ enum HighlightColor: String, CaseIterable, Codable, Sendable {
         case .green: "Green"
         }
     }
+
+    static func closest(to color: NSColor?) -> HighlightColor {
+        guard let color else { return .default }
+        let srgb = color.usingColorSpace(.sRGB) ?? color
+
+        func distanceSquared(to candidate: HighlightColor) -> CGFloat {
+            let target = candidate.nsColor.usingColorSpace(.sRGB) ?? candidate.nsColor
+            let red = srgb.redComponent - target.redComponent
+            let green = srgb.greenComponent - target.greenComponent
+            let blue = srgb.blueComponent - target.blueComponent
+            let alpha = srgb.alphaComponent - target.alphaComponent
+            return red * red + green * green + blue * blue + alpha * alpha
+        }
+
+        return Self.allCases.min(by: { distanceSquared(to: $0) < distanceSquared(to: $1) }) ?? .default
+    }
 }

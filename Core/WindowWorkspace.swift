@@ -4,6 +4,7 @@ enum RightSidebarMode: Int, CaseIterable, Codable, Sendable {
     case outline = 0
     case pages = 1
     case search = 2
+    case annotations = 3
 
     func toggledPreviewMode() -> RightSidebarMode {
         switch self {
@@ -12,6 +13,8 @@ enum RightSidebarMode: Int, CaseIterable, Codable, Sendable {
         case .pages:
             .outline
         case .search:
+            .pages
+        case .annotations:
             .pages
         }
     }

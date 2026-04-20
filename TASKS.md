@@ -21,7 +21,7 @@
 - `Cmd+S`:写回源 PDF
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 水平 tab 复用标题栏,不单独开行
-- 右栏支持 Outline / Pages / Search,`Cmd+Shift+L` 在 Outline / Pages 间切换
+- 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
 
 ## 3. 当前进度
@@ -35,15 +35,14 @@
 | M5 设置与收口 | ✅ |
 | M6 体验打磨 | ✅ |
 | M7 搜索 + 对比 | ✅ |
-| M8 批注深度化 | 未开始 |
+| M8 批注深度化 | ✅ 开发完成,待手测 |
 | M9 扩展生态(预研) | 未开始 |
 
 ## 4. 下一步执行顺序
 
-- Wave 1 批注面板：先做 `M8-001` ~ `M8-004`，把右栏扩成可管理的高亮列表。
-- Wave 2 导出闭环：再做 `M8-010` ~ `M8-013`，补 Markdown / Plain / JSON 导出。
-- Wave 3 快捷键 GUI：最后做 `M8-020` ~ `M8-024`，把配置编辑从手改 `toml` 升级到 UI。
-- M9 继续保持预研状态，先不抢占实现资源。
+- Wave 0 M8 手测：先完成 `UAT-29` ~ `UAT-31`，确认右栏批注、评论、导出、快捷键页都符合预期。
+- Wave 1 M9 预研：再做 `M9-001`，把扩展机制 RFC 先落出来。
+- Wave 2 若 M9 继续：再决定是否做 `M9-002` PoC。
 
 
 ## 5. Milestone 7:搜索强化与对比阅读
@@ -76,29 +75,30 @@
 
 ### 6.1 批注管理器
 
-- [ ] `M8-001` 批注模型扩展:每 highlight 抽取 `snippet` / `pageIndex` / `color` / `createdAt`(PDF 可取则取,否则 session 内维护)。
-- [ ] `M8-002` 右栏 Annotations 模式:顶部 segmented Outline / Annotations;列表按页分组,显示 snippet + 颜色点。
-- [ ] `M8-003` 点击跳转并高亮:跳到目标页并短暂强调对应 annotation。
-- [ ] `M8-004` dirty 变更同步:增删 highlight 实时更新列表。
+- [x] `M8-001` 批注模型扩展:每 highlight 抽取 `snippet` / `pageIndex` / `color` / `createdAt`(PDF 可取则取,否则 session 内维护)。
+- [x] `M8-002` 右栏 Annotations 模式:保留 Outline / Pages / Search,新增 Annotations;列表按页分组,显示 snippet + 颜色点。
+- [x] `M8-003` 点击跳转并高亮:跳到目标页并短暂强调对应 annotation。
+- [x] `M8-004` dirty 变更同步:增删 highlight / 评论实时更新列表。
+- [x] `M8-005` 高亮评论:每个高亮组支持 comment,在右栏编辑并随 PDF 一起保存。
 
 ### 6.2 导出
 
-- [ ] `M8-010` 抽取导出内容:`[(page, snippet, color)]`,按页排序。
-- [ ] `M8-011` 三种导出格式:Markdown / Plain / JSON;都覆盖 snippet、页码、颜色。
-- [ ] `M8-012` 输出目标:`File > Export Highlights…`;`Cmd+Shift+E` 复制 Markdown 到剪贴板;"Save as…" 走 `NSSavePanel`。
-- [ ] `M8-013` `HighlightExporterTests` 覆盖三种格式稳定。
+- [x] `M8-010` 抽取导出内容:`[(page, snippet, color, comment)]`,按页排序。
+- [x] `M8-011` 三种导出格式:Markdown / Plain / JSON;都覆盖 snippet、页码、颜色、评论。
+- [x] `M8-012` 输出目标:`File > Export Highlights…`;`Cmd+Shift+E` 复制 Markdown 到剪贴板;"Save as…" 走 `NSSavePanel`。
+- [x] `M8-013` `HighlightExporterTests` 覆盖三种格式稳定。
 
 ### 6.3 自定义快捷键 UI
 
-- [ ] `M8-020` Shortcuts 面板:设置窗口新增 tab;列出所有 `ShortcutCommand` + 当前绑定 + 默认值。
-- [ ] `M8-021` key-capture 控件:捕获按键 → `KeyboardShortcut`;支持清除 / 恢复默认。
-- [ ] `M8-022` 冲突检测:同组合冲突时拒绝或提示。
-- [ ] `M8-023` 写回配置:保存时触发 `configStore.save` + `updateAppConfiguration`;菜单 `keyEquivalent` 立即刷新。
-- [ ] `M8-024` 测试:`AppConfigurationTests` 覆盖 UI 输入 → `config.toml` → 重读闭环。
+- [x] `M8-020` Shortcuts 面板:设置窗口新增 tab;列出所有 `ShortcutCommand` + 当前绑定 + 默认值。
+- [x] `M8-021` key-capture 控件:捕获按键 → `KeyboardShortcut`;支持清除 / 恢复默认。
+- [x] `M8-022` 冲突检测:同组合冲突时拒绝或提示。
+- [x] `M8-023` 写回配置:保存时触发 `configStore.save` + `updateAppConfiguration`;菜单 `keyEquivalent` 立即刷新。
+- [x] `M8-024` 测试:`AppConfigurationTests` 覆盖清除为 `none`、新增导出快捷键、重读闭环。
 
 ### 6.4 文档与验收
 
-- [ ] `M8-030` 同步 `PROJECT.md` / `TASKS.md` / `config.toml` 默认内容。
+- [x] `M8-030` 同步 `PROJECT.md` / `TASKS.md` / `config.toml` 默认内容。
 - [ ] `M8-031` M8 验收:`AC-M8-1` ~ `AC-M8-4` 通过。
 
 ## 7. Milestone 9:扩展生态(长期预研)
@@ -115,9 +115,9 @@
 - [x] `UAT-26` `This Document` / `All Open` 切换正确,跨文档命中会先切 session 再跳转
 - [x] `UAT-27` `Cmd+Ctrl+\` 进入同窗分屏,两侧独立切换 session 不污染
 - [x] `UAT-28` `Cmd+Shift+N` 新建窗口,两窗口独立且关闭互不影响,重启后恢复
-- [ ] `UAT-29` 右栏 Annotations 能列出所有高亮,点击跳转
-- [ ] `UAT-30` 导出 Markdown / Plain / JSON 输出正确
-- [ ] `UAT-31` Shortcuts 面板改绑定后新会话生效,冲突被拒
+- [ ] `UAT-29` 右栏 Annotations 能列出所有高亮,点击跳转,并可编辑 / 清空评论
+- [ ] `UAT-30` 导出 Markdown / Plain / JSON 输出正确,且评论字段随导出带出
+- [ ] `UAT-31` Shortcuts 面板改绑定后新会话生效,冲突被拒,清除后写回 `none`
 - [ ] `UAT-32` 扩展机制 RFC 存在并评审(M9 证据)
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

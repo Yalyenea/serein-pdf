@@ -1,6 +1,6 @@
 # PDF Reader for macOS
 
-面向 macOS 的极简 PDF 阅读器。左侧文档 tabs(可切换到标题栏水平 tabs),右侧 Outline / Pages / Search,中间沉浸式阅读区(支持同窗分屏与多窗口)。风格:极简、扁平、紧凑。
+面向 macOS 的极简 PDF 阅读器。左侧文档 tabs(可切换到标题栏水平 tabs),右侧 Outline / Pages / Search / Annotations,中间沉浸式阅读区(支持同窗分屏与多窗口)。风格:极简、扁平、紧凑。
 
 ## 1. 产品原则
 
@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 删除高亮 / 手动 & 自动保存 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
+文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
 
 ### 2.2 V1 明确不做
 
@@ -52,6 +52,7 @@ flowchart LR
     F --> F1["OutlineViewController"]
     F --> F2["PDFThumbnailView (Pages)"]
     F --> F3["SearchResultsViewController"]
+    F --> F4["AnnotationsViewController"]
     D --> H["DocumentStore"]
     E --> H
     F --> H
@@ -79,8 +80,9 @@ flowchart LR
 | 目录来源 | `PDFDocument.outlineRoot` → `OutlineNode` |
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`,跨文档命中点击先切 session 再跳转 |
-| 批注存储 | 内存 + dirty;`Cmd+S` 或自动保存策略触发时写回源 PDF |
+| 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
+| 分屏默认 | 新窗口与跨启动恢复默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;窗口 UI 状态挂在 `WindowWorkspace` |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,per-session 宽度 / 可见状态原子对调 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
@@ -95,7 +97,7 @@ flowchart LR
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
 | 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader,焦点 pane 决定 tab 落点 |
-| 右栏 Sidebar | Outline / Pages / Search (segmented 切换) | 所有预览类内容都在右栏,不回流到中栏 |
+| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 所有预览类内容都在右栏,不回流到中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
@@ -104,6 +106,7 @@ flowchart LR
 - 侧栏平铺嵌入,最多保留一条淡分割线(禁悬浮 / 液态玻璃 / 漂浮面板感)
 - 按钮 / tab 视觉重量轻,突出选中态
 - 水平 tab 与系统标题栏融为一体
+- `Settings` 按当前页内容自适应尺寸,`Shortcuts` 页会自动放大到合适大小
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
 ### 4.3 快捷键总表
@@ -140,7 +143,7 @@ flowchart LR
 - `Cmd+B` / `Cmd+Option+B`:切换左 / 右侧栏
 - `Cmd+Shift+1` / `Cmd+Shift+2`:垂直 sidebar tabs / 水平 titlebar tabs
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
-- `Cmd+Ctrl+\`:切换同窗分屏
+- `Cmd+Ctrl+\`:切换同窗分屏(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
 
@@ -220,6 +223,7 @@ App/
 
 Core/
   AppConfiguration.swift
+  DocumentAnnotations.swift
   DocumentSearch.swift
   DocumentSession.swift
   DocumentStore.swift
@@ -249,6 +253,7 @@ UI/CenterReader/
   FindBarView.swift
 
 UI/RightOutline/
+  AnnotationsViewController.swift
   OutlineViewController.swift
   RightSidebarViewController.swift
   SearchResultsViewController.swift
@@ -257,6 +262,7 @@ UI/Shared/
   PlaceholderViewController.swift
 
 Features/Annotations/
+  HighlightExporter.swift
   HighlightColor.swift
   HighlightService.swift
   HighlightUndoOperation.swift
@@ -278,6 +284,7 @@ Tests/SlatePDFTests/
 | M5 设置与收口 | ✅ | 设置窗口(默认阅读模式 / fit-width / 自动保存策略);综合验收通过 |
 | M6 体验打磨 | ✅ | plain 快捷键菜单可见、全览 grid、find bar、历史栈、Vim 翻页、缩放、页跳转、左右互换、高亮 undo;真实 PDF 手测与 200+ 页缩略图验证通过 |
 | M7 搜索强化与对比阅读 | ✅ | 右栏 Search 面板、This Document / All Open、同窗分屏、多窗口、窗口级持久化、搜索与分屏状态测试补齐 |
+| M8 批注深度化 | ✅ 开发完成,待手测 | 右栏 Annotations、评论编辑、Markdown / Plain / JSON 导出、Shortcuts 页、`none` 清空绑定、批注测试补齐 |
 
 已完成细项以 commit 历史为准,不在本文件展开。
 
@@ -285,23 +292,22 @@ Tests/SlatePDFTests/
 
 ### 8.1 Milestone 8:批注深度化
 
-目标:把当前高亮从"能做"升级为"能管理、能导出、能配置"。
+目标:把当前高亮从"能做"升级为"能管理、能评论、能导出、能配置"。当前代码已完成,仅余手测验收。
 
 **交付物**
-1. 右栏 Annotations 模式,按页列所有高亮并支持点击跳转
-2. Markdown / Plain / JSON 三种高亮导出
-3. Shortcuts 面板与快捷键冲突检测
+1. 右栏 Annotations 模式,按页列所有高亮并支持点击跳转与评论编辑
+2. Markdown / Plain / JSON 三种高亮导出,评论随导出带出
+3. Shortcuts 面板与快捷键冲突检测、清除、恢复默认
 4. 配置改动即时写回 `config.toml` 并刷新菜单
 
 **验收要点**
-- Annotations 面板按页分组并支持跳转
-- 三种导出格式均包含 snippet / 页码 / 颜色
-- Shortcuts UI 写回配置文件并实时生效,冲突绑定被拒
+- Annotations 面板按页分组并支持跳转,comment 可编辑
+- 三种导出格式均包含 snippet / 页码 / 颜色 / comment
+- Shortcuts UI 写回配置文件并实时生效,冲突绑定被拒,清除后写回 `none`
 
-**建议执行顺序**
-1. 先做右栏 Annotations 与 dirty 同步
-2. 再做 Markdown / Plain / JSON 导出
-3. 最后做 Shortcuts GUI 与冲突检测
+**当前状态**
+1. 开发与自动化测试已完成
+2. 下一步只剩手测 `Annotations / Export / Shortcuts`
 
 ### 8.2 Milestone 9(长期预研):扩展生态
 

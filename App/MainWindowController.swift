@@ -227,14 +227,33 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func requestCloseActiveSession() {
+        if documentStore.isSplitEnabled(in: windowID) {
+            let focusedPane = documentStore.focusedPane(in: windowID)
+            let focusedSessionID = documentStore.displayedSessionID(for: focusedPane, in: windowID)
+            let otherSessionID = documentStore.displayedSessionID(for: focusedPane.other, in: windowID)
+
+            guard let focusedSessionID else {
+                documentStore.setSplitEnabled(false, in: windowID)
+                return
+            }
+
+            guard let otherSessionID, otherSessionID != focusedSessionID else {
+                documentStore.setSplitEnabled(false, in: windowID)
+                return
+            }
+
+            requestCloseSession(focusedSessionID, collapseSplitKeeping: focusedPane.other)
+            return
+        }
+
         guard let sessionID = documentStore.activeSessionID(in: windowID) else { return }
         requestCloseSession(sessionID)
     }
 
-    func requestCloseSession(_ sessionID: UUID) {
+    func requestCloseSession(_ sessionID: UUID, collapseSplitKeeping survivorPane: ReaderPane? = nil) {
         guard let session = documentStore.session(for: sessionID) else { return }
         guard session.isDirty else {
-            documentStore.close(sessionID: sessionID, from: windowID)
+            closeSession(sessionID, collapseSplitKeeping: survivorPane)
             return
         }
 
@@ -245,15 +264,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         case .save:
             do {
                 try documentStore.saveAnnotations(for: sessionID)
-                documentStore.close(sessionID: sessionID, from: windowID)
+                closeSession(sessionID, collapseSplitKeeping: survivorPane)
             } catch {
                 presentSaveError(error)
             }
         case .discard:
-            documentStore.close(sessionID: sessionID, from: windowID)
+            closeSession(sessionID, collapseSplitKeeping: survivorPane)
         case .cancel:
             return
         }
+    }
+
+    private func closeSession(_ sessionID: UUID, collapseSplitKeeping survivorPane: ReaderPane?) {
+        documentStore.close(sessionID: sessionID, from: windowID)
+
+        guard let survivorPane,
+              documentStore.isSplitEnabled(in: windowID) else { return }
+
+        documentStore.setFocusedPane(survivorPane, in: windowID)
+        documentStore.setSplitEnabled(false, in: windowID)
     }
 
     func prepareForApplicationTermination() -> Bool {

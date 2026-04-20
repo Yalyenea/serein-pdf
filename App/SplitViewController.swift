@@ -391,6 +391,9 @@ final class SplitViewController: NSSplitViewController {
         rightSidebarViewController.onActivateSearchMatch = { [weak self] match in
             self?.activateSearchMatch(match)
         }
+        rightSidebarViewController.onActivateAnnotation = { [weak self] group in
+            self?.activateAnnotation(group)
+        }
         rightSidebarViewController.onSearchSelectionDidChange = { [weak self] _, _ in
             self?.syncFindStatus()
         }
@@ -417,6 +420,10 @@ final class SplitViewController: NSSplitViewController {
         documentStore.activate(sessionID: match.sessionID, in: windowID, targetPane: targetPane)
         readerWorkspaceViewController.activeReaderViewController().go(to: match.selection)
         syncFindStatus()
+    }
+
+    private func activateAnnotation(_ group: DocumentHighlightGroup) {
+        readerWorkspaceViewController.focus(on: group)
     }
 
     private func syncFindStatus() {

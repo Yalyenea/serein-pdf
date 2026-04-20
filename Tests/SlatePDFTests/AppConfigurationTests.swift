@@ -18,6 +18,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.copyHighlightsMarkdown], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth]?.key, "0")
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "b", modifiers: [.command]))
@@ -96,6 +97,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("exit_highlight_mode = \"escape\""))
         XCTAssertTrue(content.contains("toggle_night_mode = \"i\""))
         XCTAssertTrue(content.contains("save_annotations = \"command+s\""))
+        XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
         XCTAssertTrue(content.contains("close_current_tab = \"command+w\""))
         XCTAssertTrue(content.contains("fit_width = \"command+9\""))
@@ -191,5 +193,22 @@ fit_width = "command+9"
 
         XCTAssertTrue(reloadedConfiguration.layout.sidebarsSwapped)
         XCTAssertTrue(persistedContent.contains("sidebars_swapped = true"))
+    }
+
+    func testClearedShortcutPersistsAsNone() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+        let store = try AppConfigurationStore(fileURL: fileURL)
+
+        var configuration = try store.load()
+        configuration.shortcuts.bindings[.copyHighlightsMarkdown] = nil
+
+        try store.save(configuration)
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+        let reloaded = try store.load()
+
+        XCTAssertTrue(persistedContent.contains("copy_highlights_markdown = \"none\""))
+        XCTAssertNil(reloaded.shortcuts.bindings[.copyHighlightsMarkdown])
     }
 }

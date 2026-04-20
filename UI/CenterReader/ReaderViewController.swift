@@ -46,6 +46,7 @@ final class ReaderViewController: NSViewController {
     private var pendingFitWidthSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
     private var lastSubmittedSearchKey: SubmittedSearchKey?
+    private var pendingAnnotationFocusToken: Int = 0
     var targetSessionID: UUID? {
         didSet {
             guard oldValue != targetSessionID else { return }
@@ -425,8 +426,7 @@ final class ReaderViewController: NSViewController {
         let records = HighlightService.removeHighlightGroup(containing: target, in: document)
         guard records.isEmpty == false else { return false }
 
-        documentStore.recordHighlightUndo(.removed(records), for: session.id)
-        documentStore.setDirty(true, for: session.id)
+        documentStore.noteHighlightsRemoved(records, for: session.id)
         return true
     }
 
@@ -638,6 +638,24 @@ final class ReaderViewController: NSViewController {
         pdfView.go(to: selection)
     }
 
+    func focus(on highlight: DocumentHighlightGroup) {
+        if let selection = highlight.primarySelection {
+            go(to: selection)
+            pendingAnnotationFocusToken += 1
+            let token = pendingAnnotationFocusToken
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.pendingAnnotationFocusToken == token else { return }
+                    self.pdfView.currentSelection = nil
+                }
+            }
+            return
+        }
+
+        guard let page = pdfView.document?.page(at: highlight.pageIndex) else { return }
+        pdfView.go(to: page)
+    }
+
     private func applyDisplayModeIfNeeded(_ session: DocumentSession) {
         guard displayedDisplayMode != session.displayMode else { return }
 
@@ -763,8 +781,7 @@ final class ReaderViewController: NSViewController {
         )
         guard appliedRecords.isEmpty == false else { return false }
 
-        documentStore.recordHighlightUndo(.added(appliedRecords), for: session.id)
-        documentStore.setDirty(true, for: session.id)
+        documentStore.noteHighlightsAdded(appliedRecords, for: session.id)
         pdfView.currentSelection = nil
         return true
     }

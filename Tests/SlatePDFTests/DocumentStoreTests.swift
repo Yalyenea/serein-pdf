@@ -514,6 +514,55 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(reopenedDocument?.page(at: 0)?.annotations.count, 1)
     }
 
+    func testAnnotationSectionsExposeSnippetColorAndPageGrouping() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let url = try makeSearchableTemporaryPDF(
+            named: "annotation-sections",
+            pages: ["alpha beta gamma", "delta epsilon"]
+        )
+        let session = try store.open(documentAt: url)
+        let selection = try XCTUnwrap(session.pdfDocument.findString("beta", withOptions: []).first)
+
+        let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.yellow.nsColor)
+        store.noteHighlightsAdded(records, for: session.id)
+
+        let sections = store.annotationSections(in: store.defaultWindowID)
+        XCTAssertEqual(sections.count, 1)
+        XCTAssertEqual(sections.first?.title, "Page 1")
+        XCTAssertEqual(sections.first?.highlights.count, 1)
+        XCTAssertEqual(sections.first?.highlights.first?.color, .yellow)
+        XCTAssertTrue(sections.first?.highlights.first?.snippet.contains("beta") == true)
+    }
+
+    func testUpdateCommentPersistsAcrossHighlightGroupAndMarksSessionDirty() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let url = try makeSearchableTemporaryPDF(
+            named: "annotation-comment",
+            pages: ["alpha beta gamma"]
+        )
+        let session = try store.open(documentAt: url)
+        let selection = try XCTUnwrap(session.pdfDocument.findString("alpha", withOptions: []).first)
+        let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.pink.nsColor)
+        store.noteHighlightsAdded(records, for: session.id)
+
+        let group = try XCTUnwrap(store.annotationGroups(for: session.id).first)
+        XCTAssertTrue(store.updateComment("Important note", forHighlightGroup: group.groupID, in: session.id))
+
+        let updatedGroup = try XCTUnwrap(store.annotationGroups(for: session.id).first)
+        XCTAssertEqual(updatedGroup.comment, "Important note")
+        XCTAssertTrue(store.session(for: session.id)?.isDirty == true)
+        XCTAssertEqual(
+            session.pdfDocument.page(at: 0)?.annotations.first(where: { $0.type == "Highlight" })?.contents,
+            "Important note"
+        )
+    }
+
     func testUpdateAppConfigurationAppliesNewDefaultsToFutureSessions() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -667,7 +716,7 @@ final class DocumentStoreTests: XCTestCase {
             recentFilesStore: InMemoryRecentFilesStore()
         )
         let first = try store.open(documentAt: makeTemporaryPDF(named: "window-copy-first"))
-        let second = try store.open(documentAt: makeTemporaryPDF(named: "window-copy-second"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "window-copy-second"))
         let sourceWindowID = store.defaultWindowID
 
         store.setSplitEnabled(true, in: sourceWindowID)
@@ -678,9 +727,10 @@ final class DocumentStoreTests: XCTestCase {
 
         let copiedWindowID = store.createWindow(copyingFrom: sourceWindowID)
 
-        XCTAssertEqual(store.displayedSessionID(for: .primary, in: copiedWindowID), second.id)
-        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: copiedWindowID), first.id)
-        XCTAssertEqual(store.focusedPane(in: copiedWindowID), .secondary)
+        XCTAssertFalse(store.isSplitEnabled(in: copiedWindowID))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: copiedWindowID), first.id)
+        XCTAssertNil(store.displayedSessionID(for: .secondary, in: copiedWindowID))
+        XCTAssertEqual(store.focusedPane(in: copiedWindowID), .primary)
         XCTAssertEqual(store.tabPresentationMode(in: copiedWindowID), .horizontalTitlebar)
         XCTAssertFalse(store.isLeftSidebarVisible(in: copiedWindowID))
         XCTAssertTrue(store.recentlyClosedURLs(in: copiedWindowID).isEmpty)
@@ -767,7 +817,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertLessThan(duration, 0.5, "search took \(duration)s")
     }
 
-    func testRestorePersistedStateReopensMultipleWindowsWithSplitSearchState() throws {
+    func testRestorePersistedStateDefaultsWindowsBackToSinglePane() throws {
         let firstURL = try makeTemporaryPDF(named: "restore-window-first")
         let secondURL = try makeTemporaryPDF(named: "restore-window-second")
         let windowA = UUID()
@@ -822,7 +872,6 @@ final class DocumentStoreTests: XCTestCase {
 
         try store.restorePersistedState()
 
-        let firstSessionID = try XCTUnwrap(store.sessions.first(where: { $0.url == firstURL })?.id)
         let secondSessionID = try XCTUnwrap(store.sessions.first(where: { $0.url == secondURL })?.id)
 
         XCTAssertEqual(Set(store.windowIDs()), [windowA, windowB])
@@ -830,10 +879,10 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.rightSidebarMode(in: windowA), .search)
         XCTAssertEqual(store.searchQuery(in: windowA), "needle")
         XCTAssertEqual(store.searchScope(in: windowA), .allOpen)
-        XCTAssertTrue(store.isSplitEnabled(in: windowA))
-        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowA), firstSessionID)
-        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowA), secondSessionID)
-        XCTAssertEqual(store.focusedPane(in: windowA), .secondary)
+        XCTAssertFalse(store.isSplitEnabled(in: windowA))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowA), secondSessionID)
+        XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowA))
+        XCTAssertEqual(store.focusedPane(in: windowA), .primary)
         XCTAssertEqual(store.recentlyClosedURLs(in: windowA), [secondURL])
 
         XCTAssertEqual(store.tabPresentationMode(in: windowB), .verticalSidebar)
@@ -886,8 +935,9 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(store.sessions.count, 2)
         XCTAssertEqual(store.sessions.map(\.url), [duplicateURL, duplicateURL])
-        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), firstSessionID)
-        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), secondSessionID)
+        XCTAssertFalse(store.isSplitEnabled(in: windowID))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), secondSessionID)
+        XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowID))
     }
 
     private func makeTemporaryPDF(named name: String) throws -> URL {

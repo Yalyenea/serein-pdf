@@ -12,8 +12,10 @@ final class RightSidebarViewController: NSViewController {
     let windowID: UUID
     let outlineViewController: OutlineViewController
     let searchResultsViewController: SearchResultsViewController
+    let annotationsViewController: AnnotationsViewController
     var onActivateSearchMatch: ((SearchSidebarMatch) -> Void)?
     var onSearchSelectionDidChange: ((Int?, Int) -> Void)?
+    var onActivateAnnotation: ((DocumentHighlightGroup) -> Void)?
     private let thumbnailView = PDFThumbnailView()
     private let modeSegmented = NSSegmentedControl()
     private var lastAppliedThumbnailWidth: CGFloat = 0
@@ -21,6 +23,7 @@ final class RightSidebarViewController: NSViewController {
     private var outlineModeConstraints: [NSLayoutConstraint] = []
     private var pagesModeConstraints: [NSLayoutConstraint] = []
     private var searchModeConstraints: [NSLayoutConstraint] = []
+    private var annotationsModeConstraints: [NSLayoutConstraint] = []
     private var thumbnailContentWidth: NSLayoutConstraint?
 
     private static let thumbnailCellSpacing: CGFloat = 4
@@ -30,10 +33,12 @@ final class RightSidebarViewController: NSViewController {
         self.windowID = windowID
         self.outlineViewController = OutlineViewController(documentStore: documentStore, windowID: windowID)
         self.searchResultsViewController = SearchResultsViewController(documentStore: documentStore, windowID: windowID)
+        self.annotationsViewController = AnnotationsViewController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
         title = "Outline"
         addChild(outlineViewController)
         addChild(searchResultsViewController)
+        addChild(annotationsViewController)
     }
 
     @available(*, unavailable)
@@ -59,6 +64,9 @@ final class RightSidebarViewController: NSViewController {
         searchResultsViewController.onSelectionChanged = { [weak self] selectedIndex, total in
             self?.onSearchSelectionDidChange?(selectedIndex, total)
         }
+        annotationsViewController.onActivateHighlight = { [weak self] group in
+            self?.onActivateAnnotation?(group)
+        }
         applyMode()
     }
 
@@ -72,7 +80,7 @@ final class RightSidebarViewController: NSViewController {
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
         container.layer?.masksToBounds = true
 
-        modeSegmented.segmentCount = 3
+        modeSegmented.segmentCount = 4
         modeSegmented.setImage(
             NSImage(systemSymbolName: "list.bullet.indent", accessibilityDescription: "Outline"),
             forSegment: 0)
@@ -82,12 +90,17 @@ final class RightSidebarViewController: NSViewController {
         modeSegmented.setImage(
             NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search"),
             forSegment: 2)
+        modeSegmented.setImage(
+            NSImage(systemSymbolName: "text.bubble", accessibilityDescription: "Annotations"),
+            forSegment: 3)
         modeSegmented.setWidth(26, forSegment: 0)
         modeSegmented.setWidth(26, forSegment: 1)
         modeSegmented.setWidth(26, forSegment: 2)
+        modeSegmented.setWidth(26, forSegment: 3)
         modeSegmented.setToolTip("Outline", forSegment: 0)
         modeSegmented.setToolTip("Pages", forSegment: 1)
         modeSegmented.setToolTip("Search", forSegment: 2)
+        modeSegmented.setToolTip("Annotations", forSegment: 3)
         modeSegmented.selectedSegment = 0
         modeSegmented.controlSize = .mini
         modeSegmented.segmentStyle = .rounded
@@ -107,8 +120,10 @@ final class RightSidebarViewController: NSViewController {
         outlineView.translatesAutoresizingMaskIntoConstraints = false
         let searchView = searchResultsViewController.view
         searchView.translatesAutoresizingMaskIntoConstraints = false
+        let annotationsView = annotationsViewController.view
+        annotationsView.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [modeSegmented, outlineView, thumbnailView, searchView] {
+        for view in [modeSegmented, outlineView, thumbnailView, searchView, annotationsView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -157,6 +172,13 @@ final class RightSidebarViewController: NSViewController {
             searchView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ]
 
+        annotationsModeConstraints = [
+            annotationsView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            annotationsView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            annotationsView.topAnchor.constraint(equalTo: modeSegmented.bottomAnchor, constant: 10),
+            annotationsView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ]
+
         NSLayoutConstraint.activate(outlineModeConstraints)
 
         view = container
@@ -179,21 +201,30 @@ final class RightSidebarViewController: NSViewController {
         case .outline:
             NSLayoutConstraint.deactivate(pagesModeConstraints)
             NSLayoutConstraint.deactivate(searchModeConstraints)
+            NSLayoutConstraint.deactivate(annotationsModeConstraints)
             NSLayoutConstraint.activate(outlineModeConstraints)
         case .pages:
             NSLayoutConstraint.deactivate(outlineModeConstraints)
             NSLayoutConstraint.deactivate(searchModeConstraints)
+            NSLayoutConstraint.deactivate(annotationsModeConstraints)
             NSLayoutConstraint.activate(pagesModeConstraints)
         case .search:
             NSLayoutConstraint.deactivate(outlineModeConstraints)
             NSLayoutConstraint.deactivate(pagesModeConstraints)
+            NSLayoutConstraint.deactivate(annotationsModeConstraints)
             NSLayoutConstraint.activate(searchModeConstraints)
+        case .annotations:
+            NSLayoutConstraint.deactivate(outlineModeConstraints)
+            NSLayoutConstraint.deactivate(pagesModeConstraints)
+            NSLayoutConstraint.deactivate(searchModeConstraints)
+            NSLayoutConstraint.activate(annotationsModeConstraints)
         }
 
         let mode = documentStore.rightSidebarMode(in: windowID)
         outlineViewController.view.isHidden = mode != .outline
         thumbnailView.isHidden = mode != .pages
         searchResultsViewController.view.isHidden = mode != .search
+        annotationsViewController.view.isHidden = mode != .annotations
 
         view.needsLayout = true
     }
@@ -204,6 +235,7 @@ final class RightSidebarViewController: NSViewController {
         }
         outlineViewController.refreshChromeColors()
         searchResultsViewController.refreshChromeColors()
+        annotationsViewController.refreshChromeColors()
     }
 
     override func viewDidLayout() {

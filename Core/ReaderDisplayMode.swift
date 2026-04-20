@@ -53,6 +53,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case exitHighlightMode = "exit_highlight_mode"
     case toggleNightMode = "toggle_night_mode"
     case saveAnnotations = "save_annotations"
+    case copyHighlightsMarkdown = "copy_highlights_markdown"
     case removeHighlight = "remove_highlight"
     case highlightColorPink = "highlight_color_pink"
     case highlightColorYellow = "highlight_color_yellow"
@@ -94,6 +95,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Toggle Night Mode"
         case .saveAnnotations:
             "Save Annotations"
+        case .copyHighlightsMarkdown:
+            "Copy Highlights as Markdown"
         case .removeHighlight:
             "Remove Highlight"
         case .highlightColorPink:

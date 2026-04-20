@@ -15,7 +15,8 @@ enum HighlightService {
     @discardableResult
     static func applyHighlight(
         to selection: PDFSelection,
-        color: NSColor = defaultColor
+        color: NSColor = defaultColor,
+        createdAt: Date = Date()
     ) -> [HighlightAnnotationRecord] {
         var records: [HighlightAnnotationRecord] = []
         let groupID = UUID().uuidString
@@ -28,6 +29,8 @@ enum HighlightService {
                 let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
                 annotation.color = color
                 annotation.userName = groupID
+                annotation.modificationDate = createdAt
+                annotation.contents = nil
                 page.addAnnotation(annotation)
                 guard let document = page.document else { continue }
                 records.append(
@@ -40,6 +43,55 @@ enum HighlightService {
         }
 
         return records
+    }
+
+    static func buildHighlightGroups(in document: PDFDocument) -> [DocumentHighlightGroup] {
+        var groupedRecords: [String: [HighlightAnnotationRecord]] = [:]
+        var orderedGroupIDs: [String] = []
+
+        for pageIndex in 0..<document.pageCount {
+            guard let page = document.page(at: pageIndex) else { continue }
+            let annotations = page.annotations
+                .filter { isHighlight($0) }
+                .sorted(by: annotationSortOrder)
+
+            for annotation in annotations {
+                let groupID = resolvedGroupID(for: annotation, pageIndex: pageIndex)
+                if groupedRecords[groupID] == nil {
+                    groupedRecords[groupID] = []
+                    orderedGroupIDs.append(groupID)
+                }
+                groupedRecords[groupID]?.append(
+                    HighlightAnnotationRecord(pageIndex: pageIndex, annotation: annotation)
+                )
+            }
+        }
+
+        return orderedGroupIDs.compactMap { groupID in
+            guard let records = groupedRecords[groupID]?.sorted(by: recordSortOrder),
+                  let firstRecord = records.first else { return nil }
+
+            let snippet = normalizedText(
+                records
+                    .compactMap(annotationSnippet(for:))
+                    .joined(separator: " ")
+            )
+            let comment = records
+                .compactMap(\.annotation.contents)
+                .first { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+                ?? ""
+
+            return DocumentHighlightGroup(
+                groupID: groupID,
+                pageIndex: firstRecord.pageIndex,
+                snippet: snippet.isEmpty ? "Untitled Highlight" : snippet,
+                color: HighlightColor.closest(to: firstRecord.annotation.color),
+                createdAt: records.compactMap(\.annotation.modificationDate).min(),
+                comment: comment,
+                primarySelection: annotationSelection(for: firstRecord),
+                records: records
+            )
+        }
     }
 
     static func highlightAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
@@ -91,8 +143,72 @@ enum HighlightService {
         }
     }
 
+    @discardableResult
+    static func updateComment(_ comment: String, for records: [HighlightAnnotationRecord]) -> Bool {
+        let normalizedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? nil
+            : comment
+        var didChange = false
+
+        for record in records where record.annotation.contents != normalizedComment {
+            record.annotation.contents = normalizedComment
+            didChange = true
+        }
+
+        return didChange
+    }
+
     private static func explodedSelections(_ selection: PDFSelection) -> [PDFSelection] {
         let lineSelections = selection.selectionsByLine()
         return lineSelections.isEmpty ? [selection] : lineSelections
+    }
+
+    private static func isHighlight(_ annotation: PDFAnnotation) -> Bool {
+        annotation.type == "Highlight"
+    }
+
+    private static func resolvedGroupID(for annotation: PDFAnnotation, pageIndex: Int) -> String {
+        if let groupID = annotation.userName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           groupID.isEmpty == false {
+            return groupID
+        }
+
+        let bounds = annotation.bounds.integral
+        return "page-\(pageIndex)-\(Int(bounds.minX))-\(Int(bounds.minY))-\(Int(bounds.width))-\(Int(bounds.height))"
+    }
+
+    private static func annotationSortOrder(_ lhs: PDFAnnotation, _ rhs: PDFAnnotation) -> Bool {
+        let lhsBounds = lhs.bounds
+        let rhsBounds = rhs.bounds
+        if abs(lhsBounds.maxY - rhsBounds.maxY) > 0.5 {
+            return lhsBounds.maxY > rhsBounds.maxY
+        }
+        if abs(lhsBounds.minX - rhsBounds.minX) > 0.5 {
+            return lhsBounds.minX < rhsBounds.minX
+        }
+        return lhsBounds.width < rhsBounds.width
+    }
+
+    private static func recordSortOrder(_ lhs: HighlightAnnotationRecord, _ rhs: HighlightAnnotationRecord) -> Bool {
+        if lhs.pageIndex != rhs.pageIndex {
+            return lhs.pageIndex < rhs.pageIndex
+        }
+        return annotationSortOrder(lhs.annotation, rhs.annotation)
+    }
+
+    private static func annotationSnippet(for record: HighlightAnnotationRecord) -> String? {
+        annotationSelection(for: record)?.string.map(normalizedText)
+    }
+
+    private static func annotationSelection(for record: HighlightAnnotationRecord) -> PDFSelection? {
+        guard let page = record.annotation.page else { return nil }
+        return page.selection(for: record.annotation.bounds)
+    }
+
+    private static func normalizedText(_ rawText: String) -> String {
+        rawText
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
     }
 }

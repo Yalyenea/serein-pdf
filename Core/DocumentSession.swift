@@ -51,6 +51,7 @@ struct DocumentSession {
     var rightSidebarWidth: CGFloat?
     var undoStack: [HighlightUndoOperation] = []
     var searchCache: DocumentSearchCache = DocumentSearchCache()
+    var annotationCache: DocumentHighlightCache = DocumentHighlightCache()
 
     init(
         id: UUID = UUID(),

@@ -104,10 +104,10 @@ final class DocumentStore {
             rightSidebarMode: source.rightSidebarMode,
             searchQuery: source.searchQuery,
             searchScope: source.searchScope,
-            isSplitEnabled: source.isSplitEnabled,
-            primarySessionID: source.primarySessionID,
-            secondarySessionID: source.secondarySessionID,
-            focusedPane: source.focusedPane,
+            isSplitEnabled: false,
+            primarySessionID: source.activeSessionID ?? source.primarySessionID,
+            secondarySessionID: nil,
+            focusedPane: .primary,
             recentlyClosedURLs: []
         )
         normalizeWorkspace(&copy)
@@ -174,7 +174,7 @@ final class DocumentStore {
         }
 
         let restoredState = try readingStateStore.loadState(for: url)
-        let session = DocumentSession(
+        var session = DocumentSession(
             url: url,
             pdfDocument: pdfDocument,
             currentPageIndex: restoredState?.readingPosition.pageIndex ?? 0,
@@ -186,6 +186,9 @@ final class DocumentStore {
             annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
             leftSidebarWidth: restoredState?.leftSidebarWidth,
             rightSidebarWidth: restoredState?.rightSidebarWidth
+        )
+        session.annotationCache = DocumentHighlightCache(
+            groups: HighlightService.buildHighlightGroups(in: pdfDocument)
         )
 
         sessions.append(session)
@@ -518,6 +521,32 @@ final class DocumentStore {
         searchSections(in: windowID).reduce(0) { $0 + $1.matches.count }
     }
 
+    func annotationSections(in windowID: UUID) -> [DocumentHighlightSection] {
+        guard let session = activeSession(in: windowID) else { return [] }
+        let grouped = Dictionary(grouping: session.annotationCache.groups) { $0.pageIndex }
+        return grouped
+            .keys
+            .sorted()
+            .map { pageIndex in
+                DocumentHighlightSection(
+                    title: "Page \(pageIndex + 1)",
+                    highlights: grouped[pageIndex, default: []]
+                        .sorted { lhs, rhs in
+                            let lhsDate = lhs.createdAt ?? .distantPast
+                            let rhsDate = rhs.createdAt ?? .distantPast
+                            if lhsDate != rhsDate {
+                                return lhsDate < rhsDate
+                            }
+                            return lhs.groupID < rhs.groupID
+                        }
+                )
+            }
+    }
+
+    func annotationGroups(for sessionID: UUID) -> [DocumentHighlightGroup] {
+        session(for: sessionID)?.annotationCache.groups ?? []
+    }
+
     func currentSessionSearchMatches(in windowID: UUID) -> [DocumentSearchMatch] {
         activeSession(in: windowID)?.searchCache.matches ?? []
     }
@@ -531,13 +560,42 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func noteHighlightsAdded(_ records: [HighlightAnnotationRecord], for sessionID: UUID, now: Date = Date()) {
+        guard records.isEmpty == false,
+              let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[sessionIndex].undoStack.append(.added(records))
+        trimUndoStack(for: sessionIndex)
+        markAnnotationsDirty(for: sessionIndex, now: now)
+        rebuildAnnotationCache(for: sessionIndex)
+        notifyChange()
+    }
+
+    func noteHighlightsRemoved(_ records: [HighlightAnnotationRecord], for sessionID: UUID, now: Date = Date()) {
+        guard records.isEmpty == false,
+              let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[sessionIndex].undoStack.append(.removed(records))
+        trimUndoStack(for: sessionIndex)
+        markAnnotationsDirty(for: sessionIndex, now: now)
+        rebuildAnnotationCache(for: sessionIndex)
+        notifyChange()
+    }
+
+    @discardableResult
+    func updateComment(_ comment: String, forHighlightGroup groupID: String, in sessionID: UUID, now: Date = Date()) -> Bool {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+              let group = sessions[sessionIndex].annotationCache.groups.first(where: { $0.groupID == groupID }),
+              HighlightService.updateComment(comment, for: group.records) else { return false }
+
+        markAnnotationsDirty(for: sessionIndex, now: now)
+        rebuildAnnotationCache(for: sessionIndex)
+        notifyChange()
+        return true
+    }
+
     func recordHighlightUndo(_ operation: HighlightUndoOperation, for sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[sessionIndex].undoStack.append(operation)
-        let overflow = sessions[sessionIndex].undoStack.count - Self.undoStackLimit
-        if overflow > 0 {
-            sessions[sessionIndex].undoStack.removeFirst(overflow)
-        }
+        trimUndoStack(for: sessionIndex)
     }
 
     func hasUndoableHighlight(for sessionID: UUID) -> Bool {
@@ -558,11 +616,8 @@ final class DocumentStore {
             HighlightService.reinsertHighlights(records, in: document)
         }
 
-        let now = Date()
-        if sessions[sessionIndex].isDirty == false {
-            sessions[sessionIndex].isDirty = true
-            sessions[sessionIndex].dirtySince = now
-        }
+        markAnnotationsDirty(for: sessionIndex, now: Date())
+        rebuildAnnotationCache(for: sessionIndex)
         notifyChange()
         return true
     }
@@ -647,8 +702,7 @@ final class DocumentStore {
             guard let pdfDocument = PDFDocument(url: reference.url) else { continue }
             let restoredState = try readingStateStore.loadState(for: reference.url)
             let sessionID = usedSessionIDs.insert(reference.id).inserted ? reference.id : UUID()
-            sessions.append(
-                DocumentSession(
+            var session = DocumentSession(
                     id: sessionID,
                     url: reference.url,
                     pdfDocument: pdfDocument,
@@ -662,7 +716,10 @@ final class DocumentStore {
                     leftSidebarWidth: restoredState?.leftSidebarWidth,
                     rightSidebarWidth: restoredState?.rightSidebarWidth
                 )
+            session.annotationCache = DocumentHighlightCache(
+                groups: HighlightService.buildHighlightGroups(in: pdfDocument)
             )
+            sessions.append(session)
         }
 
         let sessionIDByPersistedID = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.id) })
@@ -670,7 +727,19 @@ final class DocumentStore {
             mapping[session.url] = mapping[session.url] ?? session.id
         }
         let restoredWindows = persistedState.windows.isEmpty ? [WindowWorkspace()] : persistedState.windows.map { record in
-            WindowWorkspace(
+            let primarySessionID =
+                record.splitState.primarySessionID.flatMap { sessionIDByPersistedID[$0] }
+                ?? record.splitState.primarySessionURL.flatMap { firstSessionIDByURL[$0] }
+            let secondarySessionID =
+                record.splitState.secondarySessionID.flatMap { sessionIDByPersistedID[$0] }
+                ?? record.splitState.secondarySessionURL.flatMap { firstSessionIDByURL[$0] }
+            let restoredActiveSessionID = {
+                if record.splitState.isEnabled, record.splitState.focusedPane == .secondary {
+                    return secondarySessionID ?? primarySessionID
+                }
+                return primarySessionID ?? secondarySessionID
+            }()
+            return WindowWorkspace(
                 id: record.id,
                 tabPresentationMode: record.tabPresentationMode,
                 isLeftSidebarVisible: record.isLeftSidebarVisible,
@@ -678,14 +747,10 @@ final class DocumentStore {
                 rightSidebarMode: record.rightSidebarMode,
                 searchQuery: record.searchQuery,
                 searchScope: record.searchScope,
-                isSplitEnabled: record.splitState.isEnabled,
-                primarySessionID:
-                    record.splitState.primarySessionID.flatMap { sessionIDByPersistedID[$0] }
-                    ?? record.splitState.primarySessionURL.flatMap { firstSessionIDByURL[$0] },
-                secondarySessionID:
-                    record.splitState.secondarySessionID.flatMap { sessionIDByPersistedID[$0] }
-                    ?? record.splitState.secondarySessionURL.flatMap { firstSessionIDByURL[$0] },
-                focusedPane: record.splitState.focusedPane,
+                isSplitEnabled: false,
+                primarySessionID: restoredActiveSessionID,
+                secondarySessionID: nil,
+                focusedPane: .primary,
                 recentlyClosedURLs: record.recentlyClosedURLs
             )
         }
@@ -785,6 +850,24 @@ final class DocumentStore {
         }
 
         return sessions.first(where: { $0.id != excludedID })?.id ?? excludedID
+    }
+
+    private func trimUndoStack(for sessionIndex: Int) {
+        let overflow = sessions[sessionIndex].undoStack.count - Self.undoStackLimit
+        if overflow > 0 {
+            sessions[sessionIndex].undoStack.removeFirst(overflow)
+        }
+    }
+
+    private func markAnnotationsDirty(for sessionIndex: Int, now: Date) {
+        sessions[sessionIndex].isDirty = true
+        sessions[sessionIndex].dirtySince = sessions[sessionIndex].dirtySince ?? now
+    }
+
+    private func rebuildAnnotationCache(for sessionIndex: Int) {
+        sessions[sessionIndex].annotationCache = DocumentHighlightCache(
+            groups: HighlightService.buildHighlightGroups(in: sessions[sessionIndex].pdfDocument)
+        )
     }
 
     private func populateSearchCaches(for query: String, scope: SearchScope, windowID: UUID) {

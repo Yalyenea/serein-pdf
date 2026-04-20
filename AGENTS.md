@@ -11,7 +11,7 @@ Native macOS PDF reader.
 
 ## Source Of Truth
 
-- Read [PROJECT.md](PROJECT.md) before coding.
+- Read [PROJECT.md](PROJECT.md) and [README.md](README.md) before coding.
 - Track execution in [TASKS.md](TASKS.md).
 - Keep docs in sync when scope or behavior changes.
 
@@ -30,3 +30,4 @@ Native macOS PDF reader.
 - Runtime config file lives at `~/Library/Application Support/SlatePDF/config.toml`; keep docs and defaults aligned with it.
 - Prefer validating UI and interaction changes with real PDFs from `~/Downloads` when available.
 - Prefer clarity and compactness over premature flexibility.
+- Don't use computer-use tool unless i ask.

@@ -46,6 +46,7 @@ struct AppConfiguration: Equatable, Sendable {
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
+            .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
             .removeHighlight: KeyboardShortcut(key: "d", modifiers: []),
             .highlightColorPink: KeyboardShortcut(key: "p", modifiers: [.command, .shift]),
             .highlightColorYellow: KeyboardShortcut(key: "y", modifiers: [.command, .shift]),
@@ -239,6 +240,7 @@ highlight_selection = "a"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 save_annotations = "command+s"
+copy_highlights_markdown = "command+shift+e"
 remove_highlight = "d"
 highlight_color_pink = "command+shift+p"
 highlight_color_yellow = "command+shift+y"
@@ -293,41 +295,49 @@ right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounde
 sidebars_swapped = \(configuration.layout.sidebarsSwapped ? "true" : "false")
 
 [shortcuts]
-highlight_selection = "\(configuration.shortcuts.bindings[.highlightSelection]?.serializedValue ?? "a")"
-exit_highlight_mode = "\(configuration.shortcuts.bindings[.exitHighlightMode]?.serializedValue ?? "escape")"
-toggle_night_mode = "\(configuration.shortcuts.bindings[.toggleNightMode]?.serializedValue ?? "i")"
-save_annotations = "\(configuration.shortcuts.bindings[.saveAnnotations]?.serializedValue ?? "command+s")"
-remove_highlight = "\(configuration.shortcuts.bindings[.removeHighlight]?.serializedValue ?? "d")"
-highlight_color_pink = "\(configuration.shortcuts.bindings[.highlightColorPink]?.serializedValue ?? "command+shift+p")"
-highlight_color_yellow = "\(configuration.shortcuts.bindings[.highlightColorYellow]?.serializedValue ?? "command+shift+y")"
-highlight_color_green = "\(configuration.shortcuts.bindings[.highlightColorGreen]?.serializedValue ?? "command+shift+g")"
-toggle_left_sidebar = "\(configuration.shortcuts.bindings[.toggleLeftSidebar]?.serializedValue ?? "command+b")"
-toggle_right_sidebar = "\(configuration.shortcuts.bindings[.toggleRightSidebar]?.serializedValue ?? "command+option+b")"
-use_sidebar_tabs = "\(configuration.shortcuts.bindings[.useSidebarTabs]?.serializedValue ?? "command+shift+1")"
-use_titlebar_tabs = "\(configuration.shortcuts.bindings[.useTitlebarTabs]?.serializedValue ?? "command+shift+2")"
-close_current_tab = "\(configuration.shortcuts.bindings[.closeCurrentTab]?.serializedValue ?? "command+w")"
-previous_tab = "\(configuration.shortcuts.bindings[.previousTab]?.serializedValue ?? "command+shift+[")"
-next_tab = "\(configuration.shortcuts.bindings[.nextTab]?.serializedValue ?? "command+shift+]")"
-fit_width = "\(configuration.shortcuts.bindings[.fitWidth]?.serializedValue ?? "command+0")"
-zoom_in = "\(configuration.shortcuts.bindings[.zoomIn]?.serializedValue ?? "command+=")"
-zoom_out = "\(configuration.shortcuts.bindings[.zoomOut]?.serializedValue ?? "command+-")"
-single_page = "\(configuration.shortcuts.bindings[.singlePage]?.serializedValue ?? "command+1")"
-single_page_continuous = "\(configuration.shortcuts.bindings[.singlePageContinuous]?.serializedValue ?? "command+2")"
-two_up = "\(configuration.shortcuts.bindings[.twoUp]?.serializedValue ?? "command+3")"
-two_up_continuous = "\(configuration.shortcuts.bindings[.twoUpContinuous]?.serializedValue ?? "command+4")"
-page_down = "\(configuration.shortcuts.bindings[.pageDown]?.serializedValue ?? "j")"
-page_up = "\(configuration.shortcuts.bindings[.pageUp]?.serializedValue ?? "k")"
-navigate_back = "\(configuration.shortcuts.bindings[.navigateBack]?.serializedValue ?? "command+[")"
-navigate_forward = "\(configuration.shortcuts.bindings[.navigateForward]?.serializedValue ?? "command+]")"
-goto_page = "\(configuration.shortcuts.bindings[.gotoPage]?.serializedValue ?? "command+option+g")"
-reopen_last_closed = "\(configuration.shortcuts.bindings[.reopenLastClosed]?.serializedValue ?? "command+shift+t")"
-new_window = "\(configuration.shortcuts.bindings[.newWindow]?.serializedValue ?? "command+shift+n")"
-toggle_all_pages_overview = "\(configuration.shortcuts.bindings[.toggleAllPagesOverview]?.serializedValue ?? "command+shift+o")"
-toggle_reader_split = "\(configuration.shortcuts.bindings[.toggleReaderSplit]?.serializedValue ?? "command+control+\\")"
-toggle_right_sidebar_mode = "\(configuration.shortcuts.bindings[.toggleRightSidebarMode]?.serializedValue ?? "command+shift+l")"
-swap_sidebars = "\(configuration.shortcuts.bindings[.swapSidebars]?.serializedValue ?? "command+shift+x")"
-undo_last_highlight = "\(configuration.shortcuts.bindings[.undoLastHighlight]?.serializedValue ?? "command+z")"
+highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
+exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
+toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
+save_annotations = "\(serializedShortcut(.saveAnnotations, configuration: configuration))"
+copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
+remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
+highlight_color_pink = "\(serializedShortcut(.highlightColorPink, configuration: configuration))"
+highlight_color_yellow = "\(serializedShortcut(.highlightColorYellow, configuration: configuration))"
+highlight_color_green = "\(serializedShortcut(.highlightColorGreen, configuration: configuration))"
+toggle_left_sidebar = "\(serializedShortcut(.toggleLeftSidebar, configuration: configuration))"
+toggle_right_sidebar = "\(serializedShortcut(.toggleRightSidebar, configuration: configuration))"
+use_sidebar_tabs = "\(serializedShortcut(.useSidebarTabs, configuration: configuration))"
+use_titlebar_tabs = "\(serializedShortcut(.useTitlebarTabs, configuration: configuration))"
+close_current_tab = "\(serializedShortcut(.closeCurrentTab, configuration: configuration))"
+previous_tab = "\(serializedShortcut(.previousTab, configuration: configuration))"
+next_tab = "\(serializedShortcut(.nextTab, configuration: configuration))"
+fit_width = "\(serializedShortcut(.fitWidth, configuration: configuration))"
+zoom_in = "\(serializedShortcut(.zoomIn, configuration: configuration))"
+zoom_out = "\(serializedShortcut(.zoomOut, configuration: configuration))"
+single_page = "\(serializedShortcut(.singlePage, configuration: configuration))"
+single_page_continuous = "\(serializedShortcut(.singlePageContinuous, configuration: configuration))"
+two_up = "\(serializedShortcut(.twoUp, configuration: configuration))"
+two_up_continuous = "\(serializedShortcut(.twoUpContinuous, configuration: configuration))"
+page_down = "\(serializedShortcut(.pageDown, configuration: configuration))"
+page_up = "\(serializedShortcut(.pageUp, configuration: configuration))"
+navigate_back = "\(serializedShortcut(.navigateBack, configuration: configuration))"
+navigate_forward = "\(serializedShortcut(.navigateForward, configuration: configuration))"
+goto_page = "\(serializedShortcut(.gotoPage, configuration: configuration))"
+reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
+new_window = "\(serializedShortcut(.newWindow, configuration: configuration))"
+toggle_all_pages_overview = "\(serializedShortcut(.toggleAllPagesOverview, configuration: configuration))"
+toggle_reader_split = "\(serializedShortcut(.toggleReaderSplit, configuration: configuration))"
+toggle_right_sidebar_mode = "\(serializedShortcut(.toggleRightSidebarMode, configuration: configuration))"
+swap_sidebars = "\(serializedShortcut(.swapSidebars, configuration: configuration))"
+undo_last_highlight = "\(serializedShortcut(.undoLastHighlight, configuration: configuration))"
 """
+    }
+
+    private static func serializedShortcut(
+        _ command: ShortcutCommand,
+        configuration: AppConfiguration
+    ) -> String {
+        configuration.shortcuts.bindings[command]?.serializedValue ?? "none"
     }
 }
 
@@ -369,13 +379,15 @@ struct AppConfigurationParser {
     ) throws {
         switch (section, key) {
         case ("shortcuts", "highlight_selection"):
-            configuration.shortcuts.bindings[.highlightSelection] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .highlightSelection, to: &configuration)
         case ("shortcuts", "exit_highlight_mode"):
-            configuration.shortcuts.bindings[.exitHighlightMode] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .exitHighlightMode, to: &configuration)
         case ("shortcuts", "toggle_night_mode"):
-            configuration.shortcuts.bindings[.toggleNightMode] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .toggleNightMode, to: &configuration)
         case ("shortcuts", "save_annotations"):
-            configuration.shortcuts.bindings[.saveAnnotations] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .saveAnnotations, to: &configuration)
+        case ("shortcuts", "copy_highlights_markdown"):
+            try applyShortcut(rawValue, command: .copyHighlightsMarkdown, to: &configuration)
         case ("reader", "default_display_mode"):
             let value = parseString(rawValue)
             guard let displayMode = ReaderDisplayMode(rawValue: value) else {
@@ -405,65 +417,65 @@ struct AppConfigurationParser {
         case ("layout", "sidebars_swapped"):
             configuration.layout.sidebarsSwapped = try parseBool(rawValue)
         case ("shortcuts", "remove_highlight"):
-            configuration.shortcuts.bindings[.removeHighlight] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .removeHighlight, to: &configuration)
         case ("shortcuts", "highlight_color_pink"):
-            configuration.shortcuts.bindings[.highlightColorPink] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .highlightColorPink, to: &configuration)
         case ("shortcuts", "highlight_color_yellow"):
-            configuration.shortcuts.bindings[.highlightColorYellow] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .highlightColorYellow, to: &configuration)
         case ("shortcuts", "highlight_color_green"):
-            configuration.shortcuts.bindings[.highlightColorGreen] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .highlightColorGreen, to: &configuration)
         case ("shortcuts", "toggle_left_sidebar"):
-            configuration.shortcuts.bindings[.toggleLeftSidebar] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .toggleLeftSidebar, to: &configuration)
         case ("shortcuts", "toggle_right_sidebar"):
-            configuration.shortcuts.bindings[.toggleRightSidebar] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .toggleRightSidebar, to: &configuration)
         case ("shortcuts", "use_sidebar_tabs"):
-            configuration.shortcuts.bindings[.useSidebarTabs] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .useSidebarTabs, to: &configuration)
         case ("shortcuts", "use_titlebar_tabs"):
-            configuration.shortcuts.bindings[.useTitlebarTabs] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .useTitlebarTabs, to: &configuration)
         case ("shortcuts", "close_current_tab"):
-            configuration.shortcuts.bindings[.closeCurrentTab] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .closeCurrentTab, to: &configuration)
         case ("shortcuts", "previous_tab"):
-            configuration.shortcuts.bindings[.previousTab] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .previousTab, to: &configuration)
         case ("shortcuts", "next_tab"):
-            configuration.shortcuts.bindings[.nextTab] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .nextTab, to: &configuration)
         case ("shortcuts", "fit_width"):
-            configuration.shortcuts.bindings[.fitWidth] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .fitWidth, to: &configuration)
         case ("shortcuts", "single_page"):
-            configuration.shortcuts.bindings[.singlePage] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .singlePage, to: &configuration)
         case ("shortcuts", "single_page_continuous"):
-            configuration.shortcuts.bindings[.singlePageContinuous] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .singlePageContinuous, to: &configuration)
         case ("shortcuts", "two_up"):
-            configuration.shortcuts.bindings[.twoUp] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .twoUp, to: &configuration)
         case ("shortcuts", "two_up_continuous"):
-            configuration.shortcuts.bindings[.twoUpContinuous] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .twoUpContinuous, to: &configuration)
         case ("shortcuts", "zoom_in"):
-            configuration.shortcuts.bindings[.zoomIn] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .zoomIn, to: &configuration)
         case ("shortcuts", "zoom_out"):
-            configuration.shortcuts.bindings[.zoomOut] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .zoomOut, to: &configuration)
         case ("shortcuts", "page_down"):
-            configuration.shortcuts.bindings[.pageDown] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .pageDown, to: &configuration)
         case ("shortcuts", "page_up"):
-            configuration.shortcuts.bindings[.pageUp] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .pageUp, to: &configuration)
         case ("shortcuts", "navigate_back"):
-            configuration.shortcuts.bindings[.navigateBack] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .navigateBack, to: &configuration)
         case ("shortcuts", "navigate_forward"):
-            configuration.shortcuts.bindings[.navigateForward] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .navigateForward, to: &configuration)
         case ("shortcuts", "goto_page"):
-            configuration.shortcuts.bindings[.gotoPage] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .gotoPage, to: &configuration)
         case ("shortcuts", "reopen_last_closed"):
-            configuration.shortcuts.bindings[.reopenLastClosed] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .reopenLastClosed, to: &configuration)
         case ("shortcuts", "new_window"):
-            configuration.shortcuts.bindings[.newWindow] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .newWindow, to: &configuration)
         case ("shortcuts", "toggle_all_pages_overview"):
-            configuration.shortcuts.bindings[.toggleAllPagesOverview] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .toggleAllPagesOverview, to: &configuration)
         case ("shortcuts", "toggle_reader_split"):
-            configuration.shortcuts.bindings[.toggleReaderSplit] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .toggleReaderSplit, to: &configuration)
         case ("shortcuts", "toggle_right_sidebar_mode"), ("shortcuts", "toggle_left_tabs_mode"):
-            configuration.shortcuts.bindings[.toggleRightSidebarMode] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .toggleRightSidebarMode, to: &configuration)
         case ("shortcuts", "swap_sidebars"):
-            configuration.shortcuts.bindings[.swapSidebars] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .swapSidebars, to: &configuration)
         case ("shortcuts", "undo_last_highlight"):
-            configuration.shortcuts.bindings[.undoLastHighlight] = try KeyboardShortcut.parse(parseString(rawValue))
+            try applyShortcut(rawValue, command: .undoLastHighlight, to: &configuration)
         default:
             break
         }
@@ -471,6 +483,19 @@ struct AppConfigurationParser {
 
     private func parseString(_ rawValue: String) -> String {
         rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    }
+
+    private func applyShortcut(
+        _ rawValue: String,
+        command: ShortcutCommand,
+        to configuration: inout AppConfiguration
+    ) throws {
+        let value = parseString(rawValue)
+        if value == "none" {
+            configuration.shortcuts.bindings.removeValue(forKey: command)
+            return
+        }
+        configuration.shortcuts.bindings[command] = try KeyboardShortcut.parse(value)
     }
 
     private func parseBool(_ rawValue: String) throws -> Bool {
@@ -540,6 +565,7 @@ struct AppConfigurationStore {
             "exit_highlight_mode",
             "toggle_night_mode",
             "save_annotations",
+            "copy_highlights_markdown",
             "remove_highlight",
             "highlight_color_pink",
             "highlight_color_yellow",

@@ -156,6 +156,88 @@ struct WindowChromeTests {
     }
 
     @Test
+    func closeFocusedPaneInSplitCollapsesToSinglePane() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "split-close-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "split-close-second"))
+        let windowID = controller.windowID
+
+        store.setSplitEnabled(true, in: windowID)
+        store.setFocusedPane(.secondary, in: windowID)
+        controller.window?.layoutIfNeeded()
+
+        #expect(store.isSplitEnabled(in: windowID))
+        #expect(store.displayedSessionID(for: .primary, in: windowID) == second.id)
+        #expect(store.displayedSessionID(for: .secondary, in: windowID) == first.id)
+
+        controller.requestCloseActiveSession()
+        controller.window?.layoutIfNeeded()
+
+        #expect(store.isSplitEnabled(in: windowID) == false)
+        #expect(store.sessions.map(\.id) == [second.id])
+        #expect(store.displayedSessionID(for: .primary, in: windowID) == second.id)
+        #expect(store.displayedSessionID(for: .secondary, in: windowID) == nil)
+    }
+
+    @Test
+    func closeDuplicatedSplitPaneKeepsSingleDocumentOpen() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "split-duplicate"))
+        let windowID = controller.windowID
+
+        store.setSplitEnabled(true, in: windowID)
+        store.setFocusedPane(.secondary, in: windowID)
+        controller.window?.layoutIfNeeded()
+
+        #expect(store.isSplitEnabled(in: windowID))
+
+        controller.requestCloseActiveSession()
+        controller.window?.layoutIfNeeded()
+
+        #expect(store.isSplitEnabled(in: windowID) == false)
+        #expect(store.sessions.map(\.id) == [session.id])
+        #expect(store.displayedSessionID(for: .primary, in: windowID) == session.id)
+        #expect(store.displayedSessionID(for: .secondary, in: windowID) == nil)
+    }
+
+    @Test
+    func readerSplitPreservesAdjustedDividerPositionAcrossStoreRefresh() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "split-divider-first"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "split-divider-second"))
+        let windowID = controller.windowID
+
+        store.setSplitEnabled(true, in: windowID)
+        controller.window?.layoutIfNeeded()
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let workspaceSplitView = splitController.readerWorkspaceViewController.view
+            .subviews
+            .compactMap({ $0 as? NSSplitView })
+            .first else {
+            Issue.record("Failed to locate reader workspace split view")
+            return
+        }
+
+        workspaceSplitView.setPosition(280, ofDividerAt: 0)
+        workspaceSplitView.adjustSubviews()
+        controller.window?.layoutIfNeeded()
+
+        let secondaryWidthBefore = workspaceSplitView.subviews[1].frame.width
+        store.setDirty(true, for: first.id)
+        controller.window?.layoutIfNeeded()
+        let secondaryWidthAfter = workspaceSplitView.subviews[1].frame.width
+
+        #expect(abs(secondaryWidthAfter - secondaryWidthBefore) < 0.5)
+    }
+
+    @Test
     func horizontalTitlebarModeCanOpenDocument() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
@@ -184,6 +266,55 @@ struct WindowChromeTests {
         controller.window?.layoutIfNeeded()
 
         #expect(controller.window != nil)
+    }
+
+    @Test
+    func readerWorkspaceStartsCollapsedWhenSplitDisabled() {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        controller.window?.layoutIfNeeded()
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let workspaceSplitView = splitController.readerWorkspaceViewController.view
+                .subviews
+                .compactMap({ $0 as? NSSplitView })
+                .first else {
+            Issue.record("Failed to locate reader workspace split view")
+            return
+        }
+
+        #expect(store.isSplitEnabled(in: controller.windowID) == false)
+        #expect(workspaceSplitView.subviews[1].isHidden)
+        #expect(
+            workspaceSplitView.isSubviewCollapsed(workspaceSplitView.subviews[1]) ||
+                workspaceSplitView.subviews[1].frame.width < 1
+        )
+    }
+
+    @Test
+    func settingsWindowUsesAdaptiveGeneralSize() {
+        let controller = SettingsWindowController(configuration: .default) { _ in }
+        controller.showWindow(nil)
+
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 520, height: 260))
+    }
+
+    @Test
+    func settingsWindowSwitchesBetweenPageSizes() throws {
+        let controller = SettingsWindowController(configuration: .default) { _ in }
+        controller.showWindow(nil)
+
+        let window = try #require(controller.window)
+        controller.selectPageForTesting(1)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 920, height: 620))
+
+        controller.selectPageForTesting(0)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 520, height: 260))
     }
 }
 

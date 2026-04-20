@@ -189,6 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let mainMenu = NSMenu()
         mainMenu.addItem(buildApplicationMenuItem())
         mainMenu.addItem(buildFileMenuItem())
+        mainMenu.addItem(buildEditMenuItem())
         mainMenu.addItem(buildTabsMenuItem())
         mainMenu.addItem(buildAnnotateMenuItem())
         mainMenu.addItem(buildViewMenuItem())
@@ -263,6 +264,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             command: .saveAnnotations,
             action: #selector(saveAnnotations(_:))
         )
+        let exportHighlightsItem = NSMenuItem(
+            title: "Export Highlights…",
+            action: #selector(exportHighlights(_:)),
+            keyEquivalent: ""
+        )
+        exportHighlightsItem.target = self
+        let copyHighlightsMarkdownItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.copyHighlightsMarkdown.menuTitle,
+            command: .copyHighlightsMarkdown,
+            action: #selector(copyHighlightsMarkdown(_:))
+        )
         let recentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         recentItem.submenu = recentFilesMenu
         let reopenClosedItem = makeConfiguredMenuItem(
@@ -292,11 +304,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             findNextItem,
             findPreviousItem,
             saveAnnotationsItem,
+            exportHighlightsItem,
+            copyHighlightsMarkdownItem,
             .separator(),
             closeItem,
         ]
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
+    }
+
+    private func buildEditMenuItem() -> NSMenuItem {
+        let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.autoenablesItems = true
+
+        let undoItem = NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redoItem = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
+
+        for item in [undoItem, redoItem, cutItem, copyItem, pasteItem, selectAllItem] {
+            item.keyEquivalentModifierMask = [.command]
+            item.target = nil
+        }
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+
+        editMenu.items = [
+            undoItem,
+            redoItem,
+            .separator(),
+            cutItem,
+            copyItem,
+            pasteItem,
+            .separator(),
+            selectAllItem,
+        ]
+        editMenuItem.submenu = editMenu
+        return editMenuItem
     }
 
     private func buildTabsMenuItem() -> NSMenuItem {
@@ -741,6 +787,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    @objc
+    private func exportHighlights(_ sender: Any?) {
+        guard let context = currentHighlightExportContext() else { return }
+        guard let format = promptForHighlightExportFormat() else { return }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = HighlightExporter.defaultFilename(
+            for: context.documentTitle,
+            format: format
+        )
+        panel.allowedContentTypes = [contentType(for: format)]
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let data = try HighlightExporter.export(context.groups, format: format)
+            try data.write(to: url)
+        } catch {
+            presentExportError(error)
+        }
+    }
+
+    @objc
+    private func copyHighlightsMarkdown(_ sender: Any?) {
+        guard let context = currentHighlightExportContext() else { return }
+
+        do {
+            let data = try HighlightExporter.export(context.groups, format: .markdown)
+            guard let string = String(data: data, encoding: .utf8) else { return }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(string, forType: .string)
+        } catch {
+            presentExportError(error)
+        }
+    }
+
     private func setActiveReaderDisplayMode(_ mode: ReaderDisplayMode) {
         guard let controller = mainWindowController,
               let sessionID = documentStore.activeSessionID(in: controller.windowID) else { return }
@@ -843,12 +927,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         do {
             try configStore.save(newConfiguration)
             appConfiguration = newConfiguration
+            refreshMenuShortcuts()
             documentStore.updateAppConfiguration(newConfiguration)
         } catch {
             appConfiguration = previousConfiguration
+            refreshMenuShortcuts()
             documentStore.updateAppConfiguration(previousConfiguration)
             settingsWindowController?.sync(configuration: previousConfiguration)
             presentConfigurationSaveError(error)
+        }
+    }
+
+    private func refreshMenuShortcuts() {
+        guard let menu = NSApp.mainMenu else { return }
+        refreshMenuShortcuts(in: menu)
+    }
+
+    private func refreshMenuShortcuts(in menu: NSMenu) {
+        for item in menu.items {
+            if let command = item.representedObject as? ShortcutCommand,
+               let shortcut = appConfiguration.shortcuts.bindings[command] {
+                item.keyEquivalent = shortcut.menuKeyEquivalent
+                item.keyEquivalentModifierMask = shortcut.modifierMask
+            } else if item.representedObject is ShortcutCommand {
+                item.keyEquivalent = ""
+                item.keyEquivalentModifierMask = []
+            }
+
+            if let submenu = item.submenu {
+                refreshMenuShortcuts(in: submenu)
+            }
         }
     }
 
@@ -890,6 +998,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    private func presentExportError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Failed to export highlights"
+        if let window = mainWindowController?.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func currentHighlightExportContext() -> (documentTitle: String, groups: [DocumentHighlightGroup])? {
+        guard let windowID = mainWindowController?.windowID,
+              let session = documentStore.activeSession(in: windowID) else { return nil }
+        let groups = documentStore.annotationGroups(for: session.id)
+        guard groups.isEmpty == false else { return nil }
+        return (session.title, groups)
+    }
+
+    private func promptForHighlightExportFormat() -> HighlightExportFormat? {
+        let alert = NSAlert()
+        alert.messageText = "Export Highlights"
+        alert.informativeText = "Choose the output format."
+        let buttons: [(String, HighlightExportFormat)] = [
+            ("Markdown", .markdown),
+            ("Plain Text", .plainText),
+            ("JSON", .json),
+        ]
+        buttons.forEach { alert.addButton(withTitle: $0.0) }
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        let index = Int(response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue)
+        guard buttons.indices.contains(index) else { return nil }
+        return buttons[index].1
+    }
+
+    private func contentType(for format: HighlightExportFormat) -> UTType {
+        switch format {
+        case .markdown:
+            return UTType(filenameExtension: "md") ?? .plainText
+        case .plainText:
+            return .plainText
+        case .json:
+            return .json
+        }
+    }
+
     private func presentAutoSaveErrors(_ errors: [URL: Error]) {
         let sortedFiles = errors.keys.sorted { $0.lastPathComponent < $1.lastPathComponent }
         let fileList = sortedFiles.map(\.lastPathComponent).joined(separator: "\n")
@@ -905,6 +1060,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         } else {
             alert.runModal()
         }
+    }
+
+    private func activeEditableTextResponder() -> NSTextView? {
+        let window = NSApp.keyWindow ?? NSApp.mainWindow
+        guard let textView = window?.firstResponder as? NSTextView,
+              textView.isEditable else { return nil }
+        return textView
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -925,9 +1087,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return activeSession != nil
         case #selector(saveAnnotations(_:)):
             return activeSession?.isDirty == true
+        case #selector(exportHighlights(_:)), #selector(copyHighlightsMarkdown(_:)):
+            return currentHighlightExportContext() != nil
         case #selector(removeHighlightUnderCursorAction(_:)):
             return activeSession != nil
         case #selector(undoLastHighlightAction(_:)):
+            guard activeEditableTextResponder() == nil else { return false }
             return controller?.hasUndoableHighlight == true
         case #selector(setHighlightColorPink(_:)):
             menuItem.state = controller?.currentHighlightColor == .pink ? .on : .off

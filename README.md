@@ -9,12 +9,16 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
-- Right pane hosts **Outline + Pages + Search**, and all search previews stay on the right
+- Right pane hosts **Outline + Pages + Search + Annotations**, and all search / annotation previews stay on the right
 - Find bar supports `This Document` / `All Open`; typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
-- Multi-window workspaces (`cmd+shift+n`) with per-window split, sidebar, search, and recently-closed state
+- New windows and relaunch restore start in single-pane mode; split stays an explicit in-session toggle
+- Multi-window workspaces (`cmd+shift+n`) with per-window sidebar, search, and recently-closed state
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Pink-first highlight workflow (`a` to highlight, `i` to toggle inverted night mode)
+- Highlights can carry comments in the right sidebar, and exports include those comments
+- Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
+- Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
 - Find bar (`cmd+f`), Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
 - Per-PDF memory: scale, page, sidebar widths persist across launches
@@ -84,6 +88,8 @@ sidebars_swapped = false
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
+- Setting a shortcut to `none` clears it completely; SlatePDF will not silently
+  fall back to the default binding after restart.
 
 ## Keyboard shortcuts
 
@@ -95,6 +101,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Exit highlight mode | `esc` |
 | Toggle night mode | `i` |
 | Save annotations | `cmd+s` |
+| Copy highlights as Markdown | `cmd+shift+e` |
 | Fit width | `cmd+0` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Close tab / window | `cmd+w` |
@@ -113,7 +120,7 @@ Defined in `[shortcuts]` above. Highlights:
 ```
 App/         AppKit entry point, window + split + settings
 Core/        Document session store, config, persistence
-Features/    Annotation service, highlight colors, shortcut controller
+Features/    Annotation service, exporter, highlight colors, shortcut controller
 UI/          CenterReader, LeftTabs, RightOutline, TitlebarTabs
 Tests/       Swift Testing + XCTest suites
 Resources/   Info.plist, AppIcon.png/.icns
