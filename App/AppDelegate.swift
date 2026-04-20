@@ -570,7 +570,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             keyWindow.performClose(sender)
             return
         }
-        mainWindowController?.requestCloseActiveSession()
+        guard let controller = mainWindowController else { return }
+        if documentStore.activeSession(in: controller.windowID) == nil {
+            controller.window?.performClose(sender)
+            return
+        }
+        controller.requestCloseActiveSession()
     }
 
     @objc
@@ -1121,7 +1126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true ? .on : .off
             return true
         case #selector(closeCurrentTab(_:)):
-            return activeSession != nil
+            return controller != nil
         case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
             return windowID.map { documentStore.sessionCount(in: $0) > 1 } == true
         case #selector(fitReaderToWidth(_:)):

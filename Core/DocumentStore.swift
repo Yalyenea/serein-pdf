@@ -111,17 +111,16 @@ final class DocumentStore {
 
     func createWindow(copyingFrom sourceWindowID: UUID? = nil) -> UUID {
         let source = sourceWindowID.flatMap(windowWorkspace(for:)) ?? windowWorkspaces.first ?? WindowWorkspace()
-        let copiedSessionIDs = source.activeSessionID.map { [$0] } ?? []
         var copy = WindowWorkspace(
-            sessionIDs: copiedSessionIDs,
+            sessionIDs: [],
             tabPresentationMode: source.tabPresentationMode,
             isLeftSidebarVisible: source.isLeftSidebarVisible,
             isRightSidebarVisible: source.isRightSidebarVisible,
-            rightSidebarMode: source.rightSidebarMode,
-            searchQuery: source.searchQuery,
-            searchScope: source.searchScope,
+            rightSidebarMode: .outline,
+            searchQuery: "",
+            searchScope: .currentDocument,
             isSplitEnabled: false,
-            primarySessionID: source.activeSessionID ?? source.primarySessionID,
+            primarySessionID: nil,
             secondarySessionID: nil,
             focusedPane: .primary,
             recentlyClosedURLs: []

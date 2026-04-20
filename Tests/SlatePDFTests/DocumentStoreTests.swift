@@ -709,7 +709,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSessionID(in: windowID), second.id)
     }
 
-    func testCreateWindowCopiesWorkspaceButKeepsIndependentUIState() throws {
+    func testCreateWindowStartsEmptyButKeepsIndependentUIState() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
             readingStateStore: InMemoryReadingStateStore(),
@@ -728,9 +728,9 @@ final class DocumentStoreTests: XCTestCase {
         let copiedWindowID = store.createWindow(copyingFrom: sourceWindowID)
 
         XCTAssertFalse(store.isSplitEnabled(in: copiedWindowID))
-        XCTAssertEqual(store.displayedSessionID(for: .primary, in: copiedWindowID), first.id)
+        XCTAssertNil(store.displayedSessionID(for: .primary, in: copiedWindowID))
         XCTAssertNil(store.displayedSessionID(for: .secondary, in: copiedWindowID))
-        XCTAssertEqual(store.sessions(in: copiedWindowID).map(\.id), [first.id])
+        XCTAssertTrue(store.sessions(in: copiedWindowID).isEmpty)
         XCTAssertEqual(store.focusedPane(in: copiedWindowID), .primary)
         XCTAssertEqual(store.tabPresentationMode(in: copiedWindowID), .horizontalTitlebar)
         XCTAssertFalse(store.isLeftSidebarVisible(in: copiedWindowID))
@@ -754,42 +754,39 @@ final class DocumentStoreTests: XCTestCase {
         let copiedWindowID = store.createWindow(copyingFrom: sourceWindowID)
 
         XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [first.id])
-        XCTAssertEqual(store.sessions(in: copiedWindowID).map(\.id), [first.id])
+        XCTAssertTrue(store.sessions(in: copiedWindowID).isEmpty)
 
         let second = try store.open(documentAt: makeTemporaryPDF(named: "window-scope-second"), in: sourceWindowID)
         XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [first.id, second.id])
-        XCTAssertEqual(store.sessions(in: copiedWindowID).map(\.id), [first.id])
+        XCTAssertTrue(store.sessions(in: copiedWindowID).isEmpty)
 
         store.close(sessionID: second.id, from: sourceWindowID)
         XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [first.id])
-        XCTAssertEqual(store.sessions(in: copiedWindowID).map(\.id), [first.id])
+        XCTAssertTrue(store.sessions(in: copiedWindowID).isEmpty)
 
         store.close(sessionID: first.id, from: sourceWindowID)
         XCTAssertTrue(store.sessions(in: sourceWindowID).isEmpty)
-        XCTAssertEqual(store.sessions(in: copiedWindowID).map(\.id), [first.id])
-        XCTAssertNotNil(store.session(for: first.id))
+        XCTAssertTrue(store.sessions(in: copiedWindowID).isEmpty)
+        XCTAssertNil(store.session(for: first.id))
     }
 
-    func testClosingWindowRemovesSessionsOnlyOwnedByThatWindow() throws {
+    func testClosingEmptyWindowKeepsOtherWindowSessionsIntact() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
             readingStateStore: InMemoryReadingStateStore(),
             recentFilesStore: InMemoryRecentFilesStore()
         )
-        let shared = try store.open(documentAt: makeTemporaryPDF(named: "window-close-shared"))
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "window-close-source"))
         let sourceWindowID = store.defaultWindowID
         let copiedWindowID = store.createWindow(copyingFrom: sourceWindowID)
-        let exclusive = try store.open(documentAt: makeTemporaryPDF(named: "window-close-exclusive"), in: sourceWindowID)
+        XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [session.id])
+        XCTAssertTrue(store.sessions(in: copiedWindowID).isEmpty)
 
-        XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [shared.id, exclusive.id])
-        XCTAssertEqual(store.sessions(in: copiedWindowID).map(\.id), [shared.id])
+        store.closeWindow(id: copiedWindowID)
 
-        store.closeWindow(id: sourceWindowID)
-
-        XCTAssertEqual(store.windowIDs(), [copiedWindowID])
-        XCTAssertEqual(store.sessions.map(\.id), [shared.id])
-        XCTAssertEqual(store.sessions(in: copiedWindowID).map(\.id), [shared.id])
-        XCTAssertNil(store.session(for: exclusive.id))
+        XCTAssertEqual(store.windowIDs(), [sourceWindowID])
+        XCTAssertEqual(store.sessions.map(\.id), [session.id])
+        XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [session.id])
     }
 
     func testAllOpenSearchBuildsSectionsAcrossSessions() throws {
