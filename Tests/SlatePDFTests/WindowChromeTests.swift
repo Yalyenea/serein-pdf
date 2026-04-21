@@ -258,14 +258,28 @@ struct WindowChromeTests {
     func fitWidthOnOpenCanOpenWindowBackedDocument() throws {
         _ = NSApplication.shared
         var configuration = AppConfiguration.default
+        configuration.reader.defaultDisplayMode = .singlePage
         configuration.reader.fitWidthOnOpen = true
         let store = DocumentStore(appConfiguration: configuration)
         let controller = MainWindowController(documentStore: store)
 
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "fit-width-open"))
-        controller.window?.layoutIfNeeded()
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "fit-width-open",
+                pageSizes: [NSSize(width: 1280, height: 720)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let expectedScale = fitWidthScaleExpected(for: splitController.readerViewController.pdfView) else {
+            Issue.record("Failed to locate fit-width reader")
+            return
+        }
 
         #expect(controller.window != nil)
+        #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+        #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.001)
     }
 
     @Test
@@ -316,31 +330,216 @@ struct WindowChromeTests {
 
         #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 520, height: 260))
     }
+
+    @Test
+    func mainWindowUsesUpdatedReaderFramingDefaults() {
+        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        let contentSize = controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size
+
+        #expect(contentSize == MainWindowController.defaultContentSize)
+        #expect(controller.window?.minSize == MainWindowController.minimumWindowSize)
+    }
+
+    @Test
+    func singlePageZoomedOutDocumentStaysCentered() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "single-page-centered",
+                pageSizes: [NSSize(width: 1280, height: 720)]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        reader.zoomOut()
+        flushLayout(controller.window)
+
+        guard let clipView = pdfClipView(in: reader.pdfView),
+              let documentView = pdfDocumentView(in: reader.pdfView) else {
+            Issue.record("Failed to locate PDF clip/document views")
+            return
+        }
+
+        let expectedMinX = max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
+        #expect(abs(documentView.frame.minX - expectedMinX) < 1.0)
+    }
+
+    @Test
+    func singlePageZoomKeepsViewportCenterStable() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "single-page-zoom-anchor",
+                pageSizes: [NSSize(width: 720, height: 1800)]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+
+        guard let beforeAnchor = visibleDocumentCenter(in: reader.pdfView) else {
+            Issue.record("Failed to capture pre-zoom anchor")
+            return
+        }
+
+        reader.zoomOut()
+        flushLayout(controller.window)
+
+        guard let afterAnchor = visibleDocumentCenter(in: reader.pdfView) else {
+            Issue.record("Failed to capture post-zoom anchor")
+            return
+        }
+
+        #expect(abs(afterAnchor.x - beforeAnchor.x) < 2.0)
+        #expect(abs(afterAnchor.y - beforeAnchor.y) < 2.0)
+    }
+
+    @Test
+    func fitWidthUsesPDFKitRowWidthAcrossPageShapes() throws {
+        _ = NSApplication.shared
+
+        struct Scenario {
+            let name: String
+            let pageSizes: [NSSize]
+            let mode: ReaderDisplayMode
+            let leadPageIndex: Int
+        }
+
+        let scenarios = [
+            Scenario(
+                name: "wide-slide",
+                pageSizes: [NSSize(width: 1280, height: 720)],
+                mode: .singlePage,
+                leadPageIndex: 0
+            ),
+            Scenario(
+                name: "portrait-paper",
+                pageSizes: [NSSize(width: 595, height: 842)],
+                mode: .singlePageContinuous,
+                leadPageIndex: 0
+            ),
+            Scenario(
+                name: "two-up-paper",
+                pageSizes: [NSSize(width: 595, height: 842), NSSize(width: 595, height: 842)],
+                mode: .twoUp,
+                leadPageIndex: 0
+            ),
+        ]
+
+        for scenario in scenarios {
+            let store = DocumentStore(appConfiguration: .default)
+            let controller = MainWindowController(documentStore: store)
+            let session = try store.open(
+                documentAt: makeTemporaryPDF(named: scenario.name, pageSizes: scenario.pageSizes)
+            )
+            store.setDisplayMode(scenario.mode, for: session.id)
+            flushLayout(controller.window)
+
+            guard let splitController = controller.window?.contentViewController as? SplitViewController,
+                  let expectedScale = fitWidthScaleExpected(
+                      for: splitController.readerViewController.pdfView,
+                      leadPageIndex: scenario.leadPageIndex
+                  ) else {
+                Issue.record("Failed to locate reader internals for \(scenario.name)")
+                return
+            }
+
+            splitController.readerViewController.fitToWidth()
+            flushLayout(controller.window)
+
+            #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.001)
+        }
+    }
 }
 
 @MainActor
-private func makeTemporaryPDF(named name: String) throws -> URL {
+private func flushLayout(_ window: NSWindow?) {
+    window?.layoutIfNeeded()
+    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+    window?.layoutIfNeeded()
+}
+
+@MainActor
+private func pdfClipView(in pdfView: PDFView) -> NSClipView? {
+    pdfView.subviews.compactMap { $0 as? NSScrollView }.first?.contentView
+}
+
+@MainActor
+private func pdfDocumentView(in pdfView: PDFView) -> NSView? {
+    pdfClipView(in: pdfView)?.documentView
+}
+
+@MainActor
+private func visibleDocumentCenter(in pdfView: PDFView) -> NSPoint? {
+    guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
+    let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
+    guard let page = pdfView.page(for: viewportCenter, nearest: true) else { return nil }
+    return pdfView.convert(viewportCenter, to: page)
+}
+
+@MainActor
+private func fitWidthScaleExpected(for pdfView: PDFView, leadPageIndex: Int = 0) -> CGFloat? {
+    guard let clipView = pdfClipView(in: pdfView),
+          let page = pdfView.document?.page(at: leadPageIndex),
+          pdfView.scaleFactor > 0 else { return nil }
+
+    let normalizedRowWidth = pdfView.rowSize(for: page).width / pdfView.scaleFactor
+    guard normalizedRowWidth > 0 else { return nil }
+    return clipView.frame.width / normalizedRowWidth
+}
+
+@MainActor
+private func makeTemporaryPDF(named name: String, pageSizes: [NSSize] = [NSSize(width: 200, height: 260)]) throws -> URL {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension("pdf")
     let document = PDFDocument()
 
-    let image = NSImage(size: NSSize(width: 200, height: 260))
-    image.lockFocus()
-    NSColor.white.setFill()
-    NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 260)).fill()
-    let textRect = NSRect(x: 24, y: 110, width: 152, height: 40)
-    let attributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 16, weight: .medium),
-        .foregroundColor: NSColor.black,
-    ]
-    NSString(string: name).draw(in: textRect, withAttributes: attributes)
-    image.unlockFocus()
+    for (index, pageSize) in pageSizes.enumerated() {
+        let image = NSImage(size: pageSize)
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(rect: NSRect(origin: .zero, size: pageSize)).fill()
 
-    guard let page = PDFPage(image: image) else {
-        throw CocoaError(.fileWriteUnknown)
+        let textRect = NSRect(
+            x: max(pageSize.width * 0.12, 24),
+            y: max(pageSize.height * 0.42, 24),
+            width: max(pageSize.width * 0.76, 120),
+            height: 40
+        )
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 16, weight: .medium),
+            .foregroundColor: NSColor.black,
+        ]
+        NSString(string: "\(name)-\(index)").draw(in: textRect, withAttributes: attributes)
+        image.unlockFocus()
+
+        guard let page = PDFPage(image: image) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        document.insert(page, at: index)
     }
-    document.insert(page, at: 0)
 
     guard document.write(to: url) else {
         throw CocoaError(.fileWriteUnknown)

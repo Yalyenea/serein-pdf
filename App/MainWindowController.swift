@@ -5,6 +5,9 @@ extension NSToolbarItem.Identifier {
 }
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
+    static let defaultContentSize = NSSize(width: 1480, height: 960)
+    static let minimumWindowSize = NSSize(width: 1120, height: 720)
+
     let documentStore: DocumentStore
     let windowID: UUID
     private let splitViewController: SplitViewController
@@ -21,8 +24,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let window = ReaderShortcutWindow(contentViewController: splitViewController)
 
         window.title = "SlatePDF"
-        window.setContentSize(NSSize(width: 1360, height: 900))
-        window.minSize = NSSize(width: 960, height: 640)
+        window.setContentSize(Self.defaultContentSize)
+        window.minSize = Self.minimumWindowSize
         window.center()
         window.styleMask.insert(.fullSizeContentView)
         window.tabbingMode = .disallowed

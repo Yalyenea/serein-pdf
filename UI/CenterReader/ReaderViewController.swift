@@ -15,6 +15,11 @@ private struct SubmittedSearchKey: Equatable {
     let scope: SearchScope
 }
 
+private struct PDFViewportAnchor {
+    let page: PDFPage
+    let pagePoint: NSPoint
+}
+
 final class ReaderViewController: NSViewController {
     let documentStore: DocumentStore
     let windowID: UUID
@@ -126,16 +131,24 @@ final class ReaderViewController: NSViewController {
 
         guard let session = targetSession(),
               displayedSessionID == session.id,
-              session.scaleMode == .fitWidth,
               pdfView.bounds.width > 0 else { return }
+
+        guard session.scaleMode == .fitWidth else {
+            recenterDocumentViewIfNeeded()
+            return
+        }
 
         let isPending = pendingFitWidthSessionID == session.id
         let boundsChanged = abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) > 0.5
-        guard isPending || boundsChanged else { return }
+        guard isPending || boundsChanged else {
+            recenterDocumentViewIfNeeded()
+            return
+        }
 
         pendingFitWidthSessionID = nil
         lastAppliedFitBoundsWidth = pdfView.bounds.width
         applyFitWidth(for: session)
+        recenterDocumentViewIfNeeded()
     }
 
     deinit {
@@ -254,7 +267,7 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
-        applyProgrammaticScale(nextScale)
+        applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }
 
@@ -266,7 +279,7 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
-        applyProgrammaticScale(nextScale)
+        applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }
 
@@ -679,7 +692,10 @@ final class ReaderViewController: NSViewController {
             pendingFitWidthSessionID = nil
             lastAppliedFitBoundsWidth = 0
             guard displayedScaleMode != .manual || abs(pdfView.scaleFactor - session.zoomScale) > 0.001 else { return }
-            applyProgrammaticScale(session.zoomScale)
+            applyProgrammaticScale(
+                session.zoomScale,
+                preserveViewportCenter: displayedSessionID == session.id
+            )
         }
 
         displayedScaleMode = session.scaleMode
@@ -704,29 +720,32 @@ final class ReaderViewController: NSViewController {
 
     private func applyFitWidth(for session: DocumentSession) {
         guard let scaleFactor = fitWidthScaleFactor(for: session) else { return }
-        applyProgrammaticScale(scaleFactor)
+        applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
         documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
     }
 
-    private func applyProgrammaticScale(_ scaleFactor: CGFloat) {
+    private func applyProgrammaticScale(_ scaleFactor: CGFloat, preserveViewportCenter: Bool = false) {
+        let viewportAnchor = preserveViewportCenter ? captureViewportAnchor() : nil
         isApplyingProgrammaticScale = true
         defer { isApplyingProgrammaticScale = false }
         pdfView.scaleFactor = scaleFactor
+        pdfView.layoutSubtreeIfNeeded()
+        recenterDocumentViewIfNeeded()
+        if let viewportAnchor {
+            restoreViewportAnchor(viewportAnchor)
+        }
     }
 
     private func fitWidthScaleFactor(for session: DocumentSession) -> CGFloat? {
         guard let document = pdfView.document else { return nil }
         let pages = spreadPages(for: session, in: document)
-        guard pages.isEmpty == false else { return nil }
+        guard let leadPage = pages.first else { return nil }
+        let currentScale = max(pdfView.scaleFactor, 0.001)
+        let normalizedRowWidth = pdfView.rowSize(for: leadPage).width / currentScale
+        guard normalizedRowWidth > 0 else { return nil }
 
-        let pageWidths = pages.map { $0.bounds(for: pdfView.displayBox).width }
-        let interPageSpacing: CGFloat = session.displayMode.usesTwoUpLayout && pages.count > 1 ? 12 : 0
-        let horizontalInset: CGFloat = 24
-        let availableWidth = max(pdfView.bounds.width - horizontalInset, 1)
-        let totalWidth = pageWidths.reduce(0, +) + interPageSpacing
-        guard totalWidth > 0 else { return nil }
-
-        let unclamped = availableWidth / totalWidth
+        let availableWidth = max(pdfClipView()?.frame.width ?? pdfView.bounds.width, 1)
+        let unclamped = availableWidth / normalizedRowWidth
         return min(max(unclamped, pdfView.minScaleFactor), pdfView.maxScaleFactor)
     }
 
@@ -763,6 +782,73 @@ final class ReaderViewController: NSViewController {
     private func targetSession() -> DocumentSession? {
         guard let targetSessionID else { return nil }
         return documentStore.session(for: targetSessionID)
+    }
+
+    private func pdfScrollView() -> NSScrollView? {
+        pdfView.subviews.first { $0 is NSScrollView } as? NSScrollView
+    }
+
+    private func pdfClipView() -> NSClipView? {
+        pdfScrollView()?.contentView
+    }
+
+    private func pdfDocumentView() -> NSView? {
+        pdfClipView()?.documentView
+    }
+
+    private func recenterDocumentViewIfNeeded() {
+        guard let scrollView = pdfScrollView(),
+              let clipView = pdfClipView(),
+              let documentView = pdfDocumentView() else { return }
+
+        let targetMinX: CGFloat
+        if displayedDisplayMode == .singlePage {
+            targetMinX = max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
+        } else {
+            targetMinX = 0
+        }
+
+        if abs(documentView.frame.minX - targetMinX) > 0.5 {
+            var frame = documentView.frame
+            frame.origin.x = targetMinX
+            documentView.frame = frame
+        }
+
+        if targetMinX > 0, abs(clipView.bounds.origin.x) > 0.5 {
+            let targetBounds = clipView.constrainBoundsRect(
+                NSRect(origin: NSPoint(x: 0, y: clipView.bounds.origin.y), size: clipView.bounds.size)
+            )
+            clipView.scroll(to: targetBounds.origin)
+            scrollView.reflectScrolledClipView(clipView)
+        }
+    }
+
+    private func captureViewportAnchor() -> PDFViewportAnchor? {
+        guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
+        let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
+        guard let page = pdfView.page(for: viewportCenter, nearest: true) else { return nil }
+        let pagePoint = pdfView.convert(viewportCenter, to: page)
+        return PDFViewportAnchor(page: page, pagePoint: pagePoint)
+    }
+
+    private func restoreViewportAnchor(_ anchor: PDFViewportAnchor) {
+        guard let scrollView = pdfScrollView(),
+              let clipView = pdfClipView(),
+              let documentView = pdfDocumentView() else { return }
+
+        let pointInView = pdfView.convert(anchor.pagePoint, from: anchor.page)
+        let pointInDoc = documentView.convert(pointInView, from: pdfView)
+        let desiredOrigin = NSPoint(
+            x: pointInDoc.x - clipView.bounds.width * 0.5,
+            y: pointInDoc.y - clipView.bounds.height * 0.5
+        )
+        let targetBounds = clipView.constrainBoundsRect(
+            NSRect(origin: desiredOrigin, size: clipView.bounds.size)
+        )
+        guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > 0.5 ||
+                abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
+        clipView.scroll(to: targetBounds.origin)
+        scrollView.reflectScrolledClipView(clipView)
     }
 
     @discardableResult
