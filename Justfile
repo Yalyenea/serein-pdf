@@ -25,6 +25,10 @@ run:
 build:
     ./Scripts/make-app.sh {{BUILD_DIR}}
 
+# Package the built .app into build/SlatePDF-<version>.dmg.
+dmg: build
+    ./Scripts/make-dmg.sh {{BUILD_DIR}}
+
 # Regenerate Resources/AppIcon.icns from Resources/AppIcon.png.
 icon:
     ./Scripts/make-icon.sh
