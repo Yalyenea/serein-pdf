@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Show tool versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Test
+        run: swift test
+
+      - name: Build .app
+        run: ./Scripts/make-app.sh build
+
+      - name: Package DMG
+        run: ./Scripts/make-dmg.sh build
+
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/SlatePDF.app/Contents/Info.plist)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dmg=build/SlatePDF-$VERSION.dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlatePDF-${{ steps.version.outputs.version }}-dmg
+          path: ${{ steps.version.outputs.dmg }}
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SlatePDF ${{ github.ref_name }}
+          files: ${{ steps.version.outputs.dmg }}
+          body: |
+            SlatePDF ${{ github.ref_name }} — ad-hoc signed, arm64 macOS 14+.
+
+            Install:
+            1. Download `SlatePDF-${{ steps.version.outputs.version }}.dmg`
+            2. Open, drag `SlatePDF.app` to `/Applications`
+            3. First launch: right-click → Open (Gatekeeper prompt), or
+               `xattr -dr com.apple.quarantine /Applications/SlatePDF.app`
+
+            See `CHANGELOG.md` for details.
+          draft: false
+          prerelease: false
