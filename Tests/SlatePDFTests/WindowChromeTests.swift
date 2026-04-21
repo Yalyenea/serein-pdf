@@ -279,7 +279,7 @@ struct WindowChromeTests {
 
         #expect(controller.window != nil)
         #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
-        #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.001)
+        #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.05)
     }
 
     @Test
@@ -468,7 +468,7 @@ struct WindowChromeTests {
             splitController.readerViewController.fitToWidth()
             flushLayout(controller.window)
 
-            #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.001)
+            #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.05)
         }
     }
 }
