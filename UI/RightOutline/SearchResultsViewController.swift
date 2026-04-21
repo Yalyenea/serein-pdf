@@ -202,19 +202,24 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
            let row = rowIndex(for: previousSelection) {
             tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             tableView.scrollRowToVisible(row)
-        } else if rows.isEmpty == false, selectedMatch() == nil {
-            _ = selectFirstMatch()
         } else {
+            if tableView.selectedRow >= 0 {
+                tableView.deselectAll(nil)
+            }
             notifySelectionChanged()
         }
     }
 
     private func selectMatch(offset: Int) -> SearchSidebarMatch? {
         guard rows.isEmpty == false else { return nil }
-        let currentRow = tableView.selectedRow >= 0 ? tableView.selectedRow : firstMatchRow() ?? -1
-        guard currentRow >= 0 else { return nil }
-
         let direction = offset >= 0 ? 1 : -1
+        guard let currentRow = currentMatchRow(for: direction) else { return nil }
+        if tableView.selectedRow < 0 {
+            tableView.selectRowIndexes(IndexSet(integer: currentRow), byExtendingSelection: false)
+            tableView.scrollRowToVisible(currentRow)
+            return selectedMatch()
+        }
+
         var row = currentRow
         for _ in 0..<rows.count {
             row = (row + direction + rows.count) % rows.count
@@ -227,8 +232,22 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         return nil
     }
 
+    private func currentMatchRow(for direction: Int) -> Int? {
+        if tableView.selectedRow >= 0 {
+            return tableView.selectedRow
+        }
+        return direction >= 0 ? firstMatchRow() : lastMatchRow()
+    }
+
     private func firstMatchRow() -> Int? {
         rows.firstIndex {
+            if case .match = $0 { return true }
+            return false
+        }
+    }
+
+    private func lastMatchRow() -> Int? {
+        rows.lastIndex {
             if case .match = $0 { return true }
             return false
         }

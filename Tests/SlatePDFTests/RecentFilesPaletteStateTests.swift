@@ -52,14 +52,13 @@ final class RecentFilesPaletteStateTests: XCTestCase {
         XCTAssertEqual(state.openTargets(), [second])
     }
 
-    func testToggleHelpFlipsVisibility() {
-        var state = RecentFilesPaletteState(recentURLs: [])
+    func testRecentHistoryStartsWithFirstItemHighlighted() {
+        let first = URL(fileURLWithPath: "/tmp/first.pdf")
+        let second = URL(fileURLWithPath: "/tmp/second.pdf")
+        let state = RecentFilesPaletteState(recentURLs: [first, second])
 
-        XCTAssertFalse(state.isHelpVisible)
-        state.toggleHelp()
-        XCTAssertTrue(state.isHelpVisible)
-        state.toggleHelp()
-        XCTAssertFalse(state.isHelpVisible)
+        XCTAssertEqual(state.highlightedIndex, 0)
+        XCTAssertEqual(state.openTargets(), [first])
     }
 
     func testFilteringDropsSelectionsThatAreNoLongerVisible() {
@@ -74,6 +73,20 @@ final class RecentFilesPaletteStateTests: XCTestCase {
 
         XCTAssertEqual(state.filteredItems.map(\.url), [second])
         XCTAssertEqual(state.selectedURLs, [second])
+    }
+
+    func testChangingQueryResetsHighlightToFirstFilteredResult() {
+        let first = URL(fileURLWithPath: "/tmp/alpha-note.pdf")
+        let second = URL(fileURLWithPath: "/tmp/alpha-paper.pdf")
+        let third = URL(fileURLWithPath: "/tmp/beta.pdf")
+        var state = RecentFilesPaletteState(recentURLs: [first, second, third])
+
+        state.moveHighlight(delta: 2)
+        state.query = "alpha"
+
+        XCTAssertEqual(state.filteredItems.map(\.url), [first, second])
+        XCTAssertEqual(state.highlightedIndex, 0)
+        XCTAssertEqual(state.openTargets(), [first])
     }
 
     func testEmptyStateHasNoHighlightOrOpenTargets() {

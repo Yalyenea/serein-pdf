@@ -853,7 +853,6 @@ extension ReaderViewController: FindBarDelegate {
 
         lastSubmittedSearchKey = submittedKey
         syncFindBarStatus()
-        onFindActionRequested?(.activateSelected)
     }
 
     func findBarRequestsSelectNext(_ view: FindBarView) {

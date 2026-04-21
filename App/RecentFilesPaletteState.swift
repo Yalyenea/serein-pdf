@@ -41,9 +41,8 @@ struct RecentFilesPaletteState {
     private(set) var selectedURLs: [URL]
     private(set) var highlightedIndex: Int?
     var query: String {
-        didSet { rebuildFilteredItems() }
+        didSet { rebuildFilteredItems(resetHighlight: true) }
     }
-    var isHelpVisible: Bool
 
     init(recentURLs: [URL]) {
         let items = recentURLs.map(RecentFilesPaletteItem.init(url:))
@@ -52,7 +51,6 @@ struct RecentFilesPaletteState {
         self.selectedURLs = []
         self.highlightedIndex = items.isEmpty ? nil : 0
         self.query = ""
-        self.isHelpVisible = false
     }
 
     var highlightedItem: RecentFilesPaletteItem? {
@@ -65,8 +63,7 @@ struct RecentFilesPaletteState {
         allItems = urls.map(RecentFilesPaletteItem.init(url:))
         query = ""
         selectedURLs = []
-        isHelpVisible = false
-        rebuildFilteredItems()
+        rebuildFilteredItems(resetHighlight: true)
     }
 
     mutating func appendToQuery(_ string: String) {
@@ -107,10 +104,6 @@ struct RecentFilesPaletteState {
         }
     }
 
-    mutating func toggleHelp() {
-        isHelpVisible.toggle()
-    }
-
     func isSelected(_ url: URL) -> Bool {
         selectedURLs.contains(url)
     }
@@ -124,7 +117,7 @@ struct RecentFilesPaletteState {
         return highlightedItem.map { [$0.url] } ?? []
     }
 
-    private mutating func rebuildFilteredItems() {
+    private mutating func rebuildFilteredItems(resetHighlight: Bool) {
         filteredItems = allItems.filter { $0.matches(query: query) }
         selectedURLs = selectedURLs.filter { url in
             filteredItems.contains { $0.url == url }
@@ -135,7 +128,9 @@ struct RecentFilesPaletteState {
             return
         }
 
-        if let highlightedIndex, filteredItems.indices.contains(highlightedIndex) {
+        if resetHighlight == false,
+           let highlightedIndex,
+           filteredItems.indices.contains(highlightedIndex) {
             return
         }
         highlightedIndex = 0

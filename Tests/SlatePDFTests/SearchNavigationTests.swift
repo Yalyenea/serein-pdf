@@ -39,7 +39,7 @@ private final class SearchNavInMemoryRecentFilesStore: RecentFilesStore {
 
 @MainActor
 final class SearchNavigationTests: XCTestCase {
-    func testRepeatedSubmitOnSameQueryAdvancesToNextMatch() throws {
+    func testFirstSubmitOnlySearchesAndSecondSubmitStartsNavigation() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "repeat-submit",
@@ -57,7 +57,25 @@ final class SearchNavigationTests: XCTestCase {
         reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
         reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
 
-        XCTAssertEqual(actions, [.activateSelected, .activateNext])
+        XCTAssertEqual(actions, [.activateNext])
+    }
+
+    func testFirstBrowseStepSelectsFirstMatchWithoutSkipping() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "first-browse-step",
+            pages: ["needle alpha needle beta needle"]
+        )
+        _ = try store.open(documentAt: url)
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+
+        let controller = SearchResultsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+
+        XCTAssertNil(controller.selectedMatch())
+        XCTAssertEqual(controller.selectionSummary().selectedIndex, nil)
+        XCTAssertEqual(controller.selectNextMatch()?.matchIndex, 0)
+        XCTAssertEqual(controller.selectionSummary().selectedIndex, 0)
     }
 
     func testSearchSelectionSurvivesStoreRefreshAndContinuesNavigation() throws {
@@ -72,13 +90,13 @@ final class SearchNavigationTests: XCTestCase {
         let controller = SearchResultsViewController(documentStore: store, windowID: store.defaultWindowID)
         controller.loadViewIfNeeded()
 
-        XCTAssertEqual(controller.selectedMatch()?.matchIndex, 0)
-        XCTAssertEqual(controller.selectNextMatch()?.matchIndex, 1)
+        XCTAssertNil(controller.selectedMatch())
+        XCTAssertEqual(controller.selectNextMatch()?.matchIndex, 0)
 
         store.activate(sessionID: session.id, in: store.defaultWindowID, targetPane: .primary)
 
-        XCTAssertEqual(controller.selectedMatch()?.matchIndex, 1)
-        XCTAssertEqual(controller.selectNextMatch()?.matchIndex, 2)
+        XCTAssertEqual(controller.selectedMatch()?.matchIndex, 0)
+        XCTAssertEqual(controller.selectNextMatch()?.matchIndex, 1)
     }
 
     private func makeStore() -> DocumentStore {
