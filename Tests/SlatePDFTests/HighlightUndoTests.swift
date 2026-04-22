@@ -112,6 +112,58 @@ final class HighlightUndoTests: XCTestCase {
         XCTAssertFalse(store.undoLastHighlight(for: session.id))
     }
 
+    func testRedoReappliesUndoneHighlight() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTextFile(text: "alpha"))
+        let document = session.pdfDocument
+        let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
+
+        let records = HighlightService.applyHighlight(to: selection)
+        store.recordHighlightUndo(.added(records), for: session.id)
+        store.setDirty(true, for: session.id)
+
+        XCTAssertTrue(store.undoLastHighlight(for: session.id))
+        XCTAssertEqual(annotationCount(in: document), 0)
+        XCTAssertFalse(store.hasUndoableHighlight(for: session.id))
+        XCTAssertTrue(store.hasRedoableHighlight(for: session.id))
+
+        XCTAssertTrue(store.redoLastHighlight(for: session.id))
+        XCTAssertEqual(annotationCount(in: document), 1)
+        XCTAssertTrue(store.hasUndoableHighlight(for: session.id))
+        XCTAssertFalse(store.hasRedoableHighlight(for: session.id))
+    }
+
+    func testRedoReturnsFalseWhenStackEmpty() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTextFile(text: "alpha"))
+
+        XCTAssertFalse(store.hasRedoableHighlight(for: session.id))
+        XCTAssertFalse(store.redoLastHighlight(for: session.id))
+    }
+
+    func testNewHighlightClearsRedoStack() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTextFile(text: "alpha beta"))
+        let document = session.pdfDocument
+
+        let selection1 = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
+        let records1 = HighlightService.applyHighlight(to: selection1)
+        store.recordHighlightUndo(.added(records1), for: session.id)
+
+        let selection2 = try XCTUnwrap(document.findString("beta", withOptions: []).first)
+        let records2 = HighlightService.applyHighlight(to: selection2)
+        store.recordHighlightUndo(.added(records2), for: session.id)
+
+        XCTAssertTrue(store.undoLastHighlight(for: session.id))
+        XCTAssertTrue(store.hasRedoableHighlight(for: session.id))
+
+        let selection3 = try XCTUnwrap(document.findString("alpha beta", withOptions: []).first)
+        let records3 = HighlightService.applyHighlight(to: selection3)
+        store.recordHighlightUndo(.added(records3), for: session.id)
+
+        XCTAssertFalse(store.hasRedoableHighlight(for: session.id))
+    }
+
     private func makeStore() -> DocumentStore {
         DocumentStore(
             persistence: InMemoryDocumentStorePersistenceUndo(),

@@ -326,18 +326,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let editMenu = NSMenu(title: "Edit")
         editMenu.autoenablesItems = true
 
-        let undoItem = NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        let redoItem = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        let undoItem = NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "")
+        let redoItem = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "")
         let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         let selectAllItem = NSMenuItem(title: "Select All", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
 
-        for item in [undoItem, redoItem, cutItem, copyItem, pasteItem, selectAllItem] {
+        for item in [cutItem, copyItem, pasteItem, selectAllItem] {
             item.keyEquivalentModifierMask = [.command]
             item.target = nil
         }
-        redoItem.keyEquivalentModifierMask = [.command, .shift]
 
         editMenu.items = [
             undoItem,
@@ -425,6 +424,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 title: ShortcutCommand.undoLastHighlight.menuTitle,
                 command: .undoLastHighlight,
                 action: #selector(undoLastHighlightAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.redoLastHighlight.menuTitle,
+                command: .redoLastHighlight,
+                action: #selector(redoLastHighlightAction(_:))
             ),
         ]
 
@@ -696,6 +700,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func undoLastHighlightAction(_ sender: Any?) {
         _ = mainWindowController?.undoLastHighlight()
+    }
+
+    @objc
+    private func redoLastHighlightAction(_ sender: Any?) {
+        _ = mainWindowController?.redoLastHighlight()
     }
 
     @objc
@@ -1127,6 +1136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(undoLastHighlightAction(_:)):
             guard activeEditableTextResponder() == nil else { return false }
             return controller?.hasUndoableHighlight == true
+        case #selector(redoLastHighlightAction(_:)):
+            guard activeEditableTextResponder() == nil else { return false }
+            return controller?.hasRedoableHighlight == true
         case #selector(setHighlightColorPink(_:)):
             menuItem.state = controller?.currentHighlightColor == .pink ? .on : .off
             return true

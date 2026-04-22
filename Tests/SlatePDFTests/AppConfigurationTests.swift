@@ -32,6 +32,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.undoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.redoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleRightSidebarMode], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.swapSidebars], KeyboardShortcut(key: "x", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.layout.leftSidebarMinWidth, 36)
@@ -114,6 +115,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
         XCTAssertTrue(content.contains("undo_last_highlight = \"command+z\""))
+        XCTAssertTrue(content.contains("redo_last_highlight = \"command+shift+z\""))
     }
 
     func testBootstrapMigratesLegacyRemoveHighlightShortcut() throws {

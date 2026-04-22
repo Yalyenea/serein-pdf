@@ -394,6 +394,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.readerViewController.hasUndoableHighlight
     }
 
+    var hasRedoableHighlight: Bool {
+        splitViewController.readerViewController.hasRedoableHighlight
+    }
+
+    func redoLastHighlight() -> Bool {
+        splitViewController.redoLastHighlight()
+    }
+
     var currentHighlightColor: HighlightColor {
         splitViewController.readerViewController.currentHighlightColor
     }

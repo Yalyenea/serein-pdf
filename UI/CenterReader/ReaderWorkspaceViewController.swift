@@ -193,6 +193,11 @@ final class ReaderWorkspaceViewController: NSViewController {
         activeReaderViewController().undoLastHighlight()
     }
 
+    @discardableResult
+    func redoLastHighlight() -> Bool {
+        activeReaderViewController().redoLastHighlight()
+    }
+
     func toggleNightMode() {
         activeReaderViewController().toggleNightMode()
     }

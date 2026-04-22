@@ -78,6 +78,7 @@ struct AppConfiguration: Equatable, Sendable {
             .toggleRightSidebarMode: KeyboardShortcut(key: "l", modifiers: [.command, .shift]),
             .swapSidebars: KeyboardShortcut(key: "x", modifiers: [.command, .shift]),
             .undoLastHighlight: KeyboardShortcut(key: "z", modifiers: [.command]),
+            .redoLastHighlight: KeyboardShortcut(key: "z", modifiers: [.command, .shift]),
         ])
     }
 
@@ -279,6 +280,7 @@ toggle_reader_split = "command+control+\\"
 toggle_right_sidebar_mode = "command+shift+l"
 swap_sidebars = "command+shift+x"
 undo_last_highlight = "command+z"
+redo_last_highlight = "command+shift+z"
 """
 
     static func render(_ configuration: AppConfiguration) -> String {
@@ -339,6 +341,7 @@ toggle_reader_split = "\(serializedShortcut(.toggleReaderSplit, configuration: c
 toggle_right_sidebar_mode = "\(serializedShortcut(.toggleRightSidebarMode, configuration: configuration))"
 swap_sidebars = "\(serializedShortcut(.swapSidebars, configuration: configuration))"
 undo_last_highlight = "\(serializedShortcut(.undoLastHighlight, configuration: configuration))"
+redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: configuration))"
 """
     }
 
@@ -487,6 +490,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .swapSidebars, to: &configuration)
         case ("shortcuts", "undo_last_highlight"):
             try applyShortcut(rawValue, command: .undoLastHighlight, to: &configuration)
+        case ("shortcuts", "redo_last_highlight"):
+            try applyShortcut(rawValue, command: .redoLastHighlight, to: &configuration)
         default:
             break
         }
@@ -602,6 +607,7 @@ struct AppConfigurationStore {
             "toggle_right_sidebar_mode",
             "swap_sidebars",
             "undo_last_highlight",
+            "redo_last_highlight",
         ]
 
         var configuration = try parser.parse(existingContent)

@@ -459,6 +459,22 @@ final class ReaderViewController: NSViewController {
         return documentStore.hasUndoableHighlight(for: sessionID)
     }
 
+    var hasRedoableHighlight: Bool {
+        guard let sessionID = targetSessionID else { return false }
+        return documentStore.hasRedoableHighlight(for: sessionID)
+    }
+
+    @discardableResult
+    func redoLastHighlight() -> Bool {
+        guard let session = targetSession(),
+              session.id == displayedSessionID else { return false }
+        let didRedo = documentStore.redoLastHighlight(for: session.id)
+        if didRedo {
+            pdfView.needsDisplay = true
+        }
+        return didRedo
+    }
+
     func toggleNightMode() {
         themeManager.toggleNightMode()
         applyReaderAppearance()

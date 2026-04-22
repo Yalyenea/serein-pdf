@@ -325,6 +325,11 @@ final class SplitViewController: NSSplitViewController {
         readerWorkspaceViewController.undoLastHighlight()
     }
 
+    @discardableResult
+    func redoLastHighlight() -> Bool {
+        readerWorkspaceViewController.redoLastHighlight()
+    }
+
     func toggleNightMode() {
         readerWorkspaceViewController.toggleNightMode()
     }

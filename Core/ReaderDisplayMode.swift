@@ -85,6 +85,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case toggleRightSidebarMode = "toggle_right_sidebar_mode"
     case swapSidebars = "swap_sidebars"
     case undoLastHighlight = "undo_last_highlight"
+    case redoLastHighlight = "redo_last_highlight"
 
     var menuTitle: String {
         switch self {
@@ -160,6 +161,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Swap Left and Right Sidebars"
         case .undoLastHighlight:
             "Undo Highlight"
+        case .redoLastHighlight:
+            "Redo Highlight"
         }
     }
 

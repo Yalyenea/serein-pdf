@@ -593,6 +593,7 @@ final class DocumentStore {
         guard records.isEmpty == false,
               let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[sessionIndex].undoStack.append(.added(records))
+        sessions[sessionIndex].redoStack.removeAll()
         trimUndoStack(for: sessionIndex)
         markAnnotationsDirty(for: sessionIndex, now: now)
         rebuildAnnotationCache(for: sessionIndex)
@@ -603,6 +604,7 @@ final class DocumentStore {
         guard records.isEmpty == false,
               let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[sessionIndex].undoStack.append(.removed(records))
+        sessions[sessionIndex].redoStack.removeAll()
         trimUndoStack(for: sessionIndex)
         markAnnotationsDirty(for: sessionIndex, now: now)
         rebuildAnnotationCache(for: sessionIndex)
@@ -624,12 +626,18 @@ final class DocumentStore {
     func recordHighlightUndo(_ operation: HighlightUndoOperation, for sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[sessionIndex].undoStack.append(operation)
+        sessions[sessionIndex].redoStack.removeAll()
         trimUndoStack(for: sessionIndex)
     }
 
     func hasUndoableHighlight(for sessionID: UUID) -> Bool {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
         return session.undoStack.isEmpty == false
+    }
+
+    func hasRedoableHighlight(for sessionID: UUID) -> Bool {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
+        return session.redoStack.isEmpty == false
     }
 
     @discardableResult
@@ -645,6 +653,27 @@ final class DocumentStore {
             HighlightService.reinsertHighlights(records, in: document)
         }
 
+        sessions[sessionIndex].redoStack.append(operation)
+        markAnnotationsDirty(for: sessionIndex, now: Date())
+        rebuildAnnotationCache(for: sessionIndex)
+        notifyChange()
+        return true
+    }
+
+    @discardableResult
+    func redoLastHighlight(for sessionID: UUID) -> Bool {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+              let operation = sessions[sessionIndex].redoStack.popLast() else { return false }
+
+        let document = sessions[sessionIndex].pdfDocument
+        switch operation {
+        case let .added(records):
+            HighlightService.reinsertHighlights(records, in: document)
+        case let .removed(records):
+            HighlightService.removeHighlights(records, in: document)
+        }
+
+        sessions[sessionIndex].undoStack.append(operation)
         markAnnotationsDirty(for: sessionIndex, now: Date())
         rebuildAnnotationCache(for: sessionIndex)
         notifyChange()
