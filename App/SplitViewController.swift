@@ -18,6 +18,7 @@ final class SplitViewController: NSSplitViewController {
     private var appliedSwapped: Bool?
     private var appliedWidthsForSessionID: UUID?
     private var isApplyingSidebarWidths = false
+    private var pendingSidebarWidthApply = false
 
     var readerViewController: ReaderViewController {
         readerWorkspaceViewController.activeReaderViewController()
@@ -108,11 +109,12 @@ final class SplitViewController: NSSplitViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         applyStoreState()
+        applySidebarWidthsForActiveSession()
     }
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        applySidebarWidthsForActiveSession()
+        scheduleSidebarWidthApply()
     }
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
@@ -220,6 +222,16 @@ final class SplitViewController: NSSplitViewController {
         rightSidebarViewController.applyStateFromStore()
     }
 
+    private func scheduleSidebarWidthApply() {
+        guard pendingSidebarWidthApply == false else { return }
+        pendingSidebarWidthApply = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pendingSidebarWidthApply = false
+            self.applySidebarWidthsForActiveSession()
+        }
+    }
+
     private func applySidebarWidthsForActiveSession() {
         guard splitView.bounds.width > 0,
               splitView.arrangedSubviews.count >= 3 else { return }
@@ -237,21 +249,45 @@ final class SplitViewController: NSSplitViewController {
             targetRight = layout.rightSidebarWidth
         }
 
-        if appliedWidthsForSessionID == sessionID {
+        let clampedLeft = min(max(targetLeft, layout.leftSidebarMinWidth), layout.leftSidebarMaxWidth)
+        let clampedRight = min(max(targetRight, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
+        let total = splitView.bounds.width
+        let requiredWidth = clampedLeft + clampedRight + centerItem.minimumThickness
+        guard total >= requiredWidth else {
+            appliedWidthsForSessionID = nil
             return
         }
 
-        let clampedLeft = min(max(targetLeft, layout.leftSidebarMinWidth), layout.leftSidebarMaxWidth)
-        let clampedRight = min(max(targetRight, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
+        let currentWidths = currentSidebarWidths()
+        let alreadyApplied =
+            appliedWidthsForSessionID == sessionID &&
+            widthsMatch(currentWidths.left, targetWidth: clampedLeft) &&
+            widthsMatch(currentWidths.right, targetWidth: clampedRight)
+        if alreadyApplied {
+            return
+        }
 
         isApplyingSidebarWidths = true
         defer { isApplyingSidebarWidths = false }
 
-        let total = splitView.bounds.width
         splitView.setPosition(clampedLeft, ofDividerAt: 0)
         splitView.setPosition(total - clampedRight, ofDividerAt: 1)
 
         appliedWidthsForSessionID = sessionID
+    }
+
+    private func currentSidebarWidths() -> (left: CGFloat?, right: CGFloat?) {
+        let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
+        let leftItem = swapped ? outlineSidebarItem : tabsSidebarItem
+        let rightItem = swapped ? tabsSidebarItem : outlineSidebarItem
+        let leftWidth = leftItem?.isCollapsed == true ? nil : splitView.arrangedSubviews[safe: 0]?.frame.width
+        let rightWidth = rightItem?.isCollapsed == true ? nil : splitView.arrangedSubviews[safe: 2]?.frame.width
+        return (leftWidth, rightWidth)
+    }
+
+    private func widthsMatch(_ currentWidth: CGFloat?, targetWidth: CGFloat) -> Bool {
+        guard let currentWidth else { return false }
+        return abs(currentWidth - targetWidth) <= 1
     }
 
     private func purgeLegacyAutosaveKeys() {
