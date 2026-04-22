@@ -46,6 +46,22 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertNil(HighlightService.highlightAnnotation(at: outside, on: page))
     }
 
+    func testTextSanitizerPreservesChineseAndRemovesHiddenUnicodeArtifacts() {
+        let sanitized = PDFTextSanitizer.sanitize("中\u{0000}\u{200B}文\u{FEFF} 高\u{2060}亮")
+        XCTAssertEqual(sanitized, "中文 高亮")
+    }
+
+    func testBuildHighlightGroupsPreservesChineseSnippet() throws {
+        let document = try makeSearchableDocument(text: "海瑟矩阵可能非正定，导致牛顿方向其实并非下降方向。")
+        let selection = try XCTUnwrap(document.findString("非正定", withOptions: []).first)
+        _ = HighlightService.applyHighlight(to: selection)
+
+        let groups = HighlightService.buildHighlightGroups(in: document)
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.snippet, "非正定")
+    }
+
     private func makeSearchableDocument(text: String) throws -> PDFDocument {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

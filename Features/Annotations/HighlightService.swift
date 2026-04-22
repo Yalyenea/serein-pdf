@@ -5,7 +5,7 @@ enum HighlightService {
     static let defaultColor: NSColor = HighlightColor.default.nsColor
 
     static func selectionContainsText(_ selection: PDFSelection?) -> Bool {
-        guard let text = selection?.string?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+        guard let text = selection?.string.map(PDFTextSanitizer.sanitize) else {
             return false
         }
 
@@ -48,6 +48,7 @@ enum HighlightService {
     static func buildHighlightGroups(in document: PDFDocument) -> [DocumentHighlightGroup] {
         var groupedRecords: [String: [HighlightAnnotationRecord]] = [:]
         var orderedGroupIDs: [String] = []
+        var ocrCache: [ObjectIdentifier: [HighlightOCRService.RecognizedLine]] = [:]
 
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
@@ -71,11 +72,9 @@ enum HighlightService {
             guard let records = groupedRecords[groupID]?.sorted(by: recordSortOrder),
                   let firstRecord = records.first else { return nil }
 
-            let snippet = normalizedText(
-                records
-                    .compactMap(annotationSnippet(for:))
-                    .joined(separator: " ")
-            )
+            let snippet = records
+                .compactMap { annotationSnippet(for: $0, ocrCache: &ocrCache) }
+                .joined(separator: " ")
             let comment = records
                 .compactMap(\.annotation.contents)
                 .first { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
@@ -196,8 +195,27 @@ enum HighlightService {
         return annotationSortOrder(lhs.annotation, rhs.annotation)
     }
 
-    private static func annotationSnippet(for record: HighlightAnnotationRecord) -> String? {
-        annotationSelection(for: record)?.string.map(normalizedText)
+    private static func annotationSnippet(
+        for record: HighlightAnnotationRecord,
+        ocrCache: inout [ObjectIdentifier: [HighlightOCRService.RecognizedLine]]
+    ) -> String? {
+        let extracted = annotationSelection(for: record)?.string.map(PDFTextSanitizer.sanitize)
+
+        if let extracted,
+           extracted.isEmpty == false,
+           containsIdeographicText(extracted) == false {
+            return extracted
+        }
+
+        guard let page = record.annotation.page,
+              let ocrSnippet = HighlightOCRService.snippet(
+                for: record.annotation,
+                on: page,
+                cache: &ocrCache
+              ) else {
+            return extracted?.isEmpty == false ? extracted : nil
+        }
+        return ocrSnippet
     }
 
     private static func annotationSelection(for record: HighlightAnnotationRecord) -> PDFSelection? {
@@ -205,10 +223,7 @@ enum HighlightService {
         return page.selection(for: record.annotation.bounds)
     }
 
-    private static func normalizedText(_ rawText: String) -> String {
-        rawText
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { $0.isEmpty == false }
-            .joined(separator: " ")
+    private static func containsIdeographicText(_ text: String) -> Bool {
+        text.unicodeScalars.contains { $0.properties.isIdeographic }
     }
 }

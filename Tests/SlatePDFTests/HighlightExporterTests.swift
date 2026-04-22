@@ -42,6 +42,32 @@ final class HighlightExporterTests: XCTestCase {
         XCTAssertNil(exported.last?.comment)
     }
 
+    func testMarkdownExportPreservesChineseSnippetAndComment() throws {
+        let markdown = try XCTUnwrap(
+            String(
+                data: try HighlightExporter.export(
+                    [
+                        DocumentHighlightGroup(
+                            groupID: "cn",
+                            pageIndex: 0,
+                            snippet: "中文高亮",
+                            color: .pink,
+                            createdAt: nil,
+                            comment: "关键想法",
+                            primarySelection: nil,
+                            records: []
+                        ),
+                    ],
+                    format: .markdown
+                ),
+                encoding: .utf8
+            )
+        )
+
+        XCTAssertTrue(markdown.contains("- 中文高亮"))
+        XCTAssertTrue(markdown.contains("Comment: 关键想法"))
+    }
+
     private func sampleGroups() -> [DocumentHighlightGroup] {
         [
             DocumentHighlightGroup(
