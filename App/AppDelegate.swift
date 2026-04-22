@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private var autoSaveTimer: Timer?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
+    private var pendingOpenURLs: [URL] = []
     private var mainWindowController: MainWindowController? {
         currentWindowController()
     }
@@ -73,6 +74,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         updateRecentFilesMenu()
         startAutoSaveTimer()
         NSApp.activate(ignoringOtherApps: true)
+
+        if pendingOpenURLs.isEmpty == false {
+            let urls = pendingOpenURLs
+            pendingOpenURLs.removeAll()
+            openExternalURLs(urls)
+        }
     }
 
     private func startAutoSaveTimer() {
@@ -104,6 +111,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         (currentWindowController() ?? mainWindowControllers.values.first)?.prepareForApplicationTermination() == false
             ? .terminateCancel
             : .terminateNow
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard urls.isEmpty == false else { return }
+        guard documentStore != nil else {
+            pendingOpenURLs.append(contentsOf: urls)
+            return
+        }
+        openExternalURLs(urls)
+    }
+
+    func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+        let url = URL(fileURLWithPath: filename)
+        guard documentStore != nil else {
+            pendingOpenURLs.append(url)
+            return true
+        }
+        openExternalURLs([url])
+        return true
+    }
+
+    private func openExternalURLs(_ urls: [URL]) {
+        mainWindowController?.hideFindBar()
+        let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
+        do {
+            for url in urls {
+                _ = try documentStore.open(documentAt: url, in: targetWindowID)
+            }
+        } catch {
+            presentOpenError(error)
+        }
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc
