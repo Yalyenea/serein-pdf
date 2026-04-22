@@ -440,6 +440,45 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(session.scaleMode, .manual)
     }
 
+    func testConfiguredLayoutWidthsOverrideRestoredSidebarWidths() throws {
+        let url = try makeTemporaryPDF(named: "restored-layout-widths")
+        let readingStateStore = InMemoryReadingStateStore()
+        readingStateStore.states[url] = PersistedReadingState(
+            url: url,
+            displayMode: .singlePageContinuous,
+            scaleMode: .manual,
+            scaleFactor: 1.0,
+            readingPosition: .zero,
+            leftSidebarWidth: 59,
+            rightSidebarWidth: 161
+        )
+        let configuration = AppConfiguration(
+            reader: .default,
+            annotations: .default,
+            shortcuts: .default,
+            layout: .init(
+                leftSidebarWidth: 320,
+                leftSidebarMinWidth: 36,
+                leftSidebarMaxWidth: 520,
+                rightSidebarWidth: 320,
+                rightSidebarMinWidth: 120,
+                rightSidebarMaxWidth: 720,
+                sidebarsSwapped: false
+            )
+        )
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore,
+            recentFilesStore: InMemoryRecentFilesStore(),
+            appConfiguration: configuration
+        )
+
+        let session = try store.open(documentAt: url)
+
+        XCTAssertEqual(session.leftSidebarWidth, 320)
+        XCTAssertEqual(session.rightSidebarWidth, 320)
+    }
+
     func testUpdateReadingPositionPersistsScaleAndPoint() throws {
         let readingStateStore = InMemoryReadingStateStore()
         let store = DocumentStore(
@@ -587,6 +626,36 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(secondSession.displayMode, .twoUp)
         XCTAssertEqual(secondSession.scaleMode, .fitWidth)
         XCTAssertEqual(secondSession.annotationSavePolicy, .never)
+    }
+
+    func testUpdateAppConfigurationAppliesLayoutWidthsToExistingSessions() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "settings-layout-widths"))
+        store.updateSidebarWidths(left: 180, right: 260, for: session.id)
+
+        store.updateAppConfiguration(
+            AppConfiguration(
+                reader: .default,
+                annotations: .default,
+                shortcuts: .default,
+                layout: .init(
+                    leftSidebarWidth: 310,
+                    leftSidebarMinWidth: 36,
+                    leftSidebarMaxWidth: 520,
+                    rightSidebarWidth: 410,
+                    rightSidebarMinWidth: 120,
+                    rightSidebarMaxWidth: 720,
+                    sidebarsSwapped: false
+                )
+            )
+        )
+
+        let updated = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertEqual(updated.leftSidebarWidth, 310)
+        XCTAssertEqual(updated.rightSidebarWidth, 410)
     }
 
     func testUpdateAppConfigurationDisablingFitWidthFlipsExistingSessionsToManual() throws {

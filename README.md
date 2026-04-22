@@ -22,7 +22,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
 - Find bar (`cmd+f`), Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
-- Per-PDF memory: scale, page, sidebar widths persist across launches
+- Per-PDF memory: scale and page persist across launches; sidebar widths follow the current layout config on launch
 - Config-driven defaults via `~/Library/Application Support/SlatePDF/config.toml`
 
 ## Requirements
@@ -82,8 +82,8 @@ sidebars_swapped = false
 # ...
 ```
 
-- Layout defaults apply to **newly opened** PDFs. Dragging a sidebar remembers
-  that width per PDF.
+- Layout widths apply on launch and restore for all PDFs. Dragging a sidebar
+  only changes the current runtime session; restart goes back to the config.
 - `sidebars_swapped = true` flips the left and right panes — widths travel
   with the panes so your narrow tabs pane stays narrow after the swap.
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open

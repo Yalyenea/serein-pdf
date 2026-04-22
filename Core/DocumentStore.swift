@@ -200,8 +200,8 @@ final class DocumentStore {
             lastReadPosition: restoredState?.readingPosition ?? .zero,
             outlineTree: OutlineExtractor.extract(from: pdfDocument),
             annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
-            leftSidebarWidth: restoredState?.leftSidebarWidth,
-            rightSidebarWidth: restoredState?.rightSidebarWidth
+            leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
+            rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
         )
         session.annotationCache = DocumentHighlightCache(
             groups: HighlightService.buildHighlightGroups(in: pdfDocument)
@@ -692,6 +692,10 @@ final class DocumentStore {
         let previousFitWidthOnOpen = appConfiguration.reader.fitWidthOnOpen
         let previousSwapped = appConfiguration.layout.sidebarsSwapped
         let newSwapped = configuration.layout.sidebarsSwapped
+        let layoutWidthsChanged =
+            appConfiguration.layout.leftSidebarWidth != configuration.layout.leftSidebarWidth ||
+            appConfiguration.layout.rightSidebarWidth != configuration.layout.rightSidebarWidth
+        let applyLayoutWidthsDirectly = layoutWidthsChanged && previousSwapped == newSwapped
         appConfiguration = configuration
 
         let fitWidthChanged = previousFitWidthOnOpen != configuration.reader.fitWidthOnOpen
@@ -709,6 +713,11 @@ final class DocumentStore {
             sessions[index].annotationSavePolicy = configuration.annotations.autoSavePolicy
             if fitWidthChanged, sessions[index].scaleMode != targetScaleMode {
                 sessions[index].scaleMode = targetScaleMode
+                persistReadingState(for: sessions[index])
+            }
+            if applyLayoutWidthsDirectly {
+                sessions[index].leftSidebarWidth = configuration.layout.leftSidebarWidth
+                sessions[index].rightSidebarWidth = configuration.layout.rightSidebarWidth
                 persistReadingState(for: sessions[index])
             }
             if previousSwapped != newSwapped {
@@ -771,8 +780,8 @@ final class DocumentStore {
                     lastReadPosition: restoredState?.readingPosition ?? .zero,
                     outlineTree: OutlineExtractor.extract(from: pdfDocument),
                     annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
-                    leftSidebarWidth: restoredState?.leftSidebarWidth,
-                    rightSidebarWidth: restoredState?.rightSidebarWidth
+                    leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
+                    rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
                 )
             session.annotationCache = DocumentHighlightCache(
                 groups: HighlightService.buildHighlightGroups(in: pdfDocument)
