@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var readerShortcutsController: ReaderShortcutsController?
     private var recentFilesPaletteController: RecentFilesPaletteController?
     private let recentFilesMenu = NSMenu(title: "Open Recent")
+    private let windowMenu = NSMenu(title: "Window")
     private var autoSaveTimer: Timer?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
     private var pendingOpenURLs: [URL] = []
@@ -45,23 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 self?.appConfiguration.shortcuts.bindings ?? [:]
             },
             handlerProvider: { [weak self] in
-                guard let self else { return [:] }
-                return [
-                    .highlightSelection: { [weak self] in self?.highlightSelection(nil) },
-                    .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
-                    .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
-                    .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
-                    .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
-                    .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
-                    .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
-                    .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
-                    .pageDown: { [weak self] in self?.goToNextPageAction(nil) },
-                    .pageUp: { [weak self] in self?.goToPreviousPageAction(nil) },
-                    .newWindow: { [weak self] in self?.newWindow(nil) },
-                    .toggleReaderSplit: { [weak self] in self?.toggleReaderSplitAction(nil) },
-                    .toggleRightSidebarMode: { [weak self] in self?.toggleRightSidebarModeAction(nil) },
-                    .swapSidebars: { [weak self] in self?.swapSidebarsAction(nil) },
-                ]
+                self?.shortcutHandlerMap() ?? [:]
             }
         )
 
@@ -152,6 +137,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         updateRecentFilesMenu()
     }
 
+    private func shortcutHandlerMap() -> [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] {
+        [
+            .highlightSelection: { [weak self] in self?.highlightSelection(nil) },
+            .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
+            .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
+            .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
+            .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
+            .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
+            .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
+            .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
+            .highlightColorGreen: { [weak self] in self?.setHighlightColorGreen(nil) },
+            .toggleLeftSidebar: { [weak self] in self?.toggleLeftSidebar(nil) },
+            .toggleRightSidebar: { [weak self] in self?.toggleRightSidebar(nil) },
+            .useSidebarTabs: { [weak self] in self?.useSidebarTabs(nil) },
+            .useTitlebarTabs: { [weak self] in self?.useTitlebarTabs(nil) },
+            .closeCurrentTab: { [weak self] in self?.closeCurrentTab(nil) },
+            .previousTab: { [weak self] in self?.activatePreviousTab(nil) },
+            .nextTab: { [weak self] in self?.activateNextTab(nil) },
+            .fitWidth: { [weak self] in self?.fitReaderToWidth(nil) },
+            .zoomIn: { [weak self] in self?.zoomInReader(nil) },
+            .zoomOut: { [weak self] in self?.zoomOutReader(nil) },
+            .singlePage: { [weak self] in self?.useSinglePage(nil) },
+            .singlePageContinuous: { [weak self] in self?.useSinglePageContinuous(nil) },
+            .twoUp: { [weak self] in self?.useTwoUp(nil) },
+            .twoUpContinuous: { [weak self] in self?.useTwoUpContinuous(nil) },
+            .pageDown: { [weak self] in self?.goToNextPageAction(nil) },
+            .pageUp: { [weak self] in self?.goToPreviousPageAction(nil) },
+            .halfPageDown: { [weak self] in self?.scrollHalfPageDownAction(nil) },
+            .halfPageUp: { [weak self] in self?.scrollHalfPageUpAction(nil) },
+            .goToFirstPage: { [weak self] in self?.goToFirstPageAction(nil) },
+            .goToLastPage: { [weak self] in self?.goToLastPageAction(nil) },
+            .navigateBack: { [weak self] in self?.navigateBackAction(nil) },
+            .navigateForward: { [weak self] in self?.navigateForwardAction(nil) },
+            .findNextMatch: { [weak self] in self?.findNextMatchAction(nil) },
+            .findPreviousMatch: { [weak self] in self?.findPreviousMatchAction(nil) },
+            .gotoPage: { [weak self] in self?.showGotoPageDialog(nil) },
+            .showRecentFilesPalette: { [weak self] in self?.showRecentFilesPalette(nil) },
+            .reopenLastClosed: { [weak self] in self?.reopenLastClosed(nil) },
+            .newWindow: { [weak self] in self?.newWindow(nil) },
+            .toggleAllPagesOverview: { [weak self] in self?.toggleAllPagesOverview(nil) },
+            .toggleReaderSplit: { [weak self] in self?.toggleReaderSplitAction(nil) },
+            .toggleRightSidebarMode: { [weak self] in self?.toggleRightSidebarModeAction(nil) },
+            .swapSidebars: { [weak self] in self?.swapSidebarsAction(nil) },
+            .undoLastHighlight: { [weak self] in self?.undoLastHighlightAction(nil) },
+            .redoLastHighlight: { [weak self] in self?.redoLastHighlightAction(nil) },
+        ]
+    }
+
     private func makeWindowController(windowID: UUID) -> MainWindowController {
         if let existing = mainWindowControllers[windowID] {
             return existing
@@ -235,7 +268,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainMenu.addItem(buildAnnotateMenuItem())
         mainMenu.addItem(buildViewMenuItem())
         mainMenu.addItem(buildNavigateMenuItem())
+        mainMenu.addItem(buildWindowMenuItem())
         NSApp.mainMenu = mainMenu
+        NSApp.windowsMenu = windowMenu
     }
 
     private func buildApplicationMenuItem() -> NSMenuItem {
@@ -251,6 +286,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(
             settingsItem
         )
+        appMenu.addItem(.separator())
+        let hideItem = NSMenuItem(
+            title: "Hide SlatePDF",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        hideItem.keyEquivalentModifierMask = [.command]
+        hideItem.target = NSApp
+        let hideOthersItem = NSMenuItem(
+            title: "Hide Others",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        hideOthersItem.target = NSApp
+        let showAllItem = NSMenuItem(
+            title: "Show All",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        )
+        showAllItem.target = NSApp
+        appMenu.addItem(hideItem)
+        appMenu.addItem(hideOthersItem)
+        appMenu.addItem(showAllItem)
         appMenu.addItem(.separator())
         let quitItem = appMenu.addItem(
             withTitle: "Quit SlatePDF",
@@ -290,15 +349,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             action: #selector(findInCurrentDocument(_:)),
             keyEquivalent: "f"
         )
-        let findNextItem = NSMenuItem(
-            title: "Find Next",
-            action: #selector(findNextMatchAction(_:)),
-            keyEquivalent: "g"
+        let findNextItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.findNextMatch.menuTitle,
+            command: .findNextMatch,
+            action: #selector(findNextMatchAction(_:))
         )
-        let findPreviousItem = NSMenuItem(
-            title: "Find Previous",
-            action: #selector(findPreviousMatchAction(_:)),
-            keyEquivalent: "g"
+        let findPreviousItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.findPreviousMatch.menuTitle,
+            command: .findPreviousMatch,
+            action: #selector(findPreviousMatchAction(_:))
         )
         let closeItem = makeConfiguredMenuItem(
             title: "Close Current Tab",
@@ -335,10 +394,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         openItem.target = self
         findItem.keyEquivalentModifierMask = [.command]
         findItem.target = self
-        findNextItem.keyEquivalentModifierMask = [.command]
-        findNextItem.target = self
-        findPreviousItem.keyEquivalentModifierMask = [.command, .shift]
-        findPreviousItem.target = self
         fileMenu.items = [
             settingsItem,
             .separator(),
@@ -573,6 +628,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 command: .pageUp,
                 action: #selector(goToPreviousPageAction(_:))
             ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.halfPageDown.menuTitle,
+                command: .halfPageDown,
+                action: #selector(scrollHalfPageDownAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.halfPageUp.menuTitle,
+                command: .halfPageUp,
+                action: #selector(scrollHalfPageUpAction(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.goToFirstPage.menuTitle,
+                command: .goToFirstPage,
+                action: #selector(goToFirstPageAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.goToLastPage.menuTitle,
+                command: .goToLastPage,
+                action: #selector(goToLastPageAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: "Go to Page…",
+                command: .gotoPage,
+                action: #selector(showGotoPageDialog(_:))
+            ),
             .separator(),
             makeConfiguredMenuItem(
                 title: "Back",
@@ -584,16 +665,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 command: .navigateForward,
                 action: #selector(navigateForwardAction(_:))
             ),
-            .separator(),
-            makeConfiguredMenuItem(
-                title: "Go to Page…",
-                command: .gotoPage,
-                action: #selector(showGotoPageDialog(_:))
-            ),
         ]
 
         navigateMenuItem.submenu = navigateMenu
         return navigateMenuItem
+    }
+
+    private func buildWindowMenuItem() -> NSMenuItem {
+        let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+        let minimizeItem = NSMenuItem(
+            title: "Minimize",
+            action: #selector(NSWindow.performMiniaturize(_:)),
+            keyEquivalent: "m"
+        )
+        minimizeItem.keyEquivalentModifierMask = [.command]
+        minimizeItem.target = nil
+
+        let zoomItem = NSMenuItem(
+            title: "Zoom",
+            action: #selector(NSWindow.performZoom(_:)),
+            keyEquivalent: ""
+        )
+        zoomItem.target = nil
+
+        let bringAllToFrontItem = NSMenuItem(
+            title: "Bring All to Front",
+            action: #selector(NSApplication.arrangeInFront(_:)),
+            keyEquivalent: ""
+        )
+        bringAllToFrontItem.target = NSApp
+
+        windowMenu.items = [
+            minimizeItem,
+            zoomItem,
+            .separator(),
+            bringAllToFrontItem,
+        ]
+        windowMenuItem.submenu = windowMenu
+        return windowMenuItem
     }
 
     private func makeConfiguredMenuItem(
@@ -788,6 +897,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func goToPreviousPageAction(_ sender: Any?) {
         mainWindowController?.goToPreviousPage()
+    }
+
+    @objc
+    private func scrollHalfPageDownAction(_ sender: Any?) {
+        mainWindowController?.scrollHalfPageDown()
+    }
+
+    @objc
+    private func scrollHalfPageUpAction(_ sender: Any?) {
+        mainWindowController?.scrollHalfPageUp()
+    }
+
+    @objc
+    private func goToFirstPageAction(_ sender: Any?) {
+        mainWindowController?.goToFirstPage()
+    }
+
+    @objc
+    private func goToLastPageAction(_ sender: Any?) {
+        mainWindowController?.goToLastPage()
     }
 
     @objc
@@ -1214,8 +1343,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return activeSession != nil
         case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
             return activeSession != nil
-        case #selector(goToNextPageAction(_:)), #selector(goToPreviousPageAction(_:)):
+        case #selector(goToNextPageAction(_:)),
+             #selector(goToPreviousPageAction(_:)),
+             #selector(scrollHalfPageDownAction(_:)),
+             #selector(scrollHalfPageUpAction(_:)):
             return activeSession != nil
+        case #selector(goToFirstPageAction(_:)), #selector(goToLastPageAction(_:)):
+            return activeSession != nil && (controller?.currentPageCount ?? 0) > 0
         case #selector(navigateBackAction(_:)):
             return controller?.canGoBack == true
         case #selector(navigateForwardAction(_:)):

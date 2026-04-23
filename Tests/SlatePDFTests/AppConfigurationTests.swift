@@ -23,10 +23,17 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth]?.key, "0")
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "b", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "w", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.highlightColorGreen], KeyboardShortcut(key: "g", modifiers: [.command, .control]))
         XCTAssertEqual(configuration.shortcuts.bindings[.pageDown], KeyboardShortcut(key: "j", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.pageUp], KeyboardShortcut(key: "k", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.halfPageDown], KeyboardShortcut(key: "d", modifiers: [.control]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.halfPageUp], KeyboardShortcut(key: "u", modifiers: [.control]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.goToFirstPage], KeyboardShortcut(key: "g", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.goToLastPage], KeyboardShortcut(key: "g", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.navigateBack], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.navigateForward], KeyboardShortcut(key: "]", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.findNextMatch], KeyboardShortcut(key: "g", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "g", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
@@ -60,6 +67,9 @@ close_current_tab = "command+e"
 fit_width = "command+shift+9"
 previous_tab = "command+["
 two_up = "command+option+8"
+half_page_down = "control+f"
+go_to_last_page = "shift+l"
+find_previous_match = "shift+n"
 show_recent_files_palette = "command+space"
 """.write(to: fileURL, atomically: true, encoding: .utf8)
 
@@ -76,6 +86,9 @@ show_recent_files_palette = "command+space"
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth], KeyboardShortcut(key: "9", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.previousTab], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.twoUp], KeyboardShortcut(key: "8", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.halfPageDown], KeyboardShortcut(key: "f", modifiers: [.control]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.goToLastPage], KeyboardShortcut(key: "l", modifiers: [.shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "n", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command]))
     }
 
@@ -108,14 +121,40 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("remove_highlight = \"d\""))
         XCTAssertTrue(content.contains("page_down = \"j\""))
         XCTAssertTrue(content.contains("page_up = \"k\""))
+        XCTAssertTrue(content.contains("half_page_down = \"control+d\""))
+        XCTAssertTrue(content.contains("half_page_up = \"control+u\""))
+        XCTAssertTrue(content.contains("go_to_first_page = \"g\""))
+        XCTAssertTrue(content.contains("go_to_last_page = \"shift+g\""))
         XCTAssertTrue(content.contains("navigate_back = \"command+[\""))
         XCTAssertTrue(content.contains("navigate_forward = \"command+]\""))
+        XCTAssertTrue(content.contains("find_next_match = \"command+g\""))
+        XCTAssertTrue(content.contains("find_previous_match = \"command+shift+g\""))
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
         XCTAssertTrue(content.contains("show_recent_files_palette = \"command+shift+space\""))
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
         XCTAssertTrue(content.contains("undo_last_highlight = \"command+z\""))
         XCTAssertTrue(content.contains("redo_last_highlight = \"command+shift+z\""))
+    }
+
+    func testLegacyGreenShortcutMigratesAwayFromFindPreviousConflict() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(of: "highlight_color_green = \"command+control+g\"", with: "highlight_color_green = \"command+shift+g\"")
+            .replacingOccurrences(of: "find_previous_match = \"command+shift+g\"\n", with: "")
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(configuration.shortcuts.bindings[.highlightColorGreen], KeyboardShortcut(key: "g", modifiers: [.command, .control]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "g", modifiers: [.command, .shift]))
+        XCTAssertTrue(persistedContent.contains("highlight_color_green = \"command+control+g\""))
+        XCTAssertTrue(persistedContent.contains("find_previous_match = \"command+shift+g\""))
     }
 
     func testBootstrapMigratesLegacyRemoveHighlightShortcut() throws {

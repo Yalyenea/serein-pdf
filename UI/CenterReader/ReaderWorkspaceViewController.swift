@@ -157,6 +157,22 @@ final class ReaderWorkspaceViewController: NSViewController {
         activeReaderViewController().goToPreviousPage()
     }
 
+    func scrollHalfPageDown() {
+        activeReaderViewController().scrollHalfPageDown()
+    }
+
+    func scrollHalfPageUp() {
+        activeReaderViewController().scrollHalfPageUp()
+    }
+
+    func goToFirstPage() {
+        activeReaderViewController().goToFirstPage()
+    }
+
+    func goToLastPage() {
+        activeReaderViewController().goToLastPage()
+    }
+
     func navigateBack() {
         activeReaderViewController().navigateBack()
     }

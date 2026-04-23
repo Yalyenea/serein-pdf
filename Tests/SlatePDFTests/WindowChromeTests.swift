@@ -416,6 +416,40 @@ struct WindowChromeTests {
     }
 
     @Test
+    func halfPageScrollMovesViewportAndCanReturn() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "half-page-scroll",
+                pageSizes: [NSSize(width: 720, height: 2400)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+
+        guard let clipView = pdfClipView(in: reader.pdfView) else {
+            Issue.record("Failed to locate PDF clip view")
+            return
+        }
+        let beforeOrigin = clipView.bounds.origin.y
+
+        controller.scrollHalfPageDown()
+        flushLayout(controller.window)
+        let afterDownOrigin = clipView.bounds.origin.y
+        #expect(abs(afterDownOrigin - beforeOrigin) > 20)
+    }
+
+    @Test
     func fitWidthUsesPDFKitRowWidthAcrossPageShapes() throws {
         _ = NSApplication.shared
 

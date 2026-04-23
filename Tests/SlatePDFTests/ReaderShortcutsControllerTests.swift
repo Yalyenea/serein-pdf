@@ -43,6 +43,19 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertFalse(didTrigger)
     }
 
+    func testHandlePlainShortcutDoesNotConsumeCommandWithoutHandler() {
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [.fitWidth: KeyboardShortcut(key: "f", modifiers: [])]
+            },
+            handlerProvider: { [:] }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let event = makeKeyEvent(characters: "f", modifiers: [])
+
+        XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
+    }
+
     func testPlainShortcutsAreBlockedWhileEditingText() {
         let textView = NSTextView()
 

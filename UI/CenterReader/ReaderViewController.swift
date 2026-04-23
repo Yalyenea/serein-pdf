@@ -291,6 +291,23 @@ final class ReaderViewController: NSViewController {
         pdfView.goToPreviousPage(nil)
     }
 
+    func scrollHalfPageDown() {
+        scrollByViewportFraction(0.5)
+    }
+
+    func scrollHalfPageUp() {
+        scrollByViewportFraction(-0.5)
+    }
+
+    func goToFirstPage() {
+        _ = goToPage(0)
+    }
+
+    func goToLastPage() {
+        guard let pageCount = pdfView.document?.pageCount, pageCount > 0 else { return }
+        _ = goToPage(pageCount - 1)
+    }
+
     func navigateBack() {
         guard pdfView.canGoBack else { return }
         pdfView.goBack(nil)
@@ -310,7 +327,12 @@ final class ReaderViewController: NSViewController {
               pageIndex >= 0,
               pageIndex < document.pageCount,
               let page = document.page(at: pageIndex) else { return false }
-        pdfView.go(to: PDFDestination(page: page, at: .zero))
+        let bounds = page.bounds(for: pdfView.displayBox)
+        let destination = PDFDestination(
+            page: page,
+            at: NSPoint(x: bounds.minX, y: bounds.maxY)
+        )
+        pdfView.go(to: destination)
         return true
     }
 
@@ -793,6 +815,31 @@ final class ReaderViewController: NSViewController {
               let document = pdfView.document else { return nil }
 
         return ReadingPosition(pageIndex: document.index(for: page), point: .zero)
+    }
+
+    private func scrollByViewportFraction(_ fraction: CGFloat) {
+        guard isAllPagesOverviewActive == false,
+              let scrollView = pdfScrollView(),
+              let clipView = pdfClipView() else { return }
+
+        var targetBounds = clipView.bounds
+        targetBounds.origin.y += clipView.bounds.height * fraction
+        targetBounds = clipView.constrainBoundsRect(targetBounds)
+        guard abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
+
+        clipView.scroll(to: targetBounds.origin)
+        scrollView.reflectScrolledClipView(clipView)
+
+        guard let session = targetSession(),
+              session.id == displayedSessionID,
+              let document = pdfView.document,
+              let anchor = captureViewportAnchor() else { return }
+
+        documentStore.updateReadingPosition(
+            ReadingPosition(pageIndex: document.index(for: anchor.page), point: anchor.pagePoint),
+            scaleFactor: pdfView.scaleFactor,
+            for: session.id
+        )
     }
 
     private func targetSession() -> DocumentSession? {

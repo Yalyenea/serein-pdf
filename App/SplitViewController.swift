@@ -325,6 +325,22 @@ final class SplitViewController: NSSplitViewController {
         readerWorkspaceViewController.goToPreviousPage()
     }
 
+    func scrollHalfPageDown() {
+        readerWorkspaceViewController.scrollHalfPageDown()
+    }
+
+    func scrollHalfPageUp() {
+        readerWorkspaceViewController.scrollHalfPageUp()
+    }
+
+    func goToFirstPage() {
+        readerWorkspaceViewController.goToFirstPage()
+    }
+
+    func goToLastPage() {
+        readerWorkspaceViewController.goToLastPage()
+    }
+
     func navigateBack() {
         readerWorkspaceViewController.navigateBack()
     }

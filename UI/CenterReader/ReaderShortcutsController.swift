@@ -20,7 +20,8 @@ final class ReaderShortcutsController {
 
         for (command, shortcut) in shortcutsProvider() where shortcut.isPlainShortcut {
             guard shortcut.matches(event: event) else { continue }
-            handlerProvider()[command]?()
+            guard let handler = handlerProvider()[command] else { continue }
+            handler()
             return true
         }
 

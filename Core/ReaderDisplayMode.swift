@@ -74,8 +74,14 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case twoUpContinuous = "two_up_continuous"
     case pageDown = "page_down"
     case pageUp = "page_up"
+    case halfPageDown = "half_page_down"
+    case halfPageUp = "half_page_up"
+    case goToFirstPage = "go_to_first_page"
+    case goToLastPage = "go_to_last_page"
     case navigateBack = "navigate_back"
     case navigateForward = "navigate_forward"
+    case findNextMatch = "find_next_match"
+    case findPreviousMatch = "find_previous_match"
     case gotoPage = "goto_page"
     case showRecentFilesPalette = "show_recent_files_palette"
     case reopenLastClosed = "reopen_last_closed"
@@ -139,10 +145,22 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Next Page"
         case .pageUp:
             "Previous Page"
+        case .halfPageDown:
+            "Half Page Down"
+        case .halfPageUp:
+            "Half Page Up"
+        case .goToFirstPage:
+            "Go to First Page"
+        case .goToLastPage:
+            "Go to Last Page"
         case .navigateBack:
             "Back"
         case .navigateForward:
             "Forward"
+        case .findNextMatch:
+            "Find Next Match"
+        case .findPreviousMatch:
+            "Find Previous Match"
         case .gotoPage:
             "Go to Page…"
         case .showRecentFilesPalette:

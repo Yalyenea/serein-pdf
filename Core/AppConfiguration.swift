@@ -50,7 +50,7 @@ struct AppConfiguration: Equatable, Sendable {
             .removeHighlight: KeyboardShortcut(key: "d", modifiers: []),
             .highlightColorPink: KeyboardShortcut(key: "p", modifiers: [.command, .shift]),
             .highlightColorYellow: KeyboardShortcut(key: "y", modifiers: [.command, .shift]),
-            .highlightColorGreen: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
+            .highlightColorGreen: KeyboardShortcut(key: "g", modifiers: [.command, .control]),
             .toggleLeftSidebar: KeyboardShortcut(key: "b", modifiers: [.command]),
             .toggleRightSidebar: KeyboardShortcut(key: "b", modifiers: [.command, .option]),
             .useSidebarTabs: KeyboardShortcut(key: "1", modifiers: [.command, .shift]),
@@ -67,8 +67,14 @@ struct AppConfiguration: Equatable, Sendable {
             .twoUpContinuous: KeyboardShortcut(key: "4", modifiers: [.command]),
             .pageDown: KeyboardShortcut(key: "j", modifiers: []),
             .pageUp: KeyboardShortcut(key: "k", modifiers: []),
+            .halfPageDown: KeyboardShortcut(key: "d", modifiers: [.control]),
+            .halfPageUp: KeyboardShortcut(key: "u", modifiers: [.control]),
+            .goToFirstPage: KeyboardShortcut(key: "g", modifiers: []),
+            .goToLastPage: KeyboardShortcut(key: "g", modifiers: [.shift]),
             .navigateBack: KeyboardShortcut(key: "[", modifiers: [.command]),
             .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
+            .findNextMatch: KeyboardShortcut(key: "g", modifiers: [.command]),
+            .findPreviousMatch: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
             .showRecentFilesPalette: KeyboardShortcut(key: "space", modifiers: [.command, .shift]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
@@ -252,7 +258,7 @@ copy_highlights_markdown = "command+shift+e"
 remove_highlight = "d"
 highlight_color_pink = "command+shift+p"
 highlight_color_yellow = "command+shift+y"
-highlight_color_green = "command+shift+g"
+highlight_color_green = "command+control+g"
 toggle_left_sidebar = "command+b"
 toggle_right_sidebar = "command+option+b"
 use_sidebar_tabs = "command+shift+1"
@@ -269,8 +275,14 @@ two_up = "command+3"
 two_up_continuous = "command+4"
 page_down = "j"
 page_up = "k"
+half_page_down = "control+d"
+half_page_up = "control+u"
+go_to_first_page = "g"
+go_to_last_page = "shift+g"
 navigate_back = "command+["
 navigate_forward = "command+]"
+find_next_match = "command+g"
+find_previous_match = "command+shift+g"
 goto_page = "command+option+g"
 show_recent_files_palette = "command+shift+space"
 reopen_last_closed = "command+shift+t"
@@ -330,8 +342,14 @@ two_up = "\(serializedShortcut(.twoUp, configuration: configuration))"
 two_up_continuous = "\(serializedShortcut(.twoUpContinuous, configuration: configuration))"
 page_down = "\(serializedShortcut(.pageDown, configuration: configuration))"
 page_up = "\(serializedShortcut(.pageUp, configuration: configuration))"
+half_page_down = "\(serializedShortcut(.halfPageDown, configuration: configuration))"
+half_page_up = "\(serializedShortcut(.halfPageUp, configuration: configuration))"
+go_to_first_page = "\(serializedShortcut(.goToFirstPage, configuration: configuration))"
+go_to_last_page = "\(serializedShortcut(.goToLastPage, configuration: configuration))"
 navigate_back = "\(serializedShortcut(.navigateBack, configuration: configuration))"
 navigate_forward = "\(serializedShortcut(.navigateForward, configuration: configuration))"
+find_next_match = "\(serializedShortcut(.findNextMatch, configuration: configuration))"
+find_previous_match = "\(serializedShortcut(.findPreviousMatch, configuration: configuration))"
 goto_page = "\(serializedShortcut(.gotoPage, configuration: configuration))"
 show_recent_files_palette = "\(serializedShortcut(.showRecentFilesPalette, configuration: configuration))"
 reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
@@ -468,10 +486,22 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .pageDown, to: &configuration)
         case ("shortcuts", "page_up"):
             try applyShortcut(rawValue, command: .pageUp, to: &configuration)
+        case ("shortcuts", "half_page_down"):
+            try applyShortcut(rawValue, command: .halfPageDown, to: &configuration)
+        case ("shortcuts", "half_page_up"):
+            try applyShortcut(rawValue, command: .halfPageUp, to: &configuration)
+        case ("shortcuts", "go_to_first_page"):
+            try applyShortcut(rawValue, command: .goToFirstPage, to: &configuration)
+        case ("shortcuts", "go_to_last_page"):
+            try applyShortcut(rawValue, command: .goToLastPage, to: &configuration)
         case ("shortcuts", "navigate_back"):
             try applyShortcut(rawValue, command: .navigateBack, to: &configuration)
         case ("shortcuts", "navigate_forward"):
             try applyShortcut(rawValue, command: .navigateForward, to: &configuration)
+        case ("shortcuts", "find_next_match"):
+            try applyShortcut(rawValue, command: .findNextMatch, to: &configuration)
+        case ("shortcuts", "find_previous_match"):
+            try applyShortcut(rawValue, command: .findPreviousMatch, to: &configuration)
         case ("shortcuts", "goto_page"):
             try applyShortcut(rawValue, command: .gotoPage, to: &configuration)
         case ("shortcuts", "show_recent_files_palette"):
@@ -593,13 +623,25 @@ struct AppConfigurationStore {
             "close_current_tab",
             "previous_tab",
             "next_tab",
+            "fit_width",
+            "single_page",
+            "single_page_continuous",
+            "two_up",
+            "two_up_continuous",
             "zoom_in",
             "zoom_out",
             "page_down",
             "page_up",
+            "half_page_down",
+            "half_page_up",
+            "go_to_first_page",
+            "go_to_last_page",
             "navigate_back",
             "navigate_forward",
+            "find_next_match",
+            "find_previous_match",
             "goto_page",
+            "show_recent_files_palette",
             "reopen_last_closed",
             "new_window",
             "toggle_all_pages_overview",
@@ -612,9 +654,17 @@ struct AppConfigurationStore {
 
         var configuration = try parser.parse(existingContent)
         let legacyRemoveHighlight = KeyboardShortcut(key: "d", modifiers: [.command, .shift])
+        let legacyGreenHighlight = KeyboardShortcut(key: "g", modifiers: [.command, .shift])
         var didMigrate = false
         if configuration.shortcuts.bindings[.removeHighlight] == legacyRemoveHighlight {
             configuration.shortcuts.bindings[.removeHighlight] = KeyboardShortcut(key: "d", modifiers: [])
+            didMigrate = true
+        }
+        if existingContent.contains("find_previous_match") == false,
+           configuration.shortcuts.bindings[.highlightColorGreen] == legacyGreenHighlight {
+            configuration.shortcuts.bindings[.highlightColorGreen] =
+                AppConfiguration.default.shortcuts.bindings[.highlightColorGreen]
+                ?? KeyboardShortcut(key: "g", modifiers: [.command, .control])
             didMigrate = true
         }
 

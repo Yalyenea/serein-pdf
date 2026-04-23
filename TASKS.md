@@ -18,11 +18,14 @@
 - `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
 - `d`:删除鼠标所在高亮;多行整组删除
 - `i`:切换反色夜间模式
+- `Ctrl+D` / `Ctrl+U`:半页下滚 / 上滚
+- `g` / `G`:跳到文首 / 文末
 - `Cmd+S`:写回源 PDF
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 水平 tab 复用标题栏,不单独开行
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
+- 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
 
 ## 3. 当前进度
 

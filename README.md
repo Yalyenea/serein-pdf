@@ -11,6 +11,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
 - Right pane hosts **Outline + Pages + Search + Annotations**, and all search / annotation previews stay on the right
 - Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
+- Reader navigation keeps the compact Vim-style layer: `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
 - Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
@@ -105,6 +106,9 @@ Defined in `[shortcuts]` above. Highlights:
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Fit width | `cmd+0` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
+| Find next / previous match | `cmd+g` / `cmd+shift+g` |
+| Half-page down / up | `ctrl+d` / `ctrl+u` |
+| Jump to first / last page | `g` / `shift+g` |
 | Close tab / window | `cmd+w` |
 | Reopen closed tab | `cmd+shift+t` |
 | New window | `cmd+shift+n` |
@@ -116,6 +120,9 @@ Defined in `[shortcuts]` above. Highlights:
 | Swap left and right sidebars | `cmd+shift+x` |
 | All-pages overview | `cmd+shift+o` |
 | Undo last highlight edit | `cmd+z` |
+
+Standard macOS app/window shortcuts are available too, including `cmd+h`,
+`cmd+option+h`, and `cmd+m`.
 
 ## Repo layout
 

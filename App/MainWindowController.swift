@@ -181,6 +181,22 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.goToPreviousPage()
     }
 
+    func scrollHalfPageDown() {
+        splitViewController.scrollHalfPageDown()
+    }
+
+    func scrollHalfPageUp() {
+        splitViewController.scrollHalfPageUp()
+    }
+
+    func goToFirstPage() {
+        splitViewController.goToFirstPage()
+    }
+
+    func goToLastPage() {
+        splitViewController.goToLastPage()
+    }
+
     func navigateBack() {
         splitViewController.navigateBack()
     }

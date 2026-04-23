@@ -125,6 +125,8 @@ flowchart LR
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`:`singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`
 - `J` / `K`:下一页 / 上一页(文本输入上下文让路)
+- `Ctrl+D` / `Ctrl+U`:下滚 / 上滚半页
+- `G` / `g`:跳到文末 / 文首
 - `Cmd+Option+G`:跳转到页 N(越界给轻量提示)
 - `Cmd+[` / `Cmd+]`:历史后退 / 前进
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar / 下一 / 上一 匹配
@@ -147,6 +149,10 @@ flowchart LR
 - `Cmd+Ctrl+\`:切换同窗分屏(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
+
+**系统**
+- `Cmd+H` / `Cmd+Option+H`:隐藏当前 app / 隐藏其他 app
+- `Cmd+M`:最小化当前窗口
 
 ### 4.4 批注保存策略
 
