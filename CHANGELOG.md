@@ -2,6 +2,26 @@
 
 All notable changes to SlatePDF are captured here. Versions follow semver.
 
+## [0.2.0] - 2026-04-23
+
+This release focuses on keyboard-driven reading, better highlight text
+extraction, and smoother integration with the rest of macOS.
+
+### Keyboard and navigation
+- Expand shortcut coverage so every configured command can be rebound and executed consistently
+- Add Vim-style reading motions: `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to document start/end
+- Make search next/previous configurable and keep `cmd+g` / `cmd+shift+g` as the defaults
+- Restore standard macOS app and window shortcuts, including `cmd+h`, `cmd+option+h`, and `cmd+m`
+- Add highlight redo support
+
+### Reading and documents
+- Apply configured sidebar widths cleanly to restored and newly opened sessions
+- Handle external PDF open events more reliably when SlatePDF is used from Finder or other apps
+
+### Highlights and extraction
+- Improve highlight snippet extraction for Chinese text and OCR-heavy PDFs
+- Add OCR-assisted fallback extraction path for highlights that do not yield clean PDF text directly
+
 ## [0.1.0] - 2026-04-21
 
 First personal-use release. Complete macOS PDF reader with tabs, annotations,
