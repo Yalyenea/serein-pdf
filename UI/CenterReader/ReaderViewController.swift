@@ -964,6 +964,7 @@ final class ReaderViewController: NSViewController {
         guard let scrollView = pdfScrollView() else { return }
         scrollView.verticalScrollElasticity = .none
         scrollView.horizontalScrollElasticity = .none
+        scrollView.usesPredominantAxisScrolling = true
     }
 
     private func pdfClipView() -> NSClipView? {
@@ -1028,6 +1029,7 @@ final class ReaderViewController: NSViewController {
         clipView.scroll(to: targetBounds.origin)
         scrollView.reflectScrolledClipView(clipView)
     }
+
 
     @discardableResult
     private func highlightCurrentSelection() -> Bool {

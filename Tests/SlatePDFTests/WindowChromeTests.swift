@@ -597,6 +597,7 @@ struct WindowChromeTests {
         #expect(abs(settledAgainDownOrigin - settledDownOrigin) < 1.0)
     }
 
+
     @Test
     func fitWidthUsesPDFKitRowWidthAcrossPageShapes() throws {
         _ = NSApplication.shared
