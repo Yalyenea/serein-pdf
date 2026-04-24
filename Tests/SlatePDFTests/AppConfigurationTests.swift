@@ -41,6 +41,8 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.undoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.redoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleDemoMode], KeyboardShortcut(key: "l", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleImmersiveMode], KeyboardShortcut(key: "l", modifiers: [.command, .control]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleRightSidebarMode], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.swapSidebars], KeyboardShortcut(key: "x", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.layout.leftSidebarMinWidth, 36)
@@ -144,6 +146,8 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
         XCTAssertTrue(content.contains("undo_last_highlight = \"command+z\""))
         XCTAssertTrue(content.contains("redo_last_highlight = \"command+shift+z\""))
+        XCTAssertTrue(content.contains("toggle_demo_mode = \"command+l\""))
+        XCTAssertTrue(content.contains("toggle_immersive_mode = \"command+control+l\""))
         XCTAssertTrue(content.contains("show_recent_files_in_sidebar = true"))
     }
 
@@ -183,6 +187,27 @@ fit_width = "command+9"
         XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
         XCTAssertTrue(persistedContent.contains("remove_highlight = \"d\""))
         XCTAssertFalse(persistedContent.contains("remove_highlight = \"command+shift+d\""))
+    }
+
+    func testBootstrapMigratesLegacyImmersiveModeShortcut() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(
+                of: "toggle_immersive_mode = \"command+control+l\"",
+                with: "toggle_immersive_mode = \"command+option+l\""
+            )
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleImmersiveMode], KeyboardShortcut(key: "l", modifiers: [.command, .control]))
+        XCTAssertTrue(persistedContent.contains("toggle_immersive_mode = \"command+control+l\""))
+        XCTAssertFalse(persistedContent.contains("toggle_immersive_mode = \"command+option+l\""))
     }
 
     func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {

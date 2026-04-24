@@ -26,6 +26,8 @@
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换
+- `Cmd+L` 进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
+- `Cmd+Ctrl+L` 进入 / 退出沉浸模式(隐藏侧栏与 tab chrome,只保留 PDF 页面)
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
 - 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
 

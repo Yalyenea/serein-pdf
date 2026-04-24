@@ -149,6 +149,8 @@ flowchart LR
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
 - `Cmd+Ctrl+\`:切换同窗分屏(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
+- `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
+- `Cmd+Ctrl+L`:进入 / 退出沉浸模式(隐藏侧栏与 tab chrome,只保留 PDF 页面)
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
 
 **系统**

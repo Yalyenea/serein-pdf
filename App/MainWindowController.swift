@@ -14,6 +14,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let toolbar = NSToolbar(identifier: "MainToolbar")
     private let titlebarTabsItem = NSToolbarItem(itemIdentifier: .titlebarTabs)
     private var allowsTerminationWithoutPrompt = false
+    private var demoModeSnapshot: DemoModeSnapshot?
+    private var immersiveModeSnapshot: ImmersiveModeSnapshot?
     var shouldCloseHandler: ((MainWindowController) -> Bool)?
     var didCloseHandler: ((MainWindowController) -> Void)?
 
@@ -100,7 +102,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             : documentStore.isLeftSidebarVisible(in: windowID)
         let shouldShowTitlebarTabs =
             documentStore.tabPresentationMode(in: windowID) == .horizontalTitlebar &&
-            !tabsPaneVisible
+            !tabsPaneVisible &&
+            !isImmersiveModeEnabled
 
         splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
         synchronizeWindowToolbar(isVisible: shouldShowTitlebarTabs)
@@ -163,6 +166,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     func fitReaderToWidth() {
         splitViewController.fitToWidth()
+    }
+
+    func fitReaderToPage() {
+        splitViewController.fitToPage()
     }
 
     func zoomIn() {
@@ -238,6 +245,96 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     var isReaderSplitEnabled: Bool {
         documentStore.isSplitEnabled(in: windowID)
+    }
+
+    var isDemoModeEnabled: Bool {
+        demoModeSnapshot != nil
+    }
+
+    var isImmersiveModeEnabled: Bool {
+        immersiveModeSnapshot != nil
+    }
+
+    func toggleDemoMode() {
+        guard documentStore.activeSession(in: windowID) != nil else { return }
+
+        if let snapshot = demoModeSnapshot {
+            demoModeSnapshot = nil
+            restoreDemoMode(from: snapshot)
+            return
+        }
+
+        enterDemoMode()
+    }
+
+    func toggleImmersiveMode() {
+        guard documentStore.activeSession(in: windowID) != nil else { return }
+
+        if let snapshot = immersiveModeSnapshot {
+            immersiveModeSnapshot = nil
+            restoreImmersiveMode(from: snapshot)
+            return
+        }
+
+        enterImmersiveMode()
+    }
+
+    private func enterDemoMode() {
+        demoModeSnapshot = DemoModeSnapshot(
+            wasFullScreen: window?.styleMask.contains(.fullScreen) == true,
+            wasImmersiveModeEnabled: isImmersiveModeEnabled,
+            readerState: currentDemoReaderState()
+        )
+        if isImmersiveModeEnabled == false {
+            enterImmersiveMode()
+        }
+        applyDemoReaderState()
+        if window?.isVisible == true,
+           window?.styleMask.contains(.fullScreen) != true {
+            window?.toggleFullScreen(nil)
+        }
+        scheduleDemoFitToPage()
+    }
+
+    private func restoreDemoMode(from snapshot: DemoModeSnapshot) {
+        restoreDemoReaderState(snapshot.readerState)
+        if snapshot.wasImmersiveModeEnabled == false, let immersiveModeSnapshot {
+            self.immersiveModeSnapshot = nil
+            restoreImmersiveMode(from: immersiveModeSnapshot)
+        }
+        if snapshot.wasFullScreen == false,
+           window?.isVisible == true,
+           window?.styleMask.contains(.fullScreen) == true {
+            window?.toggleFullScreen(nil)
+        }
+    }
+
+    private func enterImmersiveMode() {
+        immersiveModeSnapshot = ImmersiveModeSnapshot(
+            isLeftSidebarVisible: documentStore.isLeftSidebarVisible(in: windowID),
+            isRightSidebarVisible: documentStore.isRightSidebarVisible(in: windowID)
+        )
+        documentStore.setLeftSidebarVisible(false, in: windowID)
+        documentStore.setRightSidebarVisible(false, in: windowID)
+        applyWindowChromeState()
+    }
+
+    private func restoreImmersiveMode(from snapshot: ImmersiveModeSnapshot) {
+        documentStore.setLeftSidebarVisible(snapshot.isLeftSidebarVisible, in: windowID)
+        documentStore.setRightSidebarVisible(snapshot.isRightSidebarVisible, in: windowID)
+        applyWindowChromeState()
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        guard let snapshot = demoModeSnapshot,
+              snapshot.wasFullScreen == false else { return }
+        demoModeSnapshot = nil
+        restoreDemoMode(from: snapshot)
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        guard demoModeSnapshot != nil else { return }
+        scheduleDemoFitToPage()
     }
 
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
@@ -508,5 +605,54 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let alert = NSAlert(error: error)
         alert.messageText = "Failed to save annotations"
         alert.runModal()
+    }
+
+    private func currentDemoReaderState() -> DemoReaderState? {
+        guard let session = documentStore.activeSession(in: windowID) else { return nil }
+        return DemoReaderState(
+            sessionID: session.id,
+            displayMode: session.displayMode,
+            scaleMode: session.scaleMode,
+            zoomScale: session.zoomScale
+        )
+    }
+
+    private func applyDemoReaderState() {
+        guard let sessionID = demoModeSnapshot?.readerState?.sessionID,
+              documentStore.session(for: sessionID) != nil else { return }
+        documentStore.setDisplayMode(.singlePage, for: sessionID)
+        fitReaderToPage()
+    }
+
+    private func restoreDemoReaderState(_ state: DemoReaderState?) {
+        guard let state,
+              documentStore.session(for: state.sessionID) != nil else { return }
+        documentStore.setDisplayMode(state.displayMode, for: state.sessionID)
+        documentStore.setScaleMode(state.scaleMode, scaleFactor: state.zoomScale, for: state.sessionID)
+    }
+
+    private func scheduleDemoFitToPage() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.demoModeSnapshot != nil else { return }
+            self.fitReaderToPage()
+        }
+    }
+
+    private struct DemoModeSnapshot {
+        let wasFullScreen: Bool
+        let wasImmersiveModeEnabled: Bool
+        let readerState: DemoReaderState?
+    }
+
+    private struct ImmersiveModeSnapshot {
+        let isLeftSidebarVisible: Bool
+        let isRightSidebarVisible: Bool
+    }
+
+    private struct DemoReaderState {
+        let sessionID: UUID
+        let displayMode: ReaderDisplayMode
+        let scaleMode: ReaderScaleMode
+        let zoomScale: CGFloat
     }
 }

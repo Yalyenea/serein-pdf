@@ -264,6 +264,15 @@ final class ReaderViewController: NSViewController {
         applyFitWidth(for: session)
     }
 
+    func fitToPage() {
+        guard let session = targetSession(),
+              let scaleFactor = fitPageScaleFactor() else { return }
+        pendingFitWidthSessionID = nil
+        lastAppliedFitBoundsWidth = 0
+        applyProgrammaticScale(scaleFactor, preserveViewportCenter: false)
+        documentStore.setScaleMode(.manual, scaleFactor: scaleFactor, for: session.id)
+    }
+
     func zoomIn() {
         if isAllPagesOverviewActive {
             adjustOverviewZoom(scale: 1.1)
@@ -872,6 +881,25 @@ final class ReaderViewController: NSViewController {
 
         let availableWidth = max(pdfClipView()?.frame.width ?? pdfView.bounds.width, 1)
         let unclamped = availableWidth / normalizedRowWidth
+        return min(max(unclamped, pdfView.minScaleFactor), pdfView.maxScaleFactor)
+    }
+
+    private func fitPageScaleFactor() -> CGFloat? {
+        guard let page = pdfView.currentPage ?? pdfView.document?.page(at: 0) else { return nil }
+        let currentScale = max(pdfView.scaleFactor, 0.001)
+        let normalizedRowSize = NSSize(
+            width: pdfView.rowSize(for: page).width / currentScale,
+            height: pdfView.rowSize(for: page).height / currentScale
+        )
+        guard normalizedRowSize.width > 0, normalizedRowSize.height > 0 else { return nil }
+
+        let clipFrame = pdfClipView()?.frame ?? pdfView.bounds
+        let availableWidth = max(clipFrame.width, 1)
+        let availableHeight = max(clipFrame.height, 1)
+        let unclamped = min(
+            availableWidth / normalizedRowSize.width,
+            availableHeight / normalizedRowSize.height
+        )
         return min(max(unclamped, pdfView.minScaleFactor), pdfView.maxScaleFactor)
     }
 

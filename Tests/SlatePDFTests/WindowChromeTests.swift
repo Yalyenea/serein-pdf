@@ -204,6 +204,136 @@ struct WindowChromeTests {
     }
 
     @Test
+    func immersiveModeHidesChromeAndRestoresHorizontalTitlebarLayout() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let windowID = controller.windowID
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "demo-mode"))
+
+        store.setTabPresentationMode(.horizontalTitlebar, in: windowID)
+        store.setLeftSidebarVisible(false, in: windowID)
+        store.setRightSidebarVisible(true, in: windowID)
+        flushLayout(controller.window)
+
+        #expect(controller.window?.toolbar != nil)
+        #expect(controller.isImmersiveModeEnabled == false)
+
+        controller.toggleImmersiveMode()
+        flushLayout(controller.window)
+
+        #expect(controller.isImmersiveModeEnabled)
+        #expect(controller.window?.toolbar == nil)
+        #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
+        #expect(store.isLeftSidebarVisible(in: windowID) == false)
+        #expect(store.isRightSidebarVisible(in: windowID) == false)
+
+        controller.toggleImmersiveMode()
+        flushLayout(controller.window)
+
+        #expect(controller.isImmersiveModeEnabled == false)
+        #expect(controller.window?.toolbar != nil)
+        #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
+        #expect(store.isLeftSidebarVisible(in: windowID) == false)
+        #expect(store.isRightSidebarVisible(in: windowID) == true)
+    }
+
+    @Test
+    func demoModeEntersImmersiveModeAndRestoresPreviousImmersiveState() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let windowID = controller.windowID
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "demo-mode"))
+
+        store.setTabPresentationMode(.horizontalTitlebar, in: windowID)
+        store.setLeftSidebarVisible(false, in: windowID)
+        store.setRightSidebarVisible(true, in: windowID)
+        flushLayout(controller.window)
+
+        controller.toggleDemoMode()
+        flushLayout(controller.window)
+
+        #expect(controller.isDemoModeEnabled)
+        #expect(controller.isImmersiveModeEnabled)
+        #expect(controller.window?.toolbar == nil)
+        #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
+        #expect(store.isLeftSidebarVisible(in: windowID) == false)
+        #expect(store.isRightSidebarVisible(in: windowID) == false)
+
+        controller.toggleDemoMode()
+        flushLayout(controller.window)
+
+        #expect(controller.isDemoModeEnabled == false)
+        #expect(controller.isImmersiveModeEnabled == false)
+        #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
+        #expect(store.isLeftSidebarVisible(in: windowID) == false)
+        #expect(store.isRightSidebarVisible(in: windowID) == true)
+    }
+
+    @Test
+    func demoModeFitsEntirePageAndRestoresReaderState() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "demo-fit-page",
+                pageSizes: [NSSize(width: 1280, height: 720)]
+            )
+        )
+
+        store.setDisplayMode(.singlePageContinuous, for: session.id)
+        store.setScaleMode(.fitWidth, scaleFactor: 1.0, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate reader internals")
+            return
+        }
+
+        controller.toggleDemoMode()
+        flushLayout(controller.window)
+
+        guard let expectedScale = fitPageScaleExpected(for: splitController.readerViewController.pdfView) else {
+            Issue.record("Failed to compute fit-page scale")
+            return
+        }
+
+        #expect(store.session(for: session.id)?.displayMode == .singlePage)
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.05)
+
+        controller.toggleDemoMode()
+        flushLayout(controller.window)
+
+        #expect(store.session(for: session.id)?.displayMode == .singlePageContinuous)
+        #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+    }
+
+    @Test
+    func demoModeLeavesPreexistingImmersiveModeEnabledOnExit() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let windowID = controller.windowID
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "demo-from-immersive"))
+
+        controller.toggleImmersiveMode()
+        flushLayout(controller.window)
+
+        controller.toggleDemoMode()
+        flushLayout(controller.window)
+        controller.toggleDemoMode()
+        flushLayout(controller.window)
+
+        #expect(controller.isDemoModeEnabled == false)
+        #expect(controller.isImmersiveModeEnabled)
+        #expect(store.isLeftSidebarVisible(in: windowID) == false)
+        #expect(store.isRightSidebarVisible(in: windowID) == false)
+    }
+
+    @Test
     func closeFocusedPaneInSplitCollapsesToSinglePane() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
@@ -913,6 +1043,24 @@ private func fitWidthScaleExpected(for pdfView: PDFView, leadPageIndex: Int = 0)
     let normalizedRowWidth = pdfView.rowSize(for: page).width / pdfView.scaleFactor
     guard normalizedRowWidth > 0 else { return nil }
     return clipView.frame.width / normalizedRowWidth
+}
+
+@MainActor
+private func fitPageScaleExpected(for pdfView: PDFView, pageIndex: Int = 0) -> CGFloat? {
+    guard let clipView = pdfClipView(in: pdfView),
+          let page = pdfView.document?.page(at: pageIndex),
+          pdfView.scaleFactor > 0 else { return nil }
+
+    let rowSize = pdfView.rowSize(for: page)
+    let normalizedRowSize = NSSize(
+        width: rowSize.width / pdfView.scaleFactor,
+        height: rowSize.height / pdfView.scaleFactor
+    )
+    guard normalizedRowSize.width > 0, normalizedRowSize.height > 0 else { return nil }
+    return min(
+        clipView.frame.width / normalizedRowSize.width,
+        clipView.frame.height / normalizedRowSize.height
+    )
 }
 
 @MainActor

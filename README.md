@@ -24,6 +24,8 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
 - Find bar (`cmd+f`), Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
+- Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
+- Immersive mode (`cmd+ctrl+l`) hides sidebars and tab chrome while keeping the current window size
 - Per-PDF memory: scale and page persist across launches; sidebar widths follow the current layout config on launch
 - Config-driven defaults via `~/Library/Application Support/SlatePDF/config.toml`
 
@@ -118,6 +120,8 @@ Defined in `[shortcuts]` above. Highlights:
 | Quick recent-files launcher | `cmd+shift+space` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |
 | Toggle left / right sidebar | `cmd+b` / `cmd+option+b` |
+| Toggle demo mode | `cmd+l` |
+| Toggle immersive mode | `cmd+ctrl+l` |
 | Toggle compare split | `cmd+ctrl+\` |
 | Toggle right sidebar: Outline / Pages | `cmd+shift+l` |
 | Swap left and right sidebars | `cmd+shift+x` |

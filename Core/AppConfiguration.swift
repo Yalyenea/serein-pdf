@@ -83,6 +83,8 @@ struct AppConfiguration: Equatable, Sendable {
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
             .newWindow: KeyboardShortcut(key: "n", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
+            .toggleDemoMode: KeyboardShortcut(key: "l", modifiers: [.command]),
+            .toggleImmersiveMode: KeyboardShortcut(key: "l", modifiers: [.command, .control]),
             .toggleReaderSplit: KeyboardShortcut(key: "\\", modifiers: [.command, .control]),
             .toggleRightSidebarMode: KeyboardShortcut(key: "l", modifiers: [.command, .shift]),
             .swapSidebars: KeyboardShortcut(key: "x", modifiers: [.command, .shift]),
@@ -293,6 +295,8 @@ open_containing_folder = "command+r"
 reopen_last_closed = "command+shift+t"
 new_window = "command+shift+n"
 toggle_all_pages_overview = "command+shift+o"
+toggle_demo_mode = "command+l"
+toggle_immersive_mode = "command+control+l"
 toggle_reader_split = "command+control+\\"
 toggle_right_sidebar_mode = "command+shift+l"
 swap_sidebars = "command+shift+x"
@@ -362,6 +366,8 @@ open_containing_folder = "\(serializedShortcut(.openContainingFolder, configurat
 reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
 new_window = "\(serializedShortcut(.newWindow, configuration: configuration))"
 toggle_all_pages_overview = "\(serializedShortcut(.toggleAllPagesOverview, configuration: configuration))"
+toggle_demo_mode = "\(serializedShortcut(.toggleDemoMode, configuration: configuration))"
+toggle_immersive_mode = "\(serializedShortcut(.toggleImmersiveMode, configuration: configuration))"
 toggle_reader_split = "\(serializedShortcut(.toggleReaderSplit, configuration: configuration))"
 toggle_right_sidebar_mode = "\(serializedShortcut(.toggleRightSidebarMode, configuration: configuration))"
 swap_sidebars = "\(serializedShortcut(.swapSidebars, configuration: configuration))"
@@ -523,6 +529,10 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .newWindow, to: &configuration)
         case ("shortcuts", "toggle_all_pages_overview"):
             try applyShortcut(rawValue, command: .toggleAllPagesOverview, to: &configuration)
+        case ("shortcuts", "toggle_demo_mode"):
+            try applyShortcut(rawValue, command: .toggleDemoMode, to: &configuration)
+        case ("shortcuts", "toggle_immersive_mode"):
+            try applyShortcut(rawValue, command: .toggleImmersiveMode, to: &configuration)
         case ("shortcuts", "toggle_reader_split"):
             try applyShortcut(rawValue, command: .toggleReaderSplit, to: &configuration)
         case ("shortcuts", "toggle_right_sidebar_mode"), ("shortcuts", "toggle_left_tabs_mode"):
@@ -658,6 +668,8 @@ struct AppConfigurationStore {
             "reopen_last_closed",
             "new_window",
             "toggle_all_pages_overview",
+            "toggle_demo_mode",
+            "toggle_immersive_mode",
             "toggle_reader_split",
             "toggle_right_sidebar_mode",
             "swap_sidebars",
@@ -668,6 +680,7 @@ struct AppConfigurationStore {
         var configuration = try parser.parse(existingContent)
         let legacyRemoveHighlight = KeyboardShortcut(key: "d", modifiers: [.command, .shift])
         let legacyGreenHighlight = KeyboardShortcut(key: "g", modifiers: [.command, .shift])
+        let legacyImmersiveMode = KeyboardShortcut(key: "l", modifiers: [.command, .option])
         var didMigrate = false
         if configuration.shortcuts.bindings[.removeHighlight] == legacyRemoveHighlight {
             configuration.shortcuts.bindings[.removeHighlight] = KeyboardShortcut(key: "d", modifiers: [])
@@ -678,6 +691,12 @@ struct AppConfigurationStore {
             configuration.shortcuts.bindings[.highlightColorGreen] =
                 AppConfiguration.default.shortcuts.bindings[.highlightColorGreen]
                 ?? KeyboardShortcut(key: "g", modifiers: [.command, .control])
+            didMigrate = true
+        }
+        if configuration.shortcuts.bindings[.toggleImmersiveMode] == legacyImmersiveMode {
+            configuration.shortcuts.bindings[.toggleImmersiveMode] =
+                AppConfiguration.default.shortcuts.bindings[.toggleImmersiveMode]
+                ?? KeyboardShortcut(key: "l", modifiers: [.command, .control])
             didMigrate = true
         }
 

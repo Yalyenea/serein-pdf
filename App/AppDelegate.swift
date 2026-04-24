@@ -178,6 +178,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .reopenLastClosed: { [weak self] in self?.reopenLastClosed(nil) },
             .newWindow: { [weak self] in self?.newWindow(nil) },
             .toggleAllPagesOverview: { [weak self] in self?.toggleAllPagesOverview(nil) },
+            .toggleDemoMode: { [weak self] in self?.toggleDemoModeAction(nil) },
+            .toggleImmersiveMode: { [weak self] in self?.toggleImmersiveModeAction(nil) },
             .toggleReaderSplit: { [weak self] in self?.toggleReaderSplitAction(nil) },
             .toggleRightSidebarMode: { [weak self] in self?.toggleRightSidebarModeAction(nil) },
             .swapSidebars: { [weak self] in self?.swapSidebarsAction(nil) },
@@ -604,6 +606,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 action: #selector(toggleAllPagesOverview(_:))
             ),
             makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleDemoMode.menuTitle,
+                command: .toggleDemoMode,
+                action: #selector(toggleDemoModeAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleImmersiveMode.menuTitle,
+                command: .toggleImmersiveMode,
+                action: #selector(toggleImmersiveModeAction(_:))
+            ),
+            makeConfiguredMenuItem(
                 title: ShortcutCommand.toggleReaderSplit.menuTitle,
                 command: .toggleReaderSplit,
                 action: #selector(toggleReaderSplitAction(_:))
@@ -816,6 +828,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func toggleAllPagesOverview(_ sender: Any?) {
         _ = mainWindowController?.toggleAllPagesOverview()
+    }
+
+    @objc
+    private func toggleDemoModeAction(_ sender: Any?) {
+        mainWindowController?.toggleDemoMode()
+    }
+
+    @objc
+    private func toggleImmersiveModeAction(_ sender: Any?) {
+        mainWindowController?.toggleImmersiveMode()
     }
 
     @objc
@@ -1382,6 +1404,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return windowID.map { documentStore.recentlyClosedURLs(in: $0).isEmpty == false } == true
         case #selector(toggleAllPagesOverview(_:)):
             menuItem.state = controller?.isAllPagesOverviewActive == true ? .on : .off
+            return activeSession != nil
+        case #selector(toggleDemoModeAction(_:)):
+            menuItem.state = controller?.isDemoModeEnabled == true ? .on : .off
+            return activeSession != nil
+        case #selector(toggleImmersiveModeAction(_:)):
+            menuItem.state = controller?.isImmersiveModeEnabled == true ? .on : .off
             return activeSession != nil
         case #selector(toggleReaderSplitAction(_:)):
             menuItem.state = controller?.isReaderSplitEnabled == true ? .on : .off

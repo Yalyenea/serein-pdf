@@ -360,6 +360,10 @@ final class SplitViewController: NSSplitViewController {
         readerWorkspaceViewController.fitToWidth()
     }
 
+    func fitToPage() {
+        readerWorkspaceViewController.fitToPage()
+    }
+
     func zoomIn() {
         readerWorkspaceViewController.zoomIn()
     }

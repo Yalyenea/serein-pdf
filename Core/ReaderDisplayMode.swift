@@ -88,6 +88,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case reopenLastClosed = "reopen_last_closed"
     case newWindow = "new_window"
     case toggleAllPagesOverview = "toggle_all_pages_overview"
+    case toggleDemoMode = "toggle_demo_mode"
+    case toggleImmersiveMode = "toggle_immersive_mode"
     case toggleReaderSplit = "toggle_reader_split"
     case toggleRightSidebarMode = "toggle_right_sidebar_mode"
     case swapSidebars = "swap_sidebars"
@@ -174,6 +176,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "New Window"
         case .toggleAllPagesOverview:
             "All Pages Overview"
+        case .toggleDemoMode:
+            "Toggle Demo Mode"
+        case .toggleImmersiveMode:
+            "Toggle Immersive Mode"
         case .toggleReaderSplit:
             "Toggle Compare Split"
         case .toggleRightSidebarMode:
