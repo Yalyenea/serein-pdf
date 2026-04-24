@@ -60,6 +60,7 @@ struct AppConfiguration: Equatable, Sendable {
             .closeCurrentTab: KeyboardShortcut(key: "w", modifiers: [.command]),
             .previousTab: KeyboardShortcut(key: "[", modifiers: [.command, .shift]),
             .nextTab: KeyboardShortcut(key: "]", modifiers: [.command, .shift]),
+            .fitHeight: KeyboardShortcut(key: "9", modifiers: [.command]),
             .fitWidth: KeyboardShortcut(key: "0", modifiers: [.command]),
             .zoomIn: KeyboardShortcut(key: "=", modifiers: [.command]),
             .zoomOut: KeyboardShortcut(key: "-", modifiers: [.command]),
@@ -272,6 +273,7 @@ use_titlebar_tabs = "command+shift+2"
 close_current_tab = "command+w"
 previous_tab = "command+shift+["
 next_tab = "command+shift+]"
+fit_height = "command+9"
 fit_width = "command+0"
 zoom_in = "command+="
 zoom_out = "command+-"
@@ -343,6 +345,7 @@ use_titlebar_tabs = "\(serializedShortcut(.useTitlebarTabs, configuration: confi
 close_current_tab = "\(serializedShortcut(.closeCurrentTab, configuration: configuration))"
 previous_tab = "\(serializedShortcut(.previousTab, configuration: configuration))"
 next_tab = "\(serializedShortcut(.nextTab, configuration: configuration))"
+fit_height = "\(serializedShortcut(.fitHeight, configuration: configuration))"
 fit_width = "\(serializedShortcut(.fitWidth, configuration: configuration))"
 zoom_in = "\(serializedShortcut(.zoomIn, configuration: configuration))"
 zoom_out = "\(serializedShortcut(.zoomOut, configuration: configuration))"
@@ -483,6 +486,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .previousTab, to: &configuration)
         case ("shortcuts", "next_tab"):
             try applyShortcut(rawValue, command: .nextTab, to: &configuration)
+        case ("shortcuts", "fit_height"):
+            try applyShortcut(rawValue, command: .fitHeight, to: &configuration)
         case ("shortcuts", "fit_width"):
             try applyShortcut(rawValue, command: .fitWidth, to: &configuration)
         case ("shortcuts", "single_page"):
@@ -645,6 +650,7 @@ struct AppConfigurationStore {
             "close_current_tab",
             "previous_tab",
             "next_tab",
+            "fit_height",
             "fit_width",
             "single_page",
             "single_page_continuous",

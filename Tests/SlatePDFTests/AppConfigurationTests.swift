@@ -37,6 +37,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "9", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.undoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command]))
@@ -69,6 +70,7 @@ save_annotations = "command+shift+s"
 toggle_left_sidebar = "command+shift+l"
 close_current_tab = "command+e"
 fit_width = "command+shift+9"
+fit_height = "command+shift+8"
 previous_tab = "command+["
 two_up = "command+option+8"
 half_page_down = "control+f"
@@ -92,6 +94,7 @@ show_recent_files_in_sidebar = false
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth], KeyboardShortcut(key: "9", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "8", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.previousTab], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.twoUp], KeyboardShortcut(key: "8", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.halfPageDown], KeyboardShortcut(key: "f", modifiers: [.control]))
@@ -127,6 +130,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
         XCTAssertTrue(content.contains("close_current_tab = \"command+w\""))
+        XCTAssertTrue(content.contains("fit_height = \"command+9\""))
         XCTAssertTrue(content.contains("fit_width = \"command+9\""))
         XCTAssertTrue(content.contains("remove_highlight = \"d\""))
         XCTAssertTrue(content.contains("page_down = \"j\""))

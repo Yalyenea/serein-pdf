@@ -786,6 +786,33 @@ struct WindowChromeTests {
     }
 
     @Test
+    func fitHeightUsesPDFKitRowHeight() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "fit-height",
+                pageSizes: [NSSize(width: 720, height: 1800)]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let expectedScale = fitHeightScaleExpected(for: splitController.readerViewController.pdfView) else {
+            Issue.record("Failed to locate reader internals")
+            return
+        }
+
+        splitController.readerViewController.fitToHeight()
+        flushLayout(controller.window)
+
+        #expect(store.session(for: session.id)?.scaleMode == .fitHeight)
+        #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.05)
+    }
+
+    @Test
     func pdfScrollViewDisablesElasticity() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
@@ -1043,6 +1070,17 @@ private func fitWidthScaleExpected(for pdfView: PDFView, leadPageIndex: Int = 0)
     let normalizedRowWidth = pdfView.rowSize(for: page).width / pdfView.scaleFactor
     guard normalizedRowWidth > 0 else { return nil }
     return clipView.frame.width / normalizedRowWidth
+}
+
+@MainActor
+private func fitHeightScaleExpected(for pdfView: PDFView, leadPageIndex: Int = 0) -> CGFloat? {
+    guard let clipView = pdfClipView(in: pdfView),
+          let page = pdfView.document?.page(at: leadPageIndex),
+          pdfView.scaleFactor > 0 else { return nil }
+
+    let normalizedRowHeight = pdfView.rowSize(for: page).height / pdfView.scaleFactor
+    guard normalizedRowHeight > 0 else { return nil }
+    return clipView.frame.height / normalizedRowHeight
 }
 
 @MainActor

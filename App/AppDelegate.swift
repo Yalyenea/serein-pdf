@@ -155,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .closeCurrentTab: { [weak self] in self?.closeCurrentTab(nil) },
             .previousTab: { [weak self] in self?.activatePreviousTab(nil) },
             .nextTab: { [weak self] in self?.activateNextTab(nil) },
+            .fitHeight: { [weak self] in self?.fitReaderToHeight(nil) },
             .fitWidth: { [weak self] in self?.fitReaderToWidth(nil) },
             .zoomIn: { [weak self] in self?.zoomInReader(nil) },
             .zoomOut: { [weak self] in self?.zoomOutReader(nil) },
@@ -569,6 +570,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 action: #selector(fitReaderToWidth(_:))
             ),
             makeConfiguredMenuItem(
+                title: ShortcutCommand.fitHeight.menuTitle,
+                command: .fitHeight,
+                action: #selector(fitReaderToHeight(_:))
+            ),
+            makeConfiguredMenuItem(
                 title: "Zoom In",
                 command: .zoomIn,
                 action: #selector(zoomInReader(_:))
@@ -909,6 +915,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc
     private func fitReaderToWidth(_ sender: Any?) {
         mainWindowController?.fitReaderToWidth()
+    }
+
+    @objc
+    private func fitReaderToHeight(_ sender: Any?) {
+        mainWindowController?.fitReaderToHeight()
     }
 
     @objc
@@ -1384,6 +1395,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return windowID.map { documentStore.sessionCount(in: $0) > 1 } == true
         case #selector(fitReaderToWidth(_:)):
             menuItem.state = activeSession?.scaleMode == .fitWidth ? .on : .off
+            return activeSession != nil
+        case #selector(fitReaderToHeight(_:)):
+            menuItem.state = activeSession?.scaleMode == .fitHeight ? .on : .off
             return activeSession != nil
         case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
             return activeSession != nil

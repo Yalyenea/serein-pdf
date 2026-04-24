@@ -21,6 +21,8 @@ let package = Package(
                 "Tests",
                 "AGENTS.md",
                 "CLAUDE.md",
+                "CHANGELOG.md",
+                "LICENSE",
                 "PROJECT.md",
                 "TASKS.md",
                 "Justfile",

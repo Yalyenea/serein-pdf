@@ -45,6 +45,7 @@ enum ReaderDisplayMode: String, CaseIterable, Codable, Sendable {
 
 enum ReaderScaleMode: String, Codable, Sendable {
     case manual
+    case fitHeight = "fit_height"
     case fitWidth = "fit_width"
 }
 
@@ -65,6 +66,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case closeCurrentTab = "close_current_tab"
     case previousTab = "previous_tab"
     case nextTab = "next_tab"
+    case fitHeight = "fit_height"
     case fitWidth = "fit_width"
     case zoomIn = "zoom_in"
     case zoomOut = "zoom_out"
@@ -130,6 +132,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Previous Tab"
         case .nextTab:
             "Next Tab"
+        case .fitHeight:
+            "Fit Height"
         case .fitWidth:
             "Fit Width"
         case .zoomIn:

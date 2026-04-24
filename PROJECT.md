@@ -121,7 +121,7 @@ flowchart LR
 - `Cmd+Z`:撤销最近一次高亮新增或删除(上限 50,无 redo)
 
 **阅读**
-- `Cmd+0`:适应宽度
+- `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`:`singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`
 - `J` / `K`:下一页 / 上一页(文本输入上下文让路)

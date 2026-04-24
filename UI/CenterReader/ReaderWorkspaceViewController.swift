@@ -141,6 +141,10 @@ final class ReaderWorkspaceViewController: NSViewController {
         activeReaderViewController().fitToWidth()
     }
 
+    func fitToHeight() {
+        activeReaderViewController().fitToHeight()
+    }
+
     func fitToPage() {
         activeReaderViewController().fitToPage()
     }

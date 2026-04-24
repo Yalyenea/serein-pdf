@@ -49,7 +49,9 @@ final class ReaderViewController: NSViewController {
     nonisolated(unsafe) private var leftMouseDownMonitor: Any?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
     private var pendingFitWidthSessionID: UUID?
+    private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
+    private var lastAppliedFitBoundsHeight: CGFloat = 0
     private var lastSubmittedSearchKey: SubmittedSearchKey?
     private var pendingAnnotationFocusToken: Int = 0
     var targetSessionID: UUID? {
@@ -134,21 +136,41 @@ final class ReaderViewController: NSViewController {
               displayedSessionID == session.id,
               pdfView.bounds.width > 0 else { return }
 
-        guard session.scaleMode == .fitWidth else {
+        guard session.scaleMode == .fitWidth || session.scaleMode == .fitHeight else {
             recenterDocumentViewIfNeeded()
             return
         }
 
-        let isPending = pendingFitWidthSessionID == session.id
-        let boundsChanged = abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) > 0.5
+        let isPending: Bool
+        let boundsChanged: Bool
+        switch session.scaleMode {
+        case .fitWidth:
+            isPending = pendingFitWidthSessionID == session.id
+            boundsChanged = abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) > 0.5
+        case .fitHeight:
+            isPending = pendingFitHeightSessionID == session.id
+            boundsChanged = abs(pdfView.bounds.height - lastAppliedFitBoundsHeight) > 0.5
+        case .manual:
+            isPending = false
+            boundsChanged = false
+        }
         guard isPending || boundsChanged else {
             recenterDocumentViewIfNeeded()
             return
         }
 
-        pendingFitWidthSessionID = nil
-        lastAppliedFitBoundsWidth = pdfView.bounds.width
-        applyFitWidth(for: session)
+        switch session.scaleMode {
+        case .fitWidth:
+            pendingFitWidthSessionID = nil
+            lastAppliedFitBoundsWidth = pdfView.bounds.width
+            applyFitWidth(for: session)
+        case .fitHeight:
+            pendingFitHeightSessionID = nil
+            lastAppliedFitBoundsHeight = pdfView.bounds.height
+            applyFitHeight(for: session)
+        case .manual:
+            break
+        }
         recenterDocumentViewIfNeeded()
     }
 
@@ -264,11 +286,22 @@ final class ReaderViewController: NSViewController {
         applyFitWidth(for: session)
     }
 
+    func fitToHeight() {
+        guard let session = targetSession() else { return }
+        if pdfView.bounds.height > 0 {
+            pendingFitHeightSessionID = nil
+            lastAppliedFitBoundsHeight = pdfView.bounds.height
+        }
+        applyFitHeight(for: session)
+    }
+
     func fitToPage() {
         guard let session = targetSession(),
               let scaleFactor = fitPageScaleFactor() else { return }
         pendingFitWidthSessionID = nil
+        pendingFitHeightSessionID = nil
         lastAppliedFitBoundsWidth = 0
+        lastAppliedFitBoundsHeight = 0
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: false)
         documentStore.setScaleMode(.manual, scaleFactor: scaleFactor, for: session.id)
     }
@@ -710,6 +743,16 @@ final class ReaderViewController: NSViewController {
         switch session.scaleMode {
         case .manual:
             return .manual
+        case .fitHeight:
+            guard let targetScaleFactor = fitHeightScaleFactor(for: session) else { return nil }
+            if abs(liveScale - targetScaleFactor) <= 0.001 {
+                return .fitHeight
+            }
+
+            let fitHeightLayoutIsStable =
+                pendingFitHeightSessionID != session.id &&
+                abs(pdfView.bounds.height - lastAppliedFitBoundsHeight) <= 0.5
+            return fitHeightLayoutIsStable ? .manual : nil
         case .fitWidth:
             guard let targetScaleFactor = fitWidthScaleFactor(for: session) else { return nil }
             if abs(liveScale - targetScaleFactor) <= 0.001 {
@@ -803,6 +846,14 @@ final class ReaderViewController: NSViewController {
 
     private func applyScaleIfNeeded(_ session: DocumentSession) {
         switch session.scaleMode {
+        case .fitHeight:
+            if pdfView.bounds.height > 0 {
+                pendingFitHeightSessionID = nil
+                lastAppliedFitBoundsHeight = pdfView.bounds.height
+                applyFitHeight(for: session)
+            } else {
+                pendingFitHeightSessionID = session.id
+            }
         case .fitWidth:
             if pdfView.bounds.width > 0 {
                 pendingFitWidthSessionID = nil
@@ -813,7 +864,9 @@ final class ReaderViewController: NSViewController {
             }
         case .manual:
             pendingFitWidthSessionID = nil
+            pendingFitHeightSessionID = nil
             lastAppliedFitBoundsWidth = 0
+            lastAppliedFitBoundsHeight = 0
             guard displayedScaleMode != .manual || abs(pdfView.scaleFactor - session.zoomScale) > 0.001 else { return }
             applyProgrammaticScale(
                 session.zoomScale,
@@ -851,6 +904,12 @@ final class ReaderViewController: NSViewController {
         documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
     }
 
+    private func applyFitHeight(for session: DocumentSession) {
+        guard let scaleFactor = fitHeightScaleFactor(for: session) else { return }
+        applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
+        documentStore.setScaleMode(.fitHeight, scaleFactor: scaleFactor, for: session.id)
+    }
+
     func shouldApplyFitWidth(_ targetScaleFactor: CGFloat, for session: DocumentSession) -> Bool {
         guard displayedSessionID == session.id, displayedScaleMode == .fitWidth else { return true }
 
@@ -864,9 +923,14 @@ final class ReaderViewController: NSViewController {
         isApplyingProgrammaticScale = true
         defer { isApplyingProgrammaticScale = false }
         pdfView.scaleFactor = scaleFactor
+        pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
         recenterDocumentViewIfNeeded()
         if let viewportAnchor {
+            restoreViewportAnchor(viewportAnchor)
+            pdfView.layoutDocumentView()
+            pdfView.layoutSubtreeIfNeeded()
+            recenterDocumentViewIfNeeded()
             restoreViewportAnchor(viewportAnchor)
         }
     }
@@ -881,6 +945,19 @@ final class ReaderViewController: NSViewController {
 
         let availableWidth = max(pdfClipView()?.frame.width ?? pdfView.bounds.width, 1)
         let unclamped = availableWidth / normalizedRowWidth
+        return min(max(unclamped, pdfView.minScaleFactor), pdfView.maxScaleFactor)
+    }
+
+    private func fitHeightScaleFactor(for session: DocumentSession) -> CGFloat? {
+        guard let document = pdfView.document else { return nil }
+        let pages = spreadPages(for: session, in: document)
+        guard let leadPage = pages.first else { return nil }
+        let currentScale = max(pdfView.scaleFactor, 0.001)
+        let normalizedRowHeight = pdfView.rowSize(for: leadPage).height / currentScale
+        guard normalizedRowHeight > 0 else { return nil }
+
+        let availableHeight = max(pdfClipView()?.frame.height ?? pdfView.bounds.height, 1)
+        let unclamped = availableHeight / normalizedRowHeight
         return min(max(unclamped, pdfView.minScaleFactor), pdfView.maxScaleFactor)
     }
 

@@ -108,7 +108,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Toggle night mode | `i` |
 | Save annotations | `cmd+s` |
 | Copy highlights as Markdown | `cmd+shift+e` |
-| Fit width | `cmd+0` |
+| Fit width / height | `cmd+0` / `cmd+9` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |
 | Show current PDF in Finder | `cmd+r` |
