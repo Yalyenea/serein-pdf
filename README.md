@@ -18,7 +18,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
-- Pink-first highlight workflow (`a` to highlight, `i` to toggle inverted night mode)
+- Pink-first highlight workflow (`a` to highlight, `i` to toggle a warm Rose Pine-style inverted night mode)
 - Highlights can carry comments in the right sidebar, and exports include those comments
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized

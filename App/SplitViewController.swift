@@ -48,25 +48,13 @@ final class SplitViewController: NSSplitViewController {
         self.init(documentStore: documentStore, windowID: documentStore.defaultWindowID)
     }
 
-    static let splitBackgroundColor: NSColor = NSColor(name: nil) { appearance in
-        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor(calibratedWhite: isDark ? 0.10 : 0.96, alpha: 1.0)
-    }
+    static let splitBackgroundColor: NSColor = NightModeStyle.splitBackgroundColor
 
-    static let dividerBackgroundColor: NSColor = NSColor(name: nil) { appearance in
-        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor(calibratedWhite: isDark ? 0.12 : 0.88, alpha: 1.0)
-    }
+    static let dividerBackgroundColor: NSColor = NightModeStyle.chromeDividerColor
 
-    static let selectedChromeBackgroundColor: NSColor = NSColor(name: nil) { appearance in
-        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor(calibratedWhite: isDark ? 0.19 : 0.915, alpha: 1.0)
-    }
+    static let selectedChromeBackgroundColor: NSColor = NightModeStyle.selectedChromeBackgroundColor
 
-    static let chromeStrokeColor: NSColor = NSColor(name: nil) { appearance in
-        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        return NSColor(calibratedWhite: isDark ? 0.28 : 0.82, alpha: 1.0)
-    }
+    static let chromeStrokeColor: NSColor = NightModeStyle.chromeStrokeColor
 
     override func viewDidLoad() {
         super.viewDidLoad()

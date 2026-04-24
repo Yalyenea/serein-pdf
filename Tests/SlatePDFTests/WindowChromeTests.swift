@@ -71,6 +71,40 @@ struct WindowChromeTests {
     }
 
     @Test
+    func nightModeKeepsWhitePDFBaseForWarmFilter() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        app.appearance = NSAppearance(named: .darkAqua)
+        defer { app.appearance = previousAppearance }
+
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "night-mode-background"))
+        controller.window?.layoutIfNeeded()
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to create split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        #expect(reader.pdfView.displaysPageBreaks)
+        assertColor(reader.pdfView.backgroundColor, matches: .white)
+        if let layerColor = reader.pdfView.layer?.backgroundColor,
+           let layerBackground = NSColor(cgColor: layerColor) {
+            assertColor(layerBackground, matches: .white)
+        } else {
+            Issue.record("Failed to read PDFView layer background")
+        }
+        if let readerBackground = reader.view.layer?.backgroundColor,
+           let readerBackgroundColor = NSColor(cgColor: readerBackground) {
+            assertColor(readerBackgroundColor, matches: NightModeStyle.pageBackgroundColor)
+        } else {
+            Issue.record("Failed to read reader background")
+        }
+    }
+
+    @Test
     func splitViewClearsLegacyAutosavedDividerFrames() {
         let defaults = UserDefaults.standard
         let legacyKeys = [
@@ -1212,6 +1246,17 @@ private func fitPageScaleExpected(for pdfView: PDFView, pageIndex: Int = 0) -> C
         clipView.frame.width / normalizedRowSize.width,
         clipView.frame.height / normalizedRowSize.height
     )
+}
+
+@MainActor
+private func assertColor(_ lhs: NSColor, matches rhs: NSColor, tolerance: CGFloat = 0.002) {
+    let left = lhs.usingColorSpace(.sRGB) ?? lhs
+    let right = rhs.usingColorSpace(.sRGB) ?? rhs
+
+    #expect(abs(left.redComponent - right.redComponent) < tolerance)
+    #expect(abs(left.greenComponent - right.greenComponent) < tolerance)
+    #expect(abs(left.blueComponent - right.blueComponent) < tolerance)
+    #expect(abs(left.alphaComponent - right.alphaComponent) < tolerance)
 }
 
 @MainActor

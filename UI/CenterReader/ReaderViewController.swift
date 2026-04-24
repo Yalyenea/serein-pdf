@@ -1222,9 +1222,10 @@ final class ReaderViewController: NSViewController {
 
     private func applyReaderAppearance() {
         let isNightModeEnabled = themeManager.readerState.isNightModeEnabled
-        let nightBackground = NSColor(calibratedWhite: 0.07, alpha: 1.0)
-        view.layer?.backgroundColor = (isNightModeEnabled ? nightBackground : NSColor.white).cgColor
+        let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NSColor.white
+        view.layer?.backgroundColor = pageBackground.cgColor
         pdfView.backgroundColor = .white
+        pdfView.layer?.backgroundColor = NSColor.white.cgColor
         pdfView.isHidden = false
         pdfContainerView.setNightModeEnabled(isNightModeEnabled)
         emptyStateLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
@@ -1241,18 +1242,11 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyNightModeFilter(isEnabled: Bool) {
-        guard isEnabled, let filter = CIFilter(name: "CIColorMatrix") else {
+        guard isEnabled else {
             pdfView.contentFilters = []
             return
         }
-        let scale: CGFloat = -1.0
-        let bias: CGFloat = 0.95
-        filter.setValue(CIVector(x: scale, y: 0, z: 0, w: 0), forKey: "inputRVector")
-        filter.setValue(CIVector(x: 0, y: scale, z: 0, w: 0), forKey: "inputGVector")
-        filter.setValue(CIVector(x: 0, y: 0, z: scale, w: 0), forKey: "inputBVector")
-        filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 1), forKey: "inputAVector")
-        filter.setValue(CIVector(x: bias, y: bias, z: bias, w: 0), forKey: "inputBiasVector")
-        pdfView.contentFilters = [filter]
+        pdfView.contentFilters = NightModeStyle.makePDFContentFilters()
     }
 
 }
