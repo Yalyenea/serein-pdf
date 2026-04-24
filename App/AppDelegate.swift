@@ -174,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .findPreviousMatch: { [weak self] in self?.findPreviousMatchAction(nil) },
             .gotoPage: { [weak self] in self?.showGotoPageDialog(nil) },
             .showRecentFilesPalette: { [weak self] in self?.showRecentFilesPalette(nil) },
+            .openContainingFolder: { [weak self] in self?.openContainingFolder(nil) },
             .reopenLastClosed: { [weak self] in self?.reopenLastClosed(nil) },
             .newWindow: { [weak self] in self?.newWindow(nil) },
             .toggleAllPagesOverview: { [weak self] in self?.toggleAllPagesOverview(nil) },
@@ -201,6 +202,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard let self,
                   let readerShortcutsController = self.readerShortcutsController else { return false }
             return readerShortcutsController.handlePlainShortcut(for: event, in: window)
+        }
+        controller.installSidebarRecentOpenHandler { [weak self] url, windowID in
+            self?.openRecentDocuments([url], preferredWindowID: windowID)
         }
         mainWindowControllers[windowID] = controller
         return controller
@@ -344,6 +348,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             command: .showRecentFilesPalette,
             action: #selector(showRecentFilesPalette(_:))
         )
+        let openContainingFolderItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.openContainingFolder.menuTitle,
+            command: .openContainingFolder,
+            action: #selector(openContainingFolder(_:))
+        )
         let findItem = NSMenuItem(
             title: "Find…",
             action: #selector(findInCurrentDocument(_:)),
@@ -400,6 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             newWindowItem,
             openItem,
             quickOpenRecentItem,
+            openContainingFolderItem,
             recentItem,
             reopenClosedItem,
             findItem,
@@ -1080,10 +1090,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         openRecentDocuments([url])
     }
 
-    private func openRecentDocuments(_ urls: [URL]) {
+    @objc
+    private func openContainingFolder(_ sender: Any?) {
+        guard let windowID = mainWindowController?.windowID ?? mainWindowControllers.values.first?.windowID,
+              let activeURL = documentStore.activeSession(in: windowID)?.url else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([activeURL])
+    }
+
+    private func openRecentDocuments(_ urls: [URL], preferredWindowID: UUID? = nil) {
         guard urls.isEmpty == false else { return }
         mainWindowController?.hideFindBar()
-        let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
+        let targetWindowID = preferredWindowID
+            .flatMap { documentStore.windowWorkspace(for: $0)?.id }
+            ?? mainWindowController?.windowID
+            ?? documentStore.defaultWindowID
 
         do {
             for url in urls {
@@ -1320,6 +1340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return activeSession != nil
         case #selector(showRecentFilesPalette(_:)):
             return documentStore.recentDocumentURLs.isEmpty == false
+        case #selector(openContainingFolder(_:)):
+            return activeSession != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
             return controller?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):

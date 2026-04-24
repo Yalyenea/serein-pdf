@@ -11,10 +11,17 @@ final class VerticalTabsViewController: NSViewController {
     let windowID: UUID
     var onCloseSessionRequested: ((UUID) -> Void)?
     var onAlternateSessionActivationRequested: ((UUID) -> Void)?
+    var onOpenRecentURLRequested: ((URL) -> Void)?
     private let countLabel = NSTextField(labelWithString: "0 open")
     private let emptyStateLabel = NSTextField(
         labelWithString: "Open multiple PDFs and switch them here.")
     private let listStackView = NSStackView()
+    private let recentSectionContainer = NSStackView()
+    private let recentTitleLabel = NSTextField(labelWithString: "Recent PDFs")
+    private let recentListStackView = NSStackView()
+    private var recentButtons: [NSButton] = []
+    private var recentButtonURLs: [URL] = []
+    private static let recentDisplayLimit = 5
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -71,7 +78,23 @@ final class VerticalTabsViewController: NSViewController {
         listStackView.translatesAutoresizingMaskIntoConstraints = false
         listStackView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        for view in [headerStack, emptyStateLabel, listStackView] {
+        recentSectionContainer.orientation = .vertical
+        recentSectionContainer.alignment = .leading
+        recentSectionContainer.spacing = 6
+        recentSectionContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        recentTitleLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        recentTitleLabel.textColor = .tertiaryLabelColor
+
+        recentListStackView.orientation = .vertical
+        recentListStackView.alignment = .leading
+        recentListStackView.spacing = 2
+        recentListStackView.translatesAutoresizingMaskIntoConstraints = false
+
+        recentSectionContainer.addArrangedSubview(recentTitleLabel)
+        recentSectionContainer.addArrangedSubview(recentListStackView)
+
+        for view in [headerStack, emptyStateLabel, listStackView, recentSectionContainer] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -91,8 +114,12 @@ final class VerticalTabsViewController: NSViewController {
             listStackView.trailingAnchor.constraint(
                 equalTo: container.trailingAnchor, constant: -8),
             listStackView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 10),
+
+            recentSectionContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            recentSectionContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            recentSectionContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
             listStackView.bottomAnchor.constraint(
-                lessThanOrEqualTo: container.bottomAnchor, constant: -8),
+                lessThanOrEqualTo: recentSectionContainer.topAnchor, constant: -10),
         ]
         pinned.forEach { $0.priority = .defaultHigh }
         NSLayoutConstraint.activate(pinned)
@@ -153,5 +180,70 @@ final class VerticalTabsViewController: NSViewController {
             widthMatch.priority = .defaultHigh
             widthMatch.isActive = true
         }
+
+        rebuildRecentList()
+    }
+
+    private func rebuildRecentList() {
+        recentButtons.removeAll(keepingCapacity: true)
+        recentButtonURLs.removeAll(keepingCapacity: true)
+        recentListStackView.arrangedSubviews.forEach { subview in
+            recentListStackView.removeArrangedSubview(subview)
+            subview.removeFromSuperview()
+        }
+
+        let shouldShowRecents = documentStore.appConfiguration.layout.showRecentFilesInSidebar
+        let recentURLs = Array(documentStore.recentDocumentURLs.prefix(Self.recentDisplayLimit))
+        guard shouldShowRecents, recentURLs.isEmpty == false else {
+            recentSectionContainer.isHidden = true
+            return
+        }
+
+        recentSectionContainer.isHidden = false
+        for url in recentURLs {
+            let button = NSButton(title: url.deletingPathExtension().lastPathComponent, target: self, action: #selector(openRecentDocument(_:)))
+            button.isBordered = false
+            button.alignment = .left
+            button.controlSize = .small
+            button.font = .systemFont(ofSize: 11, weight: .regular)
+            button.contentTintColor = .secondaryLabelColor
+            button.setButtonType(.momentaryChange)
+            button.bezelStyle = .regularSquare
+            button.lineBreakMode = .byTruncatingMiddle
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.toolTip = url.path
+            button.tag = recentButtons.count
+            button.target = self
+            button.action = #selector(openRecentDocument(_:))
+            recentListStackView.addArrangedSubview(button)
+            let widthMatch = button.widthAnchor.constraint(equalTo: recentListStackView.widthAnchor)
+            widthMatch.priority = .defaultHigh
+            widthMatch.isActive = true
+            recentButtons.append(button)
+            recentButtonURLs.append(url)
+        }
+    }
+
+    @objc
+    private func openRecentDocument(_ sender: NSButton) {
+        guard recentButtonURLs.indices.contains(sender.tag) else { return }
+        onOpenRecentURLRequested?(recentButtonURLs[sender.tag])
     }
 }
+
+#if DEBUG
+extension VerticalTabsViewController {
+    var testingRecentFileTitles: [String] {
+        recentButtons.map(\.title)
+    }
+
+    var testingRecentSectionVisible: Bool {
+        recentSectionContainer.isHidden == false
+    }
+
+    func testingTriggerOpenRecent(at index: Int) {
+        guard recentButtons.indices.contains(index) else { return }
+        recentButtons[index].performClick(nil)
+    }
+}
+#endif

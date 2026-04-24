@@ -36,6 +36,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "g", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.undoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command]))
@@ -44,6 +45,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.swapSidebars], KeyboardShortcut(key: "x", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.layout.leftSidebarMinWidth, 36)
         XCTAssertFalse(configuration.layout.sidebarsSwapped)
+        XCTAssertTrue(configuration.layout.showRecentFilesInSidebar)
     }
 
     func testLoadTomlOverridesReaderDefaultsAndShortcuts() throws {
@@ -71,6 +73,10 @@ half_page_down = "control+f"
 go_to_last_page = "shift+l"
 find_previous_match = "shift+n"
 show_recent_files_palette = "command+space"
+open_containing_folder = "command+option+r"
+
+[layout]
+show_recent_files_in_sidebar = false
 """.write(to: fileURL, atomically: true, encoding: .utf8)
 
         let configuration = try AppConfigurationStore(fileURL: fileURL).load()
@@ -90,6 +96,8 @@ show_recent_files_palette = "command+space"
         XCTAssertEqual(configuration.shortcuts.bindings[.goToLastPage], KeyboardShortcut(key: "l", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "n", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command, .option]))
+        XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
     }
 
     func testExistingConfigGetsMissingShortcutKeysBackfilled() throws {
@@ -131,10 +139,12 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("find_previous_match = \"command+shift+g\""))
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
         XCTAssertTrue(content.contains("show_recent_files_palette = \"command+shift+space\""))
+        XCTAssertTrue(content.contains("open_containing_folder = \"command+r\""))
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
         XCTAssertTrue(content.contains("undo_last_highlight = \"command+z\""))
         XCTAssertTrue(content.contains("redo_last_highlight = \"command+shift+z\""))
+        XCTAssertTrue(content.contains("show_recent_files_in_sidebar = true"))
     }
 
     func testLegacyGreenShortcutMigratesAwayFromFindPreviousConflict() throws {

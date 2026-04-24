@@ -26,6 +26,7 @@ struct AppConfiguration: Equatable, Sendable {
         var rightSidebarMinWidth: CGFloat
         var rightSidebarMaxWidth: CGFloat
         var sidebarsSwapped: Bool
+        var showRecentFilesInSidebar: Bool = true
 
         static let `default` = Layout(
             leftSidebarWidth: 220,
@@ -34,7 +35,8 @@ struct AppConfiguration: Equatable, Sendable {
             rightSidebarWidth: 320,
             rightSidebarMinWidth: 120,
             rightSidebarMaxWidth: 720,
-            sidebarsSwapped: false
+            sidebarsSwapped: false,
+            showRecentFilesInSidebar: true
         )
     }
 
@@ -77,6 +79,7 @@ struct AppConfiguration: Equatable, Sendable {
             .findPreviousMatch: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
             .showRecentFilesPalette: KeyboardShortcut(key: "space", modifiers: [.command, .shift]),
+            .openContainingFolder: KeyboardShortcut(key: "r", modifiers: [.command]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
             .newWindow: KeyboardShortcut(key: "n", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
@@ -248,6 +251,7 @@ right_sidebar_width = 320
 right_sidebar_min_width = 120
 right_sidebar_max_width = 720
 sidebars_swapped = false
+show_recent_files_in_sidebar = true
 
 [shortcuts]
 highlight_selection = "a"
@@ -285,6 +289,7 @@ find_next_match = "command+g"
 find_previous_match = "command+shift+g"
 goto_page = "command+option+g"
 show_recent_files_palette = "command+shift+space"
+open_containing_folder = "command+r"
 reopen_last_closed = "command+shift+t"
 new_window = "command+shift+n"
 toggle_all_pages_overview = "command+shift+o"
@@ -315,6 +320,7 @@ right_sidebar_width = \(Int(configuration.layout.rightSidebarWidth.rounded()))
 right_sidebar_min_width = \(Int(configuration.layout.rightSidebarMinWidth.rounded()))
 right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounded()))
 sidebars_swapped = \(configuration.layout.sidebarsSwapped ? "true" : "false")
+show_recent_files_in_sidebar = \(configuration.layout.showRecentFilesInSidebar ? "true" : "false")
 
 [shortcuts]
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
@@ -352,6 +358,7 @@ find_next_match = "\(serializedShortcut(.findNextMatch, configuration: configura
 find_previous_match = "\(serializedShortcut(.findPreviousMatch, configuration: configuration))"
 goto_page = "\(serializedShortcut(.gotoPage, configuration: configuration))"
 show_recent_files_palette = "\(serializedShortcut(.showRecentFilesPalette, configuration: configuration))"
+open_containing_folder = "\(serializedShortcut(.openContainingFolder, configuration: configuration))"
 reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
 new_window = "\(serializedShortcut(.newWindow, configuration: configuration))"
 toggle_all_pages_overview = "\(serializedShortcut(.toggleAllPagesOverview, configuration: configuration))"
@@ -446,6 +453,8 @@ struct AppConfigurationParser {
             configuration.layout.rightSidebarMaxWidth = try parseWidth(rawValue)
         case ("layout", "sidebars_swapped"):
             configuration.layout.sidebarsSwapped = try parseBool(rawValue)
+        case ("layout", "show_recent_files_in_sidebar"):
+            configuration.layout.showRecentFilesInSidebar = try parseBool(rawValue)
         case ("shortcuts", "remove_highlight"):
             try applyShortcut(rawValue, command: .removeHighlight, to: &configuration)
         case ("shortcuts", "highlight_color_pink"):
@@ -506,6 +515,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .gotoPage, to: &configuration)
         case ("shortcuts", "show_recent_files_palette"):
             try applyShortcut(rawValue, command: .showRecentFilesPalette, to: &configuration)
+        case ("shortcuts", "open_containing_folder"):
+            try applyShortcut(rawValue, command: .openContainingFolder, to: &configuration)
         case ("shortcuts", "reopen_last_closed"):
             try applyShortcut(rawValue, command: .reopenLastClosed, to: &configuration)
         case ("shortcuts", "new_window"):
@@ -607,6 +618,7 @@ struct AppConfigurationStore {
             "right_sidebar_min_width",
             "right_sidebar_max_width",
             "sidebars_swapped",
+            "show_recent_files_in_sidebar",
             "highlight_selection",
             "exit_highlight_mode",
             "toggle_night_mode",
@@ -642,6 +654,7 @@ struct AppConfigurationStore {
             "find_previous_match",
             "goto_page",
             "show_recent_files_palette",
+            "open_containing_folder",
             "reopen_last_closed",
             "new_window",
             "toggle_all_pages_overview",

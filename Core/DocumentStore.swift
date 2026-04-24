@@ -20,6 +20,7 @@ final class DocumentStore {
     private(set) var sessions: [DocumentSession] = []
     private(set) var recentDocumentURLs: [URL] = []
     private(set) var windowWorkspaces: [WindowWorkspace]
+    private var splitComparisonSessionIDs: Set<UUID> = []
     private static let recentlyClosedLimit = 10
     static let undoStackLimit = 50
 
@@ -185,28 +186,7 @@ final class DocumentStore {
 
     @discardableResult
     func open(documentAt url: URL, in windowID: UUID, targetPane: ReaderPane? = nil) throws -> DocumentSession {
-        guard let pdfDocument = PDFDocument(url: url) else {
-            throw DocumentStoreError.unreadableDocument(url)
-        }
-
-        let restoredState = try readingStateStore.loadState(for: url)
-        var session = DocumentSession(
-            url: url,
-            pdfDocument: pdfDocument,
-            currentPageIndex: restoredState?.readingPosition.pageIndex ?? 0,
-            displayMode: restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
-            scaleMode: resolvedScaleMode(restoredState?.scaleMode),
-            zoomScale: restoredState?.scaleFactor ?? 1.0,
-            lastReadPosition: restoredState?.readingPosition ?? .zero,
-            outlineTree: OutlineExtractor.extract(from: pdfDocument),
-            annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
-            leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
-            rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
-        )
-        session.annotationCache = DocumentHighlightCache(
-            groups: HighlightService.buildHighlightGroups(in: pdfDocument)
-        )
-
+        let session = try makeSession(documentAt: url)
         sessions.append(session)
         recentDocumentURLs = (try? recentFilesStore.recordOpen(for: url)) ?? recentDocumentURLs
         attach(sessionID: session.id, to: windowID)
@@ -268,6 +248,7 @@ final class DocumentStore {
               let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
 
         var workspace = windowWorkspaces[workspaceIndex]
+        var duplicatedSessionID: UUID?
         guard workspace.sessionIDs.contains(sessionID) else { return }
         let pane = resolvedTargetPane(for: targetPane, in: workspace)
 
@@ -282,7 +263,24 @@ final class DocumentStore {
         }
 
         if workspace.isSplitEnabled {
-            workspace.setSession(sessionID, for: pane)
+            let oppositeSessionID = pane == .primary ? workspace.secondarySessionID : workspace.primarySessionID
+            let targetSessionID: UUID
+            if oppositeSessionID == sessionID,
+               let existingCloneID = existingSplitComparisonSessionID(
+                   for: sessionID,
+                   in: workspace,
+                   excluding: oppositeSessionID
+               ) {
+                targetSessionID = existingCloneID
+            } else if oppositeSessionID == sessionID,
+                      let cloneID = duplicateSessionForSplitComparison(from: sessionID) {
+                targetSessionID = cloneID
+                duplicatedSessionID = cloneID
+                workspace.sessionIDs.append(cloneID)
+            } else {
+                targetSessionID = sessionID
+            }
+            workspace.setSession(targetSessionID, for: pane)
             workspace.focusedPane = pane
         } else {
             workspace.primarySessionID = sessionID
@@ -292,6 +290,9 @@ final class DocumentStore {
 
         normalizeWorkspace(&workspace)
         windowWorkspaces[workspaceIndex] = workspace
+        if let duplicatedSessionID {
+            updateSearchCachesAfterOpen(for: duplicatedSessionID)
+        }
         notifyChange()
     }
 
@@ -339,6 +340,7 @@ final class DocumentStore {
     func setSplitEnabled(_ isEnabled: Bool, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         var workspace = windowWorkspaces[index]
+        var duplicatedSessionID: UUID?
         guard workspace.isSplitEnabled != isEnabled else { return }
         workspace.isSplitEnabled = isEnabled
 
@@ -347,17 +349,56 @@ final class DocumentStore {
                 workspace.primarySessionID = workspace.sessionIDs.first
             }
             if workspace.secondarySessionID == nil || workspace.secondarySessionID == workspace.primarySessionID {
-                workspace.secondarySessionID = preferredSecondarySession(in: workspace, excluding: workspace.primarySessionID)
-                    ?? workspace.primarySessionID
+                if let secondary = preferredSecondarySession(in: workspace, excluding: workspace.primarySessionID),
+                   secondary != workspace.primarySessionID {
+                    workspace.secondarySessionID = secondary
+                } else if let primarySessionID = workspace.primarySessionID,
+                          let existingCloneID = existingSplitComparisonSessionID(
+                              for: primarySessionID,
+                              in: workspace,
+                              excluding: primarySessionID
+                          ) {
+                    workspace.secondarySessionID = existingCloneID
+                } else if let primarySessionID = workspace.primarySessionID,
+                          let cloneID = duplicateSessionForSplitComparison(from: primarySessionID) {
+                    duplicatedSessionID = cloneID
+                    workspace.sessionIDs.append(cloneID)
+                    workspace.secondarySessionID = cloneID
+                } else {
+                    workspace.secondarySessionID = workspace.primarySessionID
+                }
             }
         } else {
-            workspace.primarySessionID = workspace.activeSessionID ?? workspace.primarySessionID
+            let activeBeforeCollapse = workspace.activeSessionID
+            var preferredPrimaryID = activeBeforeCollapse ?? workspace.primarySessionID
+            if let primarySessionID = workspace.primarySessionID,
+               let secondarySessionID = workspace.secondarySessionID,
+               let primaryURL = session(for: primarySessionID)?.url,
+               let secondaryURL = session(for: secondarySessionID)?.url,
+               primaryURL == secondaryURL {
+                if splitComparisonSessionIDs.contains(primarySessionID),
+                   splitComparisonSessionIDs.contains(secondarySessionID) == false {
+                    preferredPrimaryID = secondarySessionID
+                } else if splitComparisonSessionIDs.contains(secondarySessionID),
+                          splitComparisonSessionIDs.contains(primarySessionID) == false,
+                          preferredPrimaryID == secondarySessionID {
+                    preferredPrimaryID = primarySessionID
+                }
+            }
+            workspace.primarySessionID = preferredPrimaryID
+            workspace.sessionIDs.removeAll { sessionID in
+                splitComparisonSessionIDs.contains(sessionID) && sessionID != workspace.primarySessionID
+            }
             workspace.secondarySessionID = nil
             workspace.focusedPane = .primary
         }
 
         normalizeWorkspace(&workspace)
         windowWorkspaces[index] = workspace
+        removeUnreferencedSessions()
+        if let duplicatedSessionID {
+            updateSearchCachesAfterOpen(for: duplicatedSessionID)
+        }
         notifyChange()
     }
 
@@ -765,6 +806,7 @@ final class DocumentStore {
         guard let persistedState = try persistence.loadState() else { return }
 
         sessions = []
+        splitComparisonSessionIDs.removeAll()
         var usedSessionIDs: Set<UUID> = []
         for reference in persistedState.sessions {
             guard let pdfDocument = PDFDocument(url: reference.url) else { continue }
@@ -867,10 +909,14 @@ final class DocumentStore {
         sessions.removeAll { session in
             isSessionReferenced(session.id) == false
         }
+        splitComparisonSessionIDs = splitComparisonSessionIDs.filter { sessionID in
+            sessions.contains(where: { $0.id == sessionID })
+        }
     }
 
     private func discardSession(_ sessionID: UUID) {
         sessions.removeAll { $0.id == sessionID }
+        splitComparisonSessionIDs.remove(sessionID)
     }
 
     private func preferredSecondarySession(in workspace: WindowWorkspace, excluding sessionID: UUID?) -> UUID? {
@@ -1075,6 +1121,63 @@ final class DocumentStore {
         guard let restoredScaleMode else { return defaultScaleMode }
         guard restoredScaleMode == .fitWidth else { return restoredScaleMode }
         return appConfiguration.reader.fitWidthOnOpen ? .fitWidth : .manual
+    }
+
+    private func makeSession(
+        documentAt url: URL,
+        seedState: DocumentSession? = nil
+    ) throws -> DocumentSession {
+        guard let pdfDocument = PDFDocument(url: url) else {
+            throw DocumentStoreError.unreadableDocument(url)
+        }
+
+        let restoredState = seedState == nil ? try readingStateStore.loadState(for: url) : nil
+        var session = DocumentSession(
+            url: url,
+            title: seedState?.title,
+            pdfDocument: pdfDocument,
+            currentPageIndex: seedState?.currentPageIndex ?? restoredState?.readingPosition.pageIndex ?? 0,
+            displayMode: seedState?.displayMode ?? restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
+            scaleMode: seedState?.scaleMode ?? resolvedScaleMode(restoredState?.scaleMode),
+            zoomScale: seedState?.zoomScale ?? restoredState?.scaleFactor ?? 1.0,
+            lastReadPosition: seedState?.lastReadPosition ?? restoredState?.readingPosition ?? .zero,
+            outlineTree: OutlineExtractor.extract(from: pdfDocument),
+            annotationSavePolicy: seedState?.annotationSavePolicy ?? appConfiguration.annotations.autoSavePolicy,
+            leftSidebarWidth: seedState?.leftSidebarWidth ?? appConfiguration.layout.leftSidebarWidth,
+            rightSidebarWidth: seedState?.rightSidebarWidth ?? appConfiguration.layout.rightSidebarWidth
+        )
+        session.annotationCache = DocumentHighlightCache(
+            groups: HighlightService.buildHighlightGroups(in: pdfDocument)
+        )
+        return session
+    }
+
+    private func duplicateSessionForSplitComparison(from sessionID: UUID) -> UUID? {
+        guard let sourceSession = session(for: sessionID) else { return nil }
+        do {
+            let duplicate = try makeSession(documentAt: sourceSession.url, seedState: sourceSession)
+            sessions.append(duplicate)
+            splitComparisonSessionIDs.insert(duplicate.id)
+            return duplicate.id
+        } catch {
+            NSLog("SlatePDF failed to duplicate session for split comparison: %@", error.localizedDescription)
+            return nil
+        }
+    }
+
+    private func existingSplitComparisonSessionID(
+        for sessionID: UUID,
+        in workspace: WindowWorkspace,
+        excluding excludedSessionID: UUID?
+    ) -> UUID? {
+        guard let targetURL = session(for: sessionID)?.url else { return nil }
+        return workspace.sessionIDs.first { candidateID in
+            guard candidateID != sessionID else { return false }
+            if let excludedSessionID, candidateID == excludedSessionID {
+                return false
+            }
+            return session(for: candidateID)?.url == targetURL
+        }
     }
 
     private func persistReadingState(for session: DocumentSession) {

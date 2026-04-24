@@ -84,6 +84,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case findPreviousMatch = "find_previous_match"
     case gotoPage = "goto_page"
     case showRecentFilesPalette = "show_recent_files_palette"
+    case openContainingFolder = "open_containing_folder"
     case reopenLastClosed = "reopen_last_closed"
     case newWindow = "new_window"
     case toggleAllPagesOverview = "toggle_all_pages_overview"
@@ -165,6 +166,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Go to Page…"
         case .showRecentFilesPalette:
             "Open Recent Quickly…"
+        case .openContainingFolder:
+            "Show in Finder"
         case .reopenLastClosed:
             "Reopen Closed Tab"
         case .newWindow:

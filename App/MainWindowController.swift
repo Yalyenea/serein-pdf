@@ -245,6 +245,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.plainShortcutHandler = handler
     }
 
+    func installSidebarRecentOpenHandler(_ handler: @escaping (URL, UUID) -> Void) {
+        splitViewController.verticalTabsViewController.onOpenRecentURLRequested = { [weak self] url in
+            guard let self else { return }
+            handler(url, self.windowID)
+        }
+    }
+
     func requestCloseActiveSession() {
         if documentStore.isSplitEnabled(in: windowID) {
             let focusedPane = documentStore.focusedPane(in: windowID)

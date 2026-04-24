@@ -21,7 +21,9 @@
 - `Ctrl+D` / `Ctrl+U`:半页下滚 / 上滚
 - `g` / `G`:跳到文首 / 文末
 - `Cmd+S`:写回源 PDF
+- `Cmd+R`:在 Finder 中显示当前 PDF 所在位置
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
+- 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换
 - 左右可互换:`Cmd+Shift+X` 或设置窗口

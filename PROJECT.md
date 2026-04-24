@@ -135,6 +135,7 @@ flowchart LR
 
 **文档与 tab**
 - `Cmd+O`:打开
+- `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+W`:关闭当前 tab
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
 - `Cmd+Shift+N`:新建窗口

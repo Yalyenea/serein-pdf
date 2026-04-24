@@ -1,7 +1,7 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 520, height: 260)
+    static let generalContentSize = NSSize(width: 520, height: 265)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
 }
 
@@ -201,6 +201,11 @@ private final class SettingsViewController: NSViewController {
         target: nil,
         action: nil
     )
+    private let showRecentInSidebarCheckbox = NSButton(
+        checkboxWithTitle: "Show recent PDFs in left sidebar footer",
+        target: nil,
+        action: nil
+    )
     private let footnoteLabel = NSTextField(
         wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Auto-save applies immediately to open PDFs."
     )
@@ -291,6 +296,7 @@ private final class SettingsViewController: NSViewController {
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
+        showRecentInSidebarCheckbox.state = configuration.layout.showRecentFilesInSidebar ? .on : .off
         shortcutsErrorLabel.stringValue = ""
 
         for command in ShortcutCommand.allCases {
@@ -331,6 +337,7 @@ private final class SettingsViewController: NSViewController {
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
         updatedConfiguration.annotations.autoSavePolicy = autoSavePolicy
         updatedConfiguration.layout.sidebarsSwapped = swapSidebarsCheckbox.state == .on
+        updatedConfiguration.layout.showRecentFilesInSidebar = showRecentInSidebarCheckbox.state == .on
         publishConfigurationIfChanged(updatedConfiguration)
     }
 
@@ -366,16 +373,27 @@ private final class SettingsViewController: NSViewController {
         swapSidebarsCheckbox.target = self
         swapSidebarsCheckbox.action = #selector(handleGeneralControlChanged(_:))
 
+        showRecentInSidebarCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        showRecentInSidebarCheckbox.controlSize = .small
+        showRecentInSidebarCheckbox.target = self
+        showRecentInSidebarCheckbox.action = #selector(handleGeneralControlChanged(_:))
+
         footnoteLabel.translatesAutoresizingMaskIntoConstraints = false
         footnoteLabel.font = .systemFont(ofSize: 11)
         footnoteLabel.textColor = .secondaryLabelColor
         footnoteLabel.maximumNumberOfLines = 0
 
+        let layoutOptionsStack = NSStackView(views: [swapSidebarsCheckbox, showRecentInSidebarCheckbox])
+        layoutOptionsStack.orientation = .vertical
+        layoutOptionsStack.alignment = .leading
+        layoutOptionsStack.spacing = 6
+        layoutOptionsStack.translatesAutoresizingMaskIntoConstraints = false
+
         let grid = NSGridView(views: [
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
-            [makeRowLabel("Layout"), swapSidebarsCheckbox],
+            [makeRowLabel("Layout"), layoutOptionsStack],
         ])
         grid.translatesAutoresizingMaskIntoConstraints = false
         grid.rowSpacing = 14
