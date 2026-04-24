@@ -979,6 +979,47 @@ struct WindowChromeTests {
     }
 
     @Test
+    func rapidPageTurnsSettleWithoutResidualDrift() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "rapid-page-turn-settle",
+                pageSizes: Array(repeating: NSSize(width: 720, height: 900), count: 5)
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let clipView = pdfClipView(in: splitController.readerViewController.pdfView) else {
+            Issue.record("Failed to locate reader internals")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+
+        reader.goToNextPage()
+        reader.goToNextPage()
+        reader.goToNextPage()
+        flushLayout(controller.window)
+
+        let settledOrigin = clipView.bounds.origin
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.25))
+        controller.window?.layoutIfNeeded()
+        let afterWaitOrigin = clipView.bounds.origin
+        let backingScale = controller.window?.backingScaleFactor ?? 1
+
+        #expect(store.session(for: session.id)?.currentPageIndex == 3)
+        #expect(abs(afterWaitOrigin.x - settledOrigin.x) < 0.5)
+        #expect(abs(afterWaitOrigin.y - settledOrigin.y) < 0.5)
+        #expect(abs(afterWaitOrigin.y * backingScale - (afterWaitOrigin.y * backingScale).rounded()) < 0.001)
+    }
+
+    @Test
     func highlightingKeepsLiveManualScaleWhenStoreMissedScaleChange() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)

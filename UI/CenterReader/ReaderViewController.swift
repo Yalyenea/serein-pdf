@@ -331,11 +331,11 @@ final class ReaderViewController: NSViewController {
     }
 
     func goToNextPage() {
-        pdfView.goToNextPage(nil)
+        turnPage(by: 1)
     }
 
     func goToPreviousPage() {
-        pdfView.goToPreviousPage(nil)
+        turnPage(by: -1)
     }
 
     func scrollHalfPageDown() {
@@ -370,6 +370,11 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func goToPage(_ pageIndex: Int) -> Bool {
+        jumpToPage(pageIndex)
+    }
+
+    @discardableResult
+    private func jumpToPage(_ pageIndex: Int) -> Bool {
         guard let document = pdfView.document,
               pageIndex >= 0,
               pageIndex < document.pageCount,
@@ -379,8 +384,42 @@ final class ReaderViewController: NSViewController {
             page: page,
             at: NSPoint(x: bounds.minX, y: bounds.maxY)
         )
-        pdfView.go(to: destination)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            pdfView.go(to: destination)
+        }
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+        recenterDocumentViewIfNeeded()
+        stabilizePDFScrollPosition()
         return true
+    }
+
+    private func turnPage(by direction: Int) {
+        guard direction != 0,
+              isAllPagesOverviewActive == false,
+              let session = targetSession(),
+              session.id == displayedSessionID,
+              let document = pdfView.document,
+              let currentPageIndex = currentPageIndexForNavigation(in: document) else { return }
+
+        let step = session.displayMode.usesTwoUpLayout ? 2 : 1
+        let targetPageIndex = min(max(currentPageIndex + direction * step, 0), document.pageCount - 1)
+        guard targetPageIndex != currentPageIndex else { return }
+
+        _ = jumpToPage(targetPageIndex)
+    }
+
+    private func currentPageIndexForNavigation(in document: PDFDocument) -> Int? {
+        if let position = currentReadingPosition(),
+           position.pageIndex >= 0,
+           position.pageIndex < document.pageCount {
+            return position.pageIndex
+        }
+
+        guard let currentPage = pdfView.currentPage else { return nil }
+        return document.index(for: currentPage)
     }
 
     var currentPageCount: Int { pdfView.document?.pageCount ?? 0 }
@@ -1038,6 +1077,9 @@ final class ReaderViewController: NSViewController {
               let scrollView = pdfScrollView(),
               let clipView = pdfClipView() else { return }
 
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+
         var targetBounds = clipView.bounds
         targetBounds.origin.y += clipView.bounds.height * fraction
         targetBounds = clipView.constrainBoundsRect(targetBounds)
@@ -1107,6 +1149,25 @@ final class ReaderViewController: NSViewController {
             clipView.scroll(to: targetBounds.origin)
             scrollView.reflectScrolledClipView(clipView)
         }
+    }
+
+    private func stabilizePDFScrollPosition() {
+        guard let scrollView = pdfScrollView(),
+              let clipView = pdfClipView() else { return }
+
+        let backingScale = max(view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1, 1)
+        let alignedOrigin = NSPoint(
+            x: (clipView.bounds.origin.x * backingScale).rounded() / backingScale,
+            y: (clipView.bounds.origin.y * backingScale).rounded() / backingScale
+        )
+        let targetBounds = clipView.constrainBoundsRect(
+            NSRect(origin: alignedOrigin, size: clipView.bounds.size)
+        )
+
+        guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > 0.001 ||
+                abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.001 else { return }
+        clipView.scroll(to: targetBounds.origin)
+        scrollView.reflectScrolledClipView(clipView)
     }
 
     private func captureViewportAnchor() -> PDFViewportAnchor? {
