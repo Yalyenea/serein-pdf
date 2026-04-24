@@ -343,7 +343,7 @@ final class DocumentStoreTests: XCTestCase {
         try store.restorePersistedState()
 
         XCTAssertEqual(store.tabPresentationMode, .verticalSidebar)
-        XCTAssertTrue(store.isLeftSidebarVisible)
+        XCTAssertFalse(store.isLeftSidebarVisible)
     }
 
     func testOpenDocumentUsesPersistedReadingStateAndConfiguredDefaults() throws {

@@ -137,6 +137,54 @@ struct WindowChromeTests {
     }
 
     @Test
+    func collapsedRightSidebarStaysCollapsedAfterStoreRefresh() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "collapsed-right-sidebar"))
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        splitController.splitViewItems[2].isCollapsed = true
+        splitController.splitViewDidResizeSubviews(
+            Notification(name: NSSplitView.didResizeSubviewsNotification, object: splitController.splitView)
+        )
+        flushLayout(controller.window)
+
+        #expect(store.isRightSidebarVisible(in: controller.windowID) == false)
+
+        store.setDirty(true, for: session.id)
+        flushLayout(controller.window)
+
+        #expect(splitController.splitViewItems[2].isCollapsed)
+    }
+
+    @Test
+    func hiddenVerticalTabsStayHiddenAcrossSessionActivation() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "hidden-tabs-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "hidden-tabs-second"))
+        flushLayout(controller.window)
+
+        store.setTabPresentationMode(.verticalSidebar, in: controller.windowID)
+        store.setLeftSidebarVisible(false, in: controller.windowID)
+        flushLayout(controller.window)
+
+        store.activate(sessionID: first.id, in: controller.windowID)
+        store.activate(sessionID: second.id, in: controller.windowID)
+        flushLayout(controller.window)
+
+        #expect(store.isLeftSidebarVisible(in: controller.windowID) == false)
+        #expect((controller.window?.contentViewController as? SplitViewController)?.splitViewItems[0].isCollapsed == true)
+    }
+
+    @Test
     func readerSplitToggleCanEnableAndDisableAgain() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
@@ -252,6 +300,31 @@ struct WindowChromeTests {
         controller.window?.layoutIfNeeded()
 
         #expect(controller.window?.toolbar != nil)
+    }
+
+    @Test
+    func outlineSelectionNavigatesReaderToTargetPage() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "outline-navigation"))
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let outlineScrollView = splitController.rightSidebarViewController.outlineViewController.view.subviews
+                .compactMap({ $0 as? NSScrollView })
+                .first,
+              let outlineView = outlineScrollView.documentView as? NSOutlineView,
+              let document = splitController.readerViewController.pdfView.document else {
+            Issue.record("Failed to locate outline UI")
+            return
+        }
+
+        outlineView.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        flushLayout(controller.window)
+
+        let currentPageIndex = splitController.readerViewController.pdfView.currentPage.map { document.index(for: $0) }
+        #expect(currentPageIndex == 1)
     }
 
     @Test
@@ -860,5 +933,50 @@ private func makeSelectableTemporaryPDF(named name: String, text: String) throws
         .appendingPathComponent("\(name)-\(UUID().uuidString)")
         .appendingPathExtension("pdf")
     try data.write(to: url)
+    return url
+}
+
+@MainActor
+private func makeTemporaryPDFWithOutline(named name: String) throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(name)-\(UUID().uuidString)")
+        .appendingPathExtension("pdf")
+    let document = PDFDocument()
+
+    for index in 0..<2 {
+        let pageSize = NSSize(width: 320, height: 480)
+        let image = NSImage(size: pageSize)
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(rect: NSRect(origin: .zero, size: pageSize)).fill()
+        NSString(string: "Outline \(index + 1)").draw(
+            in: NSRect(x: 36, y: 220, width: 200, height: 40),
+            withAttributes: [
+                .font: NSFont.systemFont(ofSize: 24, weight: .medium),
+                .foregroundColor: NSColor.black,
+            ]
+        )
+        image.unlockFocus()
+
+        guard let page = PDFPage(image: image) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        document.insert(page, at: index)
+    }
+
+    let root = PDFOutline()
+    let first = PDFOutline()
+    first.label = "Page 1"
+    first.destination = PDFDestination(page: document.page(at: 0)!, at: .zero)
+    let second = PDFOutline()
+    second.label = "Page 2"
+    second.destination = PDFDestination(page: document.page(at: 1)!, at: .zero)
+    root.insertChild(first, at: 0)
+    root.insertChild(second, at: 1)
+    document.outlineRoot = root
+
+    guard document.write(to: url) else {
+        throw CocoaError(.fileWriteUnknown)
+    }
     return url
 }

@@ -36,11 +36,6 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         updatePageCounter()
     }
 
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        syncOutlineColumnWidth()
-    }
-
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
@@ -151,13 +146,6 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         emptyStateLabel.isHidden = !isEmpty
         scrollView.isHidden = isEmpty
-    }
-
-    private func syncOutlineColumnWidth() {
-        let targetWidth = max(scrollView.contentSize.width, scrollView.bounds.width)
-        guard targetWidth > 0,
-              abs(outlineColumn.width - targetWidth) > 0.5 else { return }
-        outlineColumn.width = targetWidth
     }
 
     private func expandAllNodes() {

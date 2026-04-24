@@ -924,14 +924,6 @@ final class DocumentStore {
             workspace.focusedPane = .primary
         }
 
-        if workspace.tabPresentationMode == .verticalSidebar {
-            let tabsOnRight = appConfiguration.layout.sidebarsSwapped
-            if tabsOnRight {
-                workspace.isRightSidebarVisible = true
-            } else {
-                workspace.isLeftSidebarVisible = true
-            }
-        }
     }
 
     private func fallbackSessionID(in workspace: WindowWorkspace, preferredSessionID: UUID?, excluding excludedID: UUID?) -> UUID? {

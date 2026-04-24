@@ -119,10 +119,9 @@ final class SplitViewController: NSSplitViewController {
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
-        guard isApplyingSidebarWidths == false,
-              appliedWidthsForSessionID != nil,
-              let sessionID = documentStore.activeSessionID(in: windowID),
-              appliedWidthsForSessionID == sessionID else { return }
+        syncSidebarVisibilityFromSplitView()
+        guard let sessionID = activeSessionIDForSidebarPersistence(),
+              let session = documentStore.session(for: sessionID) else { return }
 
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
         let leftItem = swapped ? outlineSidebarItem : tabsSidebarItem
@@ -133,6 +132,8 @@ final class SplitViewController: NSSplitViewController {
         let rightWidth = rightItem?.isCollapsed == true
             ? nil
             : splitView.arrangedSubviews[safe: 2]?.frame.width
+        guard sidebarWidthChangedMeaningfully(current: leftWidth, stored: session.leftSidebarWidth) ||
+                sidebarWidthChangedMeaningfully(current: rightWidth, stored: session.rightSidebarWidth) else { return }
 
         documentStore.updateSidebarWidths(
             left: leftWidth,
@@ -237,22 +238,28 @@ final class SplitViewController: NSSplitViewController {
               splitView.arrangedSubviews.count >= 3 else { return }
 
         let layout = documentStore.appConfiguration.layout
-        let targetLeft: CGFloat
-        let targetRight: CGFloat
         let sessionID = documentStore.activeSessionID(in: windowID)
+        let leftIsVisible = documentStore.isLeftSidebarVisible(in: windowID)
+        let rightIsVisible = documentStore.isRightSidebarVisible(in: windowID)
+        let preferredLeft: CGFloat
+        let preferredRight: CGFloat
 
         if let session = documentStore.activeSession(in: windowID) {
-            targetLeft = session.leftSidebarWidth ?? layout.leftSidebarWidth
-            targetRight = session.rightSidebarWidth ?? layout.rightSidebarWidth
+            preferredLeft = session.leftSidebarWidth ?? layout.leftSidebarWidth
+            preferredRight = session.rightSidebarWidth ?? layout.rightSidebarWidth
         } else {
-            targetLeft = layout.leftSidebarWidth
-            targetRight = layout.rightSidebarWidth
+            preferredLeft = layout.leftSidebarWidth
+            preferredRight = layout.rightSidebarWidth
         }
 
-        let clampedLeft = min(max(targetLeft, layout.leftSidebarMinWidth), layout.leftSidebarMaxWidth)
-        let clampedRight = min(max(targetRight, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
+        let targetLeft = leftIsVisible
+            ? min(max(preferredLeft, layout.leftSidebarMinWidth), layout.leftSidebarMaxWidth)
+            : nil
+        let targetRight = rightIsVisible
+            ? min(max(preferredRight, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
+            : nil
         let total = splitView.bounds.width
-        let requiredWidth = clampedLeft + clampedRight + centerItem.minimumThickness
+        let requiredWidth = (targetLeft ?? 0) + (targetRight ?? 0) + centerItem.minimumThickness
         guard total >= requiredWidth else {
             appliedWidthsForSessionID = nil
             return
@@ -261,8 +268,8 @@ final class SplitViewController: NSSplitViewController {
         let currentWidths = currentSidebarWidths()
         let alreadyApplied =
             appliedWidthsForSessionID == sessionID &&
-            widthsMatch(currentWidths.left, targetWidth: clampedLeft) &&
-            widthsMatch(currentWidths.right, targetWidth: clampedRight)
+            widthsMatch(currentWidths.left, targetWidth: targetLeft) &&
+            widthsMatch(currentWidths.right, targetWidth: targetRight)
         if alreadyApplied {
             return
         }
@@ -270,8 +277,12 @@ final class SplitViewController: NSSplitViewController {
         isApplyingSidebarWidths = true
         defer { isApplyingSidebarWidths = false }
 
-        splitView.setPosition(clampedLeft, ofDividerAt: 0)
-        splitView.setPosition(total - clampedRight, ofDividerAt: 1)
+        if let targetLeft {
+            splitView.setPosition(targetLeft, ofDividerAt: 0)
+        }
+        if let targetRight {
+            splitView.setPosition(total - targetRight, ofDividerAt: 1)
+        }
 
         appliedWidthsForSessionID = sessionID
     }
@@ -285,9 +296,49 @@ final class SplitViewController: NSSplitViewController {
         return (leftWidth, rightWidth)
     }
 
-    private func widthsMatch(_ currentWidth: CGFloat?, targetWidth: CGFloat) -> Bool {
-        guard let currentWidth else { return false }
-        return abs(currentWidth - targetWidth) <= 1
+    private func widthsMatch(_ currentWidth: CGFloat?, targetWidth: CGFloat?) -> Bool {
+        switch (currentWidth, targetWidth) {
+        case (nil, nil):
+            true
+        case let (currentWidth?, targetWidth?):
+            abs(currentWidth - targetWidth) <= 1
+        default:
+            false
+        }
+    }
+
+    private func activeSessionIDForSidebarPersistence() -> UUID? {
+        guard isApplyingSidebarWidths == false,
+              appliedWidthsForSessionID != nil,
+              let sessionID = documentStore.activeSessionID(in: windowID),
+              appliedWidthsForSessionID == sessionID else { return nil }
+        return sessionID
+    }
+
+    private func sidebarWidthChangedMeaningfully(current: CGFloat?, stored: CGFloat?) -> Bool {
+        switch (current, stored) {
+        case (nil, nil):
+            false
+        case let (current?, stored?):
+            abs(current - stored) > 4
+        default:
+            true
+        }
+    }
+
+    private func syncSidebarVisibilityFromSplitView() {
+        let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
+        let leftItem = swapped ? outlineSidebarItem : tabsSidebarItem
+        let rightItem = swapped ? tabsSidebarItem : outlineSidebarItem
+        let leftIsVisible = leftItem?.isCollapsed != true
+        let rightIsVisible = rightItem?.isCollapsed != true
+
+        if documentStore.isLeftSidebarVisible(in: windowID) != leftIsVisible {
+            documentStore.setLeftSidebarVisible(leftIsVisible, in: windowID)
+        }
+        if documentStore.isRightSidebarVisible(in: windowID) != rightIsVisible {
+            documentStore.setRightSidebarVisible(rightIsVisible, in: windowID)
+        }
     }
 
     private func purgeLegacyAutosaveKeys() {
