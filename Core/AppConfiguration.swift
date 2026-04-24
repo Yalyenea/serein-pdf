@@ -148,6 +148,7 @@ struct AppConfiguration: Equatable, Sendable {
             .goToLastPage: KeyboardShortcut(key: "g", modifiers: [.shift]),
             .navigateBack: KeyboardShortcut(key: "[", modifiers: [.command]),
             .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
+            .findAllOpen: KeyboardShortcut(key: "f", modifiers: [.command, .shift]),
             .findNextMatch: KeyboardShortcut(key: "g", modifiers: [.command]),
             .findPreviousMatch: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
@@ -391,6 +392,7 @@ go_to_first_page = "g"
 go_to_last_page = "shift+g"
 navigate_back = "command+["
 navigate_forward = "command+]"
+find_all_open = "command+shift+f"
 find_next_match = "command+g"
 find_previous_match = "command+shift+g"
 goto_page = "command+option+g"
@@ -468,6 +470,7 @@ go_to_first_page = "\(serializedShortcut(.goToFirstPage, configuration: configur
 go_to_last_page = "\(serializedShortcut(.goToLastPage, configuration: configuration))"
 navigate_back = "\(serializedShortcut(.navigateBack, configuration: configuration))"
 navigate_forward = "\(serializedShortcut(.navigateForward, configuration: configuration))"
+find_all_open = "\(serializedShortcut(.findAllOpen, configuration: configuration))"
 find_next_match = "\(serializedShortcut(.findNextMatch, configuration: configuration))"
 find_previous_match = "\(serializedShortcut(.findPreviousMatch, configuration: configuration))"
 goto_page = "\(serializedShortcut(.gotoPage, configuration: configuration))"
@@ -657,6 +660,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .navigateBack, to: &configuration)
         case ("shortcuts", "navigate_forward"):
             try applyShortcut(rawValue, command: .navigateForward, to: &configuration)
+        case ("shortcuts", "find_all_open"):
+            try applyShortcut(rawValue, command: .findAllOpen, to: &configuration)
         case ("shortcuts", "find_next_match"):
             try applyShortcut(rawValue, command: .findNextMatch, to: &configuration)
         case ("shortcuts", "find_previous_match"):
@@ -809,6 +814,7 @@ struct AppConfigurationStore {
             "go_to_last_page",
             "navigate_back",
             "navigate_forward",
+            "find_all_open",
             "find_next_match",
             "find_previous_match",
             "goto_page",

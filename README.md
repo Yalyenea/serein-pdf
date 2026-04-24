@@ -27,7 +27,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Highlights can carry comments in the right sidebar, and exports include those comments
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
-- Find bar (`cmd+f`), Esc clears search and exits
+- Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs), Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
 - Immersive mode (`cmd+ctrl+l`) hides sidebars and tab chrome while keeping the current window size
@@ -124,6 +124,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
+| Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |
 | Show current PDF in Finder | `cmd+r` |
 | Half-page down / up | `ctrl+d` / `ctrl+u` |

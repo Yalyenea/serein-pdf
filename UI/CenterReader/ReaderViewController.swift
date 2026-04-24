@@ -608,8 +608,14 @@ final class ReaderViewController: NSViewController {
         findBarView.isHidden == false
     }
 
-    func showFindBar() {
+    func showFindBar(scope: SearchScope? = nil) {
         guard let container = view as NSView? else { return }
+        let targetScope = scope ?? documentStore.searchScope(in: windowID)
+        documentStore.updateSearch(
+            query: documentStore.searchQuery(in: windowID),
+            scope: targetScope,
+            in: windowID
+        )
         onFocusRequested?()
         if findBarView.isHidden {
             findBarView.isHidden = false

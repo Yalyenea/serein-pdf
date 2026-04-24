@@ -547,8 +547,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.readerViewController.search(for: query)
     }
 
-    func showFindBar() {
-        splitViewController.showFindBar()
+    func showFindBar(scope: SearchScope? = nil) {
+        splitViewController.showFindBar(scope: scope)
     }
 
     func hideFindBar() {

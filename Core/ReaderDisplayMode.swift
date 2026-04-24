@@ -82,6 +82,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case goToLastPage = "go_to_last_page"
     case navigateBack = "navigate_back"
     case navigateForward = "navigate_forward"
+    case findAllOpen = "find_all_open"
     case findNextMatch = "find_next_match"
     case findPreviousMatch = "find_previous_match"
     case gotoPage = "goto_page"
@@ -164,6 +165,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Back"
         case .navigateForward:
             "Forward"
+        case .findAllOpen:
+            "Find in All Open PDFs…"
         case .findNextMatch:
             "Find Next Match"
         case .findPreviousMatch:

@@ -97,6 +97,9 @@ struct WindowChromeTests {
         } else {
             Issue.record("Failed to read PDFView layer background")
         }
+        if let scrollView = reader.pdfView.subviews.compactMap({ $0 as? NSScrollView }).first {
+            #expect(scrollView.drawsBackground == false || scrollView.backgroundColor != .clear)
+        }
         if let readerBackground = reader.view.layer?.backgroundColor,
            let readerBackgroundColor = NSColor(cgColor: readerBackground) {
             assertColor(readerBackgroundColor, matches: NightModeStyle.pageBackgroundColor)

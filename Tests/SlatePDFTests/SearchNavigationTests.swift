@@ -99,6 +99,35 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(controller.selectNextMatch()?.matchIndex, 1)
     }
 
+    func testShowFindBarCanForceAllOpenScopeAndRequery() throws {
+        let store = makeStore()
+        let first = try makeSearchableTemporaryPDF(
+            named: "scope-primary",
+            pages: ["needle alpha beta"]
+        )
+        let second = try makeSearchableTemporaryPDF(
+            named: "scope-secondary",
+            pages: ["needle gamma delta"]
+        )
+        let session = try store.open(documentAt: first)
+        _ = try store.open(documentAt: second)
+
+        let reader = ReaderViewController(documentStore: store, windowID: store.defaultWindowID)
+        reader.targetSessionID = session.id
+        reader.loadViewIfNeeded()
+
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .currentDocument)
+        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 1)
+
+        reader.showFindBar(scope: .allOpen)
+
+        XCTAssertTrue(reader.isFindBarVisible)
+        XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .allOpen)
+        XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "needle")
+        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
+    }
+
     private func makeStore() -> DocumentStore {
         DocumentStore(
             persistence: SearchNavInMemoryDocumentStorePersistence(),

@@ -239,8 +239,8 @@ final class ReaderWorkspaceViewController: NSViewController {
         activeReaderViewController().focus(on: highlight)
     }
 
-    func showFindBar() {
-        activeReaderViewController().showFindBar()
+    func showFindBar(scope: SearchScope? = nil) {
+        activeReaderViewController().showFindBar(scope: scope)
     }
 
     func hideFindBar() {

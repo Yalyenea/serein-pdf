@@ -178,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .goToLastPage: { [weak self] in self?.goToLastPageAction(nil) },
             .navigateBack: { [weak self] in self?.navigateBackAction(nil) },
             .navigateForward: { [weak self] in self?.navigateForwardAction(nil) },
+            .findAllOpen: { [weak self] in self?.findInAllOpenDocuments(nil) },
             .findNextMatch: { [weak self] in self?.findNextMatchAction(nil) },
             .findPreviousMatch: { [weak self] in self?.findPreviousMatchAction(nil) },
             .gotoPage: { [weak self] in self?.showGotoPageDialog(nil) },
@@ -369,6 +370,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             action: #selector(findInCurrentDocument(_:)),
             keyEquivalent: "f"
         )
+        let findAllOpenItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.findAllOpen.menuTitle,
+            command: .findAllOpen,
+            action: #selector(findInAllOpenDocuments(_:))
+        )
         let findNextItem = makeConfiguredMenuItem(
             title: ShortcutCommand.findNextMatch.menuTitle,
             command: .findNextMatch,
@@ -424,6 +430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             recentItem,
             reopenClosedItem,
             findItem,
+            findAllOpenItem,
             findNextItem,
             findPreviousItem,
             saveAnnotationsItem,
@@ -1115,7 +1122,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func findInCurrentDocument(_ sender: Any?) {
         guard let controller = mainWindowController,
               documentStore.activeSession(in: controller.windowID) != nil else { return }
-        mainWindowController?.showFindBar()
+        mainWindowController?.showFindBar(scope: .currentDocument)
+    }
+
+    @objc
+    private func findInAllOpenDocuments(_ sender: Any?) {
+        guard let controller = mainWindowController,
+              documentStore.activeSession(in: controller.windowID) != nil else { return }
+        mainWindowController?.showFindBar(scope: .allOpen)
     }
 
     @objc
@@ -1399,7 +1413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(setHighlightColorGreen(_:)):
             menuItem.state = controller?.currentHighlightColor == .green ? .on : .off
             return true
-        case #selector(findInCurrentDocument(_:)):
+        case #selector(findInCurrentDocument(_:)), #selector(findInAllOpenDocuments(_:)):
             return activeSession != nil
         case #selector(showRecentFilesPalette(_:)):
             return documentStore.recentDocumentURLs.isEmpty == false
