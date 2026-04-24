@@ -1,7 +1,79 @@
 import AppKit
 import Foundation
 
+enum AppearanceMode: String, CaseIterable, Codable, Sendable {
+    case system
+    case light
+    case dark
+
+    var menuTitle: String {
+        switch self {
+        case .system:
+            "Follow System"
+        case .light:
+            "Light"
+        case .dark:
+            "Dark"
+        }
+    }
+
+    var appAppearance: NSAppearance? {
+        switch self {
+        case .system:
+            nil
+        case .light:
+            NSAppearance(named: .aqua)
+        case .dark:
+            NSAppearance(named: .darkAqua)
+        }
+    }
+
+    func toggled(currentIsDark: Bool) -> AppearanceMode {
+        currentIsDark ? .light : .dark
+    }
+}
+
+enum LightTheme: String, CaseIterable, Codable, Sendable {
+    case normal
+    case rosePineDawn = "rose_pine_dawn"
+
+    var menuTitle: String {
+        switch self {
+        case .normal:
+            "Normal"
+        case .rosePineDawn:
+            "Rose Pine Dawn"
+        }
+    }
+}
+
+enum DarkTheme: String, CaseIterable, Codable, Sendable {
+    case normal
+    case rosePineMoon = "rose_pine_moon"
+
+    var menuTitle: String {
+        switch self {
+        case .normal:
+            "Normal"
+        case .rosePineMoon:
+            "Rose Pine Moon"
+        }
+    }
+}
+
 struct AppConfiguration: Equatable, Sendable {
+    struct Appearance: Equatable, Sendable {
+        var mode: AppearanceMode
+        var lightTheme: LightTheme
+        var darkTheme: DarkTheme
+
+        static let `default` = Appearance(
+            mode: .system,
+            lightTheme: .normal,
+            darkTheme: .rosePineMoon
+        )
+    }
+
     struct Reader: Equatable, Sendable {
         var defaultDisplayMode: ReaderDisplayMode
         var fitWidthOnOpen: Bool
@@ -94,12 +166,28 @@ struct AppConfiguration: Equatable, Sendable {
         ])
     }
 
+    var appearance: Appearance
     var reader: Reader
     var annotations: Annotations
     var shortcuts: Shortcuts
     var layout: Layout
 
+    init(
+        appearance: Appearance = .default,
+        reader: Reader = .default,
+        annotations: Annotations = .default,
+        shortcuts: Shortcuts = .default,
+        layout: Layout = .default
+    ) {
+        self.appearance = appearance
+        self.reader = reader
+        self.annotations = annotations
+        self.shortcuts = shortcuts
+        self.layout = layout
+    }
+
     static let `default` = AppConfiguration(
+        appearance: .default,
         reader: .default,
         annotations: .default,
         shortcuts: .default,
@@ -211,6 +299,9 @@ struct KeyboardShortcut: Equatable, Sendable {
 enum AppConfigurationError: LocalizedError {
     case invalidLine(Int, String)
     case invalidBoolean(String)
+    case invalidAppearanceMode(String)
+    case invalidLightTheme(String)
+    case invalidDarkTheme(String)
     case invalidDisplayMode(String)
     case invalidShortcut(String)
     case invalidAnnotationSavePolicy(String)
@@ -222,6 +313,12 @@ enum AppConfigurationError: LocalizedError {
             "Invalid config line \(lineNumber): \(line)"
         case let .invalidBoolean(value):
             "Invalid boolean value in config: \(value)"
+        case let .invalidAppearanceMode(value):
+            "Invalid appearance mode in config: \(value)"
+        case let .invalidLightTheme(value):
+            "Invalid light theme in config: \(value)"
+        case let .invalidDarkTheme(value):
+            "Invalid dark theme in config: \(value)"
         case let .invalidDisplayMode(value):
             "Invalid reader display mode in config: \(value)"
         case let .invalidShortcut(value):
@@ -238,6 +335,11 @@ struct AppConfigurationFile {
     static let defaultContents = """
 # SlatePDF configuration
 # Location: ~/Library/Application Support/SlatePDF/config.toml
+
+[appearance]
+mode = "system"
+light_theme = "normal"
+dark_theme = "rose_pine_moon"
 
 [reader]
 default_display_mode = "single_page_continuous"
@@ -310,6 +412,11 @@ redo_last_highlight = "command+shift+z"
         """
 # SlatePDF configuration
 # Location: ~/Library/Application Support/SlatePDF/config.toml
+
+[appearance]
+mode = "\(configuration.appearance.mode.rawValue)"
+light_theme = "\(configuration.appearance.lightTheme.rawValue)"
+dark_theme = "\(configuration.appearance.darkTheme.rawValue)"
 
 [reader]
 default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
@@ -424,6 +531,38 @@ struct AppConfigurationParser {
         to configuration: inout AppConfiguration
     ) throws {
         switch (section, key) {
+        case ("appearance", "mode"):
+            let value = parseString(rawValue)
+            guard let mode = AppearanceMode(rawValue: value) else {
+                throw AppConfigurationError.invalidAppearanceMode(value)
+            }
+            configuration.appearance.mode = mode
+        case ("appearance", "light_theme"):
+            let value = parseString(rawValue)
+            guard let theme = LightTheme(rawValue: value) else {
+                throw AppConfigurationError.invalidLightTheme(value)
+            }
+            configuration.appearance.lightTheme = theme
+        case ("appearance", "dark_theme"):
+            let value = parseString(rawValue)
+            guard let theme = DarkTheme(rawValue: value) else {
+                throw AppConfigurationError.invalidDarkTheme(value)
+            }
+            configuration.appearance.darkTheme = theme
+        case ("appearance", "theme"):
+            let value = parseString(rawValue)
+            switch value {
+            case "system":
+                configuration.appearance.mode = .system
+            case LightTheme.rosePineDawn.rawValue:
+                configuration.appearance.mode = .light
+                configuration.appearance.lightTheme = .rosePineDawn
+            case DarkTheme.rosePineMoon.rawValue:
+                configuration.appearance.mode = .dark
+                configuration.appearance.darkTheme = .rosePineMoon
+            default:
+                throw AppConfigurationError.invalidAppearanceMode(value)
+            }
         case ("shortcuts", "highlight_selection"):
             try applyShortcut(rawValue, command: .highlightSelection, to: &configuration)
         case ("shortcuts", "exit_highlight_mode"):
@@ -623,6 +762,10 @@ struct AppConfigurationStore {
 
         let existingContent = try String(contentsOf: fileURL, encoding: .utf8)
         let requiredKeys = [
+            "[appearance]",
+            "mode",
+            "light_theme",
+            "dark_theme",
             "[annotations]",
             "auto_save",
             "[layout]",

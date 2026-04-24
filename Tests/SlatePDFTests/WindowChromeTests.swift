@@ -4,6 +4,7 @@ import PDFKit
 import Testing
 @testable import SlatePDF
 
+@Suite(.serialized)
 @MainActor
 struct WindowChromeTests {
     @Test
@@ -102,6 +103,94 @@ struct WindowChromeTests {
         } else {
             Issue.record("Failed to read reader background")
         }
+    }
+
+    @Test
+    func themeRefreshUpdatesReaderEvenWhenAppearanceModeStaysLight() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+        app.appearance = NSAppearance(named: .aqua)
+        defer {
+            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            app.appearance = previousAppearance
+        }
+
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "theme-refresh-light"))
+        controller.window?.layoutIfNeeded()
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to create split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        guard let originalBackground = reader.view.layer?.backgroundColor,
+              let originalColor = NSColor(cgColor: originalBackground) else {
+            Issue.record("Failed to inspect original reader background color")
+            return
+        }
+
+        NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
+        controller.refreshThemeAppearance()
+        controller.window?.layoutIfNeeded()
+
+        guard let updatedBackground = reader.view.layer?.backgroundColor,
+              let updatedColor = NSColor(cgColor: updatedBackground) else {
+            Issue.record("Failed to inspect reader background colors")
+            return
+        }
+
+        let originalSRGB = originalColor.usingColorSpace(.sRGB) ?? originalColor
+        let updatedSRGB = updatedColor.usingColorSpace(.sRGB) ?? updatedColor
+
+        #expect(abs(updatedSRGB.redComponent - originalSRGB.redComponent) > 0.01)
+        assertColor(updatedColor, matches: NightModeStyle.readerBackdropColor)
+    }
+
+    @Test
+    func themeRefreshUpdatesOutlineColorsWhenAppearanceModeStaysLight() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+        app.appearance = NSAppearance(named: .aqua)
+        defer {
+            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            app.appearance = previousAppearance
+        }
+
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "theme-refresh-outline"))
+        controller.window?.layoutIfNeeded()
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let titleLabel = splitController.rightSidebarViewController.outlineViewController.view.subviews
+                .compactMap({ $0 as? NSTextField })
+                .first(where: { $0.stringValue == "Outline" }) else {
+            Issue.record("Failed to locate outline title label")
+            return
+        }
+
+        guard let originalTextColor = titleLabel.textColor else {
+            Issue.record("Failed to inspect original outline title color")
+            return
+        }
+        let originalColor = originalTextColor.usingColorSpace(.sRGB) ?? originalTextColor
+
+        NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
+        controller.refreshThemeAppearance()
+        controller.window?.layoutIfNeeded()
+
+        guard let updatedTextColor = titleLabel.textColor else {
+            Issue.record("Failed to inspect updated outline title color")
+            return
+        }
+        let updatedColor = updatedTextColor.usingColorSpace(.sRGB) ?? updatedTextColor
+        #expect(abs(updatedColor.redComponent - originalColor.redComponent) > 0.01)
+        assertColor(updatedColor, matches: NightModeStyle.primaryTextColor)
     }
 
     @Test
@@ -548,7 +637,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 520, height: 265))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 520, height: 367))
     }
 
     @Test
@@ -565,7 +654,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 520, height: 265))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 520, height: 367))
     }
 
     @Test

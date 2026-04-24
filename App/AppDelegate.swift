@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var documentStore: DocumentStore!
     private var appConfiguration: AppConfiguration = .default
     private var configStore: AppConfigurationStore?
+    private var appearanceObservation: NSKeyValueObservation?
     private var readerShortcutsController: ReaderShortcutsController?
     private var recentFilesPaletteController: RecentFilesPaletteController?
     private let recentFilesMenu = NSMenu(title: "Open Recent")
@@ -32,9 +33,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return
         }
 
+        applyApplicationAppearance()
         documentStore = DocumentStore(appConfiguration: appConfiguration)
         try? documentStore.restorePersistedState()
         installMainMenu()
+        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                self?.refreshThemeChromeIfFollowingSystem()
+            }
+        }
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDocumentStoreDidChange),
@@ -195,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
 
         let controller = MainWindowController(documentStore: documentStore, windowID: windowID)
+        controller.refreshThemeAppearance()
         controller.shouldCloseHandler = { [weak self] controller in
             self?.handleWindowShouldClose(controller) ?? true
         }
@@ -909,7 +917,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func toggleNightMode(_ sender: Any?) {
-        mainWindowController?.toggleNightMode()
+        let currentIsDark = (NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+        var updatedConfiguration = appConfiguration
+        updatedConfiguration.appearance.mode = appConfiguration.appearance.mode.toggled(currentIsDark: currentIsDark)
+        applyUpdatedConfiguration(updatedConfiguration)
     }
 
     @objc
@@ -1171,6 +1182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
 
         settingsWindowController?.sync(configuration: appConfiguration)
+        settingsWindowController?.window?.appearance = appConfiguration.appearance.mode.appAppearance
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -1190,15 +1202,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         do {
             try configStore.save(newConfiguration)
             appConfiguration = newConfiguration
+            applyApplicationAppearance()
             refreshMenuShortcuts()
             documentStore.updateAppConfiguration(newConfiguration)
         } catch {
             appConfiguration = previousConfiguration
+            applyApplicationAppearance()
             refreshMenuShortcuts()
             documentStore.updateAppConfiguration(previousConfiguration)
             settingsWindowController?.sync(configuration: previousConfiguration)
             presentConfigurationSaveError(error)
         }
+    }
+
+    private func applyApplicationAppearance() {
+        NightModeStyle.applyThemeSelections(
+            light: appConfiguration.appearance.lightTheme,
+            dark: appConfiguration.appearance.darkTheme
+        )
+        NSApp.appearance = appConfiguration.appearance.mode.appAppearance
+        mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
+        settingsWindowController?.window?.appearance = appConfiguration.appearance.mode.appAppearance
+    }
+
+    private func refreshThemeChromeIfFollowingSystem() {
+        guard appConfiguration.appearance.mode == .system else { return }
+        mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
+        settingsWindowController?.window?.appearance = nil
     }
 
     private func refreshMenuShortcuts() {

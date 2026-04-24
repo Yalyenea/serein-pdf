@@ -13,11 +13,12 @@
 ## 2. 产品常量
 
 - `TabPresentationMode`:`verticalSidebar` / `horizontalTitlebar`
+- 外观配置:`mode(system/light/dark)` + `light_theme(normal/rose_pine_dawn)` + `dark_theme(normal/rose_pine_moon)`
 - 默认高亮色:偏轻、低饱和、清晰的粉色
 - `a`:有选区 → 立即高亮;无选区 → 进入高亮模式
 - `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
 - `d`:删除鼠标所在高亮;多行整组删除
-- `i`:切换反色夜间模式
+- `i`:在 light / dark mode 间切换,并保留各自已选 theme
 - `Ctrl+D` / `Ctrl+U`:半页下滚 / 上滚
 - `g` / `G`:跳到文首 / 文末
 - `Cmd+S`:写回源 PDF

@@ -18,7 +18,11 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
-- Pink-first highlight workflow (`a` to highlight, `i` to toggle a warm Rose Pine-style inverted night mode)
+- Theme controls now split into `Mode`, `Light Theme`, and `Dark Theme`
+- Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
+- `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
+- Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
+- Pink-first highlight workflow (`a` to highlight, with a warm Rose Pine-style inverted mode available in Rose Pine Moon)
 - Highlights can carry comments in the right sidebar, and exports include those comments
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
@@ -66,6 +70,11 @@ Runtime config lives at `~/Library/Application Support/SlatePDF/config.toml`
 and is created on first launch. Edit, then restart SlatePDF.
 
 ```toml
+[appearance]
+mode = "system"               # or "light" / "dark"
+light_theme = "normal"        # or "rose_pine_dawn"
+dark_theme = "rose_pine_moon" # or "normal"
+
 [reader]
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
@@ -89,6 +98,10 @@ show_recent_files_in_sidebar = true
 
 - Layout widths apply on launch and restore for all PDFs. Dragging a sidebar
   only changes the current runtime session; restart goes back to the config.
+- `mode = "system"` follows the current macOS appearance.
+- `light_theme` and `dark_theme` are selected independently, so you can pair
+  `Normal` light with `Rose Pine Moon`, or `Rose Pine Dawn` with `Normal`
+  dark, without changing the mode model.
 - `sidebars_swapped = true` flips the left and right panes — widths travel
   with the panes so your narrow tabs pane stays narrow after the swap.
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
@@ -105,7 +118,7 @@ Defined in `[shortcuts]` above. Highlights:
 |---|---|
 | Highlight selection / enter highlight mode | `a` |
 | Exit highlight mode | `esc` |
-| Toggle night mode | `i` |
+| Toggle light / dark mode | `i` |
 | Save annotations | `cmd+s` |
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Fit width / height | `cmd+0` / `cmd+9` |

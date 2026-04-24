@@ -226,6 +226,11 @@ final class ReaderWorkspaceViewController: NSViewController {
         activeReaderViewController().toggleNightMode()
     }
 
+    func refreshThemeAppearance() {
+        primaryReaderViewController.refreshThemeAppearance()
+        secondaryReaderViewController.refreshThemeAppearance()
+    }
+
     func saveAnnotations() throws {
         try activeReaderViewController().saveAnnotations()
     }

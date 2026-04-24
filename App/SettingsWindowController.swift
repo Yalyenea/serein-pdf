@@ -1,7 +1,7 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 520, height: 265)
+    static let generalContentSize = NSSize(width: 520, height: 367)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
 }
 
@@ -189,6 +189,9 @@ private final class SettingsViewController: NSViewController {
     )
     private let shortcutsErrorLabel = NSTextField(labelWithString: "")
 
+    private let modePopUp = NSPopUpButton()
+    private let lightThemePopUp = NSPopUpButton()
+    private let darkThemePopUp = NSPopUpButton()
     private let displayModePopUp = NSPopUpButton()
     private let fitWidthCheckbox = NSButton(
         checkboxWithTitle: "Fit width when opening a document",
@@ -271,6 +274,21 @@ private final class SettingsViewController: NSViewController {
             displayModePopUp.lastItem?.representedObject = mode.rawValue
         }
 
+        for mode in AppearanceMode.allCases {
+            modePopUp.addItem(withTitle: mode.menuTitle)
+            modePopUp.lastItem?.representedObject = mode.rawValue
+        }
+
+        for theme in LightTheme.allCases {
+            lightThemePopUp.addItem(withTitle: theme.menuTitle)
+            lightThemePopUp.lastItem?.representedObject = theme.rawValue
+        }
+
+        for theme in DarkTheme.allCases {
+            darkThemePopUp.addItem(withTitle: theme.menuTitle)
+            darkThemePopUp.lastItem?.representedObject = theme.rawValue
+        }
+
         for policy in AnnotationSavePolicy.allCases {
             autoSavePopUp.addItem(withTitle: policy.menuTitle)
             autoSavePopUp.lastItem?.representedObject = policy.rawValue
@@ -292,6 +310,9 @@ private final class SettingsViewController: NSViewController {
         isApplyingConfiguration = true
         defer { isApplyingConfiguration = false }
 
+        selectItem(in: modePopUp, matching: configuration.appearance.mode.rawValue)
+        selectItem(in: lightThemePopUp, matching: configuration.appearance.lightTheme.rawValue)
+        selectItem(in: darkThemePopUp, matching: configuration.appearance.darkTheme.rawValue)
         selectItem(in: displayModePopUp, matching: configuration.reader.defaultDisplayMode.rawValue)
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
@@ -325,7 +346,13 @@ private final class SettingsViewController: NSViewController {
     @objc
     private func handleGeneralControlChanged(_ sender: Any?) {
         guard isApplyingConfiguration == false else { return }
-        guard let displayModeRawValue = displayModePopUp.selectedItem?.representedObject as? String,
+        guard let modeRawValue = modePopUp.selectedItem?.representedObject as? String,
+              let mode = AppearanceMode(rawValue: modeRawValue),
+              let lightThemeRawValue = lightThemePopUp.selectedItem?.representedObject as? String,
+              let lightTheme = LightTheme(rawValue: lightThemeRawValue),
+              let darkThemeRawValue = darkThemePopUp.selectedItem?.representedObject as? String,
+              let darkTheme = DarkTheme(rawValue: darkThemeRawValue),
+              let displayModeRawValue = displayModePopUp.selectedItem?.representedObject as? String,
               let displayMode = ReaderDisplayMode(rawValue: displayModeRawValue),
               let autoSaveRawValue = autoSavePopUp.selectedItem?.representedObject as? String,
               let autoSavePolicy = AnnotationSavePolicy(rawValue: autoSaveRawValue) else {
@@ -333,6 +360,9 @@ private final class SettingsViewController: NSViewController {
         }
 
         var updatedConfiguration = configuration
+        updatedConfiguration.appearance.mode = mode
+        updatedConfiguration.appearance.lightTheme = lightTheme
+        updatedConfiguration.appearance.darkTheme = darkTheme
         updatedConfiguration.reader.defaultDisplayMode = displayMode
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
         updatedConfiguration.annotations.autoSavePolicy = autoSavePolicy
@@ -353,6 +383,21 @@ private final class SettingsViewController: NSViewController {
     }
 
     private func buildGeneralPage() {
+        modePopUp.translatesAutoresizingMaskIntoConstraints = false
+        modePopUp.controlSize = .small
+        modePopUp.target = self
+        modePopUp.action = #selector(handleGeneralControlChanged(_:))
+
+        lightThemePopUp.translatesAutoresizingMaskIntoConstraints = false
+        lightThemePopUp.controlSize = .small
+        lightThemePopUp.target = self
+        lightThemePopUp.action = #selector(handleGeneralControlChanged(_:))
+
+        darkThemePopUp.translatesAutoresizingMaskIntoConstraints = false
+        darkThemePopUp.controlSize = .small
+        darkThemePopUp.target = self
+        darkThemePopUp.action = #selector(handleGeneralControlChanged(_:))
+
         displayModePopUp.translatesAutoresizingMaskIntoConstraints = false
         displayModePopUp.controlSize = .small
         displayModePopUp.target = self
@@ -390,6 +435,9 @@ private final class SettingsViewController: NSViewController {
         layoutOptionsStack.translatesAutoresizingMaskIntoConstraints = false
 
         let grid = NSGridView(views: [
+            [makeRowLabel("Mode"), modePopUp],
+            [makeRowLabel("Light Theme"), lightThemePopUp],
+            [makeRowLabel("Dark Theme"), darkThemePopUp],
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
@@ -408,6 +456,9 @@ private final class SettingsViewController: NSViewController {
             grid.leadingAnchor.constraint(equalTo: generalContainer.leadingAnchor, constant: 24),
             grid.trailingAnchor.constraint(lessThanOrEqualTo: generalContainer.trailingAnchor, constant: -24),
             grid.topAnchor.constraint(equalTo: generalContainer.topAnchor, constant: 20),
+            modePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
+            lightThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
+            darkThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
             displayModePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
             autoSavePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
             footnoteLabel.leadingAnchor.constraint(equalTo: grid.leadingAnchor),

@@ -220,7 +220,7 @@ final class ReaderViewController: NSViewController {
 
         overviewThumbnailView.translatesAutoresizingMaskIntoConstraints = false
         overviewThumbnailView.thumbnailSize = NSSize(width: 140, height: 180)
-        overviewThumbnailView.backgroundColor = NSColor.windowBackgroundColor
+        overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
         overviewThumbnailView.pdfView = pdfView
         overviewThumbnailView.isHidden = true
 
@@ -585,6 +585,11 @@ final class ReaderViewController: NSViewController {
 
     func toggleNightMode() {
         themeManager.toggleNightMode()
+        applyReaderAppearance()
+    }
+
+    func refreshThemeAppearance() {
+        syncNightModeFromSystem()
         applyReaderAppearance()
     }
 
@@ -1222,14 +1227,16 @@ final class ReaderViewController: NSViewController {
 
     private func applyReaderAppearance() {
         let isNightModeEnabled = themeManager.readerState.isNightModeEnabled
-        let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NSColor.white
+        let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
         view.layer?.backgroundColor = pageBackground.cgColor
         pdfView.backgroundColor = .white
         pdfView.layer?.backgroundColor = NSColor.white.cgColor
         pdfView.isHidden = false
         pdfContainerView.setNightModeEnabled(isNightModeEnabled)
+        overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
+        findBarView.refreshChromeColors()
         emptyStateLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
-        applyNightModeFilter(isEnabled: isNightModeEnabled)
+        applyThemeFilter()
         updateHighlightModeBanner()
     }
 
@@ -1241,12 +1248,13 @@ final class ReaderViewController: NSViewController {
         highlightModeBanner.layer?.backgroundColor = color.nsColor.withAlphaComponent(0.7).cgColor
     }
 
-    private func applyNightModeFilter(isEnabled: Bool) {
-        guard isEnabled else {
+    private func applyThemeFilter() {
+        let filters = NightModeStyle.makePDFContentFilters(for: view.effectiveAppearance)
+        guard filters.isEmpty == false else {
             pdfView.contentFilters = []
             return
         }
-        pdfView.contentFilters = NightModeStyle.makePDFContentFilters()
+        pdfView.contentFilters = filters
     }
 
 }

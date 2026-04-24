@@ -33,7 +33,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     init() {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        refreshChromeColors()
 
         queryField.placeholderString = SearchScope.currentDocument.placeholder
         queryField.focusRingType = .none
@@ -121,6 +121,18 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshChromeColors()
+    }
+
+    func refreshChromeColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NightModeStyle.paneBackgroundColor.cgColor
+            divider.fillColor = SplitViewController.dividerBackgroundColor
+        }
     }
 
     func focusQueryField() {

@@ -58,6 +58,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             name: .documentStoreDidChange,
             object: documentStore
         )
+        refreshThemeAppearance()
         applyWindowChromeState()
         refreshWindowTitle()
     }
@@ -73,6 +74,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
+        refreshThemeAppearance()
         applyWindowChromeState()
         refreshWindowTitle()
     }
@@ -83,6 +85,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        refreshThemeAppearance()
         applyWindowChromeState()
         refreshWindowTitle()
     }
@@ -530,14 +533,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.readerViewController.currentHighlightColor
     }
 
-    func toggleNightMode() {
-        splitViewController.toggleNightMode()
-        applyNightAppearance()
-    }
-
-    private func applyNightAppearance() {
-        let isNight = splitViewController.readerViewController.isNightModeEnabled
-        window?.appearance = NSAppearance(named: isNight ? .darkAqua : .aqua)
+    func refreshThemeAppearance() {
+        window?.backgroundColor = SplitViewController.splitBackgroundColor
         splitViewController.refreshChromeColors()
     }
 
@@ -577,7 +574,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     var isNightModeEnabled: Bool {
-        splitViewController.readerViewController.isNightModeEnabled
+        (window?.effectiveAppearance ?? NSApp.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
     private enum UnsavedChangesDecision {

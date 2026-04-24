@@ -106,7 +106,10 @@ flowchart LR
 - 侧栏平铺嵌入,最多保留一条淡分割线(禁悬浮 / 液态玻璃 / 漂浮面板感)
 - 按钮 / tab 视觉重量轻,突出选中态
 - 水平 tab 与系统标题栏融为一体
-- 反色夜间模式采用暖色、低刺激的 Rose Pine 风格映射,避免生硬黄蓝互翻
+- 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
+- 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
+- `rose_pine_dawn` 不只改阅读区外围,也把 PDF 白底映射成暖纸色
+- 反色夜间模式采用暖色、低刺激的 Rose Pine Moon 映射,避免生硬黄蓝互翻
 - `Settings` 按当前页内容自适应尺寸,`Shortcuts` 页会自动放大到合适大小
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
@@ -132,7 +135,7 @@ flowchart LR
 - `Cmd+[` / `Cmd+]`:历史后退 / 前进
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar / 下一 / 上一 匹配
 - Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
-- `I`:切换反色夜间模式
+- `I`:切换 light / dark mode,并保留各自已选 theme
 
 **文档与 tab**
 - `Cmd+O`:打开

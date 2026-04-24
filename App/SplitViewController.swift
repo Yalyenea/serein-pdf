@@ -340,6 +340,7 @@ final class SplitViewController: NSSplitViewController {
     func refreshChromeColors() {
         applyChromeColors()
         verticalTabsViewController.refreshChromeColors()
+        readerWorkspaceViewController.refreshThemeAppearance()
         rightSidebarViewController.refreshChromeColors()
         titlebarTabsController.refreshChromeColors()
     }

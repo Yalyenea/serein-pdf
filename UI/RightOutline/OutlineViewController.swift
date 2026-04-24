@@ -52,13 +52,14 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
 
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        titleLabel.textColor = NightModeStyle.primaryTextColor
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
-        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         emptyStateLabel.maximumNumberOfLines = 0
 
         pageCounterLabel.font = .systemFont(ofSize: 11, weight: .regular)
-        pageCounterLabel.textColor = .secondaryLabelColor
+        pageCounterLabel.textColor = NightModeStyle.secondaryTextColor
         pageCounterLabel.alignment = .right
 
         outlineColumn.title = "Outline"
@@ -113,7 +114,11 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
             outlineView.backgroundColor = PlaceholderViewController.paneBackgroundColor
+            titleLabel.textColor = NightModeStyle.primaryTextColor
+            emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
+            pageCounterLabel.textColor = NightModeStyle.secondaryTextColor
         }
+        outlineView.reloadData()
     }
 
     @objc
@@ -203,7 +208,6 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         } else {
             textField = NSTextField(labelWithString: "")
             textField.font = .systemFont(ofSize: 12, weight: .regular)
-            textField.textColor = .labelColor
             textField.lineBreakMode = .byTruncatingTail
             textField.translatesAutoresizingMaskIntoConstraints = false
             cellView.textField = textField
@@ -216,6 +220,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             ])
         }
 
+        textField.textColor = NightModeStyle.primaryTextColor
         textField.stringValue = node.title
         return cellView
     }

@@ -12,6 +12,9 @@ final class AppConfigurationTests: XCTestCase {
         let configuration = try store.load()
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertEqual(configuration.appearance.mode, .system)
+        XCTAssertEqual(configuration.appearance.lightTheme, .normal)
+        XCTAssertEqual(configuration.appearance.darkTheme, .rosePineMoon)
         XCTAssertEqual(configuration.reader.defaultDisplayMode, .singlePageContinuous)
         XCTAssertFalse(configuration.reader.fitWidthOnOpen)
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
@@ -58,6 +61,11 @@ final class AppConfigurationTests: XCTestCase {
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try """
+[appearance]
+mode = "light"
+light_theme = "rose_pine_dawn"
+dark_theme = "normal"
+
 [reader]
 default_display_mode = "two_up"
 fit_width_on_open = false
@@ -85,6 +93,9 @@ show_recent_files_in_sidebar = false
 
         let configuration = try AppConfigurationStore(fileURL: fileURL).load()
 
+        XCTAssertEqual(configuration.appearance.mode, .light)
+        XCTAssertEqual(configuration.appearance.lightTheme, .rosePineDawn)
+        XCTAssertEqual(configuration.appearance.darkTheme, .normal)
         XCTAssertEqual(configuration.reader.defaultDisplayMode, .twoUp)
         XCTAssertFalse(configuration.reader.fitWidthOnOpen)
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "h", modifiers: []))
@@ -123,6 +134,10 @@ fit_width = "command+9"
         _ = try AppConfigurationStore(fileURL: fileURL)
         let content = try String(contentsOf: fileURL, encoding: .utf8)
 
+        XCTAssertTrue(content.contains("[appearance]"))
+        XCTAssertTrue(content.contains("mode = \"system\""))
+        XCTAssertTrue(content.contains("light_theme = \"normal\""))
+        XCTAssertTrue(content.contains("dark_theme = \"rose_pine_moon\""))
         XCTAssertTrue(content.contains("highlight_selection = \"a\""))
         XCTAssertTrue(content.contains("exit_highlight_mode = \"escape\""))
         XCTAssertTrue(content.contains("toggle_night_mode = \"i\""))
@@ -221,6 +236,9 @@ fit_width = "command+9"
         let store = try AppConfigurationStore(fileURL: fileURL)
 
         var configuration = try store.load()
+        configuration.appearance.mode = .dark
+        configuration.appearance.lightTheme = .rosePineDawn
+        configuration.appearance.darkTheme = .normal
         configuration.reader.defaultDisplayMode = .twoUpContinuous
         configuration.reader.fitWidthOnOpen = true
         configuration.annotations.autoSavePolicy = .never
@@ -229,9 +247,15 @@ fit_width = "command+9"
         let reloadedConfiguration = try store.load()
         let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
 
+        XCTAssertEqual(reloadedConfiguration.appearance.mode, .dark)
+        XCTAssertEqual(reloadedConfiguration.appearance.lightTheme, .rosePineDawn)
+        XCTAssertEqual(reloadedConfiguration.appearance.darkTheme, .normal)
         XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .twoUpContinuous)
         XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
         XCTAssertEqual(reloadedConfiguration.annotations.autoSavePolicy, .never)
+        XCTAssertTrue(persistedContent.contains("mode = \"dark\""))
+        XCTAssertTrue(persistedContent.contains("light_theme = \"rose_pine_dawn\""))
+        XCTAssertTrue(persistedContent.contains("dark_theme = \"normal\""))
         XCTAssertTrue(persistedContent.contains("default_display_mode = \"two_up_continuous\""))
         XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
         XCTAssertTrue(persistedContent.contains("auto_save = \"never\""))
