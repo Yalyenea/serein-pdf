@@ -722,13 +722,15 @@ final class ReaderViewController: NSViewController {
               pdfView.document === session.pdfDocument,
               displayedDisplayMode == session.displayMode else { return false }
 
+        guard let livePosition = currentReadingPosition() else { return false }
+
         if let displayedReadingPosition,
-           readingPosition(displayedReadingPosition, differsFrom: session.lastReadPosition) {
+           readingPosition(displayedReadingPosition, differsFrom: session.lastReadPosition),
+           readingPosition(livePosition, differsFrom: session.lastReadPosition) {
             return false
         }
 
-        guard let livePosition = currentReadingPosition(),
-              let liveScaleMode = liveScaleMode(for: session, liveScale: pdfView.scaleFactor) else { return false }
+        guard let liveScaleMode = liveScaleMode(for: session, liveScale: pdfView.scaleFactor) else { return false }
 
         if syncLiveViewportStateToStoreIfNeeded(for: session, livePosition: livePosition, liveScaleMode: liveScaleMode) {
             return true

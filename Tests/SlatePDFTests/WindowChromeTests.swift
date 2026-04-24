@@ -907,6 +907,78 @@ struct WindowChromeTests {
     }
 
     @Test
+    func pageTurnKeepsManualScale() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "page-turn-manual-scale",
+                pageSizes: [
+                    NSSize(width: 720, height: 900),
+                    NSSize(width: 1280, height: 720),
+                ]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        let manualScale = min(reader.pdfView.scaleFactor * 1.2, reader.pdfView.maxScaleFactor)
+        reader.pdfView.scaleFactor = manualScale
+        flushLayout(controller.window)
+
+        reader.goToNextPage()
+        flushLayout(controller.window)
+
+        #expect(abs(reader.pdfView.scaleFactor - manualScale) < 0.001)
+        #expect(store.session(for: session.id)?.currentPageIndex == 1)
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - manualScale) < 0.001)
+    }
+
+    @Test
+    func pageTurnFromFitWidthKeepsLiveScaleWhenPageShapeChanges() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "page-turn-fit-width-scale",
+                pageSizes: [
+                    NSSize(width: 720, height: 900),
+                    NSSize(width: 1280, height: 720),
+                ]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        let originalScale = reader.pdfView.scaleFactor
+
+        reader.goToNextPage()
+        flushLayout(controller.window)
+
+        #expect(abs(reader.pdfView.scaleFactor - originalScale) < 0.001)
+        #expect(store.session(for: session.id)?.currentPageIndex == 1)
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - originalScale) < 0.001)
+    }
+
+    @Test
     func highlightingKeepsLiveManualScaleWhenStoreMissedScaleChange() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
