@@ -426,17 +426,18 @@ final class DocumentStore {
     func updateReadingPosition(_ position: ReadingPosition, scaleFactor: CGFloat, for sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         let session = sessions[sessionIndex]
-        let needsUpdate =
-            session.lastReadPosition != position ||
-            session.currentPageIndex != position.pageIndex ||
-            session.zoomScale != scaleFactor
+        let pageChanged = session.currentPageIndex != position.pageIndex
+        let scaleChanged = abs(session.zoomScale - scaleFactor) > 0.001
+        let needsUpdate = session.lastReadPosition != position || pageChanged || scaleChanged
         guard needsUpdate else { return }
 
         sessions[sessionIndex].currentPageIndex = position.pageIndex
         sessions[sessionIndex].lastReadPosition = position
         sessions[sessionIndex].zoomScale = scaleFactor
         persistReadingState(for: sessions[sessionIndex])
-        notifyChange()
+        if pageChanged || scaleChanged {
+            notifyChange()
+        }
     }
 
     func setLeftSidebarVisible(_ isVisible: Bool) {

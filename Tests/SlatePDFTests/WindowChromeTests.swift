@@ -567,6 +567,37 @@ struct WindowChromeTests {
     }
 
     @Test
+    func halfPageScrollDoesNotDriftAfterSettlingWithOutlineSidebarVisible() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "half-page-scroll-outline"))
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+
+        guard let clipView = pdfClipView(in: reader.pdfView) else {
+            Issue.record("Failed to locate PDF clip view")
+            return
+        }
+
+        controller.scrollHalfPageDown()
+        flushLayout(controller.window)
+        let settledDownOrigin = clipView.bounds.origin.y
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15))
+        controller.window?.layoutIfNeeded()
+        let settledAgainDownOrigin = clipView.bounds.origin.y
+        #expect(abs(settledAgainDownOrigin - settledDownOrigin) < 1.0)
+    }
+
+    @Test
     func fitWidthUsesPDFKitRowWidthAcrossPageShapes() throws {
         _ = NSApplication.shared
 

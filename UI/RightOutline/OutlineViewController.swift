@@ -10,6 +10,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     private let outlineColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("OutlineColumn"))
     private let pageCounterLabel = NSTextField(labelWithString: "")
     private var nodes: [OutlineNode] = []
+    private var displayedSessionID: UUID?
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -34,6 +35,11 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         )
         reloadOutline()
         updatePageCounter()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        syncOutlineColumnWidth()
     }
 
     deinit {
@@ -112,7 +118,12 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        reloadOutline()
+        let session = documentStore.activeSession(in: windowID)
+        let sessionID = session?.id
+        let outlineTree = session?.outlineTree ?? []
+        if displayedSessionID != sessionID || nodes != outlineTree {
+            reloadOutline()
+        }
         updatePageCounter()
     }
 
@@ -133,19 +144,28 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     private func reloadOutline() {
         guard isViewLoaded else { return }
 
-        nodes = documentStore.activeSession(in: windowID)?.outlineTree ?? []
+        let session = documentStore.activeSession(in: windowID)
+        displayedSessionID = session?.id
+        nodes = session?.outlineTree ?? []
         outlineView.deselectAll(nil)
         outlineView.reloadData()
         expandAllNodes()
 
         let isEmpty = nodes.isEmpty
-        if documentStore.activeSession(in: windowID) == nil {
+        if session == nil {
             emptyStateLabel.stringValue = "Open a PDF to inspect its outline."
         } else {
             emptyStateLabel.stringValue = "This PDF has no outline."
         }
         emptyStateLabel.isHidden = !isEmpty
         scrollView.isHidden = isEmpty
+    }
+
+    private func syncOutlineColumnWidth() {
+        let targetWidth = max(scrollView.contentSize.width, scrollView.bounds.width)
+        guard targetWidth > 0,
+              abs(outlineColumn.width - targetWidth) > 0.5 else { return }
+        outlineColumn.width = targetWidth
     }
 
     private func expandAllNodes() {

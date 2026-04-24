@@ -41,6 +41,15 @@ private final class InMemoryRecentFilesStore: RecentFilesStore {
     }
 }
 
+private final class NotificationCounterObserver: NSObject {
+    private(set) var count = 0
+
+    @objc
+    func handleDocumentStoreDidChange(_ notification: Notification) {
+        count += 1
+    }
+}
+
 @MainActor
 final class DocumentStoreTests: XCTestCase {
     func testOpenDocumentCreatesActiveSession() throws {
@@ -500,6 +509,41 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(readingStateStore.states[session.url]?.scaleFactor, 1.5)
         XCTAssertEqual(readingStateStore.states[session.url]?.displayMode, .twoUp)
         XCTAssertEqual(readingStateStore.states[session.url]?.scaleMode, .manual)
+    }
+
+    func testUpdateReadingPositionSamePagePointDoesNotNotifyGlobalObservers() throws {
+        let readingStateStore = InMemoryReadingStateStore()
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: readingStateStore
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-position-notify"))
+
+        let counter = NotificationCounterObserver()
+        NotificationCenter.default.addObserver(
+            counter,
+            selector: #selector(NotificationCounterObserver.handleDocumentStoreDidChange(_:)),
+            name: .documentStoreDidChange,
+            object: store
+        )
+        defer { NotificationCenter.default.removeObserver(counter) }
+
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 0, point: CGPoint(x: 33, y: 77)),
+            scaleFactor: 1.0,
+            for: session.id
+        )
+
+        XCTAssertEqual(counter.count, 0)
+        XCTAssertEqual(readingStateStore.states[session.url]?.readingPosition.point, CGPoint(x: 33, y: 77))
+
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 1, point: CGPoint(x: 5, y: 9)),
+            scaleFactor: 1.0,
+            for: session.id
+        )
+
+        XCTAssertEqual(counter.count, 1)
     }
 
     func testReadingStateRemainsIndependentAcrossSessions() throws {

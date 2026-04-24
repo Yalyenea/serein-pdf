@@ -25,6 +25,7 @@ final class RightSidebarViewController: NSViewController {
     private var searchModeConstraints: [NSLayoutConstraint] = []
     private var annotationsModeConstraints: [NSLayoutConstraint] = []
     private var thumbnailContentWidth: NSLayoutConstraint?
+    private var appliedMode: RightSidebarMode?
 
     private static let thumbnailCellSpacing: CGFloat = 4
 
@@ -197,7 +198,10 @@ final class RightSidebarViewController: NSViewController {
     }
 
     private func applyMode() {
-        switch documentStore.rightSidebarMode(in: windowID) {
+        let mode = documentStore.rightSidebarMode(in: windowID)
+        guard appliedMode != mode else { return }
+
+        switch mode {
         case .outline:
             NSLayoutConstraint.deactivate(pagesModeConstraints)
             NSLayoutConstraint.deactivate(searchModeConstraints)
@@ -220,7 +224,7 @@ final class RightSidebarViewController: NSViewController {
             NSLayoutConstraint.activate(annotationsModeConstraints)
         }
 
-        let mode = documentStore.rightSidebarMode(in: windowID)
+        appliedMode = mode
         outlineViewController.view.isHidden = mode != .outline
         thumbnailView.isHidden = mode != .pages
         searchResultsViewController.view.isHidden = mode != .search

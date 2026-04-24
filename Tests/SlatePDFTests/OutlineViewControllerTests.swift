@@ -5,7 +5,7 @@ import Testing
 @MainActor
 struct OutlineViewControllerTests {
     @Test
-    func outlineColumnUsesAutoresizingInsteadOfManualLayoutSync() {
+    func outlineColumnTracksSidebarWidth() {
         let store = DocumentStore(appConfiguration: .default)
         let controller = OutlineViewController(
             documentStore: store,
@@ -22,7 +22,6 @@ struct OutlineViewControllerTests {
             return
         }
 
-        #expect(outlineView.columnAutoresizingStyle == .firstColumnOnlyAutoresizingStyle)
-        #expect(column.resizingMask == .autoresizingMask)
+        #expect(abs(column.width - scrollView.contentSize.width) < 0.5)
     }
 }
