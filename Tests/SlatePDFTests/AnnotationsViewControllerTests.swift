@@ -103,6 +103,64 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertEqual(store.annotationGroups(for: session.id).first?.comment, "Selection-safe comment")
     }
 
+    func testLongSnippetRowsExpandAndDoNotStaySingleLine() throws {
+        let group = DocumentHighlightGroup(
+            groupID: "long-snippet",
+            pageIndex: 0,
+            snippet: "Compressed Sparse Attention keeps long highlight snippets readable in the sidebar list.",
+            color: .pink,
+            createdAt: nil,
+            comment: "",
+            primarySelection: nil,
+            records: []
+        )
+        let rowHeight = AnnotationHighlightCellView.preferredHeight(for: group, width: 240)
+        XCTAssertGreaterThan(rowHeight, 46)
+
+        let cell = AnnotationHighlightCellView(frame: NSRect(x: 0, y: 0, width: 240, height: rowHeight))
+        cell.configure(with: group)
+        let snippetLabel = try XCTUnwrap(
+            findTextField(
+                matching: "Compressed Sparse Attention keeps long highlight snippets readable in the sidebar list.",
+                in: cell
+            )
+        )
+        XCTAssertEqual(snippetLabel.maximumNumberOfLines, 0)
+        XCTAssertEqual(snippetLabel.lineBreakMode, .byWordWrapping)
+        XCTAssertEqual(snippetLabel.cell?.wraps, true)
+        XCTAssertEqual(snippetLabel.cell?.usesSingleLineMode, false)
+        XCTAssertNil(findTextField(matching: "No comment", in: cell))
+    }
+
+    func testAnnotationsColumnTracksSidebarWidthAndCellsStayVisible() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-width-visibility"))
+        let record = try makeHighlightRecord(in: session.pdfDocument)
+        store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 320, height: 540)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let scrollView = try XCTUnwrap(findDescendant(of: NSScrollView.self, in: controller.view))
+        let tableView = try XCTUnwrap(scrollView.documentView as? NSTableView)
+        let column = try XCTUnwrap(tableView.tableColumns.first)
+        XCTAssertGreaterThan(column.width, 200)
+        XCTAssertEqual(column.width, scrollView.contentSize.width, accuracy: 0.5)
+
+        let highlightRow = try XCTUnwrap((0..<tableView.numberOfRows).first { row in
+            controller.tableView(tableView, shouldSelectRow: row)
+        })
+        let rowHeight = controller.tableView(tableView, heightOfRow: highlightRow)
+        let cell = try XCTUnwrap(tableView.view(atColumn: 0, row: highlightRow, makeIfNecessary: true))
+        cell.frame = NSRect(x: 0, y: 0, width: column.width, height: rowHeight)
+        cell.layoutSubtreeIfNeeded()
+
+        let textField = try XCTUnwrap(findDescendant(of: NSTextField.self, in: cell))
+        XCTAssertGreaterThan(textField.frame.width, 100)
+    }
+
     private func makeStore() -> DocumentStore {
         DocumentStore(
             persistence: SidebarInMemoryDocumentStorePersistence(),
@@ -186,6 +244,21 @@ private func findDescendant<T: NSView>(of type: T.Type, in root: NSView) -> T? {
     for subview in root.subviews {
         if let match = findDescendant(of: type, in: subview) {
             return match
+        }
+    }
+
+    return nil
+}
+
+@MainActor
+private func findTextField(matching stringValue: String, in root: NSView) -> NSTextField? {
+    if let textField = root as? NSTextField, textField.stringValue == stringValue {
+        return textField
+    }
+
+    for subview in root.subviews {
+        if let textField = findTextField(matching: stringValue, in: subview) {
+            return textField
         }
     }
 

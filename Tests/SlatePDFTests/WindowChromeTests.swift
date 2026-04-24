@@ -287,6 +287,96 @@ struct WindowChromeTests {
     }
 
     @Test
+    func switchingRightSidebarModesKeepsUnifiedSidebarWidth() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "right-sidebar-mode-width"))
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        splitController.splitView.setPosition(860, ofDividerAt: 1)
+        splitController.splitView.adjustSubviews()
+        flushLayout(controller.window)
+
+        let baselineWidth = splitController.splitView.arrangedSubviews[2].frame.width
+        #expect(baselineWidth > 120)
+        #expect(store.session(for: session.id)?.rightSidebarWidth != nil)
+
+        for mode in RightSidebarMode.allCases {
+            store.setRightSidebarMode(mode, in: controller.windowID)
+            flushLayout(controller.window)
+
+            let currentWidth = splitController.splitView.arrangedSubviews[2].frame.width
+            #expect(
+                abs(currentWidth - baselineWidth) < 0.5,
+                "Mode \(mode) changed right sidebar width from \(baselineWidth) to \(currentWidth)"
+            )
+            #expect(
+                abs((store.session(for: session.id)?.rightSidebarWidth ?? 0) - baselineWidth) < 0.5,
+                "Mode \(mode) mutated stored right sidebar width"
+            )
+        }
+    }
+
+    @Test
+    func switchingBetweenSearchAndAnnotationsKeepsUnifiedWidthWithRealContent() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let windowID = controller.windowID
+        let session = try store.open(
+            documentAt: makeSelectableTemporaryPDF(
+                named: "right-sidebar-real-content",
+                text: "needle alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let page = session.pdfDocument.page(at: 0),
+              let selection = page.selection(for: page.bounds(for: .mediaBox)) else {
+            Issue.record("Failed to prepare debug sidebar content")
+            return
+        }
+
+        let records = HighlightService.applyHighlight(
+            to: selection,
+            createdAt: Date(timeIntervalSinceReferenceDate: 1)
+        )
+        store.noteHighlightsAdded(records, for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        guard let group = store.annotationGroups(for: session.id).first else {
+            Issue.record("Failed to create annotation group")
+            return
+        }
+        _ = store.updateComment(
+            "Long sidebar comment for width debugging. Long sidebar comment for width debugging.",
+            forHighlightGroup: group.groupID,
+            in: session.id,
+            now: Date(timeIntervalSinceReferenceDate: 2)
+        )
+        store.updateSearch(query: "needle", scope: .currentDocument, in: windowID)
+        flushLayout(controller.window)
+
+        store.setRightSidebarMode(.search, in: windowID)
+        flushLayout(controller.window)
+        let searchWidth = splitController.splitView.arrangedSubviews[2].frame.width
+
+        store.setRightSidebarMode(.annotations, in: windowID)
+        flushLayout(controller.window)
+        let annotationsWidth = splitController.splitView.arrangedSubviews[2].frame.width
+
+        #expect(
+            abs(searchWidth - annotationsWidth) < 0.5,
+            "search width \(searchWidth) != annotations width \(annotationsWidth)"
+        )
+    }
+
+    @Test
     func hiddenVerticalTabsStayHiddenAcrossSessionActivation() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)

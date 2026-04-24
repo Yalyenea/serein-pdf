@@ -51,6 +51,9 @@ private final class SearchResultCellView: NSTableCellView {
 }
 
 final class SearchResultsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+    private static let horizontalInset: CGFloat = 8
+    private static let textInset: CGFloat = 12
+
     let documentStore: DocumentStore
     let windowID: UUID
     var onActivateMatch: ((SearchSidebarMatch) -> Void)?
@@ -89,13 +92,20 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         NotificationCenter.default.removeObserver(self)
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        syncTableColumnWidth()
+    }
+
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
 
         column.isEditable = false
+        column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
+        tableView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         tableView.headerView = nil
         tableView.rowSizeStyle = .small
         tableView.rowHeight = 42
@@ -124,12 +134,12 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         container.addSubview(emptyStateLabel)
 
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.horizontalInset),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.horizontalInset),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.textInset),
+            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.textInset),
             emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
 
@@ -334,6 +344,13 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
     private func notifySelectionChanged() {
         onSelectionChanged?(selectedMatchIndex(), totalMatchCount())
+    }
+
+    private func syncTableColumnWidth() {
+        let targetWidth = max(scrollView.contentSize.width, scrollView.bounds.width)
+        guard targetWidth > 0,
+              abs(column.width - targetWidth) > 0.5 else { return }
+        column.width = targetWidth
     }
 
     private func totalMatchCount() -> Int {
