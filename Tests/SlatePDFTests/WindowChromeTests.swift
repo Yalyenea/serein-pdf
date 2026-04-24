@@ -450,6 +450,50 @@ struct WindowChromeTests {
     }
 
     @Test
+    func halfPageScrollDoesNotDriftAfterSettling() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "half-page-scroll-settle",
+                pageSizes: [NSSize(width: 720, height: 2400)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+
+        guard let clipView = pdfClipView(in: reader.pdfView) else {
+            Issue.record("Failed to locate PDF clip view")
+            return
+        }
+
+        controller.scrollHalfPageDown()
+        flushLayout(controller.window)
+        let settledDownOrigin = clipView.bounds.origin.y
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15))
+        controller.window?.layoutIfNeeded()
+        let settledAgainDownOrigin = clipView.bounds.origin.y
+        #expect(abs(settledAgainDownOrigin - settledDownOrigin) < 1.0)
+
+        controller.scrollHalfPageUp()
+        flushLayout(controller.window)
+        let settledUpOrigin = clipView.bounds.origin.y
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15))
+        controller.window?.layoutIfNeeded()
+        let settledAgainUpOrigin = clipView.bounds.origin.y
+        #expect(abs(settledAgainUpOrigin - settledUpOrigin) < 1.0)
+    }
+
+    @Test
     func fitWidthUsesPDFKitRowWidthAcrossPageShapes() throws {
         _ = NSApplication.shared
 
@@ -504,6 +548,229 @@ struct WindowChromeTests {
 
             #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.05)
         }
+    }
+
+    @Test
+    func pdfScrollViewDisablesElasticity() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        _ = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "scroll-elasticity",
+                pageSizes: [NSSize(width: 720, height: 1800)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let scrollView = splitController.readerViewController.pdfView.subviews
+                .compactMap({ $0 as? NSScrollView })
+                .first else {
+            Issue.record("Failed to locate PDF scroll view")
+            return
+        }
+
+        #expect(scrollView.verticalScrollElasticity == .none)
+        #expect(scrollView.horizontalScrollElasticity == .none)
+    }
+
+    @Test
+    func highlightingAfterZoomKeepsManualScale() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let url = try makeSelectableTemporaryPDF(named: "highlight-zoom-stability", text: "Hello DeepSeek world")
+        let session = try store.open(documentAt: url)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.zoomIn()
+        flushLayout(controller.window)
+        let zoomedScale = reader.pdfView.scaleFactor
+
+        guard let selection = reader.pdfView.document?.findString("DeepSeek", withOptions: .caseInsensitive).first else {
+            Issue.record("Failed to locate selectable text for highlighting")
+            return
+        }
+
+        reader.pdfView.currentSelection = selection
+        #expect(reader.triggerHighlightShortcut() == true)
+        flushLayout(controller.window)
+
+        #expect(abs(reader.pdfView.scaleFactor - zoomedScale) < 0.001)
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - zoomedScale) < 0.001)
+    }
+
+    @Test
+    func highlightingAfterDirectPDFViewScaleChangeKeepsManualScale() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let url = try makeSelectableTemporaryPDF(named: "highlight-direct-scale-stability", text: "Hello DeepSeek world")
+        let session = try store.open(documentAt: url)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        let targetScale = min(reader.pdfView.scaleFactor * 1.2, reader.pdfView.maxScaleFactor)
+        reader.pdfView.scaleFactor = targetScale
+        flushLayout(controller.window)
+
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - targetScale) < 0.001)
+
+        guard let selection = reader.pdfView.document?.findString("DeepSeek", withOptions: .caseInsensitive).first else {
+            Issue.record("Failed to locate selectable text for highlighting")
+            return
+        }
+
+        reader.pdfView.currentSelection = selection
+        #expect(reader.triggerHighlightShortcut() == true)
+        flushLayout(controller.window)
+
+        #expect(abs(reader.pdfView.scaleFactor - targetScale) < 0.001)
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - targetScale) < 0.001)
+    }
+
+    @Test
+    func highlightingKeepsLiveManualScaleWhenStoreMissedScaleChange() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let url = try makeSelectableTemporaryPDF(named: "highlight-stale-scale-store", text: "Hello DeepSeek world")
+        let session = try store.open(documentAt: url)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+
+        NotificationCenter.default.removeObserver(
+            reader,
+            name: Notification.Name.PDFViewScaleChanged,
+            object: reader.pdfView
+        )
+
+        let fitScale = reader.pdfView.scaleFactor
+        let manualScale = min(fitScale * 1.2, reader.pdfView.maxScaleFactor)
+        reader.pdfView.scaleFactor = manualScale
+        flushLayout(controller.window)
+
+        guard let selection = reader.pdfView.document?.findString("DeepSeek", withOptions: .caseInsensitive).first else {
+            Issue.record("Failed to locate selectable text for highlighting")
+            return
+        }
+
+        reader.pdfView.currentSelection = selection
+        #expect(reader.triggerHighlightShortcut() == true)
+        flushLayout(controller.window)
+
+        #expect(abs(reader.pdfView.scaleFactor - manualScale) < 0.001)
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - manualScale) < 0.001)
+    }
+
+    @Test
+    func storeRefreshKeepsLivePageWhenStoreMissedPageChange() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "stale-page-store",
+                pageSizes: [NSSize(width: 720, height: 900), NSSize(width: 720, height: 900)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let clipView = pdfClipView(in: splitController.readerViewController.pdfView),
+              let scrollView = splitController.readerViewController.pdfView.subviews
+                .compactMap({ $0 as? NSScrollView })
+                .first else {
+            Issue.record("Failed to locate reader scroll view")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        NotificationCenter.default.removeObserver(
+            reader,
+            name: Notification.Name.PDFViewPageChanged,
+            object: reader.pdfView
+        )
+
+        guard let secondPage = reader.pdfView.document?.page(at: 1) else {
+            Issue.record("Failed to locate second page")
+            return
+        }
+
+        reader.pdfView.go(to: secondPage)
+        scrollView.reflectScrolledClipView(clipView)
+        flushLayout(controller.window)
+
+        let originBeforeRefresh = clipView.bounds.origin.y
+        let pageBeforeRefresh = reader.pdfView.document.flatMap { document in
+            reader.pdfView.currentPage.map { document.index(for: $0) }
+        }
+
+        store.setDirty(true, for: session.id)
+        flushLayout(controller.window)
+
+        let originAfterRefresh = clipView.bounds.origin.y
+        let pageAfterRefresh = reader.pdfView.document.flatMap { document in
+            reader.pdfView.currentPage.map { document.index(for: $0) }
+        }
+
+        #expect(pageBeforeRefresh == 1)
+        #expect(pageAfterRefresh == 1)
+        #expect(abs(originAfterRefresh - originBeforeRefresh) < 1.0)
+    }
+
+    @Test
+    func fitWidthSkipsProgrammaticReapplyWhenTargetScaleIsAlreadyActive() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "fit-width-stable-refresh",
+                pageSizes: [NSSize(width: 720, height: 1800)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+
+        let targetScale = reader.pdfView.scaleFactor
+        #expect(reader.shouldApplyFitWidth(targetScale, for: session) == false)
+
+        store.setScaleMode(.manual, scaleFactor: targetScale * 1.1, for: session.id)
+        flushLayout(controller.window)
+        #expect(reader.shouldApplyFitWidth(targetScale, for: session) == true)
     }
 }
 
@@ -578,5 +845,20 @@ private func makeTemporaryPDF(named name: String, pageSizes: [NSSize] = [NSSize(
     guard document.write(to: url) else {
         throw CocoaError(.fileWriteUnknown)
     }
+    return url
+}
+
+@MainActor
+private func makeSelectableTemporaryPDF(named name: String, text: String) throws -> URL {
+    let size = NSSize(width: 480, height: 240)
+    let textView = NSTextView(frame: NSRect(origin: .zero, size: size))
+    textView.string = text
+    textView.font = NSFont.systemFont(ofSize: 28, weight: .regular)
+    textView.textContainerInset = NSSize(width: 24, height: 32)
+    let data = textView.dataWithPDF(inside: textView.bounds)
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("\(name)-\(UUID().uuidString)")
+        .appendingPathExtension("pdf")
+    try data.write(to: url)
     return url
 }

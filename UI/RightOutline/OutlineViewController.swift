@@ -36,6 +36,11 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         updatePageCounter()
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        syncOutlineColumnWidth()
+    }
+
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
@@ -56,8 +61,10 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         pageCounterLabel.alignment = .right
 
         outlineColumn.title = "Outline"
+        outlineColumn.resizingMask = .autoresizingMask
         outlineView.addTableColumn(outlineColumn)
         outlineView.outlineTableColumn = outlineColumn
+        outlineView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         outlineView.headerView = nil
         outlineView.rowSizeStyle = .small
         outlineView.rowHeight = 22
@@ -144,6 +151,13 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         }
         emptyStateLabel.isHidden = !isEmpty
         scrollView.isHidden = isEmpty
+    }
+
+    private func syncOutlineColumnWidth() {
+        let targetWidth = max(scrollView.contentSize.width, scrollView.bounds.width)
+        guard targetWidth > 0,
+              abs(outlineColumn.width - targetWidth) > 0.5 else { return }
+        outlineColumn.width = targetWidth
     }
 
     private func expandAllNodes() {

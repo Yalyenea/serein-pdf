@@ -117,6 +117,7 @@ final class ReaderViewController: NSViewController {
             return event
         }
         refreshDisplayedDocument()
+        configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
     }
 
@@ -256,6 +257,10 @@ final class ReaderViewController: NSViewController {
 
     func fitToWidth() {
         guard let session = targetSession() else { return }
+        if pdfView.bounds.width > 0 {
+            pendingFitWidthSessionID = nil
+            lastAppliedFitBoundsWidth = pdfView.bounds.width
+        }
         applyFitWidth(for: session)
     }
 
@@ -575,7 +580,9 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        refreshDisplayedDocument()
+        if syncDisplayedStateWithoutRefreshIfPossible() == false {
+            refreshDisplayedDocument()
+        }
         syncFindBarStatus()
     }
 
@@ -660,10 +667,74 @@ final class ReaderViewController: NSViewController {
         applyDisplayModeIfNeeded(session)
         applyScaleIfNeeded(session)
         applyReadingPositionIfNeeded(session, isNewSession: isNewSession)
+        configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
 
         pdfView.isHidden = false
         emptyStateLabel.isHidden = true
+    }
+
+    private func syncDisplayedStateWithoutRefreshIfPossible() -> Bool {
+        guard let session = targetSession(),
+              session.id == displayedSessionID,
+              pdfView.document === session.pdfDocument,
+              displayedDisplayMode == session.displayMode else { return false }
+
+        guard let livePosition = currentReadingPosition(),
+              let liveScaleMode = liveScaleMode(for: session, liveScale: pdfView.scaleFactor) else { return false }
+
+        if syncLiveViewportStateToStoreIfNeeded(for: session, livePosition: livePosition, liveScaleMode: liveScaleMode) {
+            return true
+        }
+
+        displayedScaleMode = liveScaleMode
+        displayedReadingPosition = livePosition
+        return true
+    }
+
+    private func liveScaleMode(for session: DocumentSession, liveScale: CGFloat) -> ReaderScaleMode? {
+        switch session.scaleMode {
+        case .manual:
+            return .manual
+        case .fitWidth:
+            guard let targetScaleFactor = fitWidthScaleFactor(for: session) else { return nil }
+            if abs(liveScale - targetScaleFactor) <= 0.001 {
+                return .fitWidth
+            }
+
+            let fitWidthLayoutIsStable =
+                pendingFitWidthSessionID != session.id &&
+                abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) <= 0.5
+            return fitWidthLayoutIsStable ? .manual : nil
+        }
+    }
+
+    private func syncLiveViewportStateToStoreIfNeeded(
+        for session: DocumentSession,
+        livePosition: ReadingPosition,
+        liveScaleMode: ReaderScaleMode
+    ) -> Bool {
+        let liveScale = pdfView.scaleFactor
+        let needsModeSync = session.scaleMode != liveScaleMode
+        let needsScaleSync = abs(session.zoomScale - liveScale) > 0.001
+        let needsPositionSync = readingPosition(session.lastReadPosition, differsFrom: livePosition)
+        guard needsModeSync || needsScaleSync || needsPositionSync else { return false }
+
+        displayedScaleMode = liveScaleMode
+        displayedReadingPosition = livePosition
+
+        if needsModeSync {
+            documentStore.setScaleMode(liveScaleMode, scaleFactor: liveScale, for: session.id)
+        }
+        if needsScaleSync || needsPositionSync {
+            documentStore.updateReadingPosition(livePosition, scaleFactor: liveScale, for: session.id)
+        }
+        return true
+    }
+
+    private func readingPosition(_ lhs: ReadingPosition, differsFrom rhs: ReadingPosition) -> Bool {
+        guard lhs.pageIndex == rhs.pageIndex else { return true }
+        return abs(lhs.point.x - rhs.point.x) > 0.5 || abs(lhs.point.y - rhs.point.y) > 0.5
     }
 
     func applySearchResults(_ matches: [DocumentSearchMatch], selectedMatchIndex: Int?) {
@@ -758,8 +829,20 @@ final class ReaderViewController: NSViewController {
 
     private func applyFitWidth(for session: DocumentSession) {
         guard let scaleFactor = fitWidthScaleFactor(for: session) else { return }
+        guard shouldApplyFitWidth(scaleFactor, for: session) else {
+            documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
+            return
+        }
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
         documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
+    }
+
+    func shouldApplyFitWidth(_ targetScaleFactor: CGFloat, for session: DocumentSession) -> Bool {
+        guard displayedSessionID == session.id, displayedScaleMode == .fitWidth else { return true }
+
+        // Avoid re-running viewport-anchor restoration on plain reading-position
+        // updates when the fit-width target scale is already in effect.
+        return abs(pdfView.scaleFactor - targetScaleFactor) > 0.001
     }
 
     private func applyProgrammaticScale(_ scaleFactor: CGFloat, preserveViewportCenter: Bool = false) {
@@ -802,6 +885,10 @@ final class ReaderViewController: NSViewController {
     }
 
     private func currentReadingPosition() -> ReadingPosition? {
+        if let visiblePosition = visibleReadingPosition() {
+            return visiblePosition
+        }
+
         if let destination = pdfView.currentDestination,
            let page = destination.page,
            let document = pdfView.document {
@@ -815,6 +902,23 @@ final class ReaderViewController: NSViewController {
               let document = pdfView.document else { return nil }
 
         return ReadingPosition(pageIndex: document.index(for: page), point: .zero)
+    }
+
+    private func visibleReadingPosition() -> ReadingPosition? {
+        guard let clipView = pdfClipView(),
+              let documentView = pdfDocumentView(),
+              let document = pdfView.document,
+              clipView.bounds.width > 0,
+              clipView.bounds.height > 0 else { return nil }
+
+        let visibleTopLeadingInDocument = NSPoint(
+            x: clipView.bounds.minX + 1,
+            y: clipView.bounds.maxY - 1
+        )
+        let visibleTopLeadingInPDF = pdfView.convert(visibleTopLeadingInDocument, from: documentView)
+        guard let page = pdfView.page(for: visibleTopLeadingInPDF, nearest: true) else { return nil }
+        let pointOnPage = pdfView.convert(visibleTopLeadingInPDF, to: page)
+        return ReadingPosition(pageIndex: document.index(for: page), point: pointOnPage)
     }
 
     private func scrollByViewportFraction(_ fraction: CGFloat) {
@@ -849,6 +953,12 @@ final class ReaderViewController: NSViewController {
 
     private func pdfScrollView() -> NSScrollView? {
         pdfView.subviews.first { $0 is NSScrollView } as? NSScrollView
+    }
+
+    private func configurePDFScrollBehaviorIfNeeded() {
+        guard let scrollView = pdfScrollView() else { return }
+        scrollView.verticalScrollElasticity = .none
+        scrollView.horizontalScrollElasticity = .none
     }
 
     private func pdfClipView() -> NSClipView? {
