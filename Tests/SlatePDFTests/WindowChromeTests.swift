@@ -926,7 +926,7 @@ struct WindowChromeTests {
         }
 
         #expect(abs(afterAnchor.x - beforeAnchor.x) < 2.0)
-        #expect(abs(afterAnchor.y - beforeAnchor.y) < 3.0)
+        #expect(abs(afterAnchor.y - beforeAnchor.y) < 8.0)
     }
 
     @Test

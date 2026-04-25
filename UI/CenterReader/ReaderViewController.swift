@@ -418,6 +418,10 @@ final class ReaderViewController: NSViewController {
             page: page,
             at: NSPoint(x: bounds.minX, y: bounds.maxY)
         )
+        // Suppress PDFViewPageChanged during jump: at go(to:) time the clipView
+        // hasn't updated yet, so currentReadingPosition() would capture stale
+        // coordinates and write them back to the store, causing a rollback.
+        isApplyingStoreState = true
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0
             context.allowsImplicitAnimation = false
@@ -428,6 +432,14 @@ final class ReaderViewController: NSViewController {
         syncPDFMarginBackgroundAfterPDFKitLayout()
         recenterDocumentViewIfNeeded()
         stabilizePDFScrollPosition()
+        isApplyingStoreState = false
+        // Now the layout is complete; update the store with the correct position.
+        if let session = targetSession(),
+           session.id == displayedSessionID,
+           let position = currentReadingPosition() {
+            documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+            displayedReadingPosition = position
+        }
         return true
     }
 
@@ -900,8 +912,10 @@ final class ReaderViewController: NSViewController {
     }
 
     func go(to selection: PDFSelection) {
+        isApplyingStoreState = true
         pdfView.setCurrentSelection(selection, animate: true)
         pdfView.go(to: selection)
+        isApplyingStoreState = false
     }
 
     func focus(on highlight: DocumentHighlightGroup) {
@@ -919,7 +933,9 @@ final class ReaderViewController: NSViewController {
         }
 
         guard let page = pdfView.document?.page(at: highlight.pageIndex) else { return }
+        isApplyingStoreState = true
         pdfView.go(to: page)
+        isApplyingStoreState = false
     }
 
     private func applyDisplayModeIfNeeded(_ session: DocumentSession) {
@@ -976,8 +992,10 @@ final class ReaderViewController: NSViewController {
             return
         }
 
+        isApplyingStoreState = true
         let destination = PDFDestination(page: page, at: session.lastReadPosition.point)
         pdfView.go(to: destination)
+        isApplyingStoreState = false
         displayedReadingPosition = session.lastReadPosition
     }
 
@@ -1203,7 +1221,8 @@ final class ReaderViewController: NSViewController {
     private func syncPDFMarginBackground() {
         let appearance = NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
-            let backgroundColor = NightModeStyle.pageBackgroundColor
+            let backgroundColor = NightModeStyle.pageBackgroundColor.usingColorSpace(.sRGB)
+                ?? NightModeStyle.pageBackgroundColor
 
             if let scrollView = pdfScrollView() {
                 scrollView.wantsLayer = true

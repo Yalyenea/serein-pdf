@@ -46,22 +46,9 @@ register:
     {{LSREGISTER}} -f "{{INSTALL_DIR}}/{{APP_NAME}}.app"
     @echo "registered {{BUNDLE_ID}} with Launch Services."
 
-# Set SlatePDF as the system default handler for PDFs.
-# Requires `duti` (brew install duti). If absent, fall back to opening
-# a sample PDF via SlatePDF, which prompts macOS to remember it.
-set-default:
-    @if command -v duti >/dev/null 2>&1; then \
-        duti -s {{BUNDLE_ID}} com.adobe.pdf all && \
-        echo "default PDF handler set to {{BUNDLE_ID}}"; \
-    else \
-        echo "duti not found. Install: brew install duti"; \
-        echo "or set default manually: Finder -> Get Info on a PDF -> Open With -> SlatePDF -> Change All..."; \
-        exit 1; \
-    fi
-
-# Full release flow: build .app -> install -> register -> set-default.
-ship: install register set-default
-    @echo "done. SlatePDF is installed and set as your default PDF viewer."
+# Full release flow: build .app -> install -> register.
+ship: install register
+    @echo "done. SlatePDF is installed."
 
 # Remove build artifacts and the installed .app.
 clean:
