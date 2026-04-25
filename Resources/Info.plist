@@ -12,6 +12,8 @@
     <string>AppIcon</string>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
+    <key>NSAccentColorName</key>
+    <string>AccentColor</string>
     <key>CFBundleIdentifier</key>
     <string>local.yfff.SlatePDF</string>
     <key>CFBundleInfoDictionaryVersion</key>

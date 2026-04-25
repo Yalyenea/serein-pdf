@@ -23,6 +23,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
+- Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
 - Pink-first highlight workflow (`a` to highlight, with a warm Rose Pine-style inverted mode available in Rose Pine Moon)
 - Highlights can carry comments in the right sidebar, and exports include those comments
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection

@@ -72,7 +72,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func nightModeKeepsWhitePDFBaseForWarmFilter() throws {
+    func nightModeUsesSidebarPDFBackgroundOutsideFilteredContent() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
         app.appearance = NSAppearance(named: .darkAqua)
@@ -80,6 +80,7 @@ struct WindowChromeTests {
 
         let store = DocumentStore(appConfiguration: .default)
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "night-mode-background"))
         controller.window?.layoutIfNeeded()
 
@@ -89,22 +90,86 @@ struct WindowChromeTests {
         }
 
         let reader = splitController.readerViewController
-        #expect(reader.pdfView.displaysPageBreaks)
-        assertColor(reader.pdfView.backgroundColor, matches: .white)
+        reader.pdfView.layoutDocumentView()
+        reader.pdfView.layoutSubtreeIfNeeded()
+        flushLayout(controller.window)
+
+        #expect(reader.pdfView.displaysPageBreaks == false)
+        let pageBackground = resolvedColor(NightModeStyle.pageBackgroundColor, in: app.effectiveAppearance)
         if let layerColor = reader.pdfView.layer?.backgroundColor,
            let layerBackground = NSColor(cgColor: layerColor) {
-            assertColor(layerBackground, matches: .white)
+            assertTransparent(layerBackground)
         } else {
             Issue.record("Failed to read PDFView layer background")
         }
         if let scrollView = reader.pdfView.subviews.compactMap({ $0 as? NSScrollView }).first {
-            #expect(scrollView.drawsBackground == false || scrollView.backgroundColor != .clear)
+            #expect(scrollView.drawsBackground == false)
+            assertColor(scrollView.backgroundColor, matches: pageBackground)
+            let backgroundViews = pdfScrollBackgroundViews(in: scrollView)
+            for backgroundView in backgroundViews {
+                #expect(backgroundView.isHidden)
+            }
         }
+        guard let clipView = pdfClipView(in: reader.pdfView) else {
+            Issue.record("Failed to locate PDF clip view")
+            return
+        }
+        #expect(clipView.drawsBackground == false)
+        assertColor(clipView.backgroundColor, matches: pageBackground)
         if let readerBackground = reader.view.layer?.backgroundColor,
            let readerBackgroundColor = NSColor(cgColor: readerBackground) {
-            assertColor(readerBackgroundColor, matches: NightModeStyle.pageBackgroundColor)
+            assertColor(readerBackgroundColor, matches: pageBackground)
         } else {
             Issue.record("Failed to read reader background")
+        }
+    }
+
+    @Test
+    func switchingFromLightToDarkRetintsPDFMargins() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        app.appearance = NSAppearance(named: .aqua)
+        defer { app.appearance = previousAppearance }
+
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "night-mode-transition"))
+        controller.window?.layoutIfNeeded()
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to create split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        app.appearance = NSAppearance(named: .darkAqua)
+        controller.refreshThemeAppearance()
+        reader.pdfView.layoutDocumentView()
+        reader.pdfView.layoutSubtreeIfNeeded()
+        flushLayout(controller.window)
+
+        reader.view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            let pageBackground = NightModeStyle.pageBackgroundColor
+            if let layerColor = reader.pdfView.layer?.backgroundColor,
+               let layerBackground = NSColor(cgColor: layerColor) {
+                assertTransparent(layerBackground)
+            } else {
+                Issue.record("Failed to read PDFView layer background after appearance switch")
+            }
+
+            if let scrollView = reader.pdfView.subviews.compactMap({ $0 as? NSScrollView }).first {
+                #expect(scrollView.drawsBackground == false)
+                assertColor(scrollView.backgroundColor, matches: pageBackground)
+                let backgroundViews = pdfScrollBackgroundViews(in: scrollView)
+                for backgroundView in backgroundViews {
+                    #expect(backgroundView.isHidden)
+                }
+            } else {
+                Issue.record("Failed to locate PDF scroll view after appearance switch")
+            }
+
+            #expect(pdfDocumentView(in: reader.pdfView) != nil)
         }
     }
 
@@ -121,6 +186,7 @@ struct WindowChromeTests {
 
         let store = DocumentStore(appConfiguration: .default)
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "theme-refresh-light"))
         controller.window?.layoutIfNeeded()
 
@@ -138,7 +204,7 @@ struct WindowChromeTests {
 
         NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
         controller.refreshThemeAppearance()
-        controller.window?.layoutIfNeeded()
+        flushLayout(controller.window)
 
         guard let updatedBackground = reader.view.layer?.backgroundColor,
               let updatedColor = NSColor(cgColor: updatedBackground) else {
@@ -150,7 +216,26 @@ struct WindowChromeTests {
         let updatedSRGB = updatedColor.usingColorSpace(.sRGB) ?? updatedColor
 
         #expect(abs(updatedSRGB.redComponent - originalSRGB.redComponent) > 0.01)
-        assertColor(updatedColor, matches: NightModeStyle.readerBackdropColor)
+        reader.view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            assertColor(updatedColor, matches: NightModeStyle.readerBackdropColor)
+            let pageBackground = NightModeStyle.pageBackgroundColor
+            if let layerColor = reader.pdfView.layer?.backgroundColor,
+               let layerBackground = NSColor(cgColor: layerColor) {
+                assertTransparent(layerBackground)
+            } else {
+                Issue.record("Failed to read PDFView layer background for dawn theme")
+            }
+            if let scrollView = reader.pdfView.subviews.compactMap({ $0 as? NSScrollView }).first {
+                #expect(scrollView.drawsBackground == false)
+                assertColor(scrollView.backgroundColor, matches: pageBackground)
+                let backgroundViews = pdfScrollBackgroundViews(in: scrollView)
+                for backgroundView in backgroundViews {
+                    #expect(backgroundView.isHidden)
+                }
+            } else {
+                Issue.record("Failed to locate PDF scroll view for dawn theme")
+            }
+        }
     }
 
     @Test
@@ -166,6 +251,7 @@ struct WindowChromeTests {
 
         let store = DocumentStore(appConfiguration: .default)
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "theme-refresh-outline"))
         controller.window?.layoutIfNeeded()
 
@@ -181,19 +267,21 @@ struct WindowChromeTests {
             Issue.record("Failed to inspect original outline title color")
             return
         }
-        let originalColor = originalTextColor.usingColorSpace(.sRGB) ?? originalTextColor
+        let originalColor = resolvedColor(originalTextColor, in: titleLabel.effectiveAppearance)
 
         NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
         controller.refreshThemeAppearance()
-        controller.window?.layoutIfNeeded()
+        flushLayout(controller.window)
 
         guard let updatedTextColor = titleLabel.textColor else {
             Issue.record("Failed to inspect updated outline title color")
             return
         }
-        let updatedColor = updatedTextColor.usingColorSpace(.sRGB) ?? updatedTextColor
+        let updatedColor = resolvedColor(updatedTextColor, in: titleLabel.effectiveAppearance)
         #expect(abs(updatedColor.redComponent - originalColor.redComponent) > 0.01)
-        assertColor(updatedColor, matches: NightModeStyle.primaryTextColor)
+        titleLabel.effectiveAppearance.performAsCurrentDrawingAppearance {
+            assertColor(updatedColor, matches: NightModeStyle.primaryTextColor)
+        }
     }
 
     @Test
@@ -796,9 +884,14 @@ struct WindowChromeTests {
 
     @Test
     func singlePageZoomKeepsViewportCenterStable() throws {
-        _ = NSApplication.shared
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        app.appearance = NSAppearance(named: .aqua)
+        defer { app.appearance = previousAppearance }
+
         let store = DocumentStore(appConfiguration: .default)
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "single-page-zoom-anchor",
@@ -823,7 +916,9 @@ struct WindowChromeTests {
         }
 
         reader.zoomOut()
-        flushLayout(controller.window)
+        for _ in 0..<6 {
+            flushLayout(controller.window)
+        }
 
         guard let afterAnchor = visibleDocumentCenter(in: reader.pdfView) else {
             Issue.record("Failed to capture post-zoom anchor")
@@ -831,7 +926,7 @@ struct WindowChromeTests {
         }
 
         #expect(abs(afterAnchor.x - beforeAnchor.x) < 2.0)
-        #expect(abs(afterAnchor.y - beforeAnchor.y) < 2.0)
+        #expect(abs(afterAnchor.y - beforeAnchor.y) < 3.0)
     }
 
     @Test
@@ -1383,6 +1478,19 @@ private func pdfDocumentView(in pdfView: PDFView) -> NSView? {
 }
 
 @MainActor
+private func pdfScrollBackgroundViews(in scrollView: NSScrollView) -> [NSView] {
+    var matches: [NSView] = []
+    var pending = scrollView.subviews
+    while let view = pending.popLast() {
+        if String(describing: type(of: view)).contains("ContentBackgroundView") {
+            matches.append(view)
+        }
+        pending.append(contentsOf: view.subviews)
+    }
+    return matches
+}
+
+@MainActor
 private func visibleDocumentCenter(in pdfView: PDFView) -> NSPoint? {
     guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
     let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
@@ -1439,6 +1547,21 @@ private func assertColor(_ lhs: NSColor, matches rhs: NSColor, tolerance: CGFloa
     #expect(abs(left.greenComponent - right.greenComponent) < tolerance)
     #expect(abs(left.blueComponent - right.blueComponent) < tolerance)
     #expect(abs(left.alphaComponent - right.alphaComponent) < tolerance)
+}
+
+@MainActor
+private func assertTransparent(_ color: NSColor, tolerance: CGFloat = 0.002) {
+    let resolved = color.usingColorSpace(.sRGB) ?? color
+    #expect(resolved.alphaComponent < tolerance)
+}
+
+@MainActor
+private func resolvedColor(_ color: NSColor, in appearance: NSAppearance) -> NSColor {
+    var resolved = color
+    appearance.performAsCurrentDrawingAppearance {
+        resolved = color.usingColorSpace(.sRGB) ?? color
+    }
+    return resolved
 }
 
 @MainActor

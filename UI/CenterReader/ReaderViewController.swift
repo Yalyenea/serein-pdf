@@ -20,10 +20,29 @@ private struct PDFViewportAnchor {
     let pagePoint: NSPoint
 }
 
+final class ReaderPDFView: PDFView {
+    var onLayoutCompleted: (() -> Void)?
+
+    override func layout() {
+        super.layout()
+        onLayoutCompleted?()
+    }
+
+    override func layoutDocumentView() {
+        super.layoutDocumentView()
+        onLayoutCompleted?()
+    }
+
+    override func layoutSubtreeIfNeeded() {
+        super.layoutSubtreeIfNeeded()
+        onLayoutCompleted?()
+    }
+}
+
 final class ReaderViewController: NSViewController {
     let documentStore: DocumentStore
     let windowID: UUID
-    let pdfView = PDFView()
+    let pdfView = ReaderPDFView()
     var onFocusRequested: (() -> Void)?
     var onFindActionRequested: ((FindNavigationAction) -> Void)?
     private let pdfContainerView = PDFContainerView()
@@ -80,6 +99,11 @@ final class ReaderViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        pdfView.onLayoutCompleted = { [weak self] in
+            self?.syncPDFMarginBackground()
+            self?.applyThemeFilter()
+        }
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDocumentStoreDidChange),
@@ -131,6 +155,7 @@ final class ReaderViewController: NSViewController {
     override func viewDidLayout() {
         super.viewDidLayout()
         applyOverviewInsets()
+        syncPDFMarginBackgroundAfterPDFKitLayout()
 
         guard let session = targetSession(),
               displayedSessionID == session.id,
@@ -199,6 +224,7 @@ final class ReaderViewController: NSViewController {
         pdfView.backgroundColor = NSColor.white
         pdfView.isHidden = true
         pdfView.displaysPageBreaks = true
+        pdfView.pageShadowsEnabled = false
 
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
         emptyStateLabel.font = .systemFont(ofSize: 18, weight: .medium)
@@ -314,8 +340,12 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
+        let viewportAnchor = captureViewportAnchor()
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
+        if let viewportAnchor {
+            restoreViewportAnchorAfterStoreUpdate(viewportAnchor)
+        }
     }
 
     func zoomOut() {
@@ -326,8 +356,12 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
+        let viewportAnchor = captureViewportAnchor()
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
+        if let viewportAnchor {
+            restoreViewportAnchorAfterStoreUpdate(viewportAnchor)
+        }
     }
 
     func goToNextPage() {
@@ -391,6 +425,7 @@ final class ReaderViewController: NSViewController {
         }
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
+        syncPDFMarginBackgroundAfterPDFKitLayout()
         recenterDocumentViewIfNeeded()
         stabilizePDFScrollPosition()
         return true
@@ -977,11 +1012,13 @@ final class ReaderViewController: NSViewController {
         pdfView.scaleFactor = scaleFactor
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
+        syncPDFMarginBackgroundAfterPDFKitLayout()
         recenterDocumentViewIfNeeded()
         if let viewportAnchor {
             restoreViewportAnchor(viewportAnchor)
             pdfView.layoutDocumentView()
             pdfView.layoutSubtreeIfNeeded()
+            syncPDFMarginBackgroundAfterPDFKitLayout()
             recenterDocumentViewIfNeeded()
             restoreViewportAnchor(viewportAnchor)
         }
@@ -1090,6 +1127,7 @@ final class ReaderViewController: NSViewController {
 
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
+        syncPDFMarginBackgroundAfterPDFKitLayout()
 
         var targetBounds = clipView.bounds
         targetBounds.origin.y += clipView.bounds.height * fraction
@@ -1120,11 +1158,25 @@ final class ReaderViewController: NSViewController {
         pdfView.subviews.first { $0 is NSScrollView } as? NSScrollView
     }
 
+    private func pdfScrollBackgroundViews() -> [NSView] {
+        guard let scrollView = pdfScrollView() else { return [] }
+        var matches: [NSView] = []
+        var pending = scrollView.subviews
+        while let view = pending.popLast() {
+            if String(describing: type(of: view)).contains("ContentBackgroundView") {
+                matches.append(view)
+            }
+            pending.append(contentsOf: view.subviews)
+        }
+        return matches
+    }
+
     private func configurePDFScrollBehaviorIfNeeded() {
         guard let scrollView = pdfScrollView() else { return }
         scrollView.verticalScrollElasticity = .none
         scrollView.horizontalScrollElasticity = .none
         scrollView.usesPredominantAxisScrolling = true
+        syncPDFMarginBackgroundAfterPDFKitLayout()
     }
 
     private func pdfClipView() -> NSClipView? {
@@ -1133,6 +1185,58 @@ final class ReaderViewController: NSViewController {
 
     private func pdfDocumentView() -> NSView? {
         pdfClipView()?.documentView
+    }
+
+    private func pdfPageViews() -> [NSView] {
+        guard let documentView = pdfDocumentView() else { return [] }
+        var matches: [NSView] = []
+        var pending = documentView.subviews
+        while let view = pending.popLast() {
+            if String(describing: type(of: view)).contains("PDFPageView") {
+                matches.append(view)
+            }
+            pending.append(contentsOf: view.subviews)
+        }
+        return matches
+    }
+
+    private func syncPDFMarginBackground() {
+        let appearance = NSApp.effectiveAppearance
+        appearance.performAsCurrentDrawingAppearance {
+            let backgroundColor = NightModeStyle.pageBackgroundColor
+
+            if let scrollView = pdfScrollView() {
+                scrollView.wantsLayer = true
+                scrollView.drawsBackground = false
+                scrollView.backgroundColor = backgroundColor
+                scrollView.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+
+            for backgroundView in pdfScrollBackgroundViews() {
+                backgroundView.isHidden = true
+                backgroundView.wantsLayer = true
+                backgroundView.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+
+            if let clipView = pdfClipView() {
+                clipView.wantsLayer = true
+                clipView.drawsBackground = false
+                clipView.backgroundColor = backgroundColor
+                clipView.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+
+            if let documentView = pdfDocumentView() {
+                documentView.wantsLayer = true
+                documentView.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+        }
+    }
+
+    private func syncPDFMarginBackgroundAfterPDFKitLayout() {
+        syncPDFMarginBackground()
+        DispatchQueue.main.async { [weak self] in
+            self?.syncPDFMarginBackground()
+        }
     }
 
     private func recenterDocumentViewIfNeeded() {
@@ -1209,6 +1313,19 @@ final class ReaderViewController: NSViewController {
         scrollView.reflectScrolledClipView(clipView)
     }
 
+    private func restoreViewportAnchorAfterStoreUpdate(_ anchor: PDFViewportAnchor) {
+        guard let document = pdfView.document,
+              document.index(for: anchor.page) != NSNotFound else { return }
+
+        for _ in 0..<3 {
+            pdfView.layoutDocumentView()
+            pdfView.layoutSubtreeIfNeeded()
+            syncPDFMarginBackground()
+            recenterDocumentViewIfNeeded()
+            restoreViewportAnchor(anchor)
+        }
+    }
+
 
     @discardableResult
     private func highlightCurrentSelection() -> Bool {
@@ -1233,16 +1350,22 @@ final class ReaderViewController: NSViewController {
 
     private func applyReaderAppearance() {
         let isNightModeEnabled = themeManager.readerState.isNightModeEnabled
-        let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
-        view.layer?.backgroundColor = pageBackground.cgColor
-        pdfView.backgroundColor = .white
-        pdfView.layer?.backgroundColor = NSColor.white.cgColor
+        let appearance = NSApp.effectiveAppearance
+        appearance.performAsCurrentDrawingAppearance {
+            let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
+            pdfView.displaysPageBreaks = !isNightModeEnabled
+            pdfView.pageShadowsEnabled = !isNightModeEnabled
+            view.layer?.backgroundColor = pageBackground.cgColor
+            pdfView.backgroundColor = .clear
+            pdfView.layer?.backgroundColor = NSColor.clear.cgColor
+            overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
+            emptyStateLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
+        }
         pdfView.isHidden = false
         pdfContainerView.setNightModeEnabled(isNightModeEnabled)
-        overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
         findBarView.refreshChromeColors()
-        emptyStateLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
         applyThemeFilter()
+        syncPDFMarginBackgroundAfterPDFKitLayout()
         updateHighlightModeBanner()
     }
 
@@ -1255,12 +1378,13 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyThemeFilter() {
-        let filters = NightModeStyle.makePDFContentFilters(for: view.effectiveAppearance)
-        guard filters.isEmpty == false else {
-            pdfView.contentFilters = []
-            return
-        }
+        let filters = NightModeStyle.makePDFContentFilters(for: NSApp.effectiveAppearance)
         pdfView.contentFilters = filters
+        pdfDocumentView()?.contentFilters = []
+        for pageView in pdfPageViews() {
+            pageView.contentFilters = []
+            pageView.layer?.filters = []
+        }
     }
 
 }

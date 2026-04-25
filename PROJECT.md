@@ -229,64 +229,100 @@ flowchart LR
 ## 6. 项目结构
 
 ```text
-App/
-  AppDelegate.swift
-  AppMain.swift
-  MainWindowController.swift
-  SplitViewController.swift
-  SettingsWindowController.swift
-  ReaderShortcutWindow.swift
+App/                                      # AppKit 入口、窗口与设置/启动器
+  AppMain.swift                           # @main 入口,构造 NSApplication 与 AppDelegate 并 run
+  AppDelegate.swift                       # 应用委托:菜单、窗口生命周期、配置加载、自动保存驱动
+  MainWindowController.swift              # 主窗口控制器:工具栏、titlebar tabs 宿主、demo/immersive 模式
+  ReaderShortcutWindow.swift              # 自定义 NSWindow,拦截 keyDown 分发 plain(无 modifier)快捷键
+  SplitViewController.swift               # 三栏 NSSplitViewController:左 tabs / 中 reader / 右 sidebar
+  SettingsWindowController.swift          # 设置窗口:外观 / 阅读 / 批注 / 快捷键 配置 UI
+  RecentFilesPaletteController.swift      # Spotlight 风格最近文件启动器的窗口与交互控制器
+  RecentFilesPaletteState.swift           # 最近文件启动器的查询匹配与多选状态(纯模型)
 
-Core/
-  AppConfiguration.swift
-  DocumentAnnotations.swift
-  DocumentSearch.swift
-  DocumentSession.swift
-  DocumentStore.swift
-  DocumentStorePersistence.swift
-  ReaderState.swift
-  ReaderDisplayMode.swift
-  ReadingPosition.swift
-  ReadingStateStore.swift
-  RecentFilesStore.swift
-  OutlineNode.swift
-  OutlineExtractor.swift
-  WindowWorkspace.swift
+Core/                                     # 文档 / 窗口 / 配置 / 持久化 核心模型
+  AppConfiguration.swift                  # config.toml schema、默认值与 AppConfigurationStore 读写
+  DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
+  DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 分屏状态
+  DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等
+  DocumentAnnotations.swift               # 高亮分组 / 缓存 / 导出 相关数据模型
+  DocumentSearch.swift                    # PDF 全文匹配与 preview snippet 构造(DocumentSearchService)
+  WindowWorkspace.swift                   # 单窗口状态:tab 顺序、侧栏、搜索、分屏、焦点 pane
+  OutlineExtractor.swift                  # PDFDocument.outlineRoot → [OutlineNode] 转换
+  OutlineNode.swift                       # Outline 树节点数据结构
+  ReaderState.swift                       # 阅读区 UI 状态(夜间、高亮模式、高亮颜色)
+  ReaderDisplayMode.swift                 # 显示模式 / 缩放模式 / ShortcutCommand 枚举
+  ReadingPosition.swift                   # 页码 + 页内坐标的阅读位置
+  ReadingStateStore.swift                 # 每 PDF 的阅读状态 UserDefaults 持久化
+  RecentFilesStore.swift                  # 最近文件 URL 栈 UserDefaults 持久化
+  PDFTextSanitizer.swift                  # PDF 文本清洗(去控制字符、折叠空白)
 
-UI/LeftTabs/
-  VerticalTabsViewController.swift
-  VerticalTabItemView.swift
+UI/LeftTabs/                              # 左侧垂直 tabs
+  VerticalTabsViewController.swift        # 左侧 tabs 列表视图控制器,含可选最近文件 footer
+  VerticalTabItemView.swift               # 单个垂直 tab 条目视图
 
-UI/TitlebarTabs/
-  TitlebarTabsController.swift
-  TitlebarTabItemView.swift
+UI/TitlebarTabs/                          # 标题栏水平 tabs
+  TitlebarTabsController.swift            # 标题栏 tabs 控制器,挂在 NSToolbarItem 上
+  TitlebarTabItemView.swift               # 单个水平 tab 条目视图
 
-UI/CenterReader/
-  ReaderViewController.swift
-  ReaderWorkspaceViewController.swift
-  PDFContainerView.swift
-  ReaderShortcutsController.swift
-  FindBarView.swift
+UI/CenterReader/                          # 中栏阅读区
+  ReaderWorkspaceViewController.swift     # 中栏 workspace:单 / 双 Reader 分屏 + 焦点 pane
+  ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
+  PDFContainerView.swift                  # PDFView 宿主,切夜间模式时同步背景色
+  ReaderShortcutsController.swift         # plain 快捷键(j/k/g/…)分发
+  FindBarView.swift                       # find bar:查询框 + scope 切换 + 匹配导航按钮
 
-UI/RightOutline/
-  AnnotationsViewController.swift
-  OutlineViewController.swift
-  RightSidebarViewController.swift
-  SearchResultsViewController.swift
+UI/RightOutline/                          # 右栏 outline / pages / search / annotations
+  RightSidebarViewController.swift        # 右栏容器,segmented 切换四种子模式
+  OutlineViewController.swift             # 目录树 NSOutlineView
+  SearchResultsViewController.swift       # 搜索命中列表,支持跨 session 跳转
+  AnnotationsViewController.swift         # 批注列表与 comment 编辑
 
-UI/Shared/
-  PlaceholderViewController.swift
+UI/Shared/                                # 跨栏复用视图
+  PlaceholderViewController.swift         # 侧栏空状态 / 占位视图
 
-Features/Annotations/
-  HighlightExporter.swift
-  HighlightColor.swift
-  HighlightService.swift
-  HighlightUndoOperation.swift
+Features/Annotations/                     # 高亮批注功能域
+  HighlightColor.swift                    # 高亮颜色枚举(pink / yellow / green)与相近色匹配
+  HighlightService.swift                  # 应用 / 删除 / 重建 高亮的核心逻辑
+  HighlightExporter.swift                 # 高亮导出 Markdown / Plain / JSON
+  HighlightOCRService.swift               # 扫描件高亮走 Vision OCR 提取 snippet
+  HighlightUndoOperation.swift            # 撤销栈元素:added / removed
 
-Features/Theme/
-  ThemeManager.swift
+Features/Theme/                           # 主题与夜间模式
+  ThemeManager.swift                      # ReaderState 包装:夜间、高亮模式、高亮颜色
+  NightModeStyle.swift                    # 夜间反色与 Rose Pine Moon 色彩映射样式
 
-Tests/SlatePDFTests/
+Resources/                                # 资源
+  Info.plist                              # Bundle 信息与 PDF 文档类型声明
+  AppIcon.icns                            # 应用图标(发布)
+  AppIcon.png                             # 应用图标(源文件)
+
+Scripts/                                  # 打包脚本
+  make-app.sh                             # 构建 .app(ad-hoc 签名)
+  make-dmg.sh                             # 打包 .dmg
+  make-icon.sh                            # 生成 .icns 图标
+
+Tests/SlatePDFTests/                      # Swift Testing + XCTest 测试套件
+  AppConfigurationTests.swift             # 配置加载 / 写回 / shortcut 冲突
+  DocumentStoreTests.swift                # 多文档 / 多窗口 / 分屏 / 搜索 scope 等核心行为
+  ReadingStateStoreTests.swift            # 阅读状态持久化
+  RecentFilesStoreTests.swift             # 最近文件栈
+  OutlineExtractorTests.swift             # PDF outline 解析
+  OutlineViewControllerTests.swift        # 目录树视图交互
+  VerticalTabsViewControllerTests.swift   # 左栏 tabs 行为
+  TitlebarTabsControllerTests.swift       # (若存在)标题栏 tabs 行为,否则见 WindowChromeTests
+  RightSidebarViewControllerTests.swift   # 右栏 segmented 切换
+  SearchNavigationTests.swift             # 搜索结果导航与跨 session 跳转
+  FindBarViewTests.swift                  # find bar 输入 / scope / 导航
+  AnnotationsViewControllerTests.swift    # 批注列表 / comment 编辑
+  AnnotationSaveTests.swift               # 手动 / 自动批注保存策略
+  HighlightServiceTests.swift             # 高亮 apply / remove / 分组
+  HighlightExporterTests.swift            # 三种导出格式
+  HighlightUndoTests.swift                # 撤销栈上限与 added/removed 还原
+  NightModeStyleTests.swift               # 夜间反色映射
+  ReaderShortcutsControllerTests.swift    # plain 快捷键分发与文本上下文让路
+  RecentFilesPaletteStateTests.swift      # 启动器模型的过滤 / 多选
+  RecentFilesPaletteControllerTests.swift # 启动器控制器交互
+  WindowChromeTests.swift                 # 窗口 chrome / 工具栏 / titlebar tabs 行为
 ```
 
 ## 7. 已完成里程碑(概览)
