@@ -8,6 +8,7 @@ private final class CollapsibleContainerView: NSView {
 }
 
 final class RightSidebarViewController: NSViewController {
+    private static let contentInset: CGFloat = 8
     let documentStore: DocumentStore
     let windowID: UUID
     let outlineViewController: OutlineViewController
@@ -158,9 +159,9 @@ final class RightSidebarViewController: NSViewController {
         pagesModeConstraints = [
             thumbnailView.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             thumbnailView.leadingAnchor.constraint(
-                greaterThanOrEqualTo: container.leadingAnchor),
+                greaterThanOrEqualTo: container.leadingAnchor, constant: Self.contentInset),
             thumbnailView.trailingAnchor.constraint(
-                lessThanOrEqualTo: container.trailingAnchor),
+                lessThanOrEqualTo: container.trailingAnchor, constant: -Self.contentInset),
             thumbnailView.topAnchor.constraint(equalTo: modeSegmented.bottomAnchor, constant: 10),
             thumbnailView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             widthConstraint,
@@ -248,7 +249,7 @@ final class RightSidebarViewController: NSViewController {
     }
 
     private func adjustThumbnailSizeForWidth() {
-        let available = max(view.bounds.width - 8, 32)
+        let available = max(view.bounds.width - Self.contentInset * 2, 32)
         let visibleHeight = max(view.bounds.height - 56, 240)
         let rowSpacing: CGFloat = 6
         let maxRowHeight = max(visibleHeight / 5 - rowSpacing, 70)

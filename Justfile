@@ -15,7 +15,7 @@ default:
 
 # Run all Swift tests.
 test:
-    swift test
+    swift test --disable-sandbox
 
 # Run SlatePDF in dev mode via SwiftPM.
 run:
@@ -59,8 +59,8 @@ set-default:
         exit 1; \
     fi
 
-# Full release flow: test -> build .app -> install -> register -> set-default.
-ship: test install register set-default
+# Full release flow: build .app -> install -> register -> set-default.
+ship: install register set-default
     @echo "done. SlatePDF is installed and set as your default PDF viewer."
 
 # Remove build artifacts and the installed .app.

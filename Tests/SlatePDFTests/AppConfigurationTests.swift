@@ -35,6 +35,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.goToLastPage], KeyboardShortcut(key: "g", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.navigateBack], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.navigateForward], KeyboardShortcut(key: "]", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.findAllOpen], KeyboardShortcut(key: "f", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findNextMatch], KeyboardShortcut(key: "g", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "g", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
@@ -86,6 +87,7 @@ go_to_last_page = "shift+l"
 find_previous_match = "shift+n"
 show_recent_files_palette = "command+space"
 open_containing_folder = "command+option+r"
+find_all_open = "command+option+f"
 
 [layout]
 show_recent_files_in_sidebar = false
@@ -113,6 +115,7 @@ show_recent_files_in_sidebar = false
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "n", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.findAllOpen], KeyboardShortcut(key: "f", modifiers: [.command, .option]))
         XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
     }
 
@@ -156,6 +159,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("go_to_last_page = \"shift+g\""))
         XCTAssertTrue(content.contains("navigate_back = \"command+[\""))
         XCTAssertTrue(content.contains("navigate_forward = \"command+]\""))
+        XCTAssertTrue(content.contains("find_all_open = \"command+shift+f\""))
         XCTAssertTrue(content.contains("find_next_match = \"command+g\""))
         XCTAssertTrue(content.contains("find_previous_match = \"command+shift+g\""))
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))

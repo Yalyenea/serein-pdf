@@ -6,14 +6,19 @@ import Testing
 struct NightModeStyleTests {
     @Test
     @MainActor
-    func rosePineNightModeMapsBlackAndWhiteToThemeEndpoints() {
+    func rosePineNightModeMapsPDFKitPageGrayAndBlackToThemeEndpoints() {
         NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
         let background = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
         let foreground = resolve(NightModeStyle.pageForegroundColor, in: .darkAqua)
-        let transformedWhite = NightModeStyle.transformedColor(for: .white, background: background, foreground: foreground)
+        let transformedPageGray = NightModeStyle.transformedColor(
+            for: NSColor(calibratedWhite: 0.84, alpha: 1.0),
+            background: background,
+            foreground: foreground,
+            backgroundLuminance: 0.84
+        )
         let transformedBlack = NightModeStyle.transformedColor(for: .black, background: background, foreground: foreground)
 
-        assertColor(transformedWhite, matches: background, tolerance: 0.08)
+        assertColor(transformedPageGray, matches: background, tolerance: 0.08)
         assertColor(transformedBlack, matches: foreground, tolerance: 0.03)
     }
 
@@ -52,12 +57,7 @@ struct NightModeStyleTests {
         assertColor(selected, matches: divider)
         assertColor(stroke, matches: NSColor(calibratedRed: 110.0 / 255.0, green: 106.0 / 255.0, blue: 134.0 / 255.0, alpha: 1.0))
 
-        #expect(split.redComponent > page.redComponent)
-        #expect(split.greenComponent > page.greenComponent)
-        #expect(split.blueComponent > page.blueComponent)
-        #expect(split.redComponent - page.redComponent < 0.045)
-        #expect(split.greenComponent - page.greenComponent < 0.045)
-        #expect(split.blueComponent - page.blueComponent < 0.045)
+        assertColor(page, matches: split)
     }
 
     @Test

@@ -26,19 +26,30 @@ private final class AnnotationColorDotView: NSView {
     }
 }
 
-private final class AnnotationHighlightCellView: NSTableCellView {
+final class AnnotationHighlightCellView: NSTableCellView {
+    private static let titleFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+    private static let subtitleFont = NSFont.systemFont(ofSize: 11)
+    private static let horizontalPadding: CGFloat = 10
+    private static let contentLeadingInset: CGFloat = 26
+    private static let contentTrailingInset: CGFloat = 10
+    private static let verticalPadding: CGFloat = 6
+    private static let subtitleSpacing: CGFloat = 2
     private let colorDotView = AnnotationColorDotView(frame: NSRect(x: 0, y: 0, width: 8, height: 8))
-    private let titleLabel = NSTextField(labelWithString: "")
+    private let titleLabel = NSTextField(wrappingLabelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
 
-        titleLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.font = Self.titleFont
+        titleLabel.maximumNumberOfLines = 0
+        titleLabel.lineBreakMode = .byWordWrapping
+        titleLabel.cell?.wraps = true
+        titleLabel.cell?.usesSingleLineMode = false
 
-        subtitleLabel.font = .systemFont(ofSize: 11)
+        subtitleLabel.font = Self.subtitleFont
         subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.maximumNumberOfLines = 1
         subtitleLabel.lineBreakMode = .byTruncatingTail
 
         colorDotView.translatesAutoresizingMaskIntoConstraints = false
@@ -50,18 +61,19 @@ private final class AnnotationHighlightCellView: NSTableCellView {
         addSubview(subtitleLabel)
 
         NSLayoutConstraint.activate([
-            colorDotView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            colorDotView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalPadding),
             colorDotView.topAnchor.constraint(equalTo: topAnchor, constant: 11),
             colorDotView.widthAnchor.constraint(equalToConstant: 8),
             colorDotView.heightAnchor.constraint(equalToConstant: 8),
 
             titleLabel.leadingAnchor.constraint(equalTo: colorDotView.trailingAnchor, constant: 8),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.contentTrailingInset),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: Self.verticalPadding),
 
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
             subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
+            subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -Self.verticalPadding),
         ])
     }
 
@@ -73,11 +85,44 @@ private final class AnnotationHighlightCellView: NSTableCellView {
     func configure(with group: DocumentHighlightGroup) {
         colorDotView.color = group.color.nsColor
         titleLabel.stringValue = group.snippet
-        subtitleLabel.stringValue = group.commentPreview
+        let hasComment = group.normalizedComment.isEmpty == false
+        subtitleLabel.stringValue = hasComment ? group.commentPreview : ""
+        subtitleLabel.isHidden = hasComment == false
+    }
+
+    static func preferredHeight(for group: DocumentHighlightGroup, width: CGFloat) -> CGFloat {
+        let contentWidth = max(
+            width - contentLeadingInset - contentTrailingInset,
+            120
+        )
+        let titleHeight = boundingHeight(for: group.snippet, font: titleFont, width: contentWidth)
+        let subtitleHeight: CGFloat
+        if group.normalizedComment.isEmpty {
+            subtitleHeight = 0
+        } else {
+            subtitleHeight = lineHeight(for: subtitleFont) + subtitleSpacing
+        }
+        return max(46, ceil(verticalPadding * 2 + titleHeight + subtitleHeight))
+    }
+
+    private static func boundingHeight(for text: String, font: NSFont, width: CGFloat) -> CGFloat {
+        let rect = (text as NSString).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font]
+        )
+        return ceil(rect.height)
+    }
+
+    private static func lineHeight(for font: NSFont) -> CGFloat {
+        ceil(font.ascender - font.descender + font.leading)
     }
 }
 
 final class AnnotationsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSTextViewDelegate {
+    private static let horizontalInset: CGFloat = 8
+    private static let textInset: CGFloat = 12
+
     let documentStore: DocumentStore
     let windowID: UUID
     var onActivateHighlight: ((DocumentHighlightGroup) -> Void)?
@@ -97,6 +142,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     private let clearCommentButton = NSButton(title: "Clear", target: nil, action: nil)
     private var rows: [AnnotationRow] = []
     private var currentGroupID: String?
+    private var lastMeasuredTableWidth: CGFloat = 0
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -125,13 +171,20 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         NotificationCenter.default.removeObserver(self)
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        syncTableColumnWidthAndRowHeights()
+    }
+
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
         container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
 
         column.isEditable = false
+        column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
+        tableView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         tableView.headerView = nil
         tableView.rowSizeStyle = .small
         tableView.rowHeight = 46
@@ -152,28 +205,40 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         scrollView.autohidesScrollers = true
         scrollView.documentView = tableView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        scrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
         emptyStateLabel.textColor = .secondaryLabelColor
         emptyStateLabel.maximumNumberOfLines = 0
         emptyStateLabel.alignment = .center
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        emptyStateLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         detailDivider.boxType = .separator
         detailDivider.translatesAutoresizingMaskIntoConstraints = false
 
         detailContainer.translatesAutoresizingMaskIntoConstraints = false
+        detailContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        detailContainer.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         snippetLabel.font = .systemFont(ofSize: 11, weight: .medium)
         snippetLabel.maximumNumberOfLines = 2
         snippetLabel.translatesAutoresizingMaskIntoConstraints = false
+        snippetLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        snippetLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         metaLabel.font = .systemFont(ofSize: 11)
         metaLabel.textColor = .secondaryLabelColor
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
+        metaLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        metaLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         commentLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         commentLabel.translatesAutoresizingMaskIntoConstraints = false
+        commentLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        commentLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         commentTextView.isRichText = false
         commentTextView.usesFontPanel = false
@@ -198,6 +263,8 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         commentScrollView.documentView = commentTextView
         commentScrollView.translatesAutoresizingMaskIntoConstraints = false
         commentScrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        commentScrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        commentScrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         applyCommentButton.bezelStyle = .rounded
         applyCommentButton.controlSize = .small
@@ -223,19 +290,19 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         }
 
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.horizontalInset),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.horizontalInset),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
 
-            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.textInset),
+            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.textInset),
             emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
 
-            detailDivider.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            detailDivider.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            detailDivider.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.horizontalInset),
+            detailDivider.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.horizontalInset),
 
-            detailContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
-            detailContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -10),
+            detailContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.horizontalInset),
+            detailContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.horizontalInset),
             detailContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
             detailContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 174),
 
@@ -320,8 +387,9 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         switch rows[row] {
         case .section:
             return 26
-        case .highlight:
-            return 46
+        case let .highlight(group):
+            let contentWidth = max(column.width, tableView.bounds.width)
+            return AnnotationHighlightCellView.preferredHeight(for: group, width: contentWidth)
         }
     }
 
@@ -417,6 +485,29 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         let currentComment = commentTextView.string
         applyCommentButton.isEnabled = currentComment != group.comment
         clearCommentButton.isEnabled = currentComment.isEmpty == false || group.comment.isEmpty == false
+    }
+
+    private func syncTableColumnWidthAndRowHeights() {
+        let targetWidth = max(scrollView.contentSize.width, scrollView.bounds.width)
+        guard targetWidth > 0 else { return }
+
+        if abs(column.width - targetWidth) > 0.5 {
+            column.width = targetWidth
+        }
+
+        guard abs(lastMeasuredTableWidth - targetWidth) > 0.5 else { return }
+        lastMeasuredTableWidth = targetWidth
+
+        let highlightRows = IndexSet(
+            rows.enumerated().compactMap { index, row in
+                if case .highlight = row {
+                    return index
+                }
+                return nil
+            }
+        )
+        guard highlightRows.isEmpty == false else { return }
+        tableView.noteHeightOfRows(withIndexesChanged: highlightRows)
     }
 
     private func selectedGroup() -> DocumentHighlightGroup? {

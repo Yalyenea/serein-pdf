@@ -10,6 +10,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
 - Right pane hosts **Outline + Pages + Search + Annotations**, and all search / annotation previews stay on the right
+- Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
 - Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
@@ -22,11 +23,12 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
+- Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
 - Pink-first highlight workflow (`a` to highlight, with a warm Rose Pine-style inverted mode available in Rose Pine Moon)
 - Highlights can carry comments in the right sidebar, and exports include those comments
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
-- Find bar (`cmd+f`), Esc clears search and exits
+- Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs), Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
 - Immersive mode (`cmd+ctrl+l`) hides sidebars and tab chrome while keeping the current window size
@@ -123,6 +125,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
+| Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |
 | Show current PDF in Finder | `cmd+r` |
 | Half-page down / up | `ctrl+d` / `ctrl+u` |
