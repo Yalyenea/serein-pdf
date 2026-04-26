@@ -3,6 +3,8 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+    private static let recentFilesCleanupInterval: TimeInterval = 60 * 60 * 24
+    private static let recentFilesCleanupDateKey = "SlatePDF.RecentFilesCleanup.lastDate"
     private var mainWindowControllers: [UUID: MainWindowController] = [:]
     private var settingsWindowController: SettingsWindowController?
     private var documentStore: DocumentStore!
@@ -14,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private let windowMenu = NSMenu(title: "Window")
     private var autoSaveTimer: Timer?
+    private var lastRecentFilesCleanupDate: Date?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
     private var pendingOpenURLs: [URL] = []
     private let openDocumentSelectionResolver = OpenDocumentSelectionResolver()
@@ -64,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             controller.window?.orderFront(nil)
         }
         currentWindowController()?.window?.makeKeyAndOrderFront(nil)
+        runRecentFilesCleanupIfNeeded()
         updateRecentFilesMenu()
         startAutoSaveTimer()
         NSApp.activate(ignoringOtherApps: true)
@@ -88,12 +92,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func runAutoSave() {
         let errors = documentStore.autoSaveDirtySessions()
-        guard errors.isEmpty == false else { return }
-        let freshErrors = errors.filter { reportedAutoSaveFailureURLs.contains($0.key) == false }
-        guard freshErrors.isEmpty == false else { return }
-        reportedAutoSaveFailureURLs.formUnion(freshErrors.keys)
-        presentAutoSaveErrors(freshErrors)
-        NSLog("SlatePDF auto-save failed for: %@", errors.keys.map(\.lastPathComponent).joined(separator: ", "))
+        if errors.isEmpty == false {
+            let freshErrors = errors.filter { reportedAutoSaveFailureURLs.contains($0.key) == false }
+            if freshErrors.isEmpty == false {
+                reportedAutoSaveFailureURLs.formUnion(freshErrors.keys)
+                presentAutoSaveErrors(freshErrors)
+                NSLog("SlatePDF auto-save failed for: %@", errors.keys.map(\.lastPathComponent).joined(separator: ", "))
+            }
+        }
+        runRecentFilesCleanupIfNeeded()
+    }
+
+    private func runRecentFilesCleanupIfNeeded() {
+        let now = Date()
+        let lastCleanupDate = lastRecentFilesCleanupDate
+            ?? UserDefaults.standard.object(forKey: Self.recentFilesCleanupDateKey) as? Date
+        if let lastCleanupDate,
+           now.timeIntervalSince(lastCleanupDate) < Self.recentFilesCleanupInterval {
+            self.lastRecentFilesCleanupDate = lastCleanupDate
+            return
+        }
+        lastRecentFilesCleanupDate = now
+        UserDefaults.standard.set(now, forKey: Self.recentFilesCleanupDateKey)
+        documentStore.refreshRecentDocumentURLsFromStore()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -815,6 +836,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func showRecentFilesPalette(_ sender: Any?) {
+        runRecentFilesCleanupIfNeeded()
         if recentFilesPaletteController == nil {
             recentFilesPaletteController = RecentFilesPaletteController { [weak self] urls in
                 self?.openRecentDocuments(urls)

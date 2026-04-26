@@ -431,6 +431,24 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(recentFilesStore.recentFiles, [firstURL, secondURL])
     }
 
+    func testRefreshRecentDocumentURLsFromStoreUsesLatestStoreState() throws {
+        let recentFilesStore = InMemoryRecentFilesStore()
+        let firstURL = try makeTemporaryPDF(named: "refresh-recent-first")
+        let secondURL = try makeTemporaryPDF(named: "refresh-recent-second")
+        recentFilesStore.recentFiles = [firstURL]
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: recentFilesStore
+        )
+        XCTAssertEqual(store.recentDocumentURLs, [firstURL])
+
+        recentFilesStore.recentFiles = [secondURL, firstURL]
+        store.refreshRecentDocumentURLsFromStore()
+
+        XCTAssertEqual(store.recentDocumentURLs, [secondURL, firstURL])
+    }
+
     func testOpenDocumentUsesConfiguredDefaultsWhenNoPersistedReadingStateExists() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

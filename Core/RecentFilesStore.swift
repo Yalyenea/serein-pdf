@@ -9,27 +9,63 @@ struct UserDefaultsRecentFilesStore: RecentFilesStore {
     private static let stateKey = "SlatePDF.RecentFiles"
     private let maxCount: Int
     private let userDefaults: UserDefaults
+    private let fileManager: FileManager
 
-    init(maxCount: Int = 20, userDefaults: UserDefaults = .standard) {
+    init(maxCount: Int = 200, userDefaults: UserDefaults = .standard, fileManager: FileManager = .default) {
         self.maxCount = maxCount
         self.userDefaults = userDefaults
+        self.fileManager = fileManager
     }
 
     func loadRecentFiles() throws -> [URL] {
         guard let data = userDefaults.data(forKey: Self.stateKey) else { return [] }
-        return try JSONDecoder().decode([URL].self, from: data)
+        let decoded = try JSONDecoder().decode([URL].self, from: data)
+        let normalized = normalizeRecentFiles(decoded)
+        if normalized != decoded {
+            try persistRecentFiles(normalized)
+        }
+        return normalized
     }
 
     func recordOpen(for url: URL) throws -> [URL] {
-        var recentFiles = try loadRecentFiles().filter { $0 != url }
-        recentFiles.insert(url, at: 0)
+        let normalizedURL = url.standardizedFileURL
+        let normalizedPath = normalizedURL.path
+        var recentFiles = try loadRecentFiles().filter { $0.standardizedFileURL.path != normalizedPath }
+        recentFiles.insert(normalizedURL, at: 0)
 
         if recentFiles.count > maxCount {
             recentFiles.removeLast(recentFiles.count - maxCount)
         }
 
-        let data = try JSONEncoder().encode(recentFiles)
-        userDefaults.set(data, forKey: Self.stateKey)
+        try persistRecentFiles(recentFiles)
         return recentFiles
+    }
+
+    private func persistRecentFiles(_ urls: [URL]) throws {
+        let data = try JSONEncoder().encode(urls)
+        userDefaults.set(data, forKey: Self.stateKey)
+    }
+
+    private func normalizeRecentFiles(_ urls: [URL]) -> [URL] {
+        var normalized: [URL] = []
+        var seenPaths: Set<String> = []
+
+        for url in urls {
+            let standardized = url.standardizedFileURL
+            let path = standardized.path
+            guard seenPaths.insert(path).inserted else { continue }
+
+            var isDirectory = ObjCBool(false)
+            guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+                  isDirectory.boolValue == false else {
+                continue
+            }
+            normalized.append(standardized)
+        }
+
+        if normalized.count > maxCount {
+            normalized.removeLast(normalized.count - maxCount)
+        }
+        return normalized
     }
 }

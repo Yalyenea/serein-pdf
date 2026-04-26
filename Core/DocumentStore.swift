@@ -196,6 +196,13 @@ final class DocumentStore {
         return session
     }
 
+    func refreshRecentDocumentURLsFromStore() {
+        let refreshedRecentURLs = (try? recentFilesStore.loadRecentFiles()) ?? recentDocumentURLs
+        guard refreshedRecentURLs != recentDocumentURLs else { return }
+        recentDocumentURLs = refreshedRecentURLs
+        notifyChange()
+    }
+
     func close(sessionID: UUID) {
         close(sessionID: sessionID, from: defaultWindowID)
     }

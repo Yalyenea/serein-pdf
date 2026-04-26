@@ -85,6 +85,7 @@ final class VerticalTabsViewController: NSViewController {
         recentSectionContainer.alignment = .leading
         recentSectionContainer.spacing = 6
         recentSectionContainer.translatesAutoresizingMaskIntoConstraints = false
+        recentSectionContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         recentTitleLabel.font = .systemFont(ofSize: 10, weight: .semibold)
         recentTitleLabel.textColor = .tertiaryLabelColor
@@ -93,9 +94,14 @@ final class VerticalTabsViewController: NSViewController {
         recentListStackView.alignment = .leading
         recentListStackView.spacing = 2
         recentListStackView.translatesAutoresizingMaskIntoConstraints = false
+        recentListStackView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        recentListStackView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         recentSectionContainer.addArrangedSubview(recentTitleLabel)
         recentSectionContainer.addArrangedSubview(recentListStackView)
+        let recentListWidthMatch = recentListStackView.widthAnchor.constraint(equalTo: recentSectionContainer.widthAnchor)
+        recentListWidthMatch.priority = .required
+        recentListWidthMatch.isActive = true
 
         for view in [headerStack, emptyStateLabel, listStackView, recentSectionContainer] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -216,6 +222,8 @@ final class VerticalTabsViewController: NSViewController {
             button.setButtonType(.momentaryChange)
             button.bezelStyle = .regularSquare
             button.lineBreakMode = .byTruncatingMiddle
+            button.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             button.translatesAutoresizingMaskIntoConstraints = false
             button.toolTip = url.path
             button.tag = recentButtons.count
@@ -223,7 +231,7 @@ final class VerticalTabsViewController: NSViewController {
             button.action = #selector(openRecentDocument(_:))
             recentListStackView.addArrangedSubview(button)
             let widthMatch = button.widthAnchor.constraint(equalTo: recentListStackView.widthAnchor)
-            widthMatch.priority = .defaultHigh
+            widthMatch.priority = .required
             widthMatch.isActive = true
             recentButtons.append(button)
             recentButtonURLs.append(url)
@@ -269,6 +277,14 @@ extension VerticalTabsViewController {
 
     var testingRecentSectionVisible: Bool {
         recentSectionContainer.isHidden == false
+    }
+
+    var testingRecentListWidth: CGFloat {
+        recentListStackView.frame.width
+    }
+
+    var testingRecentButtonWidths: [CGFloat] {
+        recentButtons.map(\.frame.width)
     }
 
     func testingTriggerOpenRecent(at index: Int) {

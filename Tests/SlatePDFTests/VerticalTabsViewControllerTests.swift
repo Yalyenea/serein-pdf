@@ -82,6 +82,33 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertTrue(controller.testingRecentFileTitles.isEmpty)
     }
 
+    func testRecentFooterAdaptsToSidebarWidthChanges() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(
+            persistence: VTInMemoryDocumentStorePersistence(),
+            readingStateStore: VTInMemoryReadingStateStore(),
+            recentFilesStore: VTInMemoryRecentFilesStore()
+        )
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "recent-sidebar-width"))
+
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        XCTAssertTrue(controller.testingRecentSectionVisible)
+
+        controller.view.frame = NSRect(x: 0, y: 0, width: 180, height: 460)
+        controller.view.layoutSubtreeIfNeeded()
+        let narrowListWidth = controller.testingRecentListWidth
+        let narrowButtonWidth = controller.testingRecentButtonWidths.first ?? 0
+
+        controller.view.frame = NSRect(x: 0, y: 0, width: 320, height: 460)
+        controller.view.layoutSubtreeIfNeeded()
+        let wideListWidth = controller.testingRecentListWidth
+        let wideButtonWidth = controller.testingRecentButtonWidths.first ?? 0
+
+        XCTAssertGreaterThan(wideListWidth, narrowListWidth)
+        XCTAssertGreaterThan(wideButtonWidth, narrowButtonWidth)
+    }
+
     private func makeTemporaryPDF(named name: String) throws -> URL {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
