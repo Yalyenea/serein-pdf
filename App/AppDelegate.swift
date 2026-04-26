@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var autoSaveTimer: Timer?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
     private var pendingOpenURLs: [URL] = []
+    private let openDocumentSelectionResolver = OpenDocumentSelectionResolver()
     private var mainWindowController: MainWindowController? {
         currentWindowController()
     }
@@ -128,9 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindowController?.hideFindBar()
         let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
         do {
-            for url in urls {
-                _ = try documentStore.open(documentAt: url, in: targetWindowID)
-            }
+            try openResolvedDocumentURLs(urls, in: targetWindowID)
         } catch {
             presentOpenError(error)
         }
@@ -259,17 +258,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]
+        panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.canCreateDirectories = false
-        panel.message = "Open one or more PDF files."
+        panel.message = "Open one or more PDF files or folders."
 
         guard panel.runModal() == .OK else { return }
 
         do {
-            for url in panel.urls {
-                _ = try documentStore.open(documentAt: url, in: targetWindowID)
-            }
+            try openResolvedDocumentURLs(panel.urls, in: targetWindowID)
         } catch {
             presentOpenError(error)
         }
@@ -1155,6 +1153,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSWorkspace.shared.activateFileViewerSelecting([activeURL])
     }
 
+    private func openResolvedDocumentURLs(_ urls: [URL], in targetWindowID: UUID) throws {
+        let resolvedURLs = try openDocumentSelectionResolver.resolve(urls)
+        for url in resolvedURLs {
+            _ = try documentStore.open(documentAt: url, in: targetWindowID)
+        }
+    }
+
     private func openRecentDocuments(_ urls: [URL], preferredWindowID: UUID? = nil) {
         guard urls.isEmpty == false else { return }
         mainWindowController?.hideFindBar()
@@ -1269,7 +1274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func presentOpenError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to open PDF"
+        alert.messageText = "Failed to open documents"
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {

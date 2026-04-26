@@ -138,7 +138,7 @@ flowchart LR
 - `I`:切换 light / dark mode,并保留各自已选 theme
 
 **文档与 tab**
-- `Cmd+O`:打开
+- `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
 - `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+W`:关闭当前 tab
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)

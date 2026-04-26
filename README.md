@@ -9,6 +9,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
+- `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - Right pane hosts **Outline + Pages + Search + Annotations**, and all search / annotation previews stay on the right
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
@@ -123,6 +124,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Toggle light / dark mode | `i` |
 | Save annotations | `cmd+s` |
 | Copy highlights as Markdown | `cmd+shift+e` |
+| Open PDFs / folders (scan PDFs) | `cmd+o` |
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
