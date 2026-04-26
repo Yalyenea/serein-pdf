@@ -4,13 +4,15 @@ final class VerticalTabItemView: NSView {
     private let sessionID: UUID
     private let selectButton = NSButton(title: "", target: nil, action: nil)
     private let dirtyIndicator = NSView()
-    private let titleLabel = NSTextField(labelWithString: "")
+    private let titleLabel = NSTextField()
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let separator = NSBox()
     private let isDirty: Bool
     private var onSelect: ((UUID) -> Void)?
     private var onAlternateSelect: ((UUID) -> Void)?
     private var onClose: ((UUID) -> Void)?
+    private var onRename: ((UUID, String) -> Void)?
+    private var preEditTitle = ""
 
     var isSelected: Bool = false {
         didSet { updateAppearance() }
@@ -23,13 +25,15 @@ final class VerticalTabItemView: NSView {
         isDirty: Bool,
         onSelect: @escaping (UUID) -> Void,
         onAlternateSelect: @escaping (UUID) -> Void,
-        onClose: @escaping (UUID) -> Void
+        onClose: @escaping (UUID) -> Void,
+        onRename: @escaping (UUID, String) -> Void
     ) {
         self.sessionID = sessionID
         self.isDirty = isDirty
         self.onSelect = onSelect
         self.onAlternateSelect = onAlternateSelect
         self.onClose = onClose
+        self.onRename = onRename
         super.init(frame: .zero)
 
         wantsLayer = true
@@ -56,6 +60,13 @@ final class VerticalTabItemView: NSView {
         titleLabel.cell?.wraps = false
         titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        titleLabel.isEditable = false
+        titleLabel.isSelectable = false
+        titleLabel.isBezeled = false
+        titleLabel.drawsBackground = false
+        titleLabel.textColor = .labelColor
+        titleLabel.backgroundColor = .clear
+        titleLabel.delegate = self
 
         closeButton.font = .systemFont(ofSize: 13, weight: .regular)
         closeButton.isBordered = false
@@ -128,6 +139,46 @@ final class VerticalTabItemView: NSView {
         onClose?(sessionID)
     }
 
+    func beginEditing() {
+        guard titleLabel.isEditable == false else { return }
+        preEditTitle = titleLabel.stringValue
+        titleLabel.isEditable = true
+        titleLabel.isSelectable = true
+        titleLabel.isBezeled = true
+        titleLabel.drawsBackground = true
+        titleLabel.backgroundColor = .controlBackgroundColor
+        window?.makeFirstResponder(titleLabel)
+        titleLabel.currentEditor()?.selectAll(nil)
+    }
+
+    private func commitEditing() {
+        titleLabel.isEditable = false
+        titleLabel.isSelectable = false
+        titleLabel.isBezeled = false
+        titleLabel.drawsBackground = false
+        titleLabel.backgroundColor = .clear
+
+        let newTitle = titleLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard newTitle.isEmpty == false, newTitle != preEditTitle else {
+            titleLabel.stringValue = preEditTitle
+            return
+        }
+        titleLabel.stringValue = newTitle
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.onRename?(self.sessionID, newTitle)
+        }
+    }
+
+    private func cancelEditing() {
+        titleLabel.stringValue = preEditTitle
+        titleLabel.isEditable = false
+        titleLabel.isSelectable = false
+        titleLabel.isBezeled = false
+        titleLabel.drawsBackground = false
+        titleLabel.backgroundColor = .clear
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateAppearance()
@@ -145,5 +196,20 @@ final class VerticalTabItemView: NSView {
         titleLabel.textColor = isSelected ? .labelColor : .secondaryLabelColor
         closeButton.contentTintColor = isSelected ? .labelColor : .tertiaryLabelColor
         separator.isHidden = isSelected
+    }
+}
+
+extension VerticalTabItemView: NSTextFieldDelegate {
+    func controlTextDidEndEditing(_ obj: Notification) {
+        commitEditing()
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            cancelEditing()
+            window?.makeFirstResponder(nil)
+            return true
+        }
+        return false
     }
 }

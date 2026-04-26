@@ -4,21 +4,32 @@ struct PersistedDocumentStoreState: Codable, Equatable {
     struct SessionReference: Codable, Equatable {
         var id: UUID
         var url: URL
+        var title: String?
 
-        init(id: UUID = UUID(), url: URL) {
+        init(id: UUID = UUID(), url: URL, title: String? = nil) {
             self.id = id
             self.url = url
+            self.title = title
         }
 
         private enum CodingKeys: String, CodingKey {
             case id
             case url
+            case title
         }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
             url = try container.decode(URL.self, forKey: .url)
+            title = try container.decodeIfPresent(String.self, forKey: .title)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(url, forKey: .url)
+            try container.encodeIfPresent(title, forKey: .title)
         }
     }
 

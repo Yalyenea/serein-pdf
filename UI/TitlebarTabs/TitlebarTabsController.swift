@@ -11,6 +11,7 @@ final class TitlebarTabsController: NSViewController {
     private let documentContainerView = NSView()
     private let bottomBorderView = NSView()
     private var isTabsStripVisible = true
+    nonisolated(unsafe) private var eventMonitors: [Any] = []
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -38,10 +39,12 @@ final class TitlebarTabsController: NSViewController {
             object: documentStore
         )
         rebuildTabs()
+        setupEventMonitors()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        eventMonitors.forEach(NSEvent.removeMonitor)
     }
 
     override func loadView() {
@@ -142,6 +145,9 @@ final class TitlebarTabsController: NSViewController {
                 },
                 onClose: { [weak self] sessionID in
                     self?.onCloseSessionRequested?(sessionID)
+                },
+                onRename: { [weak self] sessionID, newTitle in
+                    self?.documentStore.renameSession(newTitle, for: sessionID)
                 }
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false
@@ -169,5 +175,29 @@ final class TitlebarTabsController: NSViewController {
         scrollView.isHidden = !isTabsStripVisible
         bottomBorderView.isHidden = !isTabsStripVisible
         view.frame.size = preferredContentSize
+    }
+
+    private func setupEventMonitors() {
+        // Double-click on a tab → rename
+        let mouse = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self, event.clickCount == 2 else { return event }
+            guard view.window != nil else { return event }
+            let locationInView = view.convert(event.locationInWindow, from: nil)
+            guard view.bounds.contains(locationInView) else { return event }
+            guard let selectedView = stackView.arrangedSubviews.compactMap({ $0 as? TitlebarTabItemView }).first(where: { $0.isSelected }) else { return event }
+            selectedView.beginEditing()
+            return nil
+        }
+        eventMonitors.append(mouse as Any)
+
+        // Enter on selected tab → rename (macOS Finder convention)
+        let key = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.characters == "\r" || event.characters == "\n" else { return event }
+            guard view.window?.firstResponder is NSTextView == false else { return event }
+            guard let selectedView = stackView.arrangedSubviews.compactMap({ $0 as? TitlebarTabItemView }).first(where: { $0.isSelected }) else { return event }
+            selectedView.beginEditing()
+            return nil
+        }
+        eventMonitors.append(key as Any)
     }
 }

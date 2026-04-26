@@ -22,6 +22,7 @@ final class VerticalTabsViewController: NSViewController {
     private var recentButtons: [NSButton] = []
     private var recentButtonURLs: [URL] = []
     private static let recentDisplayLimit = 5
+    nonisolated(unsafe) private var eventMonitors: [Any] = []
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -46,10 +47,12 @@ final class VerticalTabsViewController: NSViewController {
         )
         rebuildList()
         applyEmptyState()
+        setupEventMonitors()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        eventMonitors.forEach(NSEvent.removeMonitor)
     }
 
     override func loadView() {
@@ -172,6 +175,9 @@ final class VerticalTabsViewController: NSViewController {
                 },
                 onClose: { [weak self] sessionID in
                     self?.onCloseSessionRequested?(sessionID)
+                },
+                onRename: { [weak self] sessionID, newTitle in
+                    self?.documentStore.renameSession(newTitle, for: sessionID)
                 }
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false
@@ -228,6 +234,30 @@ final class VerticalTabsViewController: NSViewController {
     private func openRecentDocument(_ sender: NSButton) {
         guard recentButtonURLs.indices.contains(sender.tag) else { return }
         onOpenRecentURLRequested?(recentButtonURLs[sender.tag])
+    }
+
+    private func setupEventMonitors() {
+        // Double-click on a tab → rename
+        let mouse = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self, event.clickCount == 2 else { return event }
+            guard view.window != nil else { return event }
+            let locationInView = view.convert(event.locationInWindow, from: nil)
+            guard view.bounds.contains(locationInView) else { return event }
+            guard let selectedView = listStackView.arrangedSubviews.compactMap({ $0 as? VerticalTabItemView }).first(where: { $0.isSelected }) else { return event }
+            selectedView.beginEditing()
+            return nil
+        }
+        eventMonitors.append(mouse as Any)
+
+        // Enter on selected tab → rename (macOS Finder convention)
+        let key = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.characters == "\r" || event.characters == "\n" else { return event }
+            guard view.window?.firstResponder is NSTextView == false else { return event }
+            guard let selectedView = listStackView.arrangedSubviews.compactMap({ $0 as? VerticalTabItemView }).first(where: { $0.isSelected }) else { return event }
+            selectedView.beginEditing()
+            return nil
+        }
+        eventMonitors.append(key as Any)
     }
 }
 

@@ -815,6 +815,7 @@ final class DocumentStore {
             var session = DocumentSession(
                     id: sessionID,
                     url: reference.url,
+                    title: reference.title,
                     pdfDocument: pdfDocument,
                     currentPageIndex: restoredState?.readingPosition.pageIndex ?? 0,
                     displayMode: restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
@@ -1084,7 +1085,7 @@ final class DocumentStore {
         try? persistence.saveState(
             PersistedDocumentStoreState(
                 sessions: sessions.map {
-                    PersistedDocumentStoreState.SessionReference(id: $0.id, url: $0.url)
+                    PersistedDocumentStoreState.SessionReference(id: $0.id, url: $0.url, title: $0.title)
                 },
                 windows: windowWorkspaces.map { workspace in
                     PersistedDocumentStoreState.WindowRecord(
@@ -1192,6 +1193,12 @@ final class DocumentStore {
                 rightSidebarWidth: session.rightSidebarWidth
             )
         )
+    }
+
+    func renameSession(_ title: String, for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].title = title
+        notifyChange()
     }
 
     func updateSidebarWidths(
