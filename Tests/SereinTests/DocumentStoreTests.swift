@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 private final class InMemoryDocumentStorePersistence: DocumentStorePersistence {
     var state: PersistedDocumentStoreState?
@@ -37,6 +37,13 @@ private final class InMemoryRecentFilesStore: RecentFilesStore {
     func recordOpen(for url: URL) throws -> [URL] {
         recentFiles.removeAll { $0 == url }
         recentFiles.insert(url, at: 0)
+        return recentFiles
+    }
+
+    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
+        if let index = recentFiles.firstIndex(of: oldURL) {
+            recentFiles[index] = newURL
+        }
         return recentFiles
     }
 }
@@ -84,6 +91,68 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions.count, 3)
         XCTAssertEqual(store.sessions.map(\.id), [firstSession.id, secondSession.id, thirdSession.id])
         XCTAssertEqual(store.activeSession?.url, thirdURL)
+    }
+
+    func testBatchOpenCreatesLightweightSessionsWithoutLoadingPDFDocuments() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let urls = try (0..<3).map { try makeTemporaryPDF(named: "lazy-open-\($0)") }
+
+        let sessions = try store.open(documentsAt: urls, in: store.defaultWindowID)
+
+        XCTAssertEqual(sessions.count, 3)
+        XCTAssertEqual(store.activeSessionID, sessions.last?.id)
+        XCTAssertTrue(sessions.allSatisfy { store.isPDFDocumentLoaded(for: $0.id) == false })
+
+        _ = try store.pdfDocument(for: sessions[1].id)
+
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: sessions[0].id))
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[1].id))
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: sessions[2].id))
+    }
+
+    func testBatchOpenPostsSingleStoreChangeNotification() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let observer = NotificationCounterObserver()
+        NotificationCenter.default.addObserver(
+            observer,
+            selector: #selector(NotificationCounterObserver.handleDocumentStoreDidChange),
+            name: .documentStoreDidChange,
+            object: store
+        )
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let urls = try (0..<4).map { try makeTemporaryPDF(named: "batch-notify-\($0)") }
+
+        _ = try store.open(documentsAt: urls, in: store.defaultWindowID)
+
+        XCTAssertEqual(observer.count, 1)
+    }
+
+    func testPDFDocumentCacheEvictsCleanBackgroundDocumentsButKeepsDirtyOnes() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let urls = try (0..<5).map { try makeTemporaryPDF(named: "lru-\($0)") }
+        let sessions = try store.open(documentsAt: urls, in: store.defaultWindowID)
+
+        for session in sessions.prefix(4) {
+            _ = try store.pdfDocument(for: session.id)
+        }
+        store.setDirty(true, for: sessions[0].id)
+        _ = try store.pdfDocument(for: sessions[4].id)
+
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[0].id))
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: sessions[1].id))
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[4].id))
     }
 
     func testCloseActiveSessionFallsBackToPreviousSession() throws {
@@ -605,7 +674,7 @@ final class DocumentStoreTests: XCTestCase {
         )
         annotation.color = .systemPink
 
-        store.session(for: session.id)?.pdfDocument.page(at: 0)?.addAnnotation(annotation)
+        try store.pdfDocument(for: session.id).page(at: 0)?.addAnnotation(annotation)
         store.setDirty(true, for: session.id)
         try store.saveAnnotations(for: session.id)
 
@@ -625,7 +694,7 @@ final class DocumentStoreTests: XCTestCase {
             pages: ["alpha beta gamma", "delta epsilon"]
         )
         let session = try store.open(documentAt: url)
-        let selection = try XCTUnwrap(session.pdfDocument.findString("beta", withOptions: []).first)
+        let selection = try XCTUnwrap(store.pdfDocument(for: session.id).findString("beta", withOptions: []).first)
 
         let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.yellow.nsColor)
         store.noteHighlightsAdded(records, for: session.id)
@@ -648,7 +717,8 @@ final class DocumentStoreTests: XCTestCase {
             pages: ["alpha beta gamma"]
         )
         let session = try store.open(documentAt: url)
-        let selection = try XCTUnwrap(session.pdfDocument.findString("alpha", withOptions: []).first)
+        let document = try store.pdfDocument(for: session.id)
+        let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
         let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.pink.nsColor)
         store.noteHighlightsAdded(records, for: session.id)
 
@@ -659,7 +729,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(updatedGroup.comment, "Important note")
         XCTAssertTrue(store.session(for: session.id)?.isDirty == true)
         XCTAssertEqual(
-            session.pdfDocument.page(at: 0)?.annotations.first(where: { $0.type == "Highlight" })?.contents,
+            document.page(at: 0)?.annotations.first(where: { $0.type == "Highlight" })?.contents,
             "Important note"
         )
     }
@@ -1204,6 +1274,61 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertTrue(document.write(to: url))
         return url
+    }
+
+    func testRenameSessionUpdatesFileURLAndMigratesState() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let originalURL = temporaryDirectory.appendingPathComponent("original.pdf")
+        var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let context = CGContext(originalURL as CFURL, mediaBox: &mediaBox, nil) else {
+            XCTFail("Failed to create PDF context")
+            return
+        }
+        context.beginPDFPage(nil)
+        context.endPDFPage()
+        context.closePDF()
+
+        let readingStateStore = InMemoryReadingStateStore()
+        let recentFilesStore = InMemoryRecentFilesStore()
+        let store = DocumentStore(
+            readingStateStore: readingStateStore,
+            recentFilesStore: recentFilesStore
+        )
+        let windowID = store.defaultWindowID
+        let session = try store.open(documentAt: originalURL, in: windowID)
+        let oldURL = session.url
+
+        readingStateStore.states[oldURL] = PersistedReadingState(
+            url: oldURL,
+            displayMode: .singlePageContinuous,
+            scaleMode: .fitWidth,
+            scaleFactor: 1.5,
+            readingPosition: .zero
+        )
+        recentFilesStore.recentFiles = [oldURL]
+
+        store.renameSession("renamed", for: session.id)
+
+        let updatedSession = store.session(for: session.id)
+        XCTAssertNotNil(updatedSession)
+        XCTAssertEqual(updatedSession?.title, "renamed")
+        XCTAssertEqual(updatedSession?.url.lastPathComponent, "renamed.pdf")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: updatedSession!.url.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldURL.path))
+
+        let migratedState = try readingStateStore.loadState(for: updatedSession!.url)
+        XCTAssertNotNil(migratedState)
+        XCTAssertEqual(migratedState?.scaleFactor, 1.5)
+
+        XCTAssertTrue(recentFilesStore.recentFiles.contains(updatedSession!.url))
+        XCTAssertFalse(recentFilesStore.recentFiles.contains(oldURL))
     }
 
     private func makeSearchableTemporaryPDF(named name: String, pages: [String]) throws -> URL {

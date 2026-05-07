@@ -3,8 +3,8 @@ import AppKit
 final class SplitViewController: NSSplitViewController {
     private static let legacyAutosaveNames = [
         "MainSplitView",
-        "SlatePDFSplit.v2",
-        "SlatePDFSplit.v3",
+        "SereinSplit.v2",
+        "SereinSplit.v3",
     ]
     let documentStore: DocumentStore
     let windowID: UUID
@@ -333,8 +333,8 @@ final class SplitViewController: NSSplitViewController {
         Self.legacyAutosaveNames.forEach { name in
             UserDefaults.standard.removeObject(forKey: "NSSplitView Subview Frames \(name)")
         }
-        UserDefaults.standard.removeObject(forKey: "SlatePDF.Layout.lastConfigLeftWidth")
-        UserDefaults.standard.removeObject(forKey: "SlatePDF.Layout.lastConfigRightWidth")
+        UserDefaults.standard.removeObject(forKey: "Serein.Layout.lastConfigLeftWidth")
+        UserDefaults.standard.removeObject(forKey: "Serein.Layout.lastConfigRightWidth")
     }
 
     func refreshChromeColors() {

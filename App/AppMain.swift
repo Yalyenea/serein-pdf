@@ -1,7 +1,7 @@
 import AppKit
 
 @main
-enum SlatePDFApp {
+enum SereinApp {
     static func main() {
         let application = NSApplication.shared
         let delegate = AppDelegate()

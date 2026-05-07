@@ -1,9 +1,9 @@
-# SlatePDF — task runner
+# Serein — task runner
 # Usage: `just` (lists targets), `just <target>`
 # Install just: brew install just
 
-BUNDLE_ID := "local.yfff.SlatePDF"
-APP_NAME  := "SlatePDF"
+BUNDLE_ID := "local.yfff.Serein"
+APP_NAME  := "Serein"
 BUILD_DIR := "build"
 APP_BUNDLE := BUILD_DIR + "/" + APP_NAME + ".app"
 INSTALL_DIR := "/Applications"
@@ -17,15 +17,15 @@ default:
 test:
     swift test --disable-sandbox
 
-# Run SlatePDF in dev mode via SwiftPM.
+# Run Serein in dev mode via SwiftPM.
 run:
     swift run
 
-# Build a release .app bundle under build/SlatePDF.app.
+# Build a release .app bundle under build/Serein.app.
 build:
     ./Scripts/make-app.sh {{BUILD_DIR}}
 
-# Package the built .app into build/SlatePDF-<version>.dmg.
+# Package the built .app into build/Serein-<version>.dmg.
 dmg: build
     ./Scripts/make-dmg.sh {{BUILD_DIR}}
 
@@ -48,13 +48,13 @@ register:
 
 # Full release flow: build .app -> install -> register.
 ship: install register
-    @echo "done. SlatePDF is installed."
+    @echo "done. Serein is installed."
 
 # Remove build artifacts and the installed .app.
 clean:
     rm -rf {{BUILD_DIR}} .build
     rm -rf "{{INSTALL_DIR}}/{{APP_NAME}}.app"
 
-# Launch the installed SlatePDF.app (not the dev build).
+# Launch the installed Serein.app (not the dev build).
 launch:
     open "{{INSTALL_DIR}}/{{APP_NAME}}.app"

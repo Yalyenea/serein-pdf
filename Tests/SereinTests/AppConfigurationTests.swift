@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 final class AppConfigurationTests: XCTestCase {
     func testBootstrapCreatesDefaultTomlConfig() throws {
@@ -40,6 +40,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "g", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "9", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
@@ -86,6 +87,7 @@ half_page_down = "control+f"
 go_to_last_page = "shift+l"
 find_previous_match = "shift+n"
 show_recent_files_palette = "command+space"
+show_all_tabs = "control+tab"
 open_containing_folder = "command+option+r"
 find_all_open = "command+option+f"
 
@@ -114,6 +116,7 @@ show_recent_files_in_sidebar = false
         XCTAssertEqual(configuration.shortcuts.bindings[.goToLastPage], KeyboardShortcut(key: "l", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "n", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findAllOpen], KeyboardShortcut(key: "f", modifiers: [.command, .option]))
         XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
@@ -164,6 +167,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("find_previous_match = \"command+shift+g\""))
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
         XCTAssertTrue(content.contains("show_recent_files_palette = \"command+shift+space\""))
+        XCTAssertTrue(content.contains("show_all_tabs = \"control+tab\""))
         XCTAssertTrue(content.contains("open_containing_folder = \"command+r\""))
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
@@ -231,6 +235,27 @@ fit_width = "command+9"
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleImmersiveMode], KeyboardShortcut(key: "l", modifiers: [.command, .control]))
         XCTAssertTrue(persistedContent.contains("toggle_immersive_mode = \"command+control+l\""))
         XCTAssertFalse(persistedContent.contains("toggle_immersive_mode = \"command+option+l\""))
+    }
+
+    func testBootstrapMigratesLegacyShowAllTabsShortcut() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(
+                of: "show_all_tabs = \"control+tab\"",
+                with: "show_all_tabs = \"command+option+t\""
+            )
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
+        XCTAssertTrue(persistedContent.contains("show_all_tabs = \"control+tab\""))
+        XCTAssertFalse(persistedContent.contains("show_all_tabs = \"command+option+t\""))
     }
 
     func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {

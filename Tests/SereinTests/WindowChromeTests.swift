@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import PDFKit
 import Testing
-@testable import SlatePDF
+@testable import Serein
 
 @Suite(.serialized)
 @MainActor
@@ -69,6 +69,24 @@ struct WindowChromeTests {
 
         #expect(controller.isNightModeEnabled)
         #expect(controller.pdfView.isHidden == false)
+    }
+
+    @Test
+    func highlightModeUsesCompactInlineIndicator() {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = ReaderViewController(documentStore: store)
+        controller.loadViewIfNeeded()
+
+        #expect(controller.triggerHighlightShortcut() == false)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let highlightLabels = textFields(in: controller.view)
+            .filter { $0.stringValue.contains("Highlight") }
+            .map(\.stringValue)
+
+        #expect(highlightLabels.contains("Highlight · Esc"))
+        #expect(highlightLabels.contains { $0.contains("Highlight Mode") } == false)
     }
 
     @Test
@@ -289,8 +307,8 @@ struct WindowChromeTests {
         let defaults = UserDefaults.standard
         let legacyKeys = [
             "NSSplitView Subview Frames MainSplitView",
-            "NSSplitView Subview Frames SlatePDFSplit.v2",
-            "NSSplitView Subview Frames SlatePDFSplit.v3",
+            "NSSplitView Subview Frames SereinSplit.v2",
+            "NSSplitView Subview Frames SereinSplit.v3",
         ]
         let originals = legacyKeys.map { (key: $0, value: defaults.object(forKey: $0)) }
         defer {
@@ -429,7 +447,7 @@ struct WindowChromeTests {
         flushLayout(controller.window)
 
         guard let splitController = controller.window?.contentViewController as? SplitViewController,
-              let page = session.pdfDocument.page(at: 0),
+              let page = try? store.pdfDocument(for: session.id).page(at: 0),
               let selection = page.selection(for: page.bounds(for: .mediaBox)) else {
             Issue.record("Failed to prepare debug sidebar content")
             return
@@ -1080,17 +1098,21 @@ struct WindowChromeTests {
             store.setDisplayMode(scenario.mode, for: session.id)
             flushLayout(controller.window)
 
-            guard let splitController = controller.window?.contentViewController as? SplitViewController,
-                  let expectedScale = fitWidthScaleExpected(
-                      for: splitController.readerViewController.pdfView,
-                      leadPageIndex: scenario.leadPageIndex
-                  ) else {
+            guard let splitController = controller.window?.contentViewController as? SplitViewController else {
                 Issue.record("Failed to locate reader internals for \(scenario.name)")
                 return
             }
 
             splitController.readerViewController.fitToWidth()
             flushLayout(controller.window)
+
+            guard let expectedScale = fitWidthScaleExpected(
+                for: splitController.readerViewController.pdfView,
+                leadPageIndex: scenario.leadPageIndex
+            ) else {
+                Issue.record("Failed to calculate fit-width scale for \(scenario.name)")
+                return
+            }
 
             #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.05)
         }
@@ -1484,6 +1506,19 @@ private func pdfScrollBackgroundViews(in scrollView: NSScrollView) -> [NSView] {
     while let view = pending.popLast() {
         if String(describing: type(of: view)).contains("ContentBackgroundView") {
             matches.append(view)
+        }
+        pending.append(contentsOf: view.subviews)
+    }
+    return matches
+}
+
+@MainActor
+private func textFields(in root: NSView) -> [NSTextField] {
+    var matches: [NSTextField] = []
+    var pending = [root]
+    while let view = pending.popLast() {
+        if let textField = view as? NSTextField {
+            matches.append(textField)
         }
         pending.append(contentsOf: view.subviews)
     }

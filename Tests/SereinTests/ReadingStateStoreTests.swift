@@ -1,10 +1,10 @@
 import Foundation
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 final class ReadingStateStoreTests: XCTestCase {
     func testSaveAndLoadReadingStateByDocumentURL() throws {
-        let suiteName = "SlatePDFTests.ReadingStateStore.\(UUID().uuidString)"
+        let suiteName = "SereinTests.ReadingStateStore.\(UUID().uuidString)"
         let userDefaults = UserDefaults(suiteName: suiteName)!
         let store = UserDefaultsReadingStateStore(userDefaults: userDefaults)
         let url = URL(fileURLWithPath: "/tmp/test.pdf")

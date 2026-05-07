@@ -66,6 +66,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case closeCurrentTab = "close_current_tab"
     case previousTab = "previous_tab"
     case nextTab = "next_tab"
+    case showAllTabs = "show_all_tabs"
     case fitHeight = "fit_height"
     case fitWidth = "fit_width"
     case zoomIn = "zoom_in"
@@ -133,6 +134,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Previous Tab"
         case .nextTab:
             "Next Tab"
+        case .showAllTabs:
+            "Show All Tabs"
         case .fitHeight:
             "Fit Height"
         case .fitWidth:

@@ -47,7 +47,9 @@ final class ReaderViewController: NSViewController {
     var onFindActionRequested: ((FindNavigationAction) -> Void)?
     private let pdfContainerView = PDFContainerView()
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
-    private let highlightModeBanner = NSTextField(labelWithString: "Highlight Mode · Esc to exit")
+    private let highlightModeIndicator = NSStackView()
+    private let highlightModeColorDot = NSView()
+    private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
     private let overviewThumbnailView = PDFThumbnailView()
     private let findBarView = FindBarView()
     private var findBarTopConstraint: NSLayoutConstraint?
@@ -230,19 +232,27 @@ final class ReaderViewController: NSViewController {
         emptyStateLabel.font = .systemFont(ofSize: 18, weight: .medium)
         emptyStateLabel.textColor = .secondaryLabelColor
 
-        highlightModeBanner.translatesAutoresizingMaskIntoConstraints = false
-        highlightModeBanner.font = .systemFont(ofSize: 11, weight: .medium)
-        highlightModeBanner.textColor = .secondaryLabelColor
-        highlightModeBanner.alignment = .center
-        highlightModeBanner.wantsLayer = true
-        highlightModeBanner.layer?.cornerRadius = 4
-        highlightModeBanner.layer?.backgroundColor = NSColor(
-            calibratedRed: 0.97, green: 0.79, blue: 0.86, alpha: 0.75
-        ).cgColor
-        highlightModeBanner.drawsBackground = false
-        highlightModeBanner.isHidden = true
-        highlightModeBanner.isEditable = false
-        highlightModeBanner.isBordered = false
+        highlightModeIndicator.translatesAutoresizingMaskIntoConstraints = false
+        highlightModeIndicator.orientation = .horizontal
+        highlightModeIndicator.alignment = .centerY
+        highlightModeIndicator.spacing = 6
+        highlightModeIndicator.edgeInsets = NSEdgeInsets(top: 3, left: 6, bottom: 3, right: 6)
+        highlightModeIndicator.isHidden = true
+
+        highlightModeColorDot.translatesAutoresizingMaskIntoConstraints = false
+        highlightModeColorDot.wantsLayer = true
+        highlightModeColorDot.layer?.cornerRadius = 3.5
+
+        highlightModeLabel.translatesAutoresizingMaskIntoConstraints = false
+        highlightModeLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        highlightModeLabel.textColor = .secondaryLabelColor
+        highlightModeLabel.alignment = .left
+        highlightModeLabel.isEditable = false
+        highlightModeLabel.isBordered = false
+        highlightModeLabel.drawsBackground = false
+
+        highlightModeIndicator.addArrangedSubview(highlightModeColorDot)
+        highlightModeIndicator.addArrangedSubview(highlightModeLabel)
 
         overviewThumbnailView.translatesAutoresizingMaskIntoConstraints = false
         overviewThumbnailView.thumbnailSize = NSSize(width: 140, height: 180)
@@ -257,7 +267,7 @@ final class ReaderViewController: NSViewController {
         pdfContainerView.embedPDFView(pdfView)
         container.addSubview(pdfContainerView)
         container.addSubview(emptyStateLabel)
-        container.addSubview(highlightModeBanner)
+        container.addSubview(highlightModeIndicator)
         container.addSubview(overviewThumbnailView)
         container.addSubview(findBarView)
 
@@ -286,10 +296,10 @@ final class ReaderViewController: NSViewController {
             pdfView.bottomAnchor.constraint(equalTo: pdfContainerView.bottomAnchor),
             emptyStateLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            highlightModeBanner.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-            highlightModeBanner.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            highlightModeBanner.heightAnchor.constraint(equalToConstant: 22),
-            highlightModeBanner.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            highlightModeIndicator.topAnchor.constraint(equalTo: pdfContainerView.topAnchor, constant: 8),
+            highlightModeIndicator.leadingAnchor.constraint(equalTo: pdfContainerView.leadingAnchor, constant: 12),
+            highlightModeColorDot.widthAnchor.constraint(equalToConstant: 7),
+            highlightModeColorDot.heightAnchor.constraint(equalToConstant: 7),
             overviewLeading,
             overviewTrailing,
             overviewTop,
@@ -562,18 +572,18 @@ final class ReaderViewController: NSViewController {
         }
 
         themeManager.setHighlightModeEnabled(true)
-        updateHighlightModeBanner()
+        updateHighlightModeIndicator()
         return false
     }
 
     func exitHighlightMode() {
         themeManager.setHighlightModeEnabled(false)
-        updateHighlightModeBanner()
+        updateHighlightModeIndicator()
     }
 
     func setHighlightColor(_ color: HighlightColor) {
         themeManager.setHighlightColor(color)
-        updateHighlightModeBanner()
+        updateHighlightModeIndicator()
     }
 
     @discardableResult
@@ -780,6 +790,7 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession() else {
             pdfView.document = nil
             pdfView.isHidden = true
+            emptyStateLabel.stringValue = "Open a PDF to start reading."
             emptyStateLabel.isHidden = false
             displayedSessionID = nil
             displayedReadingPosition = nil
@@ -791,12 +802,23 @@ final class ReaderViewController: NSViewController {
         }
 
         let isNewSession = displayedSessionID != session.id
+        let document: PDFDocument
+        do {
+            document = try documentStore.pdfDocument(for: session.id)
+        } catch {
+            pdfView.document = nil
+            pdfView.isHidden = true
+            emptyStateLabel.stringValue = error.localizedDescription
+            emptyStateLabel.isHidden = false
+            displayedSessionID = session.id
+            return
+        }
 
         isApplyingStoreState = true
         defer { isApplyingStoreState = false }
 
-        if isNewSession {
-            pdfView.document = session.pdfDocument
+        if isNewSession || pdfView.document !== document {
+            pdfView.document = document
             displayedSessionID = session.id
             displayedReadingPosition = nil
             displayedDisplayMode = nil
@@ -816,7 +838,8 @@ final class ReaderViewController: NSViewController {
     private func syncDisplayedStateWithoutRefreshIfPossible() -> Bool {
         guard let session = targetSession(),
               session.id == displayedSessionID,
-              pdfView.document === session.pdfDocument,
+              let document = documentStore.loadedPDFDocument(for: session.id),
+              pdfView.document === document,
               displayedDisplayMode == session.displayMode else { return false }
 
         guard let livePosition = currentReadingPosition() else { return false }
@@ -1002,16 +1025,19 @@ final class ReaderViewController: NSViewController {
     private func applyFitWidth(for session: DocumentSession) {
         guard let scaleFactor = fitWidthScaleFactor(for: session) else { return }
         guard shouldApplyFitWidth(scaleFactor, for: session) else {
+            lastAppliedFitBoundsWidth = pdfView.bounds.width
             documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
             return
         }
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
+        lastAppliedFitBoundsWidth = pdfView.bounds.width
         documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
     }
 
     private func applyFitHeight(for session: DocumentSession) {
         guard let scaleFactor = fitHeightScaleFactor(for: session) else { return }
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
+        lastAppliedFitBoundsHeight = pdfView.bounds.height
         documentStore.setScaleMode(.fitHeight, scaleFactor: scaleFactor, for: session.id)
     }
 
@@ -1385,15 +1411,15 @@ final class ReaderViewController: NSViewController {
         findBarView.refreshChromeColors()
         applyThemeFilter()
         syncPDFMarginBackgroundAfterPDFKitLayout()
-        updateHighlightModeBanner()
+        updateHighlightModeIndicator()
     }
 
-    private func updateHighlightModeBanner() {
+    private func updateHighlightModeIndicator() {
         let isEnabled = themeManager.readerState.isHighlightModeEnabled
-        highlightModeBanner.isHidden = !isEnabled
+        highlightModeIndicator.isHidden = !isEnabled
         let color = themeManager.readerState.highlightColor
-        highlightModeBanner.stringValue = "Highlight Mode · \(color.menuTitle) · Esc to exit"
-        highlightModeBanner.layer?.backgroundColor = color.nsColor.withAlphaComponent(0.7).cgColor
+        highlightModeLabel.stringValue = "Highlight · Esc"
+        highlightModeColorDot.layer?.backgroundColor = color.nsColor.withAlphaComponent(0.85).cgColor
     }
 
     private func applyThemeFilter() {

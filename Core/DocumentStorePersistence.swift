@@ -243,7 +243,7 @@ protocol DocumentStorePersistence {
 }
 
 struct UserDefaultsDocumentStorePersistence: DocumentStorePersistence {
-    private static let stateKey = "SlatePDF.DocumentStoreState"
+    private static let stateKey = "Serein.DocumentStoreState"
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {

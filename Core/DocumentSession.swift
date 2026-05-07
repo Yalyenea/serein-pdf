@@ -33,15 +33,16 @@ enum AnnotationSavePolicy: String, CaseIterable, Equatable, Codable, Sendable {
 
 struct DocumentSession {
     let id: UUID
-    let url: URL
+    var url: URL
     var title: String
-    let pdfDocument: PDFDocument
+    var pageCount: Int?
     var currentPageIndex: Int
     var displayMode: ReaderDisplayMode
     var scaleMode: ReaderScaleMode
     var zoomScale: CGFloat
     var lastReadPosition: ReadingPosition
     var outlineTree: [OutlineNode]
+    var isOutlineLoaded: Bool
     var isDirty: Bool
     var dirtySince: Date?
     var sidebarState: SidebarState
@@ -53,36 +54,42 @@ struct DocumentSession {
     var redoStack: [HighlightUndoOperation] = []
     var searchCache: DocumentSearchCache = DocumentSearchCache()
     var annotationCache: DocumentHighlightCache = DocumentHighlightCache()
+    var isAnnotationCacheLoaded: Bool
 
     init(
         id: UUID = UUID(),
         url: URL,
         title: String? = nil,
-        pdfDocument: PDFDocument,
+        pdfDocument: PDFDocument? = nil,
+        pageCount: Int? = nil,
         currentPageIndex: Int = 0,
         displayMode: ReaderDisplayMode = .singlePageContinuous,
         scaleMode: ReaderScaleMode = .fitWidth,
         zoomScale: CGFloat = 1.0,
         lastReadPosition: ReadingPosition = .zero,
         outlineTree: [OutlineNode] = [],
+        isOutlineLoaded: Bool = false,
         isDirty: Bool = false,
         dirtySince: Date? = nil,
         sidebarState: SidebarState = SidebarState(),
         tabPresentationState: TabPresentationState = TabPresentationState(),
         annotationSavePolicy: AnnotationSavePolicy = .default,
         leftSidebarWidth: CGFloat? = nil,
-        rightSidebarWidth: CGFloat? = nil
+        rightSidebarWidth: CGFloat? = nil,
+        annotationCache: DocumentHighlightCache = DocumentHighlightCache(),
+        isAnnotationCacheLoaded: Bool = false
     ) {
         self.id = id
         self.url = url
         self.title = title ?? url.deletingPathExtension().lastPathComponent
-        self.pdfDocument = pdfDocument
+        self.pageCount = pageCount ?? pdfDocument?.pageCount
         self.currentPageIndex = currentPageIndex
         self.displayMode = displayMode
         self.scaleMode = scaleMode
         self.zoomScale = zoomScale
         self.lastReadPosition = lastReadPosition
         self.outlineTree = outlineTree
+        self.isOutlineLoaded = isOutlineLoaded
         self.isDirty = isDirty
         self.dirtySince = dirtySince
         self.sidebarState = sidebarState
@@ -90,5 +97,7 @@ struct DocumentSession {
         self.annotationSavePolicy = annotationSavePolicy
         self.leftSidebarWidth = leftSidebarWidth
         self.rightSidebarWidth = rightSidebarWidth
+        self.annotationCache = annotationCache
+        self.isAnnotationCacheLoaded = isAnnotationCacheLoaded
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 final class RecentFilesStoreTests: XCTestCase {
     func testRecordOpenDeduplicatesAndMovesFileToFront() throws {
@@ -52,7 +52,7 @@ final class RecentFilesStoreTests: XCTestCase {
         let existing = try makeTemporaryFile(named: "existing.pdf")
         let missing = existing.deletingLastPathComponent().appendingPathComponent("missing.pdf")
         let seededData = try JSONEncoder().encode([missing, existing, existing])
-        userDefaults.set(seededData, forKey: "SlatePDF.RecentFiles")
+        userDefaults.set(seededData, forKey: "Serein.RecentFiles")
         let store = UserDefaultsRecentFilesStore(userDefaults: userDefaults)
 
         let loaded = try store.loadRecentFiles()
@@ -62,7 +62,7 @@ final class RecentFilesStoreTests: XCTestCase {
     }
 
     private func makeUserDefaults() -> UserDefaults {
-        let suiteName = "SlatePDFTests.RecentFilesStore.\(UUID().uuidString)"
+        let suiteName = "SereinTests.RecentFilesStore.\(UUID().uuidString)"
         let userDefaults = UserDefaults(suiteName: suiteName)!
         userDefaults.removePersistentDomain(forName: suiteName)
         return userDefaults
@@ -70,7 +70,7 @@ final class RecentFilesStoreTests: XCTestCase {
 
     private func makeTemporaryFile(named name: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SlatePDFTests.RecentFiles.\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("SereinTests.RecentFiles.\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock {
             try? FileManager.default.removeItem(at: directory)

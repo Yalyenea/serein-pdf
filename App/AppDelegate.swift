@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private static let recentFilesCleanupInterval: TimeInterval = 60 * 60 * 24
-    private static let recentFilesCleanupDateKey = "SlatePDF.RecentFilesCleanup.lastDate"
+    private static let recentFilesCleanupDateKey = "Serein.RecentFilesCleanup.lastDate"
     private var mainWindowControllers: [UUID: MainWindowController] = [:]
     private var settingsWindowController: SettingsWindowController?
     private var documentStore: DocumentStore!
@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var appearanceObservation: NSKeyValueObservation?
     private var readerShortcutsController: ReaderShortcutsController?
     private var recentFilesPaletteController: RecentFilesPaletteController?
+    private var openTabsPaletteController: OpenTabsPaletteController?
+    private var openTabsPaletteWindowID: UUID?
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private let windowMenu = NSMenu(title: "Window")
     private var autoSaveTimer: Timer?
@@ -97,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if freshErrors.isEmpty == false {
                 reportedAutoSaveFailureURLs.formUnion(freshErrors.keys)
                 presentAutoSaveErrors(freshErrors)
-                NSLog("SlatePDF auto-save failed for: %@", errors.keys.map(\.lastPathComponent).joined(separator: ", "))
+                NSLog("Serein auto-save failed for: %@", errors.keys.map(\.lastPathComponent).joined(separator: ", "))
             }
         }
         runRecentFilesCleanupIfNeeded()
@@ -119,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        closeOpenTabsPalette()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -182,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .closeCurrentTab: { [weak self] in self?.closeCurrentTab(nil) },
             .previousTab: { [weak self] in self?.activatePreviousTab(nil) },
             .nextTab: { [weak self] in self?.activateNextTab(nil) },
+            .showAllTabs: { [weak self] in self?.showAllTabs(nil) },
             .fitHeight: { [weak self] in self?.fitReaderToHeight(nil) },
             .fitWidth: { [weak self] in self?.fitReaderToWidth(nil) },
             .zoomIn: { [weak self] in self?.zoomInReader(nil) },
@@ -309,7 +316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func buildApplicationMenuItem() -> NSMenuItem {
-        let appMenuItem = NSMenuItem(title: "SlatePDF", action: nil, keyEquivalent: "")
+        let appMenuItem = NSMenuItem(title: "Serein", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
         let settingsItem = NSMenuItem(
             title: "Settings…",
@@ -323,7 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         )
         appMenu.addItem(.separator())
         let hideItem = NSMenuItem(
-            title: "Hide SlatePDF",
+            title: "Hide Serein",
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
@@ -347,7 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(showAllItem)
         appMenu.addItem(.separator())
         let quitItem = appMenu.addItem(
-            withTitle: "Quit SlatePDF",
+            withTitle: "Quit Serein",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -507,6 +514,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 title: "Next Tab",
                 command: .nextTab,
                 action: #selector(activateNextTab(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.showAllTabs.menuTitle,
+                command: .showAllTabs,
+                action: #selector(showAllTabs(_:))
             ),
             .separator(),
             makeConfiguredMenuItem(
@@ -849,6 +861,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
+    private func showAllTabs(_ sender: Any?) {
+        if openTabsPaletteController?.window?.isVisible == true {
+            closeOpenTabsPalette()
+            return
+        }
+        guard let controller = mainWindowController else { return }
+        let sessions = documentStore.sessions(in: controller.windowID)
+        guard sessions.isEmpty == false else { return }
+        openTabsPaletteWindowID = controller.windowID
+
+        if openTabsPaletteController == nil {
+            openTabsPaletteController = OpenTabsPaletteController { [weak self] sessionID, alternatePane in
+                guard let self,
+                      let windowID = self.openTabsPaletteWindowID else { return }
+                self.documentStore.clearSearch(in: windowID)
+                let targetPane = alternatePane
+                    ? self.documentStore.focusedPane(in: windowID).other
+                    : nil
+                self.documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
+            }
+        }
+        openTabsPaletteController?.show(
+            with: sessions,
+            activeSessionID: documentStore.activeSessionID(in: controller.windowID),
+            primarySessionID: documentStore.displayedSessionID(for: .primary, in: controller.windowID),
+            secondarySessionID: documentStore.displayedSessionID(for: .secondary, in: controller.windowID),
+            focusedPane: documentStore.focusedPane(in: controller.windowID),
+            relativeTo: controller.window
+        )
+    }
+
+    private func closeOpenTabsPalette() {
+        openTabsPaletteController?.close()
+        openTabsPaletteWindowID = nil
+    }
+
+    @objc
     private func highlightSelection(_ sender: Any?) {
         _ = mainWindowController?.triggerHighlightShortcut()
     }
@@ -1177,9 +1226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func openResolvedDocumentURLs(_ urls: [URL], in targetWindowID: UUID) throws {
         let resolvedURLs = try openDocumentSelectionResolver.resolve(urls)
-        for url in resolvedURLs {
-            _ = try documentStore.open(documentAt: url, in: targetWindowID)
-        }
+        _ = try documentStore.open(documentsAt: resolvedURLs, in: targetWindowID)
     }
 
     private func openRecentDocuments(_ urls: [URL], preferredWindowID: UUID? = nil) {
@@ -1191,9 +1238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             ?? documentStore.defaultWindowID
 
         do {
-            for url in urls {
-                _ = try documentStore.open(documentAt: url, in: targetWindowID)
-            }
+            _ = try documentStore.open(documentsAt: urls, in: targetWindowID)
         } catch {
             presentOpenError(error)
         }
@@ -1307,14 +1352,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func presentConfigurationError(_ error: Error) {
         let alert = NSAlert()
         alert.alertStyle = .critical
-        alert.messageText = "Failed to load SlatePDF config"
+        alert.messageText = "Failed to load Serein config"
         alert.informativeText = error.localizedDescription
         alert.runModal()
     }
 
     private func presentConfigurationSaveError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to save SlatePDF settings"
+        alert.messageText = "Failed to save Serein settings"
         if let window = settingsWindowController?.window ?? mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -1444,6 +1489,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return activeSession != nil
         case #selector(showRecentFilesPalette(_:)):
             return documentStore.recentDocumentURLs.isEmpty == false
+        case #selector(showAllTabs(_:)):
+            return windowID.map { documentStore.sessions(in: $0).isEmpty == false } == true
         case #selector(openContainingFolder(_:)):
             return activeSession != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):

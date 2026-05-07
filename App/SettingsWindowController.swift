@@ -150,11 +150,13 @@ private final class ShortcutCaptureButton: NSButton {
             "escape"
         case " ":
             "space"
+        case "\t":
+            "tab"
         default:
             characters
         }
 
-        guard key.count == 1 || key == "escape" || key == "space" else {
+        guard key.count == 1 || key == "escape" || key == "space" || key == "tab" else {
             NSSound.beep()
             return
         }
@@ -691,6 +693,8 @@ private extension KeyboardShortcut {
             keyDisplay = "Esc"
         case "space":
             keyDisplay = "Space"
+        case "tab":
+            keyDisplay = "Tab"
         default:
             keyDisplay = key.uppercased()
         }

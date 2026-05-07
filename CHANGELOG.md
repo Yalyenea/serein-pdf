@@ -1,6 +1,17 @@
 # Changelog
 
-All notable changes to SlatePDF are captured here. Versions follow semver.
+All notable changes to Serein are captured here. Versions follow semver.
+
+## [Unreleased]
+
+### Visual
+- Refresh the app icon with a quieter Serein identity: warm paper PDF shape, rain-clear blue-gray atmosphere, and no bright annotation accent
+- Replace the centered highlight-mode badge with a compact inline reader indicator
+
+### Performance
+- Make PDF tabs lightweight on open: sessions keep URL/title/reading state first, while `PDFDocument` loads only when a reader, sidebar, annotation, or search path needs it
+- Add a small live `PDFDocument` LRU so clean background PDFs can be released while the current pane, split pane, and dirty documents stay resident
+- Keep Show All Tabs as a lightweight text overview instead of rendering PDF thumbnails
 
 ## [0.2.0] - 2026-04-23
 
@@ -16,7 +27,7 @@ extraction, and smoother integration with the rest of macOS.
 
 ### Reading and documents
 - Apply configured sidebar widths cleanly to restored and newly opened sessions
-- Handle external PDF open events more reliably when SlatePDF is used from Finder or other apps
+- Handle external PDF open events more reliably when Serein is used from Finder or other apps
 
 ### Highlights and extraction
 - Improve highlight snippet extraction for Chinese text and OCR-heavy PDFs
@@ -67,12 +78,12 @@ files launcher.
 ### Settings
 - General page: default display mode, `fit_width_on_open`, auto-save policy
 - Shortcuts page: capture, clear, restore default, conflict detection
-- Writes back to `~/Library/Application Support/SlatePDF/config.toml` and refreshes menus live
+- Writes back to `~/Library/Application Support/Serein/config.toml` and refreshes menus live
 
 ### Theme
 - Night mode toggle (`i`) via inversion
 - Minimal flat chrome, compact titlebar
 
 ### Known limitations
-- Ad-hoc signed; Gatekeeper will prompt on first open (right-click → Open, or strip quarantine with `xattr -dr com.apple.quarantine SlatePDF.app`)
+- Ad-hoc signed; Gatekeeper will prompt on first open (right-click → Open, or strip quarantine with `xattr -dr com.apple.quarantine Serein.app`)
 - Personal-use license, no redistribution

@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 final class OutlineExtractorTests: XCTestCase {
     func testOutlineNodeSupportsHashingForOutlineViewIdentity() {

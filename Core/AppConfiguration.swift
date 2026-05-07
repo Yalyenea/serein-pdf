@@ -155,6 +155,7 @@ struct AppConfiguration: Equatable, Sendable {
             .showRecentFilesPalette: KeyboardShortcut(key: "space", modifiers: [.command, .shift]),
             .openContainingFolder: KeyboardShortcut(key: "r", modifiers: [.command]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
+            .showAllTabs: KeyboardShortcut(key: "tab", modifiers: [.control]),
             .newWindow: KeyboardShortcut(key: "n", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
             .toggleDemoMode: KeyboardShortcut(key: "l", modifiers: [.command]),
@@ -241,6 +242,8 @@ struct KeyboardShortcut: Equatable, Sendable {
             "\u{1b}"
         case "space":
             " "
+        case "tab":
+            "\t"
         default:
             key
         }
@@ -256,6 +259,8 @@ struct KeyboardShortcut: Equatable, Sendable {
             "escape"
         case " ":
             "space"
+        case "\t":
+            "tab"
         default:
             characters
         }
@@ -293,7 +298,7 @@ struct KeyboardShortcut: Equatable, Sendable {
     }
 
     private static func isSupportedKeyToken(_ token: String) -> Bool {
-        token.count == 1 || token == "escape" || token == "space"
+        token.count == 1 || token == "escape" || token == "space" || token == "tab"
     }
 }
 
@@ -334,8 +339,8 @@ enum AppConfigurationError: LocalizedError {
 
 struct AppConfigurationFile {
     static let defaultContents = """
-# SlatePDF configuration
-# Location: ~/Library/Application Support/SlatePDF/config.toml
+# Serein configuration
+# Location: ~/Library/Application Support/Serein/config.toml
 
 [appearance]
 mode = "system"
@@ -376,6 +381,7 @@ use_titlebar_tabs = "command+shift+2"
 close_current_tab = "command+w"
 previous_tab = "command+shift+["
 next_tab = "command+shift+]"
+show_all_tabs = "control+tab"
 fit_height = "command+9"
 fit_width = "command+0"
 zoom_in = "command+="
@@ -412,8 +418,8 @@ redo_last_highlight = "command+shift+z"
 
     static func render(_ configuration: AppConfiguration) -> String {
         """
-# SlatePDF configuration
-# Location: ~/Library/Application Support/SlatePDF/config.toml
+# Serein configuration
+# Location: ~/Library/Application Support/Serein/config.toml
 
 [appearance]
 mode = "\(configuration.appearance.mode.rawValue)"
@@ -454,6 +460,7 @@ use_titlebar_tabs = "\(serializedShortcut(.useTitlebarTabs, configuration: confi
 close_current_tab = "\(serializedShortcut(.closeCurrentTab, configuration: configuration))"
 previous_tab = "\(serializedShortcut(.previousTab, configuration: configuration))"
 next_tab = "\(serializedShortcut(.nextTab, configuration: configuration))"
+show_all_tabs = "\(serializedShortcut(.showAllTabs, configuration: configuration))"
 fit_height = "\(serializedShortcut(.fitHeight, configuration: configuration))"
 fit_width = "\(serializedShortcut(.fitWidth, configuration: configuration))"
 zoom_in = "\(serializedShortcut(.zoomIn, configuration: configuration))"
@@ -628,6 +635,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .previousTab, to: &configuration)
         case ("shortcuts", "next_tab"):
             try applyShortcut(rawValue, command: .nextTab, to: &configuration)
+        case ("shortcuts", "show_all_tabs"):
+            try applyShortcut(rawValue, command: .showAllTabs, to: &configuration)
         case ("shortcuts", "fit_height"):
             try applyShortcut(rawValue, command: .fitHeight, to: &configuration)
         case ("shortcuts", "fit_width"):
@@ -798,6 +807,7 @@ struct AppConfigurationStore {
             "close_current_tab",
             "previous_tab",
             "next_tab",
+            "show_all_tabs",
             "fit_height",
             "fit_width",
             "single_page",
@@ -836,6 +846,7 @@ struct AppConfigurationStore {
         let legacyRemoveHighlight = KeyboardShortcut(key: "d", modifiers: [.command, .shift])
         let legacyGreenHighlight = KeyboardShortcut(key: "g", modifiers: [.command, .shift])
         let legacyImmersiveMode = KeyboardShortcut(key: "l", modifiers: [.command, .option])
+        let legacyShowAllTabs = KeyboardShortcut(key: "t", modifiers: [.command, .option])
         var didMigrate = false
         if configuration.shortcuts.bindings[.removeHighlight] == legacyRemoveHighlight {
             configuration.shortcuts.bindings[.removeHighlight] = KeyboardShortcut(key: "d", modifiers: [])
@@ -854,6 +865,12 @@ struct AppConfigurationStore {
                 ?? KeyboardShortcut(key: "l", modifiers: [.command, .control])
             didMigrate = true
         }
+        if configuration.shortcuts.bindings[.showAllTabs] == legacyShowAllTabs {
+            configuration.shortcuts.bindings[.showAllTabs] =
+                AppConfiguration.default.shortcuts.bindings[.showAllTabs]
+                ?? KeyboardShortcut(key: "tab", modifiers: [.control])
+            didMigrate = true
+        }
 
         let missingKeys = requiredKeys.contains(where: { existingContent.contains($0) == false })
         guard missingKeys || didMigrate else { return }
@@ -863,7 +880,7 @@ struct AppConfigurationStore {
 
     static func defaultFileURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SlatePDF", isDirectory: true)
+            .appendingPathComponent("Serein", isDirectory: true)
             .appendingPathComponent("config.toml")
     }
 }

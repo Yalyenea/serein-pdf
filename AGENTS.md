@@ -28,7 +28,7 @@ Native macOS PDF reader.
 - Put temporary files in `.tmp/`.
 - Use git, but never commit automatically unless asked.
 - Add tests for core state and persistence logic.
-- Runtime config file lives at `~/Library/Application Support/SlatePDF/config.toml`; keep docs and defaults aligned with it.
+- Runtime config file lives at `~/Library/Application Support/Serein/config.toml`; keep docs and defaults aligned with it.
 - Prefer validating UI and interaction changes with real PDFs from `~/Downloads` when available.
 - Prefer clarity and compactness over premature flexibility.
 - Don't use computer-use tool unless i ask.

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Package the built SlatePDF.app into a DMG under build/SlatePDF-<version>.dmg
+# Package the built Serein.app into a DMG under build/Serein-<version>.dmg
 # Usage: Scripts/make-dmg.sh [output-dir]
 
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT_DIR="${1:-$PROJECT_ROOT/build}"
-APP_NAME="SlatePDF"
+APP_NAME="Serein"
 APP_BUNDLE="$OUTPUT_DIR/$APP_NAME.app"
 
 if [[ ! -d "$APP_BUNDLE" ]]; then
@@ -17,7 +17,7 @@ fi
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_BUNDLE/Contents/Info.plist")"
 DMG_PATH="$OUTPUT_DIR/$APP_NAME-$VERSION.dmg"
 
-STAGING_DIR="$(mktemp -d -t slatepdf-dmg)"
+STAGING_DIR="$(mktemp -d -t serein-dmg)"
 trap 'rm -rf "$STAGING_DIR"' EXIT
 
 echo "==> staging $APP_NAME.app at $STAGING_DIR"

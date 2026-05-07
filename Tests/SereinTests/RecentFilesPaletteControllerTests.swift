@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 @MainActor
 final class RecentFilesPaletteControllerTests: XCTestCase {

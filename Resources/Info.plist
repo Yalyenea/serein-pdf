@@ -5,9 +5,9 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>SlatePDF</string>
+    <string>Serein</string>
     <key>CFBundleExecutable</key>
-    <string>SlatePDF</string>
+    <string>Serein</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIconName</key>
@@ -15,11 +15,11 @@
     <key>NSAccentColorName</key>
     <string>AccentColor</string>
     <key>CFBundleIdentifier</key>
-    <string>local.yfff.SlatePDF</string>
+    <string>local.yfff.Serein</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>SlatePDF</string>
+    <string>Serein</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

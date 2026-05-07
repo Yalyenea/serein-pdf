@@ -1,7 +1,7 @@
-# SlatePDF
+# Serein
 
 <p align="center">
-  <img src="Resources/AppIcon.png" width="128" alt="SlatePDF icon"/>
+  <img src="Resources/AppIcon.png" width="128" alt="Serein icon"/>
 </p>
 
 Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
@@ -17,6 +17,8 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
+- Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
+- Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
@@ -26,7 +28,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
 - Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
-- Pink-first highlight workflow (`a` to highlight, with a warm Rose Pine-style inverted mode available in Rose Pine Moon)
+- Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
 - Highlights can carry comments in the right sidebar, and exports include those comments
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
@@ -35,7 +37,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
 - Immersive mode (`cmd+ctrl+l`) hides sidebars and tab chrome while keeping the current window size
 - Per-PDF memory: scale and page persist across launches; sidebar widths follow the current layout config on launch
-- Config-driven defaults via `~/Library/Application Support/SlatePDF/config.toml`
+- Config-driven defaults via `~/Library/Application Support/Serein/config.toml`
 
 ## Requirements
 
@@ -55,11 +57,11 @@ just run        # run dev build via SwiftPM
 ## Ship to your Mac
 
 ```sh
-just build      # produces build/SlatePDF.app (ad-hoc signed)
+just build      # produces build/Serein.app (ad-hoc signed)
 just install    # copies the .app to /Applications
 just register   # lsregister -f so Finder's Open With sees it
-just set-default  # duti -s local.yfff.SlatePDF com.adobe.pdf all
-just launch     # open /Applications/SlatePDF.app
+just set-default  # duti -s local.yfff.Serein com.adobe.pdf all
+just launch     # open /Applications/Serein.app
 ```
 
 Full release pipeline:
@@ -70,8 +72,8 @@ just ship       # test → build → install → register → set-default
 
 ## Configuration
 
-Runtime config lives at `~/Library/Application Support/SlatePDF/config.toml`
-and is created on first launch. Edit, then restart SlatePDF.
+Runtime config lives at `~/Library/Application Support/Serein/config.toml`
+and is created on first launch. Edit, then restart Serein.
 
 ```toml
 [appearance]
@@ -111,7 +113,7 @@ show_recent_files_in_sidebar = true
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
-- Setting a shortcut to `none` clears it completely; SlatePDF will not silently
+- Setting a shortcut to `none` clears it completely; Serein will not silently
   fall back to the default binding after restart.
 
 ## Keyboard shortcuts
@@ -135,6 +137,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Jump to first / last page | `g` / `shift+g` |
 | Close tab / window | `cmd+w` |
 | Reopen closed tab | `cmd+shift+t` |
+| Show all tabs | `ctrl+tab` |
 | New window | `cmd+shift+n` |
 | Quick recent-files launcher | `cmd+shift+space` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |

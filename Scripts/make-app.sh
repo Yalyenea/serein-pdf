@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Build a release SlatePDF.app bundle under build/SlatePDF.app
+# Build a release Serein.app bundle under build/Serein.app
 # Usage: Scripts/make-app.sh [output-dir]
 
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT_DIR="${1:-$PROJECT_ROOT/build}"
-APP_NAME="SlatePDF"
+APP_NAME="Serein"
 APP_BUNDLE="$OUTPUT_DIR/$APP_NAME.app"
 
 cd "$PROJECT_ROOT"

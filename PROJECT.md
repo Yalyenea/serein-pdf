@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
+文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
 
 ### 2.2 V1 明确不做
 
@@ -59,7 +59,7 @@ flowchart LR
     G --> H
     H --> I["DocumentSession"]
     H --> J["WindowWorkspace"]
-    E1 --> K["PDFView / PDFDocument"]
+    E1 --> K["PDFView / lazy PDFDocument"]
     E2 --> K
     E1 --> L["HighlightService + Undo"]
     E2 --> L
@@ -77,13 +77,13 @@ flowchart LR
 | 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,窗口只承载视图与交互 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
-| 目录来源 | `PDFDocument.outlineRoot` → `OutlineNode` |
+| 目录来源 | 右栏需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
-| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;窗口 UI 状态挂在 `WindowWorkspace` |
+| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;窗口 UI 状态挂在 `WindowWorkspace` |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,per-session 宽度 / 可见状态原子对调 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
@@ -111,11 +111,12 @@ flowchart LR
 - `rose_pine_dawn` 不只改阅读区外围,也把 PDF 白底映射成暖纸色
 - 反色夜间模式采用暖色、低刺激的 Rose Pine Moon 映射,避免生硬黄蓝互翻
 - `Settings` 按当前页内容自适应尺寸,`Shortcuts` 页会自动放大到合适大小
+- 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
 ### 4.3 快捷键总表
 
-配置文件:`~/Library/Application Support/SlatePDF/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`。
+配置文件:`~/Library/Application Support/Serein/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`。
 
 **批注**
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
@@ -144,6 +145,7 @@ flowchart LR
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
 - `Cmd+Shift+N`:新建窗口
 - `Cmd+Shift+Space`:最近文件启动器
+- `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 切换,`Option+Click` / `Option+Enter` 打开到另一 pane;重复 `Ctrl+Tab` 或 `Esc` 关闭
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
 - `Option+Click` tab:丢到另一 pane(必要时自动开分屏)
 
@@ -178,7 +180,8 @@ flowchart LR
 | `id: UUID` | session 唯一标识 |
 | `url: URL` | PDF 位置 |
 | `title: String` | 标题或文件名 |
-| `pdfDocument: PDFDocument` | 文档对象 |
+| `pageCount: Int?` | 激活或搜索后得到的页数元数据 |
+| live `PDFDocument` | 不存入 session,由 `DocumentStore` 按需加载并通过小容量 LRU 保留当前 / 分屏 / 最近文档 |
 | `currentPageIndex: Int` | 当前页 |
 | `displayMode` | 四种阅读模式 |
 | `scaleMode` | `fitWidth` / `manual` |
@@ -198,6 +201,7 @@ flowchart LR
 - 维护多个 `WindowWorkspace`,驱动多窗口 / 分屏 / 焦点 pane / 右栏模式 / 搜索 scope
 - 每个 `WindowWorkspace` 独立维护自己的 session/tab 集合,open/close 不跨窗扩散
 - 维护 active session,驱动左栏 tab 与中栏 reader 联动
+- 按需创建 `PDFDocument`,用小容量 LRU 保留当前 pane / 分屏 pane / 最近文档;干净后台文档可释放
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - 提供 tab 模式切换
 - 左右互换时对调 per-session 宽度 / 可见状态
@@ -238,6 +242,8 @@ App/                                      # AppKit 入口、窗口与设置/启�
   SettingsWindowController.swift          # 设置窗口:外观 / 阅读 / 批注 / 快捷键 配置 UI
   RecentFilesPaletteController.swift      # Spotlight 风格最近文件启动器的窗口与交互控制器
   RecentFilesPaletteState.swift           # 最近文件启动器的查询匹配与多选状态(纯模型)
+  OpenTabsPaletteController.swift         # 当前窗口所有 tabs 轻量文本总览
+  OpenTabsPaletteState.swift              # tabs 总览的选中状态(纯模型)
 
 Core/                                     # 文档 / 窗口 / 配置 / 持久化 核心模型
   AppConfiguration.swift                  # config.toml schema、默认值与 AppConfigurationStore 读写
@@ -301,7 +307,7 @@ Scripts/                                  # 打包脚本
   make-dmg.sh                             # 打包 .dmg
   make-icon.sh                            # 生成 .icns 图标
 
-Tests/SlatePDFTests/                      # Swift Testing + XCTest 测试套件
+Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   AppConfigurationTests.swift             # 配置加载 / 写回 / shortcut 冲突
   DocumentStoreTests.swift                # 多文档 / 多窗口 / 分屏 / 搜索 scope 等核心行为
   ReadingStateStoreTests.swift            # 阅读状态持久化
@@ -322,6 +328,8 @@ Tests/SlatePDFTests/                      # Swift Testing + XCTest 测试套件
   ReaderShortcutsControllerTests.swift    # plain 快捷键分发与文本上下文让路
   RecentFilesPaletteStateTests.swift      # 启动器模型的过滤 / 多选
   RecentFilesPaletteControllerTests.swift # 启动器控制器交互
+  OpenTabsPaletteStateTests.swift         # show all tabs 预览目标与网格选中
+  OpenTabsPaletteControllerTests.swift    # show all tabs 鼠标 / 键盘切换交互
   WindowChromeTests.swift                 # 窗口 chrome / 工具栏 / titlebar tabs 行为
 ```
 
@@ -391,7 +399,7 @@ Tests/SlatePDFTests/                      # Swift Testing + XCTest 测试套件
 
 - 扩展机制 RFC:进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳 的候选比较
 - PoC:若决策继续,把"导出高亮"重写为首个插件
-- Slate Extension API 草稿
+- Serein Extension API 草稿
 - 风险评估:沙箱、上架(若走 MAS)、维护成本;若推迟,说明"为什么现在不做"
 
 ## 9. 风险

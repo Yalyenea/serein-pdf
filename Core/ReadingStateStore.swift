@@ -16,7 +16,7 @@ protocol ReadingStateStore {
 }
 
 struct UserDefaultsReadingStateStore: ReadingStateStore {
-    private static let stateKey = "SlatePDF.ReadingState"
+    private static let stateKey = "Serein.ReadingState"
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {

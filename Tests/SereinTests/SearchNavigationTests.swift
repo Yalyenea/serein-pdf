@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 private final class SearchNavInMemoryDocumentStorePersistence: DocumentStorePersistence {
     var state: PersistedDocumentStoreState?
@@ -33,6 +33,11 @@ private final class SearchNavInMemoryRecentFilesStore: RecentFilesStore {
     func recordOpen(for url: URL) throws -> [URL] {
         recentFiles.removeAll { $0 == url }
         recentFiles.insert(url, at: 0)
+        return recentFiles
+    }
+
+    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
+        if let index = recentFiles.firstIndex(of: oldURL) { recentFiles[index] = newURL }
         return recentFiles
     }
 }

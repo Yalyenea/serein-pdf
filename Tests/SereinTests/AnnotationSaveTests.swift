@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 private final class InMemoryDocumentStorePersistence2: DocumentStorePersistence {
     var state: PersistedDocumentStoreState?
@@ -37,7 +37,7 @@ final class AnnotationSaveTests: XCTestCase {
     func testAutoSaveSkipsSessionWhenIntervalHasNotElapsed() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "autosave-not-elapsed"))
-        addHighlightAnnotation(to: session)
+        try addHighlightAnnotation(to: session, in: store)
         let dirtyAt = Date()
         store.setDirty(true, for: session.id, now: dirtyAt)
 
@@ -50,7 +50,7 @@ final class AnnotationSaveTests: XCTestCase {
     func testAutoSaveWritesWhenIntervalElapsed() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "autosave-elapsed"))
-        addHighlightAnnotation(to: session)
+        try addHighlightAnnotation(to: session, in: store)
         let dirtyAt = Date()
         store.setDirty(true, for: session.id, now: dirtyAt)
 
@@ -65,7 +65,7 @@ final class AnnotationSaveTests: XCTestCase {
     func testAutoSaveNeverPolicyDoesNotWrite() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "autosave-never"))
-        addHighlightAnnotation(to: session)
+        try addHighlightAnnotation(to: session, in: store)
         store.setAnnotationSavePolicy(.never, for: session.id)
         store.setDirty(true, for: session.id)
 
@@ -78,7 +78,7 @@ final class AnnotationSaveTests: XCTestCase {
     func testManualSaveClearsDirtyAndPersistsAnnotations() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "manual-save"))
-        addHighlightAnnotation(to: session)
+        try addHighlightAnnotation(to: session, in: store)
         store.setDirty(true, for: session.id)
 
         try store.saveAnnotations(for: session.id)
@@ -95,14 +95,14 @@ final class AnnotationSaveTests: XCTestCase {
         )
     }
 
-    private func addHighlightAnnotation(to session: DocumentSession) {
+    private func addHighlightAnnotation(to session: DocumentSession, in store: DocumentStore) throws {
         let annotation = PDFAnnotation(
             bounds: NSRect(x: 10, y: 10, width: 60, height: 16),
             forType: .highlight,
             withProperties: nil
         )
         annotation.color = HighlightColor.pink.nsColor
-        session.pdfDocument.page(at: 0)?.addAnnotation(annotation)
+        try store.pdfDocument(for: session.id).page(at: 0)?.addAnnotation(annotation)
     }
 
     private func makeTemporaryPDF(named name: String) throws -> URL {

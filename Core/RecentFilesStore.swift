@@ -3,10 +3,11 @@ import Foundation
 protocol RecentFilesStore {
     func loadRecentFiles() throws -> [URL]
     func recordOpen(for url: URL) throws -> [URL]
+    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL]
 }
 
 struct UserDefaultsRecentFilesStore: RecentFilesStore {
-    private static let stateKey = "SlatePDF.RecentFiles"
+    private static let stateKey = "Serein.RecentFiles"
     private let maxCount: Int
     private let userDefaults: UserDefaults
     private let fileManager: FileManager
@@ -37,6 +38,16 @@ struct UserDefaultsRecentFilesStore: RecentFilesStore {
             recentFiles.removeLast(recentFiles.count - maxCount)
         }
 
+        try persistRecentFiles(recentFiles)
+        return recentFiles
+    }
+
+    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
+        let oldPath = oldURL.standardizedFileURL.path
+        var recentFiles = try loadRecentFiles()
+        if let index = recentFiles.firstIndex(where: { $0.standardizedFileURL.path == oldPath }) {
+            recentFiles[index] = newURL.standardizedFileURL
+        }
         try persistRecentFiles(recentFiles)
         return recentFiles
     }

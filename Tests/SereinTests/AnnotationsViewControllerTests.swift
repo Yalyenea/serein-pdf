@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 private final class SidebarInMemoryDocumentStorePersistence: DocumentStorePersistence {
     var state: PersistedDocumentStoreState?
@@ -39,6 +39,11 @@ private final class SidebarInMemoryRecentFilesStore: RecentFilesStore {
         recentFiles.insert(url, at: 0)
         return recentFiles
     }
+
+    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
+        if let index = recentFiles.firstIndex(of: oldURL) { recentFiles[index] = newURL }
+        return recentFiles
+    }
 }
 
 @MainActor
@@ -46,7 +51,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
     func testApplyCommentPersistsFromSidebarEditor() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-comment"))
-        let record = try makeHighlightRecord(in: session.pdfDocument)
+        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
         store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
 
         let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
@@ -75,7 +80,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
     func testApplyCommentSurvivesMomentarySelectionLoss() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-selection"))
-        let record = try makeHighlightRecord(in: session.pdfDocument)
+        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
         store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
 
         let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
@@ -135,7 +140,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
     func testAnnotationsColumnTracksSidebarWidthAndCellsStayVisible() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-width-visibility"))
-        let record = try makeHighlightRecord(in: session.pdfDocument)
+        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
         store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
 
         let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)

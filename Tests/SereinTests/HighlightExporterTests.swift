@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 final class HighlightExporterTests: XCTestCase {
     func testMarkdownExportIncludesCommentAndPageHeaders() throws {

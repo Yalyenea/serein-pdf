@@ -21,7 +21,10 @@ final class DocumentStore {
     private(set) var recentDocumentURLs: [URL] = []
     private(set) var windowWorkspaces: [WindowWorkspace]
     private var splitComparisonSessionIDs: Set<UUID> = []
+    private var pdfDocumentCache: [UUID: PDFDocument] = [:]
+    private var pdfDocumentRecency: [UUID] = []
     private static let recentlyClosedLimit = 10
+    private static let livePDFDocumentLimit = 4
     static let undoStackLimit = 50
 
     init(
@@ -186,14 +189,28 @@ final class DocumentStore {
 
     @discardableResult
     func open(documentAt url: URL, in windowID: UUID, targetPane: ReaderPane? = nil) throws -> DocumentSession {
-        let session = try makeSession(documentAt: url)
-        sessions.append(session)
-        recentDocumentURLs = (try? recentFilesStore.recordOpen(for: url)) ?? recentDocumentURLs
-        attach(sessionID: session.id, to: windowID)
-        activate(sessionID: session.id, in: windowID, targetPane: targetPane)
-        updateSearchCachesAfterOpen(for: session.id)
-        notifyChange()
+        let openedSessions = try open(documentsAt: [url], in: windowID, targetPane: targetPane)
+        guard let session = openedSessions.first else {
+            throw DocumentStoreError.unreadableDocument(url)
+        }
         return session
+    }
+
+    @discardableResult
+    func open(documentsAt urls: [URL], in windowID: UUID, targetPane: ReaderPane? = nil) throws -> [DocumentSession] {
+        let newSessions = try urls.map { try makeSession(documentAt: $0) }
+        guard newSessions.isEmpty == false else { return [] }
+
+        sessions.append(contentsOf: newSessions)
+        for session in newSessions {
+            recentDocumentURLs = (try? recentFilesStore.recordOpen(for: session.url)) ?? recentDocumentURLs
+            attach(sessionID: session.id, to: windowID)
+        }
+        if let activeSessionID = newSessions.last?.id {
+            activateSession(sessionID: activeSessionID, in: windowID, targetPane: targetPane, notify: false)
+        }
+        notifyChange()
+        return newSessions
     }
 
     func refreshRecentDocumentURLsFromStore() {
@@ -251,6 +268,10 @@ final class DocumentStore {
     }
 
     func activate(sessionID: UUID, in windowID: UUID, targetPane: ReaderPane? = nil) {
+        activateSession(sessionID: sessionID, in: windowID, targetPane: targetPane, notify: true)
+    }
+
+    private func activateSession(sessionID: UUID, in windowID: UUID, targetPane: ReaderPane?, notify: Bool) {
         guard session(for: sessionID) != nil,
               let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
 
@@ -300,7 +321,9 @@ final class DocumentStore {
         if let duplicatedSessionID {
             updateSearchCachesAfterOpen(for: duplicatedSessionID)
         }
-        notifyChange()
+        if notify {
+            notifyChange()
+        }
     }
 
     func activatePreviousSession() {
@@ -435,6 +458,56 @@ final class DocumentStore {
         sessions.first { $0.id == id }
     }
 
+    func isPDFDocumentLoaded(for sessionID: UUID) -> Bool {
+        pdfDocumentCache[sessionID] != nil
+    }
+
+    func loadedPDFDocument(for sessionID: UUID) -> PDFDocument? {
+        pdfDocumentCache[sessionID]
+    }
+
+    @discardableResult
+    func pdfDocument(for sessionID: UUID) throws -> PDFDocument {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else {
+            throw DocumentStoreError.missingSession(sessionID)
+        }
+        if let document = pdfDocumentCache[sessionID] {
+            touchPDFDocument(sessionID)
+            return document
+        }
+
+        let url = sessions[sessionIndex].url
+        guard let document = PDFDocument(url: url) else {
+            throw DocumentStoreError.unreadableDocument(url)
+        }
+
+        pdfDocumentCache[sessionID] = document
+        touchPDFDocument(sessionID)
+        sessions[sessionIndex].pageCount = document.pageCount
+        prunePDFDocumentCache()
+        return document
+    }
+
+    func outlineTree(for sessionID: UUID) -> [OutlineNode] {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return [] }
+        if sessions[sessionIndex].isOutlineLoaded {
+            return sessions[sessionIndex].outlineTree
+        }
+        guard let document = try? pdfDocument(for: sessionID) else { return [] }
+        let outlineTree = OutlineExtractor.extract(from: document)
+        sessions[sessionIndex].outlineTree = outlineTree
+        sessions[sessionIndex].isOutlineLoaded = true
+        return outlineTree
+    }
+
+    func pageCount(for sessionID: UUID) -> Int? {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return nil }
+        if let pageCount = sessions[sessionIndex].pageCount {
+            return pageCount
+        }
+        return loadedPDFDocument(for: sessionID)?.pageCount
+    }
+
     func updateCurrentPage(index: Int, for sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[sessionIndex].currentPageIndex != index else { return }
@@ -552,7 +625,9 @@ final class DocumentStore {
 
         switch searchScope(in: windowID) {
         case .currentDocument:
-            guard let session = activeSession(in: windowID) else { return [] }
+            guard let sessionID = activeSessionID(in: windowID) else { return [] }
+            rebuildSearchCache(for: sessionID, query: query)
+            guard let session = session(for: sessionID) else { return [] }
             let grouped = Dictionary(grouping: session.searchCache.matches) { $0.pageIndex }
             return grouped
                 .keys
@@ -574,6 +649,9 @@ final class DocumentStore {
                     )
                 }
         case .allOpen:
+            for sessionID in windowWorkspace(for: windowID)?.sessionIDs ?? [] {
+                rebuildSearchCache(for: sessionID, query: query)
+            }
             return sessions(in: windowID).compactMap { session in
                 guard session.searchCache.query == query,
                       session.searchCache.matches.isEmpty == false else { return nil }
@@ -600,8 +678,11 @@ final class DocumentStore {
     }
 
     func annotationSections(in windowID: UUID) -> [DocumentHighlightSection] {
-        guard let session = activeSession(in: windowID) else { return [] }
-        let grouped = Dictionary(grouping: session.annotationCache.groups) { $0.pageIndex }
+        guard let sessionID = activeSessionID(in: windowID),
+              let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return [] }
+        ensureAnnotationCacheLoaded(for: sessionIndex)
+        guard let refreshedSessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return [] }
+        let grouped = Dictionary(grouping: sessions[refreshedSessionIndex].annotationCache.groups) { $0.pageIndex }
         return grouped
             .keys
             .sorted()
@@ -622,7 +703,9 @@ final class DocumentStore {
     }
 
     func annotationGroups(for sessionID: UUID) -> [DocumentHighlightGroup] {
-        session(for: sessionID)?.annotationCache.groups ?? []
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return [] }
+        ensureAnnotationCacheLoaded(for: sessionIndex)
+        return sessions.first(where: { $0.id == sessionID })?.annotationCache.groups ?? []
     }
 
     func currentSessionSearchMatches(in windowID: UUID) -> [DocumentSearchMatch] {
@@ -635,6 +718,9 @@ final class DocumentStore {
 
         sessions[sessionIndex].isDirty = isDirty
         sessions[sessionIndex].dirtySince = isDirty ? (sessions[sessionIndex].dirtySince ?? now) : nil
+        if isDirty == false {
+            prunePDFDocumentCache()
+        }
         notifyChange()
     }
 
@@ -662,6 +748,8 @@ final class DocumentStore {
 
     @discardableResult
     func updateComment(_ comment: String, forHighlightGroup groupID: String, in sessionID: UUID, now: Date = Date()) -> Bool {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return false }
+        ensureAnnotationCacheLoaded(for: sessionIndex)
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
               let group = sessions[sessionIndex].annotationCache.groups.first(where: { $0.groupID == groupID }),
               HighlightService.updateComment(comment, for: group.records) else { return false }
@@ -691,10 +779,10 @@ final class DocumentStore {
 
     @discardableResult
     func undoLastHighlight(for sessionID: UUID) -> Bool {
-        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+        guard let document = try? pdfDocument(for: sessionID),
+              let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
               let operation = sessions[sessionIndex].undoStack.popLast() else { return false }
 
-        let document = sessions[sessionIndex].pdfDocument
         switch operation {
         case let .added(records):
             HighlightService.removeHighlights(records, in: document)
@@ -711,10 +799,10 @@ final class DocumentStore {
 
     @discardableResult
     func redoLastHighlight(for sessionID: UUID) -> Bool {
-        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+        guard let document = try? pdfDocument(for: sessionID),
+              let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
               let operation = sessions[sessionIndex].redoStack.popLast() else { return false }
 
-        let document = sessions[sessionIndex].pdfDocument
         switch operation {
         case let .added(records):
             HighlightService.reinsertHighlights(records, in: document)
@@ -783,12 +871,14 @@ final class DocumentStore {
     func saveAnnotations(for sessionID: UUID) throws {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[sessionIndex].isDirty else { return }
-        guard sessions[sessionIndex].pdfDocument.write(to: sessions[sessionIndex].url) else {
+        let document = try pdfDocument(for: sessionID)
+        guard document.write(to: sessions[sessionIndex].url) else {
             throw DocumentStoreError.failedToSaveDocument(sessions[sessionIndex].url)
         }
 
         sessions[sessionIndex].isDirty = false
         sessions[sessionIndex].dirtySince = nil
+        prunePDFDocumentCache()
         notifyChange()
     }
 
@@ -813,30 +903,27 @@ final class DocumentStore {
         guard let persistedState = try persistence.loadState() else { return }
 
         sessions = []
+        pdfDocumentCache.removeAll()
+        pdfDocumentRecency.removeAll()
         splitComparisonSessionIDs.removeAll()
         var usedSessionIDs: Set<UUID> = []
         for reference in persistedState.sessions {
-            guard let pdfDocument = PDFDocument(url: reference.url) else { continue }
+            guard FileManager.default.isReadableFile(atPath: reference.url.path) else { continue }
             let restoredState = try readingStateStore.loadState(for: reference.url)
             let sessionID = usedSessionIDs.insert(reference.id).inserted ? reference.id : UUID()
-            var session = DocumentSession(
+            let session = DocumentSession(
                     id: sessionID,
                     url: reference.url,
                     title: reference.title,
-                    pdfDocument: pdfDocument,
                     currentPageIndex: restoredState?.readingPosition.pageIndex ?? 0,
                     displayMode: restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
                     scaleMode: resolvedScaleMode(restoredState?.scaleMode),
                     zoomScale: restoredState?.scaleFactor ?? 1.0,
                     lastReadPosition: restoredState?.readingPosition ?? .zero,
-                    outlineTree: OutlineExtractor.extract(from: pdfDocument),
                     annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
                     leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
                     rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
                 )
-            session.annotationCache = DocumentHighlightCache(
-                groups: HighlightService.buildHighlightGroups(in: pdfDocument)
-            )
             sessions.append(session)
         }
 
@@ -914,8 +1001,12 @@ final class DocumentStore {
     }
 
     private func removeUnreferencedSessions() {
+        let removedSessionIDs = sessions.filter { isSessionReferenced($0.id) == false }.map(\.id)
         sessions.removeAll { session in
             isSessionReferenced(session.id) == false
+        }
+        for sessionID in removedSessionIDs {
+            discardPDFDocumentCache(for: sessionID)
         }
         splitComparisonSessionIDs = splitComparisonSessionIDs.filter { sessionID in
             sessions.contains(where: { $0.id == sessionID })
@@ -924,6 +1015,7 @@ final class DocumentStore {
 
     private func discardSession(_ sessionID: UUID) {
         sessions.removeAll { $0.id == sessionID }
+        discardPDFDocumentCache(for: sessionID)
         splitComparisonSessionIDs.remove(sessionID)
     }
 
@@ -1006,9 +1098,54 @@ final class DocumentStore {
     }
 
     private func rebuildAnnotationCache(for sessionIndex: Int) {
+        guard let document = try? pdfDocument(for: sessions[sessionIndex].id) else { return }
         sessions[sessionIndex].annotationCache = DocumentHighlightCache(
-            groups: HighlightService.buildHighlightGroups(in: sessions[sessionIndex].pdfDocument)
+            groups: HighlightService.buildHighlightGroups(in: document)
         )
+        sessions[sessionIndex].isAnnotationCacheLoaded = true
+    }
+
+    private func ensureAnnotationCacheLoaded(for sessionIndex: Int) {
+        guard sessions[sessionIndex].isAnnotationCacheLoaded == false else { return }
+        rebuildAnnotationCache(for: sessionIndex)
+    }
+
+    private func touchPDFDocument(_ sessionID: UUID) {
+        pdfDocumentRecency.removeAll { $0 == sessionID }
+        pdfDocumentRecency.append(sessionID)
+    }
+
+    private func discardPDFDocumentCache(for sessionID: UUID) {
+        pdfDocumentCache.removeValue(forKey: sessionID)
+        pdfDocumentRecency.removeAll { $0 == sessionID }
+    }
+
+    private func pinnedPDFDocumentIDs() -> Set<UUID> {
+        var pinned = Set(sessions.filter(\.isDirty).map(\.id))
+        for workspace in windowWorkspaces {
+            if let primary = workspace.primarySessionID {
+                pinned.insert(primary)
+            }
+            if workspace.isSplitEnabled, let secondary = workspace.secondarySessionID {
+                pinned.insert(secondary)
+            }
+        }
+        return pinned
+    }
+
+    private func prunePDFDocumentCache() {
+        let pinned = pinnedPDFDocumentIDs()
+        while pdfDocumentCache.count > Self.livePDFDocumentLimit {
+            guard let victim = pdfDocumentRecency.first(where: { pinned.contains($0) == false }) else { return }
+            pdfDocumentCache.removeValue(forKey: victim)
+            pdfDocumentRecency.removeAll { $0 == victim }
+            guard let index = sessions.firstIndex(where: { $0.id == victim }) else { continue }
+            sessions[index].searchCache.clear()
+            if sessions[index].isDirty == false {
+                sessions[index].annotationCache.clear()
+                sessions[index].isAnnotationCacheLoaded = false
+            }
+        }
     }
 
     private func populateSearchCaches(for query: String, scope: SearchScope, windowID: UUID) {
@@ -1030,7 +1167,8 @@ final class DocumentStore {
         if sessions[index].searchCache.query == query {
             return
         }
-        let matches = DocumentSearchService.buildMatches(for: query, in: sessions[index].pdfDocument)
+        guard let document = try? pdfDocument(for: sessionID) else { return }
+        let matches = DocumentSearchService.buildMatches(for: query, in: document)
         sessions[index].searchCache = DocumentSearchCache(
             query: query,
             matches: matches.enumerated().map { offset, match in
@@ -1135,29 +1273,28 @@ final class DocumentStore {
         documentAt url: URL,
         seedState: DocumentSession? = nil
     ) throws -> DocumentSession {
-        guard let pdfDocument = PDFDocument(url: url) else {
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
             throw DocumentStoreError.unreadableDocument(url)
         }
 
         let restoredState = seedState == nil ? try readingStateStore.loadState(for: url) : nil
-        var session = DocumentSession(
+        return DocumentSession(
             url: url,
             title: seedState?.title,
-            pdfDocument: pdfDocument,
+            pageCount: seedState?.pageCount,
             currentPageIndex: seedState?.currentPageIndex ?? restoredState?.readingPosition.pageIndex ?? 0,
             displayMode: seedState?.displayMode ?? restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
             scaleMode: seedState?.scaleMode ?? resolvedScaleMode(restoredState?.scaleMode),
             zoomScale: seedState?.zoomScale ?? restoredState?.scaleFactor ?? 1.0,
             lastReadPosition: seedState?.lastReadPosition ?? restoredState?.readingPosition ?? .zero,
-            outlineTree: OutlineExtractor.extract(from: pdfDocument),
+            outlineTree: seedState?.outlineTree ?? [],
+            isOutlineLoaded: seedState?.isOutlineLoaded ?? false,
             annotationSavePolicy: seedState?.annotationSavePolicy ?? appConfiguration.annotations.autoSavePolicy,
             leftSidebarWidth: seedState?.leftSidebarWidth ?? appConfiguration.layout.leftSidebarWidth,
-            rightSidebarWidth: seedState?.rightSidebarWidth ?? appConfiguration.layout.rightSidebarWidth
+            rightSidebarWidth: seedState?.rightSidebarWidth ?? appConfiguration.layout.rightSidebarWidth,
+            annotationCache: seedState?.annotationCache ?? DocumentHighlightCache(),
+            isAnnotationCacheLoaded: seedState?.isAnnotationCacheLoaded ?? false
         )
-        session.annotationCache = DocumentHighlightCache(
-            groups: HighlightService.buildHighlightGroups(in: pdfDocument)
-        )
-        return session
     }
 
     private func duplicateSessionForSplitComparison(from sessionID: UUID) -> UUID? {
@@ -1168,7 +1305,7 @@ final class DocumentStore {
             splitComparisonSessionIDs.insert(duplicate.id)
             return duplicate.id
         } catch {
-            NSLog("SlatePDF failed to duplicate session for split comparison: %@", error.localizedDescription)
+            NSLog("Serein failed to duplicate session for split comparison: %@", error.localizedDescription)
             return nil
         }
     }
@@ -1204,7 +1341,42 @@ final class DocumentStore {
 
     func renameSession(_ title: String, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let oldURL = sessions[index].url
+        let newURL = oldURL.deletingLastPathComponent().appendingPathComponent(title).appendingPathExtension("pdf")
+
+        guard oldURL != newURL else {
+            sessions[index].title = title
+            notifyChange()
+            return
+        }
+
+        do {
+            try FileManager.default.moveItem(at: oldURL, to: newURL)
+        } catch {
+            NSLog("Serein failed to rename file: %@", error.localizedDescription)
+            sessions[index].title = title
+            notifyChange()
+            return
+        }
+
+        sessions[index].url = newURL
         sessions[index].title = title
+
+        if let oldState = try? readingStateStore.loadState(for: oldURL) {
+            var migratedState = oldState
+            migratedState.url = newURL
+            try? readingStateStore.saveState(migratedState)
+        }
+
+        recentDocumentURLs = (try? recentFilesStore.replaceURL(oldURL, with: newURL)) ?? recentDocumentURLs
+
+        for workspaceIndex in windowWorkspaces.indices {
+            for closedIndex in windowWorkspaces[workspaceIndex].recentlyClosedURLs.indices
+            where windowWorkspaces[workspaceIndex].recentlyClosedURLs[closedIndex] == oldURL {
+                windowWorkspaces[workspaceIndex].recentlyClosedURLs[closedIndex] = newURL
+            }
+        }
+
         notifyChange()
     }
 
@@ -1226,11 +1398,14 @@ final class DocumentStore {
 }
 
 enum DocumentStoreError: Error, LocalizedError {
+    case missingSession(UUID)
     case unreadableDocument(URL)
     case failedToSaveDocument(URL)
 
     var errorDescription: String? {
         switch self {
+        case let .missingSession(id):
+            "Missing PDF session \(id.uuidString)"
         case let .unreadableDocument(url):
             "Unable to open PDF at \(url.path)"
         case let .failedToSaveDocument(url):

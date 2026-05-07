@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 @MainActor
 final class HighlightServiceTests: XCTestCase {

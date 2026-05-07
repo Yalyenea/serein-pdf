@@ -125,7 +125,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         let session = documentStore.activeSession(in: windowID)
         let sessionID = session?.id
-        let outlineTree = session?.outlineTree ?? []
+        let outlineTree = sessionID.map { documentStore.outlineTree(for: $0) } ?? []
         if displayedSessionID != sessionID || nodes != outlineTree {
             reloadOutline()
         }
@@ -137,7 +137,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             pageCounterLabel.stringValue = ""
             return
         }
-        let total = session.pdfDocument.pageCount
+        let total = documentStore.pageCount(for: session.id) ?? 0
         guard total > 0 else {
             pageCounterLabel.stringValue = ""
             return
@@ -151,7 +151,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
 
         let session = documentStore.activeSession(in: windowID)
         displayedSessionID = session?.id
-        nodes = session?.outlineTree ?? []
+        nodes = session.map { documentStore.outlineTree(for: $0.id) } ?? []
         outlineView.deselectAll(nil)
         outlineView.reloadData()
         expandAllNodes()

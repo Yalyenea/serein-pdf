@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 private final class PDFMockTextView: NSTextView {}
 

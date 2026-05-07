@@ -1,7 +1,7 @@
 import AppKit
 
 extension NSToolbarItem.Identifier {
-    static let titlebarTabs = NSToolbarItem.Identifier("local.yfff.SlatePDF.titlebarTabs")
+    static let titlebarTabs = NSToolbarItem.Identifier("local.yfff.Serein.titlebarTabs")
 }
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
@@ -25,7 +25,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController = SplitViewController(documentStore: documentStore, windowID: windowID)
         let window = ReaderShortcutWindow(contentViewController: splitViewController)
 
-        window.title = "SlatePDF"
+        window.title = "Serein"
         window.setContentSize(Self.defaultContentSize)
         window.minSize = Self.minimumWindowSize
         window.center()
@@ -146,7 +146,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func refreshWindowTitle() {
-        window?.title = documentStore.activeSession(in: windowID)?.title ?? "SlatePDF"
+        window?.title = documentStore.activeSession(in: windowID)?.title ?? "Serein"
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -434,7 +434,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
 
         switch presentUnsavedChangesAlert(
-            title: "Save changes before quitting SlatePDF?",
+            title: "Save changes before quitting Serein?",
             detail: detail
         ) {
         case .save:

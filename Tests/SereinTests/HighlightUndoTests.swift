@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 private final class InMemoryDocumentStorePersistenceUndo: DocumentStorePersistence {
     var state: PersistedDocumentStoreState?
@@ -23,6 +23,10 @@ private final class InMemoryRecentFilesStoreUndo: RecentFilesStore {
         recentFiles.insert(url, at: 0)
         return recentFiles
     }
+    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
+        if let index = recentFiles.firstIndex(of: oldURL) { recentFiles[index] = newURL }
+        return recentFiles
+    }
 }
 
 @MainActor
@@ -40,7 +44,7 @@ final class HighlightUndoTests: XCTestCase {
     func testUndoAddRemovesAnnotation() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTextFile(text: "alpha"))
-        let document = session.pdfDocument
+        let document = try store.pdfDocument(for: session.id)
         let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
 
         let records = HighlightService.applyHighlight(to: selection)
@@ -59,7 +63,7 @@ final class HighlightUndoTests: XCTestCase {
     func testUndoRemoveRestoresGroup() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTextFile(text: "alpha beta gamma"))
-        let document = session.pdfDocument
+        let document = try store.pdfDocument(for: session.id)
         let selection = try XCTUnwrap(document.findString("alpha beta gamma", withOptions: []).first)
 
         let added = HighlightService.applyHighlight(to: selection)
@@ -115,7 +119,7 @@ final class HighlightUndoTests: XCTestCase {
     func testRedoReappliesUndoneHighlight() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTextFile(text: "alpha"))
-        let document = session.pdfDocument
+        let document = try store.pdfDocument(for: session.id)
         let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
 
         let records = HighlightService.applyHighlight(to: selection)
@@ -144,7 +148,7 @@ final class HighlightUndoTests: XCTestCase {
     func testNewHighlightClearsRedoStack() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTextFile(text: "alpha beta"))
-        let document = session.pdfDocument
+        let document = try store.pdfDocument(for: session.id)
 
         let selection1 = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
         let records1 = HighlightService.applyHighlight(to: selection1)

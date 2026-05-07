@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import SlatePDF
+@testable import Serein
 
 final class OpenDocumentSelectionResolverTests: XCTestCase {
     private let resolver = OpenDocumentSelectionResolver()
@@ -47,7 +47,7 @@ final class OpenDocumentSelectionResolverTests: XCTestCase {
 
     private func makeTemporaryDirectory() throws -> URL {
         let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let directory = root.appendingPathComponent("SlatePDFTests.OpenSelection.\(UUID().uuidString)", isDirectory: true)
+        let directory = root.appendingPathComponent("SereinTests.OpenSelection.\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock {
             try? FileManager.default.removeItem(at: directory)

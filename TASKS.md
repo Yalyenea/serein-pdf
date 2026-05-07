@@ -24,6 +24,7 @@
 - `Cmd+S`:写回源 PDF
 - `Cmd+R`:在 Finder 中显示当前 PDF 所在位置
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
+- `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 切换;`Option+Click` / `Option+Enter` 打开到另一 pane
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行
@@ -119,6 +120,11 @@
 - [x] `M9-003` 键盘交互:`↑` / `↓` 选中,`Space` 切换多选,`Enter` 打开选中或当前项,`Esc` 关闭。
 - [x] `M9-004` 操作提示:面板底部常驻显示键盘操作说明,不跳出到外部文档。
 - [x] `M9-005` 测试:覆盖搜索过滤、多选打开、空列表与帮助切换。
+- [x] `M9-006` Show All Tabs:`Ctrl+Tab` 显示当前窗口所有 PDF tab 的轻量文本总览,不渲染缩略图,支持点击、方向键、H/J/K/L、Enter 切换、Esc 关闭。
+- [x] `M9-007` Show All Tabs 关闭语义:严格单选,重复 `Ctrl+Tab` / `Esc` / app 失焦关闭,打开后关闭。
+- [x] `M9-008` Show All Tabs 分屏联动:`Option+Click` / `Option+Enter` 打开到另一 pane,必要时自动开启分屏。
+- [x] `M9-009` 多 PDF 打开懒加载:tab session 先保存 URL/title/阅读状态;live `PDFDocument` 由小容量 LRU 按需加载,干净后台文档可释放。
+- [x] `M9-010` 右栏缓存延迟构建:outline / annotations / search 在对应面板或搜索动作需要时才解析 PDF。
 
 ## 8. Milestone 10:阅读区 Framing 打磨
 
@@ -143,7 +149,7 @@
 
 - [ ] `M11-001` 扩展机制 RFC:`docs/extensions-rfc.md` 列选型,至少比较进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳。
 - [ ] `M11-002` PoC:若决策继续,选一条路径把"导出高亮"重写为插件,可在 app 中运行。
-- [ ] `M11-003` Slate Extension API 草稿:面向未来扩展开发者。
+- [ ] `M11-003` Serein Extension API 草稿:面向未来扩展开发者。
 - [ ] `M11-004` 若推迟,在 RFC 写清"为什么现在不做"(安全、上架、维护成本)。
 
 ## 10. 手测清单(尚未覆盖)
@@ -158,6 +164,8 @@
 - [ ] `UAT-31` Shortcuts 面板改绑定后新会话生效,冲突被拒,清除后写回 `none`
 - [ ] `UAT-32` 最近文件启动器可搜索最近文件,支持 `Space` 多选与 `Enter` 打开
 - [ ] `UAT-33` 最近文件启动器底部常驻显示操作提示,无查询和有查询时都可直接 `↓` 浏览结果
+- [ ] `UAT-33A` Show All Tabs 可在大量已打开 PDF 中通过轻量文本总览切换 tab,且单选与分屏打开语义正确
+- [ ] `UAT-33B` 批量打开大量 PDF 时先出现 tabs,只加载当前 reader / 分屏 reader,后台干净 PDF 可被 LRU 释放
 - [ ] `UAT-34` 单页非连续模式缩小后页面保持居中,slide PDF 不贴边
 - [ ] `UAT-35` `Cmd+0` 或默认 fit width 后,页面刚好完整显示内容,无横向裁切
 - [ ] `UAT-36` 扩展机制 RFC 存在并评审(M11 证据)

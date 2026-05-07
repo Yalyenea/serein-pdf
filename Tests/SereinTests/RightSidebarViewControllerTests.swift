@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import SlatePDF
+@testable import Serein
 
 @MainActor
 struct RightSidebarViewControllerTests {

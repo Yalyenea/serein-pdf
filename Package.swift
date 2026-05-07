@@ -3,16 +3,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "SlatePDF",
+    name: "Serein",
     platforms: [
         .macOS(.v14),
     ],
     products: [
-        .executable(name: "SlatePDF", targets: ["SlatePDF"]),
+        .executable(name: "Serein", targets: ["Serein"]),
     ],
     targets: [
         .executableTarget(
-            name: "SlatePDF",
+            name: "Serein",
             path: ".",
             exclude: [
                 ".build",
@@ -39,9 +39,9 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "SlatePDFTests",
-            dependencies: ["SlatePDF"],
-            path: "Tests/SlatePDFTests"
+            name: "SereinTests",
+            dependencies: ["Serein"],
+            path: "Tests/SereinTests"
         ),
     ]
 )
