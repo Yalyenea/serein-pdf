@@ -1174,7 +1174,7 @@ final class ReaderViewController: NSViewController {
         syncPDFMarginBackgroundAfterPDFKitLayout()
 
         var targetBounds = clipView.bounds
-        targetBounds.origin.y += clipView.bounds.height * fraction
+        targetBounds.origin.y -= clipView.bounds.height * fraction
         targetBounds = clipView.constrainBoundsRect(targetBounds)
         guard abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
 
