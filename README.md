@@ -20,7 +20,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
 - Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
-- PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, search, and direct PDF opening
+- PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
@@ -122,8 +122,9 @@ open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
 - `library.folders` can contain one or more folders. The library browser scans
-  them recursively when opened, groups results by library root and PDF folder,
-  and keeps the files in place.
+  them recursively, groups results by library root and PDF folder, keeps a
+  lightweight in-session catalog cache, and invalidates it when the configured
+  folders change.
 - Setting a shortcut to `none` clears it completely; Serein will not silently
   fall back to the default binding after restart.
 

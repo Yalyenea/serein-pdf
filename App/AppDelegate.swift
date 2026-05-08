@@ -1339,6 +1339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard let configStore else { return }
         let previousConfiguration = appConfiguration
         var newConfiguration = configuration
+        let libraryFoldersChanged = previousConfiguration.library.folderURLs != newConfiguration.library.folderURLs
 
         if previousConfiguration.layout.sidebarsSwapped != newConfiguration.layout.sidebarsSwapped {
             swap(&newConfiguration.layout.leftSidebarWidth, &newConfiguration.layout.rightSidebarWidth)
@@ -1352,6 +1353,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             applyApplicationAppearance()
             refreshMenuShortcuts()
             documentStore.updateAppConfiguration(newConfiguration)
+            if libraryFoldersChanged {
+                libraryPaletteController?.invalidateCatalogCache()
+            }
         } catch {
             appConfiguration = previousConfiguration
             applyApplicationAppearance()

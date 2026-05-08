@@ -12,6 +12,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Make PDF tabs lightweight on open: sessions keep URL/title/reading state first, while `PDFDocument` loads only when a reader, sidebar, annotation, or search path needs it
 - Add a small live `PDFDocument` LRU so clean background PDFs can be released while the current pane, split pane, and dirty documents stay resident
 - Keep Show All Tabs as a lightweight text overview instead of rendering PDF thumbnails
+- Cache the PDF Library catalog per configured folder set and precompute lightweight root, folder, and search indexes so reopening the library does not rescan unchanged folders
 
 ### Reading
 - Add continuous reading groups for multiple selected PDFs: `cmd+shift+c` or the tab context menu enables ordered cross-PDF page turns, tab group indentation, and a combined right-sidebar Outline grouped by PDF

@@ -134,6 +134,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private static let panelSize = NSSize(width: 860, height: 620)
 
     private let onOpenURL: (URL) -> Void
+    private let catalogCache = PDFLibraryCatalogCache()
     private var catalog = PDFLibraryCatalog(roots: [], items: [])
     private var selectedSegmentIndex = 0
     private var selectedFolderScope: PDFLibraryFolderScope = .all
@@ -188,7 +189,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     }
 
     func show(folderURLs: [URL], relativeTo parentWindow: NSWindow?) {
-        catalog = PDFLibraryCatalog.build(folderURLs: folderURLs)
+        catalog = catalogCache.catalog(folderURLs: folderURLs)
         selectedSegmentIndex = 0
         selectedFolderScope = .all
         queryField.stringValue = ""
@@ -199,6 +200,10 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         window?.makeKeyAndOrderFront(nil)
         focusQueryField()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func invalidateCatalogCache() {
+        catalogCache.invalidate()
     }
 
     private func buildInterface(in panel: NSPanel) {
@@ -350,10 +355,12 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         )
     }
 
-    private func reloadUI() {
-        folderRows = makeFolderRows()
-        if folderRows.contains(where: { $0.scope == selectedFolderScope }) == false {
-            selectedFolderScope = .all
+    private func reloadUI(rebuildFolders: Bool = true) {
+        if rebuildFolders {
+            folderRows = makeFolderRows()
+            if folderRows.contains(where: { $0.scope == selectedFolderScope }) == false {
+                selectedFolderScope = .all
+            }
         }
         filteredItems = makeFilteredItems()
         secondaryLabel.stringValue = "\(filteredItems.count) PDFs"
@@ -362,9 +369,11 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         pdfsScrollView.isHidden = filteredItems.isEmpty
 
         isApplyingSelection = true
-        foldersTableView.reloadData()
+        if rebuildFolders {
+            foldersTableView.reloadData()
+            selectCurrentFolder()
+        }
         pdfsTableView.reloadData()
-        selectCurrentFolder()
         selectFirstPDF()
         isApplyingSelection = false
     }
@@ -377,7 +386,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
 
         if selectedSegmentIndex == 0 {
             for root in catalog.roots {
-                let count = catalog.items.filter { $0.rootURL == root.url }.count
+                let count = catalog.rootItemCounts[root.url, default: 0]
                 rows.append(PDFLibraryFolderRow(scope: .root(root.url), title: root.title, subtitle: "\(count) PDFs"))
             }
         }
@@ -409,9 +418,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         let query = queryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard query.isEmpty == false else { return scopedItems }
         return scopedItems.filter { item in
-            item.title.lowercased().contains(query)
-                || item.relativePath.lowercased().contains(query)
-                || item.url.path.lowercased().contains(query)
+            item.searchableText.contains(query)
         }
     }
 
@@ -421,7 +428,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             return catalog.items
         }
         let rootURL = catalog.roots[selectedSegmentIndex - 1].url
-        return catalog.items.filter { $0.rootURL == rootURL }
+        return catalog.items(forRootURL: rootURL)
     }
 
     private func itemsForSelectedFolder() -> [PDFLibraryItem] {
@@ -430,9 +437,9 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         case .all:
             return segmentItems
         case .root(let rootURL):
-            return segmentItems.filter { $0.rootURL == rootURL }
+            return catalog.items(forRootURL: rootURL)
         case .folder(let folderURL):
-            return segmentItems.filter { $0.folderURL == folderURL }
+            return catalog.items(forFolderURL: folderURL)
         }
     }
 
@@ -502,7 +509,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     }
 
     func controlTextDidChange(_ notification: Notification) {
-        reloadUI()
+        reloadUI(rebuildFolders: false)
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -609,7 +616,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
               tableView === foldersTableView,
               folderRows.indices.contains(tableView.selectedRow) else { return }
         selectedFolderScope = folderRows[tableView.selectedRow].scope
-        reloadUI()
+        reloadUI(rebuildFolders: false)
     }
 }
 

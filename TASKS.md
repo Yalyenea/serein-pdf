@@ -14,7 +14,7 @@
 
 - `TabPresentationMode`:`verticalSidebar` / `horizontalTitlebar`
 - 外观配置:`mode(system/light/dark)` + `light_theme(normal/rose_pine_dawn)` + `dark_theme(normal/rose_pine_moon)`
-- PDF 库配置:`library.folders` 保存一个或多个文件夹,打开库时递归扫描 PDF,按库 root / 子文件夹 / PDF 列表二级浏览
+- PDF 库配置:`library.folders` 保存一个或多个文件夹,打开库时递归扫描 PDF,建立轻量索引并缓存,按库 root / 子文件夹 / PDF 列表二级浏览
 - 默认高亮色:偏轻、低饱和、清晰的粉色
 - `a`:有选区 → 立即高亮;无选区 → 进入高亮模式
 - `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
@@ -169,6 +169,7 @@
 - [x] `M10.6-003` 库扫描:打开库时递归扫描配置文件夹内 PDF,按路径稳定排序并去重。
 - [x] `M10.6-004` 快捷键入口:`Cmd+K` → `Cmd+O` 打开 PDF Library 二级浏览面板,不落入标准 Open panel。
 - [x] `M10.6-005` 测试:覆盖配置读写、库扫描、chord 分发、设置窗口尺寸。
+- [x] `M10.6-006` 性能:PDF Library catalog 对同一组库文件夹复用缓存,并预计算 root / folder / search 索引,避免每次打开面板重复扫描。
 
 ## 11. Milestone 11:扩展生态(长期预研)
 

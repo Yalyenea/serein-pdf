@@ -12,11 +12,26 @@ struct PDFLibraryItem: Equatable {
     let title: String
     let relativePath: String
     let relativeFolderPath: String
+    let searchableText: String
 }
 
 struct PDFLibraryCatalog: Equatable {
     let roots: [PDFLibraryRoot]
     let items: [PDFLibraryItem]
+    let rootItemCounts: [URL: Int]
+    private let itemsByRootURL: [URL: [PDFLibraryItem]]
+    private let itemsByFolderURL: [URL: [PDFLibraryItem]]
+
+    init(roots: [PDFLibraryRoot], items: [PDFLibraryItem]) {
+        let itemsByRootURL = Dictionary(grouping: items, by: \.rootURL)
+        self.roots = roots
+        self.items = items
+        self.itemsByRootURL = itemsByRootURL
+        self.itemsByFolderURL = Dictionary(grouping: items, by: \.folderURL)
+        self.rootItemCounts = roots.reduce(into: [:]) { counts, root in
+            counts[root.url] = itemsByRootURL[root.url, default: []].count
+        }
+    }
 
     static func build(
         folderURLs: [URL],
@@ -49,7 +64,8 @@ struct PDFLibraryCatalog: Equatable {
                         folderURL: folderURL,
                         title: pdfURL.deletingPathExtension().lastPathComponent,
                         relativePath: Self.relativePath(from: rootURL, to: pdfURL),
-                        relativeFolderPath: Self.relativePath(from: rootURL, to: folderURL)
+                        relativeFolderPath: Self.relativePath(from: rootURL, to: folderURL),
+                        searchableText: Self.searchableText(for: pdfURL, rootURL: rootURL)
                     )
                 )
             }
@@ -61,6 +77,14 @@ struct PDFLibraryCatalog: Equatable {
                 $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
             }
         )
+    }
+
+    func items(forRootURL rootURL: URL) -> [PDFLibraryItem] {
+        itemsByRootURL[rootURL.standardizedFileURL, default: []]
+    }
+
+    func items(forFolderURL folderURL: URL) -> [PDFLibraryItem] {
+        itemsByFolderURL[folderURL.standardizedFileURL, default: []]
     }
 
     private static func title(for url: URL) -> String {
@@ -75,6 +99,50 @@ struct PDFLibraryCatalog: Equatable {
         let startIndex = path.index(path.startIndex, offsetBy: rootPath.count)
         let relative = String(path[startIndex...]).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return relative.isEmpty ? title(for: url) : relative
+    }
+
+    private static func searchableText(for pdfURL: URL, rootURL: URL) -> String {
+        [
+            pdfURL.deletingPathExtension().lastPathComponent,
+            relativePath(from: rootURL, to: pdfURL),
+            pdfURL.path,
+        ]
+        .joined(separator: "\n")
+        .lowercased()
+    }
+}
+
+final class PDFLibraryCatalogCache {
+    private var cachedFolderURLs: [URL] = []
+    private var cachedCatalog: PDFLibraryCatalog?
+
+    func catalog(
+        folderURLs: [URL],
+        builder: ([URL]) -> PDFLibraryCatalog = { PDFLibraryCatalog.build(folderURLs: $0) }
+    ) -> PDFLibraryCatalog {
+        let normalizedFolderURLs = Self.normalized(folderURLs)
+        if cachedFolderURLs == normalizedFolderURLs, let cachedCatalog {
+            return cachedCatalog
+        }
+
+        let catalog = builder(normalizedFolderURLs)
+        cachedFolderURLs = normalizedFolderURLs
+        cachedCatalog = catalog
+        return catalog
+    }
+
+    func invalidate() {
+        cachedFolderURLs = []
+        cachedCatalog = nil
+    }
+
+    private static func normalized(_ folderURLs: [URL]) -> [URL] {
+        var seenPaths: Set<String> = []
+        return folderURLs.compactMap { url in
+            let standardizedURL = url.standardizedFileURL
+            guard seenPaths.insert(standardizedURL.path).inserted else { return nil }
+            return standardizedURL
+        }
     }
 }
 
