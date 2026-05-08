@@ -19,12 +19,14 @@
 - `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
 - `d`:删除鼠标所在高亮;多行整组删除
 - `i`:在 light / dark mode 间切换,并保留各自已选 theme
+- `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme,不改变 light / dark mode
 - `Ctrl+D` / `Ctrl+U`:半页下滚 / 上滚
 - `g` / `G`:跳到文首 / 文末
 - `Cmd+S`:写回源 PDF
 - `Cmd+R`:在 Finder 中显示当前 PDF 所在位置
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 切换;`Option+Click` / `Option+Enter` 打开到另一 pane
+- `Cmd+Shift+C`:对当前选中的 tabs 开启 / 退出多 PDF 连续阅读;连续组内翻页跨 PDF 边界切换,右侧 Outline 按 PDF 分组显示
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行
@@ -48,13 +50,15 @@
 | M8 批注深度化 | ✅ 开发完成,待手测 |
 | M9 最近文件启动器 | ✅ 开发完成,待手测 |
 | M10 阅读区 Framing 打磨 | ✅ 开发完成,待手测 |
+| M10.5 多 PDF 连续阅读 | ✅ 开发完成,待手测 |
 | M11 扩展生态(预研) | 未开始 |
 
 ## 4. 下一步执行顺序
 
 - Wave 0 M8 / M9 手测：完成 `UAT-29` ~ `UAT-33`，确认批注、快捷键页、最近文件启动器都符合预期。
 - Wave 1 M10 手测：完成 `M10-021`，用真实 slide / paper PDF 验证居中与 fit width framing。
-- Wave 2 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
+- Wave 2 M10.5 手测：完成 `UAT-37`，用多个 slide PDF 验证连续阅读、跨 PDF 翻页与连续 Outline。
+- Wave 3 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
 
 
 ## 5. Milestone 7:搜索强化与对比阅读
@@ -145,14 +149,23 @@
 - [x] `M10-020` 测试:补充 `ReaderViewController` / `WindowChromeTests`,覆盖单页居中、fit width scale 计算与主窗口默认 framing。
 - [ ] `M10-021` 手测:使用 `~/Downloads` 里的真实 slide PDF 和常规论文 PDF 各验证一次,记录视觉差异与最终默认值。
 
-## 9. Milestone 11:扩展生态(长期预研)
+## 9. Milestone 10.5:多 PDF 连续阅读
+
+- [x] `M10.5-001` 窗口级连续阅读状态:在 `WindowWorkspace` 保存 selected tabs 与有序连续组,并随持久化恢复。
+- [x] `M10.5-002` tab 入口:批量打开自动预选本批 PDF;`Cmd` / `Shift` 点击支持多选;右键或 `Cmd+Shift+C` 开启 / 退出连续阅读。
+- [x] `M10.5-003` tab 表达:连续组内 tab 轻量缩进并显示细分组标记,垂直 / 标题栏 tabs 共用模型。
+- [x] `M10.5-004` 阅读行为:在组内 PDF 边界执行下一页 / 上一页 / 半页滚动时切到相邻 PDF 首页 / 末页。
+- [x] `M10.5-005` 连续 Outline:右侧 Outline 顶层按 PDF 分组,点击跨 PDF 目录项先切 session 再跳页。
+- [x] `M10.5-006` 测试:覆盖连续组顺序、关闭清理、恢复、连续 Outline 与跨 PDF 翻页。
+
+## 10. Milestone 11:扩展生态(长期预研)
 
 - [ ] `M11-001` 扩展机制 RFC:`docs/extensions-rfc.md` 列选型,至少比较进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳。
 - [ ] `M11-002` PoC:若决策继续,选一条路径把"导出高亮"重写为插件,可在 app 中运行。
 - [ ] `M11-003` Serein Extension API 草稿:面向未来扩展开发者。
 - [ ] `M11-004` 若推迟,在 RFC 写清"为什么现在不做"(安全、上架、维护成本)。
 
-## 10. 手测清单(尚未覆盖)
+## 11. 手测清单(尚未覆盖)
 
 - [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
@@ -169,5 +182,6 @@
 - [ ] `UAT-34` 单页非连续模式缩小后页面保持居中,slide PDF 不贴边
 - [ ] `UAT-35` `Cmd+0` 或默认 fit width 后,页面刚好完整显示内容,无横向裁切
 - [ ] `UAT-36` 扩展机制 RFC 存在并评审(M11 证据)
+- [ ] `UAT-37` 多选多个 slide PDF 后通过右键或 `Cmd+Shift+C` 开启连续阅读,`J/K` 或半页滚动能跨 PDF 边界,右侧 Outline 按 PDF 连续分组显示
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

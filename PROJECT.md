@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
+文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ 多 PDF 连续阅读 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
 
 ### 2.2 V1 明确不做
 
@@ -80,6 +80,7 @@ flowchart LR
 | 目录来源 | 右栏需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
+| 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
@@ -97,7 +98,7 @@ flowchart LR
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
 | 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader,焦点 pane 决定 tab 落点 |
-| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 所有预览类内容都在右栏,不回流到中栏 |
+| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 连续阅读时 Outline 按 PDF 分组连续显示;所有预览类内容都在右栏,不回流到中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
@@ -137,6 +138,7 @@ flowchart LR
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar / 下一 / 上一 匹配
 - Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
 - `I`:切换 light / dark mode,并保留各自已选 theme
+- `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme(亮色切 `normal` / `rose_pine_dawn`,暗色切 `normal` / `rose_pine_moon`)
 
 **文档与 tab**
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
@@ -146,6 +148,7 @@ flowchart LR
 - `Cmd+Shift+N`:新建窗口
 - `Cmd+Shift+Space`:最近文件启动器
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 切换,`Option+Click` / `Option+Enter` 打开到另一 pane;重复 `Ctrl+Tab` 或 `Esc` 关闭
+- `Cmd+Shift+C`:对当前选中的 tabs 开启 / 退出多 PDF 连续阅读;批量打开会预选本批 PDF,也可 `Cmd` / `Shift` 点击多选后右键开启
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
 - `Option+Click` tab:丢到另一 pane(必要时自动开分屏)
 
@@ -212,6 +215,8 @@ flowchart LR
 |---|---|
 | `id: UUID` | window 唯一标识 |
 | `sessionIDs: [UUID]` | 当前窗口拥有的 tab 顺序 |
+| `selectedSessionIDs` | 当前 tab 多选集合,用于连续阅读入口 |
+| `continuousReadingState` | 当前窗口的多 PDF 连续阅读组,按 session 顺序保存 |
 | `tabPresentationMode` | 当前窗口 tabs 形态 |
 | `rightSidebarMode` | `outline` / `pages` / `search` |
 | `searchQuery` / `searchScope` | 当前窗口搜索上下文 |
@@ -237,7 +242,7 @@ App/                                      # AppKit 入口、窗口与设置/启�
   AppMain.swift                           # @main 入口,构造 NSApplication 与 AppDelegate 并 run
   AppDelegate.swift                       # 应用委托:菜单、窗口生命周期、配置加载、自动保存驱动
   MainWindowController.swift              # 主窗口控制器:工具栏、titlebar tabs 宿主、demo/immersive 模式
-  ReaderShortcutWindow.swift              # 自定义 NSWindow,拦截 keyDown 分发 plain(无 modifier)快捷键
+  ReaderShortcutWindow.swift              # 自定义 NSWindow,拦截 keyDown 分发 reader 快捷键与 chord
   SplitViewController.swift               # 三栏 NSSplitViewController:左 tabs / 中 reader / 右 sidebar
   SettingsWindowController.swift          # 设置窗口:外观 / 阅读 / 批注 / 快捷键 配置 UI
   RecentFilesPaletteController.swift      # Spotlight 风格最近文件启动器的窗口与交互控制器
@@ -274,7 +279,7 @@ UI/CenterReader/                          # 中栏阅读区
   ReaderWorkspaceViewController.swift     # 中栏 workspace:单 / 双 Reader 分屏 + 焦点 pane
   ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
   PDFContainerView.swift                  # PDFView 宿主,切夜间模式时同步背景色
-  ReaderShortcutsController.swift         # plain 快捷键(j/k/g/…)分发
+  ReaderShortcutsController.swift         # reader 快捷键(j/k/g/…)与 Cmd+K chord 分发
   FindBarView.swift                       # find bar:查询框 + scope 切换 + 匹配导航按钮
 
 UI/RightOutline/                          # 右栏 outline / pages / search / annotations
@@ -325,7 +330,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   HighlightExporterTests.swift            # 三种导出格式
   HighlightUndoTests.swift                # 撤销栈上限与 added/removed 还原
   NightModeStyleTests.swift               # 夜间反色映射
-  ReaderShortcutsControllerTests.swift    # plain 快捷键分发与文本上下文让路
+  ReaderShortcutsControllerTests.swift    # reader 快捷键 / chord 分发与文本上下文让路
   RecentFilesPaletteStateTests.swift      # 启动器模型的过滤 / 多选
   RecentFilesPaletteControllerTests.swift # 启动器控制器交互
   OpenTabsPaletteStateTests.swift         # show all tabs 预览目标与网格选中

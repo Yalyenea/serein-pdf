@@ -53,6 +53,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case highlightSelection = "highlight_selection"
     case exitHighlightMode = "exit_highlight_mode"
     case toggleNightMode = "toggle_night_mode"
+    case switchCurrentTheme = "switch_current_theme"
     case saveAnnotations = "save_annotations"
     case copyHighlightsMarkdown = "copy_highlights_markdown"
     case removeHighlight = "remove_highlight"
@@ -67,6 +68,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case previousTab = "previous_tab"
     case nextTab = "next_tab"
     case showAllTabs = "show_all_tabs"
+    case toggleContinuousReading = "toggle_continuous_reading"
     case fitHeight = "fit_height"
     case fitWidth = "fit_width"
     case zoomIn = "zoom_in"
@@ -108,6 +110,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Exit Highlight Mode"
         case .toggleNightMode:
             "Toggle Night Mode"
+        case .switchCurrentTheme:
+            "Switch Current Theme"
         case .saveAnnotations:
             "Save Annotations"
         case .copyHighlightsMarkdown:
@@ -136,6 +140,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Next Tab"
         case .showAllTabs:
             "Show All Tabs"
+        case .toggleContinuousReading:
+            "Toggle Continuous Reading"
         case .fitHeight:
             "Fit Height"
         case .fitWidth:

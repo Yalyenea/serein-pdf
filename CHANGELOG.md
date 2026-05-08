@@ -13,6 +13,12 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a small live `PDFDocument` LRU so clean background PDFs can be released while the current pane, split pane, and dirty documents stay resident
 - Keep Show All Tabs as a lightweight text overview instead of rendering PDF thumbnails
 
+### Reading
+- Add continuous reading groups for multiple selected PDFs: `cmd+shift+c` or the tab context menu enables ordered cross-PDF page turns, tab group indentation, and a combined right-sidebar Outline grouped by PDF
+
+### Keyboard
+- Restore the VS Code-style `cmd+k`, then `cmd+t` theme chord for switching the current light or dark theme
+
 ## [0.2.0] - 2026-04-23
 
 This release focuses on keyboard-driven reading, better highlight text

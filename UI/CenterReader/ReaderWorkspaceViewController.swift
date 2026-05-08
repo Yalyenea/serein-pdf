@@ -158,19 +158,27 @@ final class ReaderWorkspaceViewController: NSViewController {
     }
 
     func goToNextPage() {
-        activeReaderViewController().goToNextPage()
+        let reader = activeReaderViewController()
+        guard reader.goToNextPage() == false else { return }
+        goToContinuousReadingBoundary(direction: 1)
     }
 
     func goToPreviousPage() {
-        activeReaderViewController().goToPreviousPage()
+        let reader = activeReaderViewController()
+        guard reader.goToPreviousPage() == false else { return }
+        goToContinuousReadingBoundary(direction: -1)
     }
 
     func scrollHalfPageDown() {
-        activeReaderViewController().scrollHalfPageDown()
+        let reader = activeReaderViewController()
+        guard reader.scrollHalfPageDown() == false else { return }
+        goToContinuousReadingBoundary(direction: 1)
     }
 
     func scrollHalfPageUp() {
-        activeReaderViewController().scrollHalfPageUp()
+        let reader = activeReaderViewController()
+        guard reader.scrollHalfPageUp() == false else { return }
+        goToContinuousReadingBoundary(direction: -1)
     }
 
     func goToFirstPage() {
@@ -192,6 +200,16 @@ final class ReaderWorkspaceViewController: NSViewController {
     @discardableResult
     func goToPage(_ pageIndex: Int) -> Bool {
         activeReaderViewController().goToPage(pageIndex)
+    }
+
+    private func goToContinuousReadingBoundary(direction: Int) {
+        let focusedPane = documentStore.focusedPane(in: windowID)
+        guard let sessionID = documentStore.displayedSessionID(for: focusedPane, in: windowID),
+              let target = documentStore.continuousReadingTarget(from: sessionID, direction: direction, in: windowID) else {
+            return
+        }
+        documentStore.updateCurrentPage(index: target.pageIndex, for: target.sessionID)
+        documentStore.activate(sessionID: target.sessionID, in: windowID, targetPane: focusedPane)
     }
 
     @discardableResult

@@ -62,6 +62,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
         var id: UUID
         var sessionIDs: [UUID]
         var sessionURLs: [URL]
+        var continuousReadingSessionIDs: [UUID]
         var tabPresentationMode: TabPresentationMode
         var isLeftSidebarVisible: Bool
         var isRightSidebarVisible: Bool
@@ -75,6 +76,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
             id: UUID,
             sessionIDs: [UUID] = [],
             sessionURLs: [URL] = [],
+            continuousReadingSessionIDs: [UUID] = [],
             tabPresentationMode: TabPresentationMode,
             isLeftSidebarVisible: Bool,
             isRightSidebarVisible: Bool,
@@ -87,6 +89,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
             self.id = id
             self.sessionIDs = sessionIDs
             self.sessionURLs = sessionURLs
+            self.continuousReadingSessionIDs = continuousReadingSessionIDs
             self.tabPresentationMode = tabPresentationMode
             self.isLeftSidebarVisible = isLeftSidebarVisible
             self.isRightSidebarVisible = isRightSidebarVisible
@@ -101,6 +104,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
             case id
             case sessionIDs
             case sessionURLs
+            case continuousReadingSessionIDs
             case tabPresentationMode
             case isLeftSidebarVisible
             case isRightSidebarVisible
@@ -116,6 +120,10 @@ struct PersistedDocumentStoreState: Codable, Equatable {
             id = try container.decode(UUID.self, forKey: .id)
             sessionIDs = try container.decodeIfPresent([UUID].self, forKey: .sessionIDs) ?? []
             sessionURLs = try container.decodeIfPresent([URL].self, forKey: .sessionURLs) ?? []
+            continuousReadingSessionIDs = try container.decodeIfPresent(
+                [UUID].self,
+                forKey: .continuousReadingSessionIDs
+            ) ?? []
             tabPresentationMode = try container.decode(TabPresentationMode.self, forKey: .tabPresentationMode)
             isLeftSidebarVisible = try container.decode(Bool.self, forKey: .isLeftSidebarVisible)
             isRightSidebarVisible = try container.decode(Bool.self, forKey: .isRightSidebarVisible)

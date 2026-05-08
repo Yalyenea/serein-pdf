@@ -20,6 +20,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
+        XCTAssertNil(configuration.shortcuts.bindings[.switchCurrentTheme])
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.copyHighlightsMarkdown], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
@@ -41,6 +42,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleContinuousReading], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "9", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
@@ -76,6 +78,7 @@ fit_width_on_open = false
 highlight_selection = "h"
 exit_highlight_mode = "escape"
 toggle_night_mode = "n"
+switch_current_theme = "command+option+t"
 save_annotations = "command+shift+s"
 toggle_left_sidebar = "command+shift+l"
 close_current_tab = "command+e"
@@ -88,6 +91,7 @@ go_to_last_page = "shift+l"
 find_previous_match = "shift+n"
 show_recent_files_palette = "command+space"
 show_all_tabs = "control+tab"
+toggle_continuous_reading = "command+option+c"
 open_containing_folder = "command+option+r"
 find_all_open = "command+option+f"
 
@@ -105,6 +109,7 @@ show_recent_files_in_sidebar = false
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "h", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "n", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.switchCurrentTheme], KeyboardShortcut(key: "t", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
@@ -117,6 +122,7 @@ show_recent_files_in_sidebar = false
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "n", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleContinuousReading], KeyboardShortcut(key: "c", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findAllOpen], KeyboardShortcut(key: "f", modifiers: [.command, .option]))
         XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
@@ -147,6 +153,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("highlight_selection = \"a\""))
         XCTAssertTrue(content.contains("exit_highlight_mode = \"escape\""))
         XCTAssertTrue(content.contains("toggle_night_mode = \"i\""))
+        XCTAssertTrue(content.contains("switch_current_theme = \"none\""))
         XCTAssertTrue(content.contains("save_annotations = \"command+s\""))
         XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
@@ -168,6 +175,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
         XCTAssertTrue(content.contains("show_recent_files_palette = \"command+shift+space\""))
         XCTAssertTrue(content.contains("show_all_tabs = \"control+tab\""))
+        XCTAssertTrue(content.contains("toggle_continuous_reading = \"command+shift+c\""))
         XCTAssertTrue(content.contains("open_containing_folder = \"command+r\""))
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))

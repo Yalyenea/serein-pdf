@@ -48,9 +48,28 @@ enum ReaderPane: String, CaseIterable, Codable, Sendable {
     }
 }
 
+struct ContinuousReadingState: Equatable, Codable, Sendable {
+    var orderedSessionIDs: [UUID]
+
+    init(orderedSessionIDs: [UUID] = []) {
+        self.orderedSessionIDs = orderedSessionIDs
+    }
+
+    var isEnabled: Bool {
+        orderedSessionIDs.count > 1
+    }
+}
+
+struct ContinuousReadingTarget: Equatable, Sendable {
+    var sessionID: UUID
+    var pageIndex: Int
+}
+
 struct WindowWorkspace: Equatable, Sendable {
     let id: UUID
     var sessionIDs: [UUID]
+    var selectedSessionIDs: Set<UUID>
+    var continuousReadingState: ContinuousReadingState
     var tabPresentationMode: TabPresentationMode
     var isLeftSidebarVisible: Bool
     var isRightSidebarVisible: Bool
@@ -66,6 +85,8 @@ struct WindowWorkspace: Equatable, Sendable {
     init(
         id: UUID = UUID(),
         sessionIDs: [UUID] = [],
+        selectedSessionIDs: Set<UUID> = [],
+        continuousReadingState: ContinuousReadingState = ContinuousReadingState(),
         tabPresentationMode: TabPresentationMode = .verticalSidebar,
         isLeftSidebarVisible: Bool = true,
         isRightSidebarVisible: Bool = true,
@@ -80,6 +101,8 @@ struct WindowWorkspace: Equatable, Sendable {
     ) {
         self.id = id
         self.sessionIDs = sessionIDs
+        self.selectedSessionIDs = selectedSessionIDs
+        self.continuousReadingState = continuousReadingState
         self.tabPresentationMode = tabPresentationMode
         self.isLeftSidebarVisible = isLeftSidebarVisible
         self.isRightSidebarVisible = isRightSidebarVisible

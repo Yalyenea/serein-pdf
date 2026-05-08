@@ -117,6 +117,8 @@ final class DocumentStore {
         let source = sourceWindowID.flatMap(windowWorkspace(for:)) ?? windowWorkspaces.first ?? WindowWorkspace()
         var copy = WindowWorkspace(
             sessionIDs: [],
+            selectedSessionIDs: [],
+            continuousReadingState: ContinuousReadingState(),
             tabPresentationMode: source.tabPresentationMode,
             isLeftSidebarVisible: source.isLeftSidebarVisible,
             isRightSidebarVisible: source.isRightSidebarVisible,
@@ -205,6 +207,10 @@ final class DocumentStore {
         for session in newSessions {
             recentDocumentURLs = (try? recentFilesStore.recordOpen(for: session.url)) ?? recentDocumentURLs
             attach(sessionID: session.id, to: windowID)
+        }
+        selectSessions(newSessions.map(\.id), in: windowID, notify: false)
+        if let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }) {
+            windowWorkspaces[workspaceIndex].continuousReadingState = ContinuousReadingState()
         }
         if let activeSessionID = newSessions.last?.id {
             activateSession(sessionID: activeSessionID, in: windowID, targetPane: targetPane, notify: false)
@@ -350,6 +356,119 @@ final class DocumentStore {
               workspace.sessionIDs.count > 1 else { return }
         let nextIndex = (currentIndex + 1) % workspace.sessionIDs.count
         activate(sessionID: workspace.sessionIDs[nextIndex], in: windowID)
+    }
+
+    func selectedSessionIDs(in windowID: UUID) -> Set<UUID> {
+        windowWorkspace(for: windowID)?.selectedSessionIDs ?? []
+    }
+
+    func selectSessions(_ sessionIDs: [UUID], in windowID: UUID) {
+        selectSessions(sessionIDs, in: windowID, notify: true)
+    }
+
+    private func selectSessions(_ sessionIDs: [UUID], in windowID: UUID, notify: Bool) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
+        let validIDs = Set(windowWorkspaces[index].sessionIDs)
+        let selected = Set(sessionIDs.filter { validIDs.contains($0) })
+        guard windowWorkspaces[index].selectedSessionIDs != selected else { return }
+        windowWorkspaces[index].selectedSessionIDs = selected
+        if notify {
+            notifyChange()
+        }
+    }
+
+    func toggleSessionSelection(_ sessionID: UUID, in windowID: UUID) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              windowWorkspaces[index].sessionIDs.contains(sessionID) else { return }
+        var selected = windowWorkspaces[index].selectedSessionIDs
+        if selected.contains(sessionID) {
+            selected.remove(sessionID)
+        } else {
+            selected.insert(sessionID)
+        }
+        windowWorkspaces[index].selectedSessionIDs = selected
+        notifyChange()
+    }
+
+    func selectSessionRange(through sessionID: UUID, in windowID: UUID) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              let targetIndex = windowWorkspaces[index].sessionIDs.firstIndex(of: sessionID) else { return }
+        let workspace = windowWorkspaces[index]
+        let anchorID = workspace.selectedSessionIDs
+            .compactMap { selectedID in
+                workspace.sessionIDs.firstIndex(of: selectedID).map { (selectedID, $0) }
+            }
+            .min { abs($0.1 - targetIndex) < abs($1.1 - targetIndex) }?
+            .0
+            ?? workspace.activeSessionID
+            ?? workspace.sessionIDs.first
+        guard let anchorID,
+              let anchorIndex = workspace.sessionIDs.firstIndex(of: anchorID) else { return }
+        let bounds = min(anchorIndex, targetIndex)...max(anchorIndex, targetIndex)
+        windowWorkspaces[index].selectedSessionIDs = Set(workspace.sessionIDs[bounds])
+        notifyChange()
+    }
+
+    func isContinuousReadingEnabled(in windowID: UUID) -> Bool {
+        windowWorkspace(for: windowID)?.continuousReadingState.isEnabled == true
+    }
+
+    func continuousReadingSessionIDs(in windowID: UUID) -> [UUID] {
+        windowWorkspace(for: windowID)?.continuousReadingState.orderedSessionIDs ?? []
+    }
+
+    func isSessionInContinuousReading(_ sessionID: UUID, in windowID: UUID) -> Bool {
+        continuousReadingSessionIDs(in: windowID).contains(sessionID)
+    }
+
+    @discardableResult
+    func startContinuousReadingFromSelectedSessions(in windowID: UUID) -> Bool {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return false }
+        let workspace = windowWorkspaces[index]
+        let orderedSelection = workspace.sessionIDs.filter { workspace.selectedSessionIDs.contains($0) }
+        guard orderedSelection.count > 1 else { return false }
+        windowWorkspaces[index].continuousReadingState = ContinuousReadingState(orderedSessionIDs: orderedSelection)
+        windowWorkspaces[index].selectedSessionIDs = Set(orderedSelection)
+        if workspace.activeSessionID.map({ orderedSelection.contains($0) }) != true,
+           let firstSessionID = orderedSelection.first {
+            activateSession(sessionID: firstSessionID, in: windowID, targetPane: nil, notify: false)
+        }
+        notifyChange()
+        return true
+    }
+
+    func stopContinuousReading(in windowID: UUID) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              windowWorkspaces[index].continuousReadingState.isEnabled else { return }
+        windowWorkspaces[index].continuousReadingState = ContinuousReadingState()
+        notifyChange()
+    }
+
+    @discardableResult
+    func toggleContinuousReadingFromSelection(in windowID: UUID) -> Bool {
+        if isContinuousReadingEnabled(in: windowID) {
+            stopContinuousReading(in: windowID)
+            return false
+        }
+        return startContinuousReadingFromSelectedSessions(in: windowID)
+    }
+
+    func continuousReadingTarget(from sessionID: UUID, direction: Int, in windowID: UUID) -> ContinuousReadingTarget? {
+        guard direction != 0,
+              let workspace = windowWorkspace(for: windowID),
+              workspace.continuousReadingState.isEnabled,
+              let currentIndex = workspace.continuousReadingState.orderedSessionIDs.firstIndex(of: sessionID) else {
+            return nil
+        }
+        let targetIndex = direction > 0 ? currentIndex + 1 : currentIndex - 1
+        guard workspace.continuousReadingState.orderedSessionIDs.indices.contains(targetIndex) else { return nil }
+        let targetSessionID = workspace.continuousReadingState.orderedSessionIDs[targetIndex]
+        if direction > 0 {
+            return ContinuousReadingTarget(sessionID: targetSessionID, pageIndex: 0)
+        }
+        guard let pageCount = pageCount(for: targetSessionID) ?? (try? pdfDocument(for: targetSessionID).pageCount),
+              pageCount > 0 else { return nil }
+        return ContinuousReadingTarget(sessionID: targetSessionID, pageIndex: pageCount - 1)
     }
 
     func setFocusedPane(_ pane: ReaderPane, in windowID: UUID) {
@@ -498,6 +617,25 @@ final class DocumentStore {
         sessions[sessionIndex].outlineTree = outlineTree
         sessions[sessionIndex].isOutlineLoaded = true
         return outlineTree
+    }
+
+    func outlineTreeForSidebar(in windowID: UUID) -> [OutlineNode] {
+        guard let workspace = windowWorkspace(for: windowID) else { return [] }
+        if workspace.continuousReadingState.isEnabled {
+            return workspace.continuousReadingState.orderedSessionIDs.compactMap { sessionID in
+                guard let session = session(for: sessionID) else { return nil }
+                return OutlineNode(
+                    title: session.title,
+                    pageIndex: 0,
+                    children: outlineTree(for: sessionID).withSourceSessionID(sessionID),
+                    sourceSessionID: sessionID,
+                    isDocumentRoot: true
+                )
+            }
+        }
+
+        guard let sessionID = workspace.activeSessionID else { return [] }
+        return outlineTree(for: sessionID).withSourceSessionID(sessionID)
     }
 
     func pageCount(for sessionID: UUID) -> Int? {
@@ -939,6 +1077,9 @@ final class DocumentStore {
                 record.splitState.secondarySessionID.flatMap { sessionIDByPersistedID[$0] }
                 ?? record.splitState.secondarySessionURL.flatMap { firstSessionIDByURL[$0] }
             let restoredSessionIDs = restoredSessionIDs(for: record, sessionIDByPersistedID: sessionIDByPersistedID, firstSessionIDByURL: firstSessionIDByURL)
+            let restoredContinuousReadingIDs = record.continuousReadingSessionIDs.compactMap {
+                sessionIDByPersistedID[$0]
+            }
             let restoredActiveSessionID = {
                 if record.splitState.isEnabled, record.splitState.focusedPane == .secondary {
                     return secondarySessionID ?? primarySessionID
@@ -948,6 +1089,8 @@ final class DocumentStore {
             return WindowWorkspace(
                 id: record.id,
                 sessionIDs: restoredSessionIDs,
+                selectedSessionIDs: [],
+                continuousReadingState: ContinuousReadingState(orderedSessionIDs: restoredContinuousReadingIDs),
                 tabPresentationMode: record.tabPresentationMode,
                 isLeftSidebarVisible: record.isLeftSidebarVisible,
                 isRightSidebarVisible: record.isRightSidebarVisible,
@@ -1040,6 +1183,17 @@ final class DocumentStore {
         workspace.sessionIDs = workspace.sessionIDs.filter { validIDs.contains($0) }
         var seenSessionIDs: Set<UUID> = []
         workspace.sessionIDs.removeAll { seenSessionIDs.insert($0).inserted == false }
+        let workspaceSessionIDs = Set(workspace.sessionIDs)
+        workspace.selectedSessionIDs = workspace.selectedSessionIDs.filter { workspaceSessionIDs.contains($0) }
+        workspace.continuousReadingState.orderedSessionIDs = workspace.continuousReadingState.orderedSessionIDs
+            .filter { workspaceSessionIDs.contains($0) }
+        var seenContinuousIDs: Set<UUID> = []
+        workspace.continuousReadingState.orderedSessionIDs.removeAll {
+            seenContinuousIDs.insert($0).inserted == false
+        }
+        if workspace.continuousReadingState.orderedSessionIDs.count < 2 {
+            workspace.continuousReadingState = ContinuousReadingState()
+        }
         let fallback = fallbackSessionID(in: workspace, preferredSessionID: preferredSessionID, excluding: workspace.isSplitEnabled ? workspace.secondarySessionID : nil)
 
         if workspace.primarySessionID.map({ workspace.sessionIDs.contains($0) }) != true {
@@ -1237,6 +1391,7 @@ final class DocumentStore {
                         id: workspace.id,
                         sessionIDs: workspace.sessionIDs,
                         sessionURLs: workspace.sessionIDs.compactMap { session(for: $0)?.url },
+                        continuousReadingSessionIDs: workspace.continuousReadingState.orderedSessionIDs,
                         tabPresentationMode: workspace.tabPresentationMode,
                         isLeftSidebarVisible: workspace.isLeftSidebarVisible,
                         isRightSidebarVisible: workspace.isRightSidebarVisible,

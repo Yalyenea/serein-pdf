@@ -4,17 +4,28 @@ final class VerticalTabItemView: NSView {
     private let sessionID: UUID
     private let selectButton = NSButton(title: "", target: nil, action: nil)
     private let dirtyIndicator = NSView()
+    private let groupIndicator = NSView()
     private let titleLabel = NSTextField()
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let separator = NSBox()
     private let isDirty: Bool
-    private var onSelect: ((UUID) -> Void)?
+    private let isContinuousReadingMember: Bool
+    private let isContinuousReadingLeader: Bool
+    private let canStartContinuousReading: Bool
+    private var onSelect: ((UUID, NSEvent.ModifierFlags) -> Void)?
     private var onAlternateSelect: ((UUID) -> Void)?
     private var onClose: ((UUID) -> Void)?
     private var onRename: ((UUID, String) -> Void)?
+    private var onContextMenu: ((UUID) -> Void)?
+    private var onStartContinuousReading: ((UUID) -> Void)?
+    private var onExitContinuousReading: ((UUID) -> Void)?
     private var preEditTitle = ""
 
     var isSelected: Bool = false {
+        didSet { updateAppearance() }
+    }
+
+    var isTabSelected: Bool = false {
         didSet { updateAppearance() }
     }
 
@@ -22,18 +33,31 @@ final class VerticalTabItemView: NSView {
         sessionID: UUID,
         title: String,
         isSelected: Bool,
+        isTabSelected: Bool,
         isDirty: Bool,
-        onSelect: @escaping (UUID) -> Void,
+        isContinuousReadingMember: Bool = false,
+        isContinuousReadingLeader: Bool = false,
+        canStartContinuousReading: Bool = false,
+        onSelect: @escaping (UUID, NSEvent.ModifierFlags) -> Void,
         onAlternateSelect: @escaping (UUID) -> Void,
         onClose: @escaping (UUID) -> Void,
-        onRename: @escaping (UUID, String) -> Void
+        onRename: @escaping (UUID, String) -> Void,
+        onContextMenu: @escaping (UUID) -> Void,
+        onStartContinuousReading: @escaping (UUID) -> Void,
+        onExitContinuousReading: @escaping (UUID) -> Void
     ) {
         self.sessionID = sessionID
         self.isDirty = isDirty
+        self.isContinuousReadingMember = isContinuousReadingMember
+        self.isContinuousReadingLeader = isContinuousReadingLeader
+        self.canStartContinuousReading = canStartContinuousReading
         self.onSelect = onSelect
         self.onAlternateSelect = onAlternateSelect
         self.onClose = onClose
         self.onRename = onRename
+        self.onContextMenu = onContextMenu
+        self.onStartContinuousReading = onStartContinuousReading
+        self.onExitContinuousReading = onExitContinuousReading
         super.init(frame: .zero)
 
         wantsLayer = true
@@ -51,6 +75,11 @@ final class VerticalTabItemView: NSView {
         dirtyIndicator.layer?.cornerRadius = 3
         dirtyIndicator.translatesAutoresizingMaskIntoConstraints = false
         dirtyIndicator.isHidden = !isDirty
+
+        groupIndicator.wantsLayer = true
+        groupIndicator.layer?.cornerRadius = 1
+        groupIndicator.translatesAutoresizingMaskIntoConstraints = false
+        groupIndicator.isHidden = !(isContinuousReadingMember || isContinuousReadingLeader)
 
         titleLabel.stringValue = title
         titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
@@ -88,9 +117,15 @@ final class VerticalTabItemView: NSView {
         row.alignment = .centerY
         row.distribution = .fill
         row.spacing = 7
-        row.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 6)
+        row.edgeInsets = NSEdgeInsets(
+            top: 6,
+            left: isContinuousReadingMember ? 24 : 10,
+            bottom: 6,
+            right: 6
+        )
 
         addSubview(selectButton)
+        addSubview(groupIndicator)
         addSubview(row)
         addSubview(separator)
         selectButton.translatesAutoresizingMaskIntoConstraints = false
@@ -102,6 +137,10 @@ final class VerticalTabItemView: NSView {
             selectButton.trailingAnchor.constraint(equalTo: trailingAnchor),
             selectButton.topAnchor.constraint(equalTo: topAnchor),
             selectButton.bottomAnchor.constraint(equalTo: bottomAnchor),
+            groupIndicator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 9),
+            groupIndicator.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            groupIndicator.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            groupIndicator.widthAnchor.constraint(equalToConstant: 2),
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
             row.trailingAnchor.constraint(equalTo: trailingAnchor),
             row.topAnchor.constraint(equalTo: topAnchor),
@@ -116,6 +155,7 @@ final class VerticalTabItemView: NSView {
         ])
 
         self.isSelected = isSelected
+        self.isTabSelected = isTabSelected
         updateAppearance()
     }
 
@@ -126,17 +166,51 @@ final class VerticalTabItemView: NSView {
 
     @objc
     private func handleSelect() {
-        let isAlternate = NSApp.currentEvent?.modifierFlags.contains(.option) == true
+        let modifierFlags = NSApp.currentEvent?.modifierFlags.intersection([.command, .shift, .option, .control]) ?? []
+        let isAlternate = modifierFlags.contains(.option)
         if isAlternate {
             onAlternateSelect?(sessionID)
         } else {
-            onSelect?(sessionID)
+            onSelect?(sessionID, modifierFlags)
         }
     }
 
     @objc
     private func handleClose() {
         onClose?(sessionID)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        onContextMenu?(sessionID)
+        let menu = NSMenu()
+        let startItem = NSMenuItem(
+            title: "Start Continuous Reading",
+            action: #selector(handleStartContinuousReading),
+            keyEquivalent: ""
+        )
+        startItem.target = self
+        startItem.isEnabled = canStartContinuousReading
+        menu.addItem(startItem)
+
+        let exitItem = NSMenuItem(
+            title: "Exit Continuous Reading",
+            action: #selector(handleExitContinuousReading),
+            keyEquivalent: ""
+        )
+        exitItem.target = self
+        exitItem.isEnabled = isContinuousReadingMember || isContinuousReadingLeader
+        menu.addItem(exitItem)
+        return menu
+    }
+
+    @objc
+    private func handleStartContinuousReading() {
+        onStartContinuousReading?(sessionID)
+    }
+
+    @objc
+    private func handleExitContinuousReading() {
+        onExitContinuousReading?(sessionID)
     }
 
     func beginEditing() {
@@ -186,14 +260,23 @@ final class VerticalTabItemView: NSView {
 
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = isSelected
-                ? SplitViewController.selectedChromeBackgroundColor.cgColor
-                : NSColor.clear.cgColor
+            if isSelected {
+                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor.cgColor
+            } else if isTabSelected {
+                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
+                    .withAlphaComponent(0.45)
+                    .cgColor
+            } else {
+                layer?.backgroundColor = NSColor.clear.cgColor
+            }
             layer?.borderColor = isSelected ? SplitViewController.chromeStrokeColor.cgColor : NSColor.clear.cgColor
             layer?.borderWidth = isSelected ? 1 : 0
             dirtyIndicator.layer?.backgroundColor = HighlightColor.pink.nsColor.cgColor
+            groupIndicator.layer?.backgroundColor = isContinuousReadingLeader
+                ? HighlightColor.pink.nsColor.cgColor
+                : SplitViewController.chromeStrokeColor.withAlphaComponent(0.75).cgColor
         }
-        titleLabel.textColor = isSelected ? .labelColor : .secondaryLabelColor
+        titleLabel.textColor = isSelected || isTabSelected ? .labelColor : .secondaryLabelColor
         closeButton.contentTintColor = isSelected ? .labelColor : .tertiaryLabelColor
         separator.isHidden = isSelected
     }

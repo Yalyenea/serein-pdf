@@ -374,19 +374,23 @@ final class ReaderViewController: NSViewController {
         }
     }
 
-    func goToNextPage() {
+    @discardableResult
+    func goToNextPage() -> Bool {
         turnPage(by: 1)
     }
 
-    func goToPreviousPage() {
+    @discardableResult
+    func goToPreviousPage() -> Bool {
         turnPage(by: -1)
     }
 
-    func scrollHalfPageDown() {
+    @discardableResult
+    func scrollHalfPageDown() -> Bool {
         scrollByViewportFraction(0.5)
     }
 
-    func scrollHalfPageUp() {
+    @discardableResult
+    func scrollHalfPageUp() -> Bool {
         scrollByViewportFraction(-0.5)
     }
 
@@ -453,19 +457,20 @@ final class ReaderViewController: NSViewController {
         return true
     }
 
-    private func turnPage(by direction: Int) {
+    @discardableResult
+    private func turnPage(by direction: Int) -> Bool {
         guard direction != 0,
               isAllPagesOverviewActive == false,
               let session = targetSession(),
               session.id == displayedSessionID,
               let document = pdfView.document,
-              let currentPageIndex = currentPageIndexForNavigation(in: document) else { return }
+              let currentPageIndex = currentPageIndexForNavigation(in: document) else { return false }
 
         let step = session.displayMode.usesTwoUpLayout ? 2 : 1
         let targetPageIndex = min(max(currentPageIndex + direction * step, 0), document.pageCount - 1)
-        guard targetPageIndex != currentPageIndex else { return }
+        guard targetPageIndex != currentPageIndex else { return false }
 
-        _ = jumpToPage(targetPageIndex)
+        return jumpToPage(targetPageIndex)
     }
 
     private func currentPageIndexForNavigation(in document: PDFDocument) -> Int? {
@@ -1164,10 +1169,11 @@ final class ReaderViewController: NSViewController {
         return ReadingPosition(pageIndex: document.index(for: page), point: pointOnPage)
     }
 
-    private func scrollByViewportFraction(_ fraction: CGFloat) {
+    @discardableResult
+    private func scrollByViewportFraction(_ fraction: CGFloat) -> Bool {
         guard isAllPagesOverviewActive == false,
               let scrollView = pdfScrollView(),
-              let clipView = pdfClipView() else { return }
+              let clipView = pdfClipView() else { return false }
 
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
@@ -1176,7 +1182,7 @@ final class ReaderViewController: NSViewController {
         var targetBounds = clipView.bounds
         targetBounds.origin.y -= clipView.bounds.height * fraction
         targetBounds = clipView.constrainBoundsRect(targetBounds)
-        guard abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
+        guard abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return false }
 
         clipView.scroll(to: targetBounds.origin)
         scrollView.reflectScrolledClipView(clipView)
@@ -1184,13 +1190,14 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession(),
               session.id == displayedSessionID,
               let document = pdfView.document,
-              let anchor = captureViewportAnchor() else { return }
+              let anchor = captureViewportAnchor() else { return true }
 
         documentStore.updateReadingPosition(
             ReadingPosition(pageIndex: document.index(for: anchor.page), point: anchor.pagePoint),
             scaleFactor: pdfView.scaleFactor,
             for: session.id
         )
+        return true
     }
 
     private func targetSession() -> DocumentSession? {

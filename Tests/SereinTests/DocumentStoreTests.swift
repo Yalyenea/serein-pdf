@@ -135,6 +135,94 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(observer.count, 1)
     }
 
+    func testBatchOpenSelectsNewTabsForContinuousReadingEntry() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let urls = try (0..<3).map { try makeTemporaryPDF(named: "continuous-open-\($0)") }
+
+        let sessions = try store.open(documentsAt: urls, in: store.defaultWindowID)
+
+        XCTAssertEqual(store.selectedSessionIDs(in: store.defaultWindowID), Set(sessions.map(\.id)))
+        XCTAssertFalse(store.isContinuousReadingEnabled(in: store.defaultWindowID))
+    }
+
+    func testContinuousReadingStartsFromSelectedTabsInWindowOrder() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(named: "continuous-first"),
+                makeTemporaryPDF(named: "continuous-second"),
+                makeTemporaryPDF(named: "continuous-third"),
+            ],
+            in: store.defaultWindowID
+        )
+
+        store.selectSessions([sessions[2].id, sessions[0].id], in: store.defaultWindowID)
+
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        XCTAssertEqual(store.continuousReadingSessionIDs(in: store.defaultWindowID), [sessions[0].id, sessions[2].id])
+    }
+
+    func testOpeningNewBatchClearsPriorContinuousReadingGroup() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        _ = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(named: "continuous-clear-first"),
+                makeTemporaryPDF(named: "continuous-clear-second"),
+            ],
+            in: store.defaultWindowID
+        )
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+
+        _ = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(named: "continuous-clear-new-first"),
+                makeTemporaryPDF(named: "continuous-clear-new-second"),
+            ],
+            in: store.defaultWindowID
+        )
+
+        XCTAssertFalse(store.isContinuousReadingEnabled(in: store.defaultWindowID))
+    }
+
+    func testContinuousReadingTargetsNeighborDocumentsAtBoundaries() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(named: "continuous-boundary-first", pageCount: 2),
+                makeTemporaryPDF(named: "continuous-boundary-second", pageCount: 3),
+            ],
+            in: store.defaultWindowID
+        )
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+
+        XCTAssertEqual(
+            store.continuousReadingTarget(from: sessions[0].id, direction: 1, in: store.defaultWindowID),
+            ContinuousReadingTarget(sessionID: sessions[1].id, pageIndex: 0)
+        )
+        XCTAssertEqual(
+            store.continuousReadingTarget(from: sessions[1].id, direction: -1, in: store.defaultWindowID),
+            ContinuousReadingTarget(sessionID: sessions[0].id, pageIndex: 1)
+        )
+        XCTAssertNil(store.continuousReadingTarget(from: sessions[0].id, direction: -1, in: store.defaultWindowID))
+        XCTAssertNil(store.continuousReadingTarget(from: sessions[1].id, direction: 1, in: store.defaultWindowID))
+    }
+
     func testPDFDocumentCacheEvictsCleanBackgroundDocumentsButKeepsDirtyOnes() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -170,6 +258,33 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(store.activeSessionID, first.id)
         XCTAssertEqual(store.sessions.count, 1)
+    }
+
+    func testClosingContinuousReadingTabCleansGroup() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(named: "continuous-close-first"),
+                makeTemporaryPDF(named: "continuous-close-second"),
+                makeTemporaryPDF(named: "continuous-close-third"),
+            ],
+            in: store.defaultWindowID
+        )
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+
+        store.close(sessionID: sessions[1].id, from: store.defaultWindowID)
+
+        XCTAssertTrue(store.isContinuousReadingEnabled(in: store.defaultWindowID))
+        XCTAssertEqual(store.continuousReadingSessionIDs(in: store.defaultWindowID), [sessions[0].id, sessions[2].id])
+
+        store.close(sessionID: sessions[2].id, from: store.defaultWindowID)
+
+        XCTAssertFalse(store.isContinuousReadingEnabled(in: store.defaultWindowID))
+        XCTAssertTrue(store.continuousReadingSessionIDs(in: store.defaultWindowID).isEmpty)
     }
 
     func testCloseSessionPushesURLOntoRecentlyClosedStack() throws {
@@ -1252,7 +1367,53 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowID))
     }
 
-    private func makeTemporaryPDF(named name: String) throws -> URL {
+    func testRestorePersistedContinuousReadingState() throws {
+        let firstURL = try makeTemporaryPDF(named: "restore-continuous-first")
+        let secondURL = try makeTemporaryPDF(named: "restore-continuous-second")
+        let firstSessionID = UUID()
+        let secondSessionID = UUID()
+        let windowID = UUID()
+        let persistence = InMemoryDocumentStorePersistence()
+        persistence.state = PersistedDocumentStoreState(
+            sessions: [
+                .init(id: firstSessionID, url: firstURL),
+                .init(id: secondSessionID, url: secondURL),
+            ],
+            windows: [
+                .init(
+                    id: windowID,
+                    sessionIDs: [firstSessionID, secondSessionID],
+                    continuousReadingSessionIDs: [firstSessionID, secondSessionID],
+                    tabPresentationMode: .verticalSidebar,
+                    isLeftSidebarVisible: true,
+                    isRightSidebarVisible: true,
+                    rightSidebarMode: .outline,
+                    searchQuery: "",
+                    searchScope: .currentDocument,
+                    splitState: .init(
+                        isEnabled: false,
+                        primarySessionID: secondSessionID,
+                        primarySessionURL: secondURL,
+                        secondarySessionURL: nil,
+                        focusedPane: .primary
+                    ),
+                    recentlyClosedURLs: []
+                ),
+            ]
+        )
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+
+        try store.restorePersistedState()
+
+        XCTAssertEqual(store.continuousReadingSessionIDs(in: windowID), [firstSessionID, secondSessionID])
+        XCTAssertTrue(store.isContinuousReadingEnabled(in: windowID))
+    }
+
+    private func makeTemporaryPDF(named name: String, pageCount: Int = 1) throws -> URL {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
@@ -1261,16 +1422,18 @@ final class DocumentStoreTests: XCTestCase {
         )
 
         let url = temporaryDirectory.appendingPathComponent("\(name).pdf")
-        let image = NSImage(size: NSSize(width: 200, height: 260))
-
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 260)).fill()
-        image.unlockFocus()
-
         let document = PDFDocument()
-        let page = PDFPage(image: image)
-        document.insert(page!, at: 0)
+        for _ in 0..<pageCount {
+            let image = NSImage(size: NSSize(width: 200, height: 260))
+
+            image.lockFocus()
+            NSColor.white.setFill()
+            NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 260)).fill()
+            image.unlockFocus()
+
+            let page = PDFPage(image: image)
+            document.insert(page!, at: document.pageCount)
+        }
 
         XCTAssertTrue(document.write(to: url))
         return url

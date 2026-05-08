@@ -56,6 +56,38 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
     }
 
+    func testThemeChordInvokesSwitchCurrentTheme() {
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [.switchCurrentTheme: { triggeredCommands.append(.switchCurrentTheme) }]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifiers: [.command]), in: window))
+        XCTAssertEqual(triggeredCommands, [.switchCurrentTheme])
+    }
+
+    func testThemeChordDoesNotRunWhileEditingText() {
+        var didTrigger = false
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [.switchCurrentTheme: { didTrigger = true }]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let textView = NSTextView()
+        window.contentView = textView
+        window.makeFirstResponder(textView)
+
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
+        XCTAssertFalse(didTrigger)
+    }
+
     func testPlainShortcutsAreBlockedWhileEditingText() {
         let textView = NSTextView()
 

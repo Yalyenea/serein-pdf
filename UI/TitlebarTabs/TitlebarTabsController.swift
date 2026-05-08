@@ -129,16 +129,23 @@ final class TitlebarTabsController: NSViewController {
             subview.removeFromSuperview()
         }
 
+        let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
+        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
+        let continuousSessionSet = Set(continuousSessionIDs)
+        let continuousLeaderID = continuousSessionIDs.first
+
         for session in documentStore.sessions(in: windowID) {
             let itemView = TitlebarTabItemView(
                 sessionID: session.id,
                 title: session.title,
                 isSelected: documentStore.activeSessionID(in: windowID) == session.id,
+                isTabSelected: selectedSessionIDs.contains(session.id),
                 isDirty: session.isDirty,
-                onSelect: { [weak self] sessionID in
-                    guard let self else { return }
-                    self.documentStore.clearSearch(in: self.windowID)
-                    self.documentStore.activate(sessionID: sessionID, in: self.windowID)
+                isContinuousReadingMember: continuousSessionSet.contains(session.id),
+                isContinuousReadingLeader: continuousLeaderID == session.id,
+                canStartContinuousReading: selectedSessionIDs.count > 1,
+                onSelect: { [weak self] sessionID, modifierFlags in
+                    self?.handleSessionSelection(sessionID, modifierFlags: modifierFlags)
                 },
                 onAlternateSelect: { [weak self] sessionID in
                     self?.onAlternateSessionActivationRequested?(sessionID)
@@ -148,6 +155,17 @@ final class TitlebarTabsController: NSViewController {
                 },
                 onRename: { [weak self] sessionID, newTitle in
                     self?.documentStore.renameSession(newTitle, for: sessionID)
+                },
+                onContextMenu: { [weak self] sessionID in
+                    self?.selectForContextMenuIfNeeded(sessionID)
+                },
+                onStartContinuousReading: { [weak self] _ in
+                    guard let self else { return }
+                    _ = self.documentStore.startContinuousReadingFromSelectedSessions(in: self.windowID)
+                },
+                onExitContinuousReading: { [weak self] _ in
+                    guard let self else { return }
+                    self.documentStore.stopContinuousReading(in: self.windowID)
                 }
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false
@@ -155,6 +173,25 @@ final class TitlebarTabsController: NSViewController {
         }
 
         updateDocumentContainerFrame()
+    }
+
+    private func handleSessionSelection(_ sessionID: UUID, modifierFlags: NSEvent.ModifierFlags) {
+        if modifierFlags.contains(.command) {
+            documentStore.toggleSessionSelection(sessionID, in: windowID)
+            return
+        }
+        if modifierFlags.contains(.shift) {
+            documentStore.selectSessionRange(through: sessionID, in: windowID)
+            return
+        }
+        documentStore.selectSessions([sessionID], in: windowID)
+        documentStore.clearSearch(in: windowID)
+        documentStore.activate(sessionID: sessionID, in: windowID)
+    }
+
+    private func selectForContextMenuIfNeeded(_ sessionID: UUID) {
+        guard documentStore.selectedSessionIDs(in: windowID).contains(sessionID) == false else { return }
+        documentStore.selectSessions([sessionID], in: windowID)
     }
 
     private func updateDocumentContainerFrame() {

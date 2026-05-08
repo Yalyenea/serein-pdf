@@ -175,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .highlightSelection: { [weak self] in self?.highlightSelection(nil) },
             .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
+            .switchCurrentTheme: { [weak self] in self?.switchCurrentTheme(nil) },
             .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
             .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
@@ -189,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .previousTab: { [weak self] in self?.activatePreviousTab(nil) },
             .nextTab: { [weak self] in self?.activateNextTab(nil) },
             .showAllTabs: { [weak self] in self?.showAllTabs(nil) },
+            .toggleContinuousReading: { [weak self] in self?.toggleContinuousReading(nil) },
             .fitHeight: { [weak self] in self?.fitReaderToHeight(nil) },
             .fitWidth: { [weak self] in self?.fitReaderToWidth(nil) },
             .zoomIn: { [weak self] in self?.zoomInReader(nil) },
@@ -240,7 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         controller.installPlainShortcutHandler { [weak self] event, window in
             guard let self,
                   let readerShortcutsController = self.readerShortcutsController else { return false }
-            return readerShortcutsController.handlePlainShortcut(for: event, in: window)
+            return readerShortcutsController.handleShortcutEvent(for: event, in: window)
         }
         controller.installSidebarRecentOpenHandler { [weak self] url, windowID in
             self?.openRecentDocuments([url], preferredWindowID: windowID)
@@ -520,6 +522,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 command: .showAllTabs,
                 action: #selector(showAllTabs(_:))
             ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleContinuousReading.menuTitle,
+                command: .toggleContinuousReading,
+                action: #selector(toggleContinuousReading(_:))
+            ),
             .separator(),
             makeConfiguredMenuItem(
                 title: "Use Sidebar Tabs",
@@ -608,6 +615,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 title: "Toggle Night Mode",
                 command: .toggleNightMode,
                 action: #selector(toggleNightMode(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.switchCurrentTheme.menuTitle,
+                command: .switchCurrentTheme,
+                action: #selector(switchCurrentTheme(_:))
             ),
             .separator(),
             makeConfiguredMenuItem(
@@ -898,6 +910,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
+    private func toggleContinuousReading(_ sender: Any?) {
+        guard let controller = mainWindowController else { return }
+        _ = documentStore.toggleContinuousReadingFromSelection(in: controller.windowID)
+    }
+
+    @objc
     private func highlightSelection(_ sender: Any?) {
         _ = mainWindowController?.triggerHighlightShortcut()
     }
@@ -996,6 +1014,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let currentIsDark = (NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
         var updatedConfiguration = appConfiguration
         updatedConfiguration.appearance.mode = appConfiguration.appearance.mode.toggled(currentIsDark: currentIsDark)
+        applyUpdatedConfiguration(updatedConfiguration)
+    }
+
+    @objc
+    private func switchCurrentTheme(_ sender: Any?) {
+        let currentIsDark = (NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+        var updatedConfiguration = appConfiguration
+        if currentIsDark {
+            updatedConfiguration.appearance.darkTheme = appConfiguration.appearance.darkTheme.toggled
+        } else {
+            updatedConfiguration.appearance.lightTheme = appConfiguration.appearance.lightTheme.toggled
+        }
         applyUpdatedConfiguration(updatedConfiguration)
     }
 
@@ -1491,6 +1521,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return documentStore.recentDocumentURLs.isEmpty == false
         case #selector(showAllTabs(_:)):
             return windowID.map { documentStore.sessions(in: $0).isEmpty == false } == true
+        case #selector(toggleContinuousReading(_:)):
+            if let windowID {
+                menuItem.state = documentStore.isContinuousReadingEnabled(in: windowID) ? .on : .off
+                return documentStore.isContinuousReadingEnabled(in: windowID)
+                    || documentStore.selectedSessionIDs(in: windowID).count > 1
+            }
+            return false
         case #selector(openContainingFolder(_:)):
             return activeSession != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):

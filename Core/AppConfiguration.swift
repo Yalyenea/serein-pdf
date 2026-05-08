@@ -45,6 +45,15 @@ enum LightTheme: String, CaseIterable, Codable, Sendable {
             "Rose Pine Dawn"
         }
     }
+
+    var toggled: LightTheme {
+        switch self {
+        case .normal:
+            .rosePineDawn
+        case .rosePineDawn:
+            .normal
+        }
+    }
 }
 
 enum DarkTheme: String, CaseIterable, Codable, Sendable {
@@ -57,6 +66,15 @@ enum DarkTheme: String, CaseIterable, Codable, Sendable {
             "Normal"
         case .rosePineMoon:
             "Rose Pine Moon"
+        }
+    }
+
+    var toggled: DarkTheme {
+        switch self {
+        case .normal:
+            .rosePineMoon
+        case .rosePineMoon:
+            .normal
         }
     }
 }
@@ -132,6 +150,7 @@ struct AppConfiguration: Equatable, Sendable {
             .closeCurrentTab: KeyboardShortcut(key: "w", modifiers: [.command]),
             .previousTab: KeyboardShortcut(key: "[", modifiers: [.command, .shift]),
             .nextTab: KeyboardShortcut(key: "]", modifiers: [.command, .shift]),
+            .toggleContinuousReading: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
             .fitHeight: KeyboardShortcut(key: "9", modifiers: [.command]),
             .fitWidth: KeyboardShortcut(key: "0", modifiers: [.command]),
             .zoomIn: KeyboardShortcut(key: "=", modifiers: [.command]),
@@ -368,6 +387,8 @@ show_recent_files_in_sidebar = true
 highlight_selection = "a"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
+# Cmd+K, Cmd+T is a built-in chord.
+switch_current_theme = "none"
 save_annotations = "command+s"
 copy_highlights_markdown = "command+shift+e"
 remove_highlight = "d"
@@ -382,6 +403,7 @@ close_current_tab = "command+w"
 previous_tab = "command+shift+["
 next_tab = "command+shift+]"
 show_all_tabs = "control+tab"
+toggle_continuous_reading = "command+shift+c"
 fit_height = "command+9"
 fit_width = "command+0"
 zoom_in = "command+="
@@ -447,6 +469,7 @@ show_recent_files_in_sidebar = \(configuration.layout.showRecentFilesInSidebar ?
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
+switch_current_theme = "\(serializedShortcut(.switchCurrentTheme, configuration: configuration))"
 save_annotations = "\(serializedShortcut(.saveAnnotations, configuration: configuration))"
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
 remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
@@ -461,6 +484,7 @@ close_current_tab = "\(serializedShortcut(.closeCurrentTab, configuration: confi
 previous_tab = "\(serializedShortcut(.previousTab, configuration: configuration))"
 next_tab = "\(serializedShortcut(.nextTab, configuration: configuration))"
 show_all_tabs = "\(serializedShortcut(.showAllTabs, configuration: configuration))"
+toggle_continuous_reading = "\(serializedShortcut(.toggleContinuousReading, configuration: configuration))"
 fit_height = "\(serializedShortcut(.fitHeight, configuration: configuration))"
 fit_width = "\(serializedShortcut(.fitWidth, configuration: configuration))"
 zoom_in = "\(serializedShortcut(.zoomIn, configuration: configuration))"
@@ -579,6 +603,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .exitHighlightMode, to: &configuration)
         case ("shortcuts", "toggle_night_mode"):
             try applyShortcut(rawValue, command: .toggleNightMode, to: &configuration)
+        case ("shortcuts", "switch_current_theme"):
+            try applyShortcut(rawValue, command: .switchCurrentTheme, to: &configuration)
         case ("shortcuts", "save_annotations"):
             try applyShortcut(rawValue, command: .saveAnnotations, to: &configuration)
         case ("shortcuts", "copy_highlights_markdown"):
@@ -637,6 +663,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .nextTab, to: &configuration)
         case ("shortcuts", "show_all_tabs"):
             try applyShortcut(rawValue, command: .showAllTabs, to: &configuration)
+        case ("shortcuts", "toggle_continuous_reading"):
+            try applyShortcut(rawValue, command: .toggleContinuousReading, to: &configuration)
         case ("shortcuts", "fit_height"):
             try applyShortcut(rawValue, command: .fitHeight, to: &configuration)
         case ("shortcuts", "fit_width"):

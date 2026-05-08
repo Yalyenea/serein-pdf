@@ -125,7 +125,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         let session = documentStore.activeSession(in: windowID)
         let sessionID = session?.id
-        let outlineTree = sessionID.map { documentStore.outlineTree(for: $0) } ?? []
+        let outlineTree = documentStore.outlineTreeForSidebar(in: windowID)
         if displayedSessionID != sessionID || nodes != outlineTree {
             reloadOutline()
         }
@@ -143,7 +143,12 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             return
         }
         let current = min(max(session.currentPageIndex + 1, 1), total)
-        pageCounterLabel.stringValue = "\(current) / \(total)"
+        if documentStore.isContinuousReadingEnabled(in: windowID),
+           let index = documentStore.continuousReadingSessionIDs(in: windowID).firstIndex(of: session.id) {
+            pageCounterLabel.stringValue = "\(index + 1) / \(documentStore.continuousReadingSessionIDs(in: windowID).count) · \(current) / \(total)"
+        } else {
+            pageCounterLabel.stringValue = "\(current) / \(total)"
+        }
     }
 
     private func reloadOutline() {
@@ -151,7 +156,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
 
         let session = documentStore.activeSession(in: windowID)
         displayedSessionID = session?.id
-        nodes = session.map { documentStore.outlineTree(for: $0.id) } ?? []
+        nodes = documentStore.outlineTreeForSidebar(in: windowID)
         outlineView.deselectAll(nil)
         outlineView.reloadData()
         expandAllNodes()
@@ -159,6 +164,8 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         let isEmpty = nodes.isEmpty
         if session == nil {
             emptyStateLabel.stringValue = "Open a PDF to inspect its outline."
+        } else if documentStore.isContinuousReadingEnabled(in: windowID) {
+            emptyStateLabel.stringValue = "No outline in this continuous group."
         } else {
             emptyStateLabel.stringValue = "This PDF has no outline."
         }
@@ -174,8 +181,10 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     private func expandAllNodes() {
-        for row in 0..<outlineView.numberOfRows {
+        var row = 0
+        while row < outlineView.numberOfRows {
             outlineView.expandItem(outlineView.item(atRow: row), expandChildren: true)
+            row += 1
         }
     }
 
@@ -220,7 +229,10 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             ])
         }
 
-        textField.textColor = NightModeStyle.primaryTextColor
+        textField.font = node.isDocumentRoot
+            ? .systemFont(ofSize: 12, weight: .semibold)
+            : .systemFont(ofSize: 12, weight: .regular)
+        textField.textColor = node.isDocumentRoot ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor
         textField.stringValue = node.title
         return cellView
     }
@@ -229,9 +241,13 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         let row = outlineView.selectedRow
         guard row >= 0,
               let node = outlineView.item(atRow: row) as? OutlineNode,
-              let pageIndex = node.pageIndex,
-              let sessionID = documentStore.activeSessionID(in: windowID) else { return }
+              let pageIndex = node.pageIndex else { return }
 
-        documentStore.updateCurrentPage(index: pageIndex, for: sessionID)
+        let targetSessionID = node.sourceSessionID ?? documentStore.activeSessionID(in: windowID)
+        guard let targetSessionID else { return }
+        documentStore.updateCurrentPage(index: pageIndex, for: targetSessionID)
+        if documentStore.activeSessionID(in: windowID) != targetSessionID {
+            documentStore.activate(sessionID: targetSessionID, in: windowID)
+        }
     }
 }

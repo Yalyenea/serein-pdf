@@ -18,6 +18,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
+- Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
@@ -26,6 +27,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Theme controls now split into `Mode`, `Light Theme`, and `Dark Theme`
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
+- `cmd+k`, then `cmd+t` switches the current light or dark theme, VS Code-style
 - Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
 - Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
@@ -99,6 +101,7 @@ sidebars_swapped = false
 show_recent_files_in_sidebar = true
 
 [shortcuts]
+switch_current_theme = "none"   # cmd+k, cmd+t is a built-in chord
 # ...
 ```
 
@@ -125,6 +128,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Highlight selection / enter highlight mode | `a` |
 | Exit highlight mode | `esc` |
 | Toggle light / dark mode | `i` |
+| Switch current theme | `cmd+k`, then `cmd+t` |
 | Save annotations | `cmd+s` |
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
@@ -138,6 +142,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Close tab / window | `cmd+w` |
 | Reopen closed tab | `cmd+shift+t` |
 | Show all tabs | `ctrl+tab` |
+| Toggle continuous reading for selected tabs | `cmd+shift+c` |
 | New window | `cmd+shift+n` |
 | Quick recent-files launcher | `cmd+shift+space` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |

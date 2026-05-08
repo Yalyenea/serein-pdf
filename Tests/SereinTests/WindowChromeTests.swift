@@ -780,6 +780,59 @@ struct WindowChromeTests {
     }
 
     @Test
+    func continuousReadingNextPageActivatesNextPDF() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(named: "continuous-next-first", pageSizes: [NSSize(width: 320, height: 480)]),
+                makeTemporaryPDF(named: "continuous-next-second", pageSizes: [NSSize(width: 320, height: 480)]),
+            ],
+            in: store.defaultWindowID
+        )
+        #expect(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        store.activate(sessionID: sessions[0].id, in: store.defaultWindowID)
+        flushLayout(controller.window)
+
+        controller.goToNextPage()
+        flushLayout(controller.window)
+
+        #expect(store.activeSessionID == sessions[1].id)
+        #expect(store.session(for: sessions[1].id)?.currentPageIndex == 0)
+    }
+
+    @Test
+    func continuousReadingPreviousPageActivatesPreviousPDFLastPage() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(
+                    named: "continuous-prev-first",
+                    pageSizes: [
+                        NSSize(width: 320, height: 480),
+                        NSSize(width: 320, height: 480),
+                    ]
+                ),
+                makeTemporaryPDF(named: "continuous-prev-second", pageSizes: [NSSize(width: 320, height: 480)]),
+            ],
+            in: store.defaultWindowID
+        )
+        #expect(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        flushLayout(controller.window)
+
+        controller.goToPreviousPage()
+        flushLayout(controller.window)
+
+        #expect(store.activeSessionID == sessions[0].id)
+        #expect(store.session(for: sessions[0].id)?.currentPageIndex == 1)
+    }
+
+    @Test
     func fitWidthOnOpenCanOpenWindowBackedDocument() throws {
         _ = NSApplication.shared
         var configuration = AppConfiguration.default
