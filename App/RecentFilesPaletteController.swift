@@ -78,12 +78,16 @@ private final class RecentFilesPaletteRowView: NSTableCellView {
 final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private static let panelSize = NSSize(width: 520, height: 640)
 
+    private let panelTitle: String
+    private let queryPlaceholder: String
+    private let emptyItemsMessage: String
+    private let emptyQueryMessage: String
     private let onOpenURLs: ([URL]) -> Void
     private var state = RecentFilesPaletteState(recentURLs: [])
     private var isApplyingSelection = false
     private var interactionMode: RecentFilesPaletteInteractionMode = .editingQuery
 
-    private let titleLabel = NSTextField(labelWithString: "Recent Files")
+    private let titleLabel = NSTextField(labelWithString: "")
     private let queryField = RecentFilesPaletteQueryField(frame: .zero)
     private let secondaryLabel = NSTextField(labelWithString: "")
     private let footerLabel = NSTextField(
@@ -93,7 +97,17 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
     private let scrollView = NSScrollView()
     private let tableView = RecentFilesPaletteResultsTableView()
 
-    init(onOpenURLs: @escaping ([URL]) -> Void) {
+    init(
+        title: String = "Recent Files",
+        queryPlaceholder: String = "Filter recent files",
+        emptyItemsMessage: String = "No recent files yet.",
+        emptyQueryMessage: String = "No recent files match the current query.",
+        onOpenURLs: @escaping ([URL]) -> Void
+    ) {
+        self.panelTitle = title
+        self.queryPlaceholder = queryPlaceholder
+        self.emptyItemsMessage = emptyItemsMessage
+        self.emptyQueryMessage = emptyQueryMessage
         self.onOpenURLs = onOpenURLs
 
         let panel = NSPanel(
@@ -102,7 +116,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
             backing: .buffered,
             defer: false
         )
-        panel.title = "Recent Files"
+        panel.title = title
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
@@ -144,6 +158,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         panel.contentView = contentView
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.stringValue = panelTitle
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         titleLabel.textColor = .secondaryLabelColor
 
@@ -153,7 +168,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         queryField.drawsBackground = false
         queryField.focusRingType = .none
         queryField.font = .systemFont(ofSize: 22, weight: .semibold)
-        queryField.placeholderString = "Filter recent files"
+        queryField.placeholderString = queryPlaceholder
         queryField.textColor = .labelColor
         queryField.lineBreakMode = .byTruncatingTail
         queryField.maximumNumberOfLines = 1
@@ -246,7 +261,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         secondaryLabel.stringValue = secondaryText()
 
         if state.filteredItems.isEmpty {
-            emptyLabel.stringValue = state.allItems.isEmpty ? "No recent files yet." : "No recent files match the current query."
+            emptyLabel.stringValue = state.allItems.isEmpty ? emptyItemsMessage : emptyQueryMessage
             emptyLabel.isHidden = false
             scrollView.isHidden = true
         } else {

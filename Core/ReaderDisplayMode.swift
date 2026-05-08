@@ -54,6 +54,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case exitHighlightMode = "exit_highlight_mode"
     case toggleNightMode = "toggle_night_mode"
     case switchCurrentTheme = "switch_current_theme"
+    case openLibraryPDF = "open_library_pdf"
     case saveAnnotations = "save_annotations"
     case copyHighlightsMarkdown = "copy_highlights_markdown"
     case removeHighlight = "remove_highlight"
@@ -112,6 +113,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Toggle Night Mode"
         case .switchCurrentTheme:
             "Switch Current Theme"
+        case .openLibraryPDF:
+            "Open from PDF Library…"
         case .saveAnnotations:
             "Save Annotations"
         case .copyHighlightsMarkdown:

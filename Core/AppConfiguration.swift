@@ -130,6 +130,12 @@ struct AppConfiguration: Equatable, Sendable {
         )
     }
 
+    struct Library: Equatable, Sendable {
+        var folderURLs: [URL]
+
+        static let `default` = Library(folderURLs: [])
+    }
+
     struct Shortcuts: Equatable, Sendable {
         var bindings: [ShortcutCommand: KeyboardShortcut]
 
@@ -192,19 +198,22 @@ struct AppConfiguration: Equatable, Sendable {
     var annotations: Annotations
     var shortcuts: Shortcuts
     var layout: Layout
+    var library: Library
 
     init(
         appearance: Appearance = .default,
         reader: Reader = .default,
         annotations: Annotations = .default,
         shortcuts: Shortcuts = .default,
-        layout: Layout = .default
+        layout: Layout = .default,
+        library: Library = .default
     ) {
         self.appearance = appearance
         self.reader = reader
         self.annotations = annotations
         self.shortcuts = shortcuts
         self.layout = layout
+        self.library = library
     }
 
     static let `default` = AppConfiguration(
@@ -212,7 +221,8 @@ struct AppConfiguration: Equatable, Sendable {
         reader: .default,
         annotations: .default,
         shortcuts: .default,
-        layout: .default
+        layout: .default,
+        library: .default
     )
 }
 
@@ -329,6 +339,7 @@ enum AppConfigurationError: LocalizedError {
     case invalidDarkTheme(String)
     case invalidDisplayMode(String)
     case invalidShortcut(String)
+    case invalidStringArray(String)
     case invalidAnnotationSavePolicy(String)
     case invalidWidth(String)
 
@@ -348,6 +359,8 @@ enum AppConfigurationError: LocalizedError {
             "Invalid reader display mode in config: \(value)"
         case let .invalidShortcut(value):
             "Invalid keyboard shortcut in config: \(value)"
+        case let .invalidStringArray(value):
+            "Invalid string array in config: \(value)"
         case let .invalidAnnotationSavePolicy(value):
             "Invalid annotation auto-save policy in config: \(value)"
         case let .invalidWidth(value):
@@ -383,12 +396,17 @@ right_sidebar_max_width = 720
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
 
+[library]
+folders = []
+
 [shortcuts]
 highlight_selection = "a"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 # Cmd+K, Cmd+T is a built-in chord.
 switch_current_theme = "none"
+# Cmd+K, Cmd+O is a built-in chord.
+open_library_pdf = "none"
 save_annotations = "command+s"
 copy_highlights_markdown = "command+shift+e"
 remove_highlight = "d"
@@ -465,11 +483,15 @@ right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounde
 sidebars_swapped = \(configuration.layout.sidebarsSwapped ? "true" : "false")
 show_recent_files_in_sidebar = \(configuration.layout.showRecentFilesInSidebar ? "true" : "false")
 
+[library]
+folders = \(serializedPathArray(configuration.library.folderURLs))
+
 [shortcuts]
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
 switch_current_theme = "\(serializedShortcut(.switchCurrentTheme, configuration: configuration))"
+open_library_pdf = "\(serializedShortcut(.openLibraryPDF, configuration: configuration))"
 save_annotations = "\(serializedShortcut(.saveAnnotations, configuration: configuration))"
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
 remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
@@ -525,6 +547,16 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         configuration: AppConfiguration
     ) -> String {
         configuration.shortcuts.bindings[command]?.serializedValue ?? "none"
+    }
+
+    private static func serializedPathArray(_ urls: [URL]) -> String {
+        let paths = urls.map { url in
+            let escapedPath = url.standardizedFileURL.path
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            return "\"\(escapedPath)\""
+        }
+        return "[\(paths.joined(separator: ", "))]"
     }
 }
 
@@ -605,6 +637,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .toggleNightMode, to: &configuration)
         case ("shortcuts", "switch_current_theme"):
             try applyShortcut(rawValue, command: .switchCurrentTheme, to: &configuration)
+        case ("shortcuts", "open_library_pdf"):
+            try applyShortcut(rawValue, command: .openLibraryPDF, to: &configuration)
         case ("shortcuts", "save_annotations"):
             try applyShortcut(rawValue, command: .saveAnnotations, to: &configuration)
         case ("shortcuts", "copy_highlights_markdown"):
@@ -639,6 +673,9 @@ struct AppConfigurationParser {
             configuration.layout.sidebarsSwapped = try parseBool(rawValue)
         case ("layout", "show_recent_files_in_sidebar"):
             configuration.layout.showRecentFilesInSidebar = try parseBool(rawValue)
+        case ("library", "folders"):
+            configuration.library.folderURLs = try parseStringArray(rawValue)
+                .map { URL(fileURLWithPath: $0).standardizedFileURL }
         case ("shortcuts", "remove_highlight"):
             try applyShortcut(rawValue, command: .removeHighlight, to: &configuration)
         case ("shortcuts", "highlight_color_pink"):
@@ -738,6 +775,14 @@ struct AppConfigurationParser {
         rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
     }
 
+    private func parseStringArray(_ rawValue: String) throws -> [String] {
+        let data = Data(rawValue.utf8)
+        guard let array = try JSONSerialization.jsonObject(with: data) as? [String] else {
+            throw AppConfigurationError.invalidStringArray(rawValue)
+        }
+        return array
+    }
+
     private func applyShortcut(
         _ rawValue: String,
         command: ShortcutCommand,
@@ -819,9 +864,13 @@ struct AppConfigurationStore {
             "right_sidebar_max_width",
             "sidebars_swapped",
             "show_recent_files_in_sidebar",
+            "[library]",
+            "folders",
             "highlight_selection",
             "exit_highlight_mode",
             "toggle_night_mode",
+            "switch_current_theme",
+            "open_library_pdf",
             "save_annotations",
             "copy_highlights_markdown",
             "remove_highlight",
@@ -836,6 +885,7 @@ struct AppConfigurationStore {
             "previous_tab",
             "next_tab",
             "show_all_tabs",
+            "toggle_continuous_reading",
             "fit_height",
             "fit_width",
             "single_page",

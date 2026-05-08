@@ -14,12 +14,14 @@
 
 - `TabPresentationMode`:`verticalSidebar` / `horizontalTitlebar`
 - 外观配置:`mode(system/light/dark)` + `light_theme(normal/rose_pine_dawn)` + `dark_theme(normal/rose_pine_moon)`
+- PDF 库配置:`library.folders` 保存一个或多个文件夹,打开库时递归扫描 PDF,按库 root / 子文件夹 / PDF 列表二级浏览
 - 默认高亮色:偏轻、低饱和、清晰的粉色
 - `a`:有选区 → 立即高亮;无选区 → 进入高亮模式
 - `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
 - `d`:删除鼠标所在高亮;多行整组删除
 - `i`:在 light / dark mode 间切换,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme,不改变 light / dark mode
+- `Cmd+K` → `Cmd+O`:打开 PDF 库二级浏览面板
 - `Ctrl+D` / `Ctrl+U`:半页下滚 / 上滚
 - `g` / `G`:跳到文首 / 文末
 - `Cmd+S`:写回源 PDF
@@ -51,6 +53,7 @@
 | M9 最近文件启动器 | ✅ 开发完成,待手测 |
 | M10 阅读区 Framing 打磨 | ✅ 开发完成,待手测 |
 | M10.5 多 PDF 连续阅读 | ✅ 开发完成,待手测 |
+| M10.6 PDF 库 | ✅ 开发完成,待手测 |
 | M11 扩展生态(预研) | 未开始 |
 
 ## 4. 下一步执行顺序
@@ -58,7 +61,8 @@
 - Wave 0 M8 / M9 手测：完成 `UAT-29` ~ `UAT-33`，确认批注、快捷键页、最近文件启动器都符合预期。
 - Wave 1 M10 手测：完成 `M10-021`，用真实 slide / paper PDF 验证居中与 fit width framing。
 - Wave 2 M10.5 手测：完成 `UAT-37`，用多个 slide PDF 验证连续阅读、跨 PDF 翻页与连续 Outline。
-- Wave 3 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
+- Wave 3 M10.6 手测：完成 `UAT-38`，配置 Book 文件夹后用 `Cmd+K` → `Cmd+O` 打开库浏览面板并打开库内 PDF。
+- Wave 4 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
 
 
 ## 5. Milestone 7:搜索强化与对比阅读
@@ -158,14 +162,22 @@
 - [x] `M10.5-005` 连续 Outline:右侧 Outline 顶层按 PDF 分组,点击跨 PDF 目录项先切 session 再跳页。
 - [x] `M10.5-006` 测试:覆盖连续组顺序、关闭清理、恢复、连续 Outline 与跨 PDF 翻页。
 
-## 10. Milestone 11:扩展生态(长期预研)
+## 10. Milestone 10.6:PDF 库
+
+- [x] `M10.6-001` 配置模型:在 `config.toml` 增加 `[library] folders = []`,支持保存多个库文件夹。
+- [x] `M10.6-002` 设置页:新增 Library 页,支持添加 / 移除库文件夹并即时写回配置。
+- [x] `M10.6-003` 库扫描:打开库时递归扫描配置文件夹内 PDF,按路径稳定排序并去重。
+- [x] `M10.6-004` 快捷键入口:`Cmd+K` → `Cmd+O` 打开 PDF Library 二级浏览面板,不落入标准 Open panel。
+- [x] `M10.6-005` 测试:覆盖配置读写、库扫描、chord 分发、设置窗口尺寸。
+
+## 11. Milestone 11:扩展生态(长期预研)
 
 - [ ] `M11-001` 扩展机制 RFC:`docs/extensions-rfc.md` 列选型,至少比较进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳。
 - [ ] `M11-002` PoC:若决策继续,选一条路径把"导出高亮"重写为插件,可在 app 中运行。
 - [ ] `M11-003` Serein Extension API 草稿:面向未来扩展开发者。
 - [ ] `M11-004` 若推迟,在 RFC 写清"为什么现在不做"(安全、上架、维护成本)。
 
-## 11. 手测清单(尚未覆盖)
+## 12. 手测清单(尚未覆盖)
 
 - [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
@@ -183,5 +195,6 @@
 - [ ] `UAT-35` `Cmd+0` 或默认 fit width 后,页面刚好完整显示内容,无横向裁切
 - [ ] `UAT-36` 扩展机制 RFC 存在并评审(M11 证据)
 - [ ] `UAT-37` 多选多个 slide PDF 后通过右键或 `Cmd+Shift+C` 开启连续阅读,`J/K` 或半页滚动能跨 PDF 边界,右侧 Outline 按 PDF 连续分组显示
+- [ ] `UAT-38` Settings > Library 添加 Book 文件夹后,`Cmd+K` → `Cmd+O` 可搜索并打开库内 PDF
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

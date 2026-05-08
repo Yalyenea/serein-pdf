@@ -1,7 +1,8 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 520, height: 367)
+    static let generalContentSize = NSSize(width: 520, height: 397)
+    static let libraryContentSize = NSSize(width: 680, height: 460)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
 }
 
@@ -85,7 +86,8 @@ final class SettingsWindowController: NSWindowController {
 
 private enum SettingsPage: Int {
     case general = 0
-    case shortcuts = 1
+    case library = 1
+    case shortcuts = 2
 }
 
 private final class ShortcutCaptureButton: NSButton {
@@ -181,8 +183,17 @@ private final class SettingsViewController: NSViewController {
     private var configuration: AppConfiguration
     private var isApplyingConfiguration = false
 
-    private let pageControl = NSSegmentedControl(labels: ["General", "Shortcuts"], trackingMode: .selectOne, target: nil, action: nil)
+    private let pageControl = NSSegmentedControl(labels: ["General", "Library", "Shortcuts"], trackingMode: .selectOne, target: nil, action: nil)
     private let generalContainer = NSView()
+    private let libraryContainer = NSView()
+    private let libraryScrollView = NSScrollView()
+    private let libraryContentView = FlippedContentView()
+    private let libraryFoldersStackView = NSStackView()
+    private let libraryHintLabel = NSTextField(
+        wrappingLabelWithString: "Library folders are scanned for PDFs when opening from the library."
+    )
+    private let libraryEmptyLabel = NSTextField(labelWithString: "No library folders configured.")
+    private let addLibraryFolderButton = NSButton(title: "Add Folder…", target: nil, action: nil)
     private let shortcutsScrollView = NSScrollView()
     private let shortcutsContentView = FlippedContentView()
     private let shortcutsStackView = NSStackView()
@@ -241,13 +252,16 @@ private final class SettingsViewController: NSViewController {
         pageControl.action = #selector(handlePageChanged(_:))
 
         buildGeneralPage()
+        buildLibraryPage()
         buildShortcutsPage()
 
         generalContainer.translatesAutoresizingMaskIntoConstraints = false
+        libraryContainer.translatesAutoresizingMaskIntoConstraints = false
         shortcutsScrollView.translatesAutoresizingMaskIntoConstraints = false
 
         contentView.addSubview(pageControl)
         contentView.addSubview(generalContainer)
+        contentView.addSubview(libraryContainer)
         contentView.addSubview(shortcutsScrollView)
 
         NSLayoutConstraint.activate([
@@ -258,6 +272,11 @@ private final class SettingsViewController: NSViewController {
             generalContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             generalContainer.topAnchor.constraint(equalTo: pageControl.bottomAnchor, constant: 14),
             generalContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+
+            libraryContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            libraryContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            libraryContainer.topAnchor.constraint(equalTo: pageControl.bottomAnchor, constant: 14),
+            libraryContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
             shortcutsScrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             shortcutsScrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
@@ -321,6 +340,7 @@ private final class SettingsViewController: NSViewController {
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
         showRecentInSidebarCheckbox.state = configuration.layout.showRecentFilesInSidebar ? .on : .off
         shortcutsErrorLabel.stringValue = ""
+        rebuildLibraryFolderRows()
 
         for command in ShortcutCommand.allCases {
             shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
@@ -376,6 +396,7 @@ private final class SettingsViewController: NSViewController {
     private func applySelectedPage() {
         let page = SettingsPage(rawValue: pageControl.selectedSegment) ?? .general
         generalContainer.isHidden = page != .general
+        libraryContainer.isHidden = page != .library
         shortcutsScrollView.isHidden = page != .shortcuts
         if page == .shortcuts {
             shortcutsScrollView.contentView.scroll(to: .zero)
@@ -470,6 +491,68 @@ private final class SettingsViewController: NSViewController {
         ])
     }
 
+    private func buildLibraryPage() {
+        libraryHintLabel.translatesAutoresizingMaskIntoConstraints = false
+        libraryHintLabel.font = .systemFont(ofSize: 11)
+        libraryHintLabel.textColor = .secondaryLabelColor
+        libraryHintLabel.maximumNumberOfLines = 0
+
+        addLibraryFolderButton.translatesAutoresizingMaskIntoConstraints = false
+        addLibraryFolderButton.controlSize = .small
+        addLibraryFolderButton.bezelStyle = .rounded
+        addLibraryFolderButton.target = self
+        addLibraryFolderButton.action = #selector(addLibraryFolder(_:))
+
+        libraryEmptyLabel.font = .systemFont(ofSize: 12)
+        libraryEmptyLabel.textColor = .secondaryLabelColor
+
+        libraryFoldersStackView.orientation = .vertical
+        libraryFoldersStackView.alignment = .leading
+        libraryFoldersStackView.spacing = 8
+        libraryFoldersStackView.translatesAutoresizingMaskIntoConstraints = false
+
+        libraryContentView.translatesAutoresizingMaskIntoConstraints = false
+        libraryContentView.addSubview(libraryFoldersStackView)
+
+        libraryScrollView.translatesAutoresizingMaskIntoConstraints = false
+        libraryScrollView.drawsBackground = false
+        libraryScrollView.borderType = .noBorder
+        libraryScrollView.hasHorizontalScroller = false
+        libraryScrollView.hasVerticalScroller = true
+        libraryScrollView.autohidesScrollers = true
+        libraryScrollView.documentView = libraryContentView
+
+        libraryContainer.addSubview(libraryHintLabel)
+        libraryContainer.addSubview(addLibraryFolderButton)
+        libraryContainer.addSubview(libraryScrollView)
+
+        NSLayoutConstraint.activate([
+            libraryHintLabel.leadingAnchor.constraint(equalTo: libraryContainer.leadingAnchor, constant: 24),
+            libraryHintLabel.trailingAnchor.constraint(equalTo: addLibraryFolderButton.leadingAnchor, constant: -16),
+            libraryHintLabel.topAnchor.constraint(equalTo: libraryContainer.topAnchor, constant: 18),
+
+            addLibraryFolderButton.trailingAnchor.constraint(equalTo: libraryContainer.trailingAnchor, constant: -24),
+            addLibraryFolderButton.centerYAnchor.constraint(equalTo: libraryHintLabel.centerYAnchor),
+
+            libraryScrollView.leadingAnchor.constraint(equalTo: libraryHintLabel.leadingAnchor),
+            libraryScrollView.trailingAnchor.constraint(equalTo: libraryContainer.trailingAnchor, constant: -24),
+            libraryScrollView.topAnchor.constraint(equalTo: libraryHintLabel.bottomAnchor, constant: 16),
+            libraryScrollView.bottomAnchor.constraint(equalTo: libraryContainer.bottomAnchor, constant: -20),
+
+            libraryContentView.leadingAnchor.constraint(equalTo: libraryScrollView.contentView.leadingAnchor),
+            libraryContentView.trailingAnchor.constraint(equalTo: libraryScrollView.contentView.trailingAnchor),
+            libraryContentView.topAnchor.constraint(equalTo: libraryScrollView.contentView.topAnchor),
+            libraryContentView.bottomAnchor.constraint(greaterThanOrEqualTo: libraryScrollView.contentView.bottomAnchor),
+            libraryContentView.widthAnchor.constraint(equalTo: libraryScrollView.contentView.widthAnchor),
+
+            libraryFoldersStackView.leadingAnchor.constraint(equalTo: libraryContentView.leadingAnchor),
+            libraryFoldersStackView.trailingAnchor.constraint(equalTo: libraryContentView.trailingAnchor),
+            libraryFoldersStackView.topAnchor.constraint(equalTo: libraryContentView.topAnchor),
+            libraryFoldersStackView.bottomAnchor.constraint(equalTo: libraryContentView.bottomAnchor),
+            libraryFoldersStackView.widthAnchor.constraint(equalTo: libraryContentView.widthAnchor),
+        ])
+    }
+
     private func buildShortcutsPage() {
         shortcutsHintLabel.translatesAutoresizingMaskIntoConstraints = false
         shortcutsHintLabel.font = .systemFont(ofSize: 11)
@@ -536,6 +619,90 @@ private final class SettingsViewController: NSViewController {
             let row = makeShortcutRow(for: command)
             shortcutsStackView.addArrangedSubview(row)
         }
+    }
+
+    private func rebuildLibraryFolderRows() {
+        libraryFoldersStackView.arrangedSubviews.forEach { view in
+            libraryFoldersStackView.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        guard configuration.library.folderURLs.isEmpty == false else {
+            libraryFoldersStackView.addArrangedSubview(libraryEmptyLabel)
+            return
+        }
+
+        for folderURL in configuration.library.folderURLs {
+            let row = makeLibraryFolderRow(for: folderURL)
+            libraryFoldersStackView.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: libraryFoldersStackView.widthAnchor).isActive = true
+        }
+    }
+
+    private func makeLibraryFolderRow(for folderURL: URL) -> NSView {
+        let row = NSView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let pathLabel = NSTextField(labelWithString: folderURL.path)
+        pathLabel.font = .systemFont(ofSize: 12)
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+        pathLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let removeButton = NSButton(title: "Remove", target: self, action: #selector(removeLibraryFolder(_:)))
+        removeButton.controlSize = .small
+        removeButton.bezelStyle = .rounded
+        removeButton.identifier = NSUserInterfaceItemIdentifier(folderURL.path)
+        removeButton.translatesAutoresizingMaskIntoConstraints = false
+
+        row.addSubview(pathLabel)
+        row.addSubview(removeButton)
+
+        NSLayoutConstraint.activate([
+            pathLabel.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            pathLabel.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            pathLabel.trailingAnchor.constraint(equalTo: removeButton.leadingAnchor, constant: -12),
+
+            removeButton.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            removeButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+
+            row.heightAnchor.constraint(equalToConstant: 28),
+        ])
+
+        return row
+    }
+
+    @objc
+    private func addLibraryFolder(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        panel.message = "Choose folders whose PDFs should appear in the library."
+
+        guard panel.runModal() == .OK else { return }
+
+        var folderURLs = configuration.library.folderURLs
+        var seenPaths = Set(folderURLs.map { $0.standardizedFileURL.path })
+        for url in panel.urls.map(\.standardizedFileURL) {
+            guard seenPaths.insert(url.path).inserted else { continue }
+            folderURLs.append(url)
+        }
+        updateLibraryFolderURLs(folderURLs)
+    }
+
+    @objc
+    private func removeLibraryFolder(_ sender: NSButton) {
+        guard let path = sender.identifier?.rawValue else { return }
+        updateLibraryFolderURLs(
+            configuration.library.folderURLs.filter { $0.standardizedFileURL.path != path }
+        )
+    }
+
+    private func updateLibraryFolderURLs(_ folderURLs: [URL]) {
+        var updatedConfiguration = configuration
+        updatedConfiguration.library.folderURLs = folderURLs
+        publishConfigurationIfChanged(updatedConfiguration)
     }
 
     private func makeShortcutRow(for command: ShortcutCommand) -> NSView {
@@ -665,6 +832,8 @@ private final class SettingsViewController: NSViewController {
         switch page {
         case .general:
             return SettingsWindowMetrics.generalContentSize
+        case .library:
+            return SettingsWindowMetrics.libraryContentSize
         case .shortcuts:
             return SettingsWindowMetrics.shortcutsContentSize
         }

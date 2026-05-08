@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var appearanceObservation: NSKeyValueObservation?
     private var readerShortcutsController: ReaderShortcutsController?
     private var recentFilesPaletteController: RecentFilesPaletteController?
+    private var libraryPaletteController: PDFLibraryPaletteController?
     private var openTabsPaletteController: OpenTabsPaletteController?
     private var openTabsPaletteWindowID: UUID?
     private let recentFilesMenu = NSMenu(title: "Open Recent")
@@ -176,6 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
             .switchCurrentTheme: { [weak self] in self?.switchCurrentTheme(nil) },
+            .openLibraryPDF: { [weak self] in self?.showLibraryPalette(nil) },
             .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
             .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
@@ -322,7 +324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let appMenu = NSMenu()
         let settingsItem = NSMenuItem(
             title: "Settings…",
-            action: #selector(showSettings(_:)),
+            action: #selector(openSettingsWindow(_:)),
             keyEquivalent: ","
         )
         settingsItem.keyEquivalentModifierMask = [.command]
@@ -370,9 +372,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let fileMenu = NSMenu(title: "File")
         let settingsItem = NSMenuItem(
             title: "Settings…",
-            action: #selector(showSettings(_:)),
+            action: #selector(openSettingsWindow(_:)),
             keyEquivalent: ","
         )
+        settingsItem.keyEquivalentModifierMask = [.command]
+        settingsItem.target = self
         let newWindowItem = makeConfiguredMenuItem(
             title: ShortcutCommand.newWindow.menuTitle,
             command: .newWindow,
@@ -387,6 +391,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             title: ShortcutCommand.showRecentFilesPalette.menuTitle,
             command: .showRecentFilesPalette,
             action: #selector(showRecentFilesPalette(_:))
+        )
+        let openLibraryItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.openLibraryPDF.menuTitle,
+            command: .openLibraryPDF,
+            action: #selector(showLibraryPalette(_:))
         )
         let openContainingFolderItem = makeConfiguredMenuItem(
             title: ShortcutCommand.openContainingFolder.menuTitle,
@@ -454,6 +463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             newWindowItem,
             openItem,
             quickOpenRecentItem,
+            openLibraryItem,
             openContainingFolderItem,
             recentItem,
             reopenClosedItem,
@@ -873,6 +883,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
+    private func showLibraryPalette(_ sender: Any?) {
+        guard appConfiguration.library.folderURLs.isEmpty == false else {
+            presentLibraryMessage(
+                title: "No PDF library folders",
+                message: "Add folders in Settings > Library, then use Cmd+K, Cmd+O again."
+            )
+            return
+        }
+
+        if libraryPaletteController == nil {
+            libraryPaletteController = PDFLibraryPaletteController { [weak self] url in
+                self?.openRecentDocuments([url])
+            }
+        }
+        libraryPaletteController?.show(
+            folderURLs: appConfiguration.library.folderURLs,
+            relativeTo: mainWindowController?.window
+        )
+    }
+
+    @objc
     private func showAllTabs(_ sender: Any?) {
         if openTabsPaletteController?.window?.isVisible == true {
             closeOpenTabsPalette()
@@ -1287,7 +1318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
-    private func showSettings(_ sender: Any?) {
+    private func openSettingsWindow(_ sender: Any?) {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
                 configuration: appConfiguration,
@@ -1462,6 +1493,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         alert.alertStyle = .warning
         alert.messageText = "Auto-save failed"
         alert.informativeText = "These PDFs still have unsaved highlights:\n\(fileList)"
+        alert.addButton(withTitle: "OK")
+
+        if let window = mainWindowController?.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func presentLibraryMessage(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = title
+        alert.informativeText = message
         alert.addButton(withTitle: "OK")
 
         if let window = mainWindowController?.window ?? NSApp.mainWindow {

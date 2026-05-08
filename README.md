@@ -20,6 +20,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
 - Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
+- PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, search, and direct PDF opening
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
@@ -100,8 +101,12 @@ right_sidebar_max_width = 720
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
 
+[library]
+folders = ["/Users/your-name/Documents/Papers"]
+
 [shortcuts]
 switch_current_theme = "none"   # cmd+k, cmd+t is a built-in chord
+open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
 # ...
 ```
 
@@ -116,6 +121,9 @@ switch_current_theme = "none"   # cmd+k, cmd+t is a built-in chord
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
+- `library.folders` can contain one or more folders. The library browser scans
+  them recursively when opened, groups results by library root and PDF folder,
+  and keeps the files in place.
 - Setting a shortcut to `none` clears it completely; Serein will not silently
   fall back to the default binding after restart.
 
@@ -132,6 +140,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Save annotations | `cmd+s` |
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
+| Open from PDF Library | `cmd+k`, then `cmd+o` |
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |

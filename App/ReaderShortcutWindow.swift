@@ -17,6 +17,9 @@ final class ReaderShortcutWindow: NSWindow {
         if modifiers.isEmpty {
             return false
         }
+        if plainShortcutHandler?(event, self) == true {
+            return true
+        }
         return super.performKeyEquivalent(with: event)
     }
 }

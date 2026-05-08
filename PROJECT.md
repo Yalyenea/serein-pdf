@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 阅读(单·双页、适应宽度、缩放、翻页)/ 多 PDF 连续阅读 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
+文档管理 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ 多 PDF 连续阅读 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
 
 ### 2.2 V1 明确不做
 
@@ -81,6 +81,7 @@ flowchart LR
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
+| PDF 库 | 配置保存库文件夹路径;触发打开库时递归扫描 PDF,用轻量搜索面板打开目标文件 |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
@@ -139,6 +140,7 @@ flowchart LR
 - Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
 - `I`:切换 light / dark mode,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme(亮色切 `normal` / `rose_pine_dawn`,暗色切 `normal` / `rose_pine_moon`)
+- `Cmd+K` → `Cmd+O`:从配置的 PDF 库文件夹扫描并打开二级库浏览面板
 
 **文档与 tab**
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
@@ -247,11 +249,13 @@ App/                                      # AppKit 入口、窗口与设置/启�
   SettingsWindowController.swift          # 设置窗口:外观 / 阅读 / 批注 / 快捷键 配置 UI
   RecentFilesPaletteController.swift      # Spotlight 风格最近文件启动器的窗口与交互控制器
   RecentFilesPaletteState.swift           # 最近文件启动器的查询匹配与多选状态(纯模型)
+  PDFLibraryPaletteController.swift       # PDF Library 二级浏览面板:库 tab / 文件夹 / PDF 列表 / 搜索
   OpenTabsPaletteController.swift         # 当前窗口所有 tabs 轻量文本总览
   OpenTabsPaletteState.swift              # tabs 总览的选中状态(纯模型)
 
 Core/                                     # 文档 / 窗口 / 配置 / 持久化 核心模型
   AppConfiguration.swift                  # config.toml schema、默认值与 AppConfigurationStore 读写
+  PDFLibrary.swift                        # PDF 库扫描、root / folder / item catalog
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
   DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 分屏状态
   DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等

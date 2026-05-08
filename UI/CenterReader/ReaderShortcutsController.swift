@@ -5,7 +5,10 @@ final class ReaderShortcutsController {
     typealias ShortcutHandler = @MainActor () -> Void
 
     private static let chordPrefix = KeyboardShortcut(key: "k", modifiers: [.command])
-    private static let switchCurrentThemeChord = KeyboardShortcut(key: "t", modifiers: [.command])
+    private static let chordCommands: [(KeyboardShortcut, ShortcutCommand)] = [
+        (KeyboardShortcut(key: "t", modifiers: [.command]), .switchCurrentTheme),
+        (KeyboardShortcut(key: "o", modifiers: [.command]), .openLibraryPDF),
+    ]
 
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]
     private let handlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
@@ -49,8 +52,9 @@ final class ReaderShortcutsController {
         if isWaitingForChordKey {
             isWaitingForChordKey = false
 
-            if Self.switchCurrentThemeChord.matches(event: event) {
-                handlerProvider()[.switchCurrentTheme]?()
+            if let command = Self.chordCommands.first(where: { $0.0.matches(event: event) })?.1,
+               let handler = handlerProvider()[command] {
+                handler()
                 return true
             }
 

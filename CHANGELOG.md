@@ -15,9 +15,11 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Reading
 - Add continuous reading groups for multiple selected PDFs: `cmd+shift+c` or the tab context menu enables ordered cross-PDF page turns, tab group indentation, and a combined right-sidebar Outline grouped by PDF
+- Add configurable PDF Library folders with a two-pane library browser for root tabs, folder scopes, search, and opening library PDFs
 
 ### Keyboard
 - Restore the VS Code-style `cmd+k`, then `cmd+t` theme chord for switching the current light or dark theme
+- Add `cmd+k`, then `cmd+o` for opening the PDF Library browser without falling through to the standard Open panel
 
 ## [0.2.0] - 2026-04-23
 

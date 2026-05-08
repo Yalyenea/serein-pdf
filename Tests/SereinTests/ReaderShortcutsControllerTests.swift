@@ -71,6 +71,38 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(triggeredCommands, [.switchCurrentTheme])
     }
 
+    func testLibraryChordInvokesOpenLibraryPDF() {
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [.openLibraryPDF: { triggeredCommands.append(.openLibraryPDF) }]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "o", modifiers: [.command]), in: window))
+        XCTAssertEqual(triggeredCommands, [.openLibraryPDF])
+    }
+
+    func testReaderWindowChecksShortcutHandlerBeforeMenuKeyEquivalent() {
+        let window = ReaderShortcutWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        var handledEvents: [String] = []
+        window.plainShortcutHandler = { event, _ in
+            handledEvents.append(event.charactersIgnoringModifiers ?? "")
+            return true
+        }
+
+        XCTAssertTrue(window.performKeyEquivalent(with: makeKeyEvent(characters: "o", modifiers: [.command])))
+        XCTAssertEqual(handledEvents, ["o"])
+    }
+
     func testThemeChordDoesNotRunWhileEditingText() {
         var didTrigger = false
         let controller = ReaderShortcutsController(

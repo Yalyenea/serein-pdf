@@ -889,7 +889,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 520, height: 367))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 520, height: 397))
     }
 
     @Test
@@ -901,12 +901,32 @@ struct WindowChromeTests {
         controller.selectPageForTesting(1)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 460))
+
+        controller.selectPageForTesting(2)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
         #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 920, height: 620))
 
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 520, height: 367))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 520, height: 397))
+    }
+
+    @Test
+    func settingsWindowOpensWithConfiguredLibraryFolders() throws {
+        var configuration = AppConfiguration.default
+        configuration.library.folderURLs = [URL(fileURLWithPath: "/Users/your-name/Documents/Papers")]
+        let controller = SettingsWindowController(configuration: configuration) { _ in }
+        controller.showWindow(nil)
+
+        let window = try #require(controller.window)
+        controller.selectPageForTesting(1)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        #expect(window.title == "Settings")
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 460))
     }
 
     @Test

@@ -17,10 +17,12 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.appearance.darkTheme, .rosePineMoon)
         XCTAssertEqual(configuration.reader.defaultDisplayMode, .singlePageContinuous)
         XCTAssertFalse(configuration.reader.fitWidthOnOpen)
+        XCTAssertEqual(configuration.library.folderURLs, [])
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
         XCTAssertNil(configuration.shortcuts.bindings[.switchCurrentTheme])
+        XCTAssertNil(configuration.shortcuts.bindings[.openLibraryPDF])
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.copyHighlightsMarkdown], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
@@ -97,6 +99,12 @@ find_all_open = "command+option+f"
 
 [layout]
 show_recent_files_in_sidebar = false
+
+[library]
+folders = ["/tmp/Books", "/tmp/Papers"]
+
+[shortcuts]
+open_library_pdf = "command+option+o"
 """.write(to: fileURL, atomically: true, encoding: .utf8)
 
         let configuration = try AppConfigurationStore(fileURL: fileURL).load()
@@ -110,6 +118,7 @@ show_recent_files_in_sidebar = false
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "n", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.switchCurrentTheme], KeyboardShortcut(key: "t", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.openLibraryPDF], KeyboardShortcut(key: "o", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
@@ -126,6 +135,10 @@ show_recent_files_in_sidebar = false
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findAllOpen], KeyboardShortcut(key: "f", modifiers: [.command, .option]))
         XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
+        XCTAssertEqual(
+            configuration.library.folderURLs.map(\.path),
+            ["/tmp/Books", "/tmp/Papers"]
+        )
     }
 
     func testExistingConfigGetsMissingShortcutKeysBackfilled() throws {
@@ -154,6 +167,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("exit_highlight_mode = \"escape\""))
         XCTAssertTrue(content.contains("toggle_night_mode = \"i\""))
         XCTAssertTrue(content.contains("switch_current_theme = \"none\""))
+        XCTAssertTrue(content.contains("open_library_pdf = \"none\""))
         XCTAssertTrue(content.contains("save_annotations = \"command+s\""))
         XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
@@ -184,6 +198,8 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("toggle_demo_mode = \"command+l\""))
         XCTAssertTrue(content.contains("toggle_immersive_mode = \"command+control+l\""))
         XCTAssertTrue(content.contains("show_recent_files_in_sidebar = true"))
+        XCTAssertTrue(content.contains("[library]"))
+        XCTAssertTrue(content.contains("folders = []"))
     }
 
     func testLegacyGreenShortcutMigratesAwayFromFindPreviousConflict() throws {
@@ -279,6 +295,10 @@ fit_width = "command+9"
         configuration.reader.defaultDisplayMode = .twoUpContinuous
         configuration.reader.fitWidthOnOpen = true
         configuration.annotations.autoSavePolicy = .never
+        configuration.library.folderURLs = [
+            URL(fileURLWithPath: "/tmp/Books"),
+            URL(fileURLWithPath: "/tmp/Papers"),
+        ]
 
         try store.save(configuration)
         let reloadedConfiguration = try store.load()
@@ -290,12 +310,14 @@ fit_width = "command+9"
         XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .twoUpContinuous)
         XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
         XCTAssertEqual(reloadedConfiguration.annotations.autoSavePolicy, .never)
+        XCTAssertEqual(reloadedConfiguration.library.folderURLs.map(\.path), ["/tmp/Books", "/tmp/Papers"])
         XCTAssertTrue(persistedContent.contains("mode = \"dark\""))
         XCTAssertTrue(persistedContent.contains("light_theme = \"rose_pine_dawn\""))
         XCTAssertTrue(persistedContent.contains("dark_theme = \"normal\""))
         XCTAssertTrue(persistedContent.contains("default_display_mode = \"two_up_continuous\""))
         XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
         XCTAssertTrue(persistedContent.contains("auto_save = \"never\""))
+        XCTAssertTrue(persistedContent.contains("folders = [\"/tmp/Books\", \"/tmp/Papers\"]"))
     }
 
     func testLegacyToggleLeftTabsModeMigratesToRightSidebarMode() throws {
