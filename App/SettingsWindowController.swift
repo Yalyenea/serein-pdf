@@ -31,6 +31,7 @@ final class SettingsWindowController: NSWindowController {
         window.title = "Settings"
         window.toolbarStyle = .unifiedCompact
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.center()
 
         super.init(window: window)
@@ -50,9 +51,14 @@ final class SettingsWindowController: NSWindowController {
         settingsViewController.apply(configuration: configuration)
     }
 
+    func selectPage(_ page: SettingsPage) {
+        settingsViewController.selectPage(page)
+        applyPreferredWindowSize(settingsViewController.preferredContentSizeForCurrentPage())
+    }
+
 #if DEBUG
     func selectPageForTesting(_ index: Int) {
-        settingsViewController.selectPageForTesting(index)
+        settingsViewController.selectPage(SettingsPage(rawValue: index) ?? .general)
         applyPreferredWindowSize(settingsViewController.preferredContentSizeForCurrentPage())
     }
 #endif
@@ -84,7 +90,7 @@ final class SettingsWindowController: NSWindowController {
     }
 }
 
-private enum SettingsPage: Int {
+enum SettingsPage: Int {
     case general = 0
     case library = 1
     case shortcuts = 2
@@ -358,12 +364,10 @@ private final class SettingsViewController: NSViewController {
         applySelectedPage()
     }
 
-#if DEBUG
-    func selectPageForTesting(_ index: Int) {
-        pageControl.selectedSegment = index
+    func selectPage(_ page: SettingsPage) {
+        pageControl.selectedSegment = page.rawValue
         applySelectedPage()
     }
-#endif
 
     @objc
     private func handleGeneralControlChanged(_ sender: Any?) {

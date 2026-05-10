@@ -86,6 +86,31 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(triggeredCommands, [.openLibraryPDF])
     }
 
+    func testAdditionalCommandKChordsInvokeHandlers() {
+        let cases: [(String, ShortcutCommand)] = [
+            ("r", .refreshLibraryIndex),
+            ("l", .openLibrarySettings),
+            ("s", .openShortcutSettings),
+            ("m", .mergeAllWindows),
+            ("n", .moveCurrentPDFToNewWindow),
+        ]
+
+        for (key, command) in cases {
+            var triggeredCommands: [ShortcutCommand] = []
+            let controller = ReaderShortcutsController(
+                shortcutsProvider: { [:] },
+                handlerProvider: {
+                    [command: { triggeredCommands.append(command) }]
+                }
+            )
+            let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+
+            XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
+            XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: key, modifiers: [.command]), in: window))
+            XCTAssertEqual(triggeredCommands, [command])
+        }
+    }
+
     func testReaderWindowChecksShortcutHandlerBeforeMenuKeyEquivalent() {
         let window = ReaderShortcutWindow(
             contentRect: .init(x: 0, y: 0, width: 400, height: 300),

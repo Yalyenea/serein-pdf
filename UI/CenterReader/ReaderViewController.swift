@@ -23,6 +23,18 @@ private struct PDFViewportAnchor {
 final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
 
+    override func isAccessibilityElement() -> Bool {
+        false
+    }
+
+    override func accessibilityChildren() -> [Any]? {
+        []
+    }
+
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        nil
+    }
+
     override func layout() {
         super.layout()
         onLayoutCompleted?()

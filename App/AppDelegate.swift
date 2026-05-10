@@ -2,7 +2,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     private static let recentFilesCleanupInterval: TimeInterval = 60 * 60 * 24
     private static let recentFilesCleanupDateKey = "Serein.RecentFilesCleanup.lastDate"
     private var mainWindowControllers: [UUID: MainWindowController] = [:]
@@ -124,6 +124,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         true
     }
 
+    func application(_ application: NSApplication, shouldSaveApplicationState coder: NSCoder) -> Bool {
+        false
+    }
+
+    func application(_ application: NSApplication, shouldRestoreApplicationState coder: NSCoder) -> Bool {
+        false
+    }
+
     func applicationDidResignActive(_ notification: Notification) {
         closeOpenTabsPalette()
     }
@@ -169,6 +177,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let dirtyURLs = Set(documentStore.sessions.filter(\.isDirty).map(\.url))
         reportedAutoSaveFailureURLs.formIntersection(dirtyURLs)
         updateRecentFilesMenu()
+        refreshManagedMenuState()
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        refreshManagedMenuState(in: menu)
     }
 
     private func shortcutHandlerMap() -> [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] {
@@ -178,6 +191,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
             .switchCurrentTheme: { [weak self] in self?.switchCurrentTheme(nil) },
             .openLibraryPDF: { [weak self] in self?.showLibraryPalette(nil) },
+            .refreshLibraryIndex: { [weak self] in self?.refreshLibraryIndex(nil) },
+            .openLibrarySettings: { [weak self] in self?.openLibrarySettings(nil) },
+            .openShortcutSettings: { [weak self] in self?.openShortcutSettings(nil) },
             .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
             .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
@@ -217,6 +233,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .openContainingFolder: { [weak self] in self?.openContainingFolder(nil) },
             .reopenLastClosed: { [weak self] in self?.reopenLastClosed(nil) },
             .newWindow: { [weak self] in self?.newWindow(nil) },
+            .mergeAllWindows: { [weak self] in self?.mergeAllWindows(nil) },
+            .moveCurrentPDFToNewWindow: { [weak self] in self?.moveCurrentPDFToNewWindow(nil) },
             .toggleAllPagesOverview: { [weak self] in self?.toggleAllPagesOverview(nil) },
             .toggleDemoMode: { [weak self] in self?.toggleDemoModeAction(nil) },
             .toggleImmersiveMode: { [weak self] in self?.toggleImmersiveModeAction(nil) },
@@ -329,9 +347,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         )
         settingsItem.keyEquivalentModifierMask = [.command]
         settingsItem.target = self
-        appMenu.addItem(
-            settingsItem
+        let librarySettingsItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.openLibrarySettings.menuTitle,
+            command: .openLibrarySettings,
+            action: #selector(openLibrarySettings(_:))
         )
+        let shortcutSettingsItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.openShortcutSettings.menuTitle,
+            command: .openShortcutSettings,
+            action: #selector(openShortcutSettings(_:))
+        )
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(librarySettingsItem)
+        appMenu.addItem(shortcutSettingsItem)
         appMenu.addItem(.separator())
         let hideItem = NSMenuItem(
             title: "Hide Serein",
@@ -369,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func buildFileMenuItem() -> NSMenuItem {
         let fileMenuItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
-        let fileMenu = NSMenu(title: "File")
+        let fileMenu = managedMenu(title: "File")
         let settingsItem = NSMenuItem(
             title: "Settings…",
             action: #selector(openSettingsWindow(_:)),
@@ -396,6 +424,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             title: ShortcutCommand.openLibraryPDF.menuTitle,
             command: .openLibraryPDF,
             action: #selector(showLibraryPalette(_:))
+        )
+        let refreshLibraryItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.refreshLibraryIndex.menuTitle,
+            command: .refreshLibraryIndex,
+            action: #selector(refreshLibraryIndex(_:))
         )
         let openContainingFolderItem = makeConfiguredMenuItem(
             title: ShortcutCommand.openContainingFolder.menuTitle,
@@ -464,6 +497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             openItem,
             quickOpenRecentItem,
             openLibraryItem,
+            refreshLibraryItem,
             openContainingFolderItem,
             recentItem,
             reopenClosedItem,
@@ -514,7 +548,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func buildTabsMenuItem() -> NSMenuItem {
         let tabsMenuItem = NSMenuItem(title: "Tabs", action: nil, keyEquivalent: "")
-        let tabsMenu = NSMenu(title: "Tabs")
+        let tabsMenu = managedMenu(title: "Tabs")
 
         tabsMenu.items = [
             makeConfiguredMenuItem(
@@ -555,7 +589,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func buildAnnotateMenuItem() -> NSMenuItem {
         let annotateMenuItem = NSMenuItem(title: "Annotate", action: nil, keyEquivalent: "")
-        let annotateMenu = NSMenu(title: "Annotate")
+        let annotateMenu = managedMenu(title: "Annotate")
 
         annotateMenu.items = [
             makeConfiguredMenuItem(
@@ -608,7 +642,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func buildViewMenuItem() -> NSMenuItem {
         let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
-        let viewMenu = NSMenu(title: "View")
+        let viewMenu = managedMenu(title: "View")
 
         viewMenu.items = [
             makeConfiguredMenuItem(
@@ -711,7 +745,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func buildNavigateMenuItem() -> NSMenuItem {
         let navigateMenuItem = NSMenuItem(title: "Navigate", action: nil, keyEquivalent: "")
-        let navigateMenu = NSMenu(title: "Navigate")
+        let navigateMenu = managedMenu(title: "Navigate")
 
         navigateMenu.items = [
             makeConfiguredMenuItem(
@@ -790,10 +824,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             keyEquivalent: ""
         )
         bringAllToFrontItem.target = NSApp
+        let mergeAllWindowsItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.mergeAllWindows.menuTitle,
+            command: .mergeAllWindows,
+            action: #selector(mergeAllWindows(_:))
+        )
+        let moveCurrentPDFItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.moveCurrentPDFToNewWindow.menuTitle,
+            command: .moveCurrentPDFToNewWindow,
+            action: #selector(moveCurrentPDFToNewWindow(_:))
+        )
 
         windowMenu.items = [
             minimizeItem,
             zoomItem,
+            .separator(),
+            mergeAllWindowsItem,
+            moveCurrentPDFItem,
             .separator(),
             bringAllToFrontItem,
         ]
@@ -806,7 +853,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         command: ShortcutCommand,
         action: Selector
     ) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        let item = NSMenuItem(title: menuTitle(title, for: command), action: action, keyEquivalent: "")
         item.target = self
         item.representedObject = command
 
@@ -816,6 +863,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
 
         return item
+    }
+
+    private func managedMenu(title: String) -> NSMenu {
+        let menu = NSMenu(title: title)
+        menu.autoenablesItems = false
+        menu.delegate = self
+        return menu
+    }
+
+    private func menuTitle(_ title: String, for command: ShortcutCommand) -> String {
+        guard appConfiguration.shortcuts.bindings[command] == nil,
+              let builtInChordDisplay = command.builtInChordDisplay else { return title }
+        return "\(title) (\(builtInChordDisplay))"
     }
 
     @objc
@@ -869,6 +929,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc
+    private func mergeAllWindows(_ sender: Any?) {
+        guard let targetController = mainWindowController else { return }
+        let closingControllers = mainWindowControllers.values.filter { $0.windowID != targetController.windowID }
+        guard closingControllers.isEmpty == false else { return }
+
+        documentStore.mergeAllWindows(into: targetController.windowID)
+        for controller in closingControllers {
+            controller.window?.performClose(sender)
+        }
+        targetController.window?.makeKeyAndOrderFront(sender)
+    }
+
+    @objc
+    private func moveCurrentPDFToNewWindow(_ sender: Any?) {
+        guard let sourceController = mainWindowController,
+              let windowID = documentStore.moveActiveSessionToNewWindow(from: sourceController.windowID) else { return }
+        let controller = makeWindowController(windowID: windowID)
+        controller.showWindow(sender)
+        controller.window?.makeKeyAndOrderFront(sender)
+    }
+
+    @objc
     private func showRecentFilesPalette(_ sender: Any?) {
         runRecentFilesCleanupIfNeeded()
         if recentFilesPaletteController == nil {
@@ -901,6 +983,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             folderURLs: appConfiguration.library.folderURLs,
             relativeTo: mainWindowController?.window
         )
+    }
+
+    @objc
+    private func refreshLibraryIndex(_ sender: Any?) {
+        libraryPaletteController?.invalidateCatalogCache()
+        showLibraryPalette(sender)
     }
 
     @objc
@@ -1319,6 +1407,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc
     private func openSettingsWindow(_ sender: Any?) {
+        openSettingsWindow(sender, selecting: nil)
+    }
+
+    @objc
+    private func openLibrarySettings(_ sender: Any?) {
+        openSettingsWindow(sender, selecting: .library)
+    }
+
+    @objc
+    private func openShortcutSettings(_ sender: Any?) {
+        openSettingsWindow(sender, selecting: .shortcuts)
+    }
+
+    private func openSettingsWindow(_ sender: Any?, selecting page: SettingsPage?) {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
                 configuration: appConfiguration,
@@ -1329,6 +1431,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
 
         settingsWindowController?.sync(configuration: appConfiguration)
+        if let page {
+            settingsWindowController?.selectPage(page)
+        }
         settingsWindowController?.window?.appearance = appConfiguration.appearance.mode.appAppearance
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
@@ -1385,21 +1490,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func refreshMenuShortcuts() {
         guard let menu = NSApp.mainMenu else { return }
         refreshMenuShortcuts(in: menu)
+        refreshManagedMenuState(in: menu)
     }
 
     private func refreshMenuShortcuts(in menu: NSMenu) {
         for item in menu.items {
-            if let command = item.representedObject as? ShortcutCommand,
-               let shortcut = appConfiguration.shortcuts.bindings[command] {
-                item.keyEquivalent = shortcut.menuKeyEquivalent
-                item.keyEquivalentModifierMask = shortcut.modifierMask
-            } else if item.representedObject is ShortcutCommand {
-                item.keyEquivalent = ""
-                item.keyEquivalentModifierMask = []
+            if let command = item.representedObject as? ShortcutCommand {
+                item.title = menuTitle(command.menuTitle, for: command)
+                if let shortcut = appConfiguration.shortcuts.bindings[command] {
+                    item.keyEquivalent = shortcut.menuKeyEquivalent
+                    item.keyEquivalentModifierMask = shortcut.modifierMask
+                } else {
+                    item.keyEquivalent = ""
+                    item.keyEquivalentModifierMask = []
+                }
             }
 
             if let submenu = item.submenu {
                 refreshMenuShortcuts(in: submenu)
+            }
+        }
+    }
+
+    private func refreshManagedMenuState() {
+        guard let menu = NSApp.mainMenu else { return }
+        refreshManagedMenuState(in: menu)
+    }
+
+    private func refreshManagedMenuState(in menu: NSMenu) {
+        for item in menu.items {
+            if let target = item.target, target === self {
+                item.isEnabled = validateMenuItem(item)
+            }
+
+            if let submenu = item.submenu {
+                refreshManagedMenuState(in: submenu)
             }
         }
     }
@@ -1535,6 +1660,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch menuItem.action {
         case #selector(newWindow(_:)):
             return true
+        case #selector(mergeAllWindows(_:)):
+            return mainWindowControllers.count > 1
+        case #selector(moveCurrentPDFToNewWindow(_:)):
+            return activeSession != nil
+        case #selector(refreshLibraryIndex(_:)), #selector(showLibraryPalette(_:)):
+            return appConfiguration.library.folderURLs.isEmpty == false
+        case #selector(openLibrarySettings(_:)), #selector(openShortcutSettings(_:)):
+            return true
         case #selector(highlightSelection(_:)):
             return activeSession != nil
         case #selector(exitHighlightMode(_:)):
@@ -1546,7 +1679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(saveAnnotations(_:)):
             return activeSession?.isDirty == true
         case #selector(exportHighlights(_:)), #selector(copyHighlightsMarkdown(_:)):
-            return currentHighlightExportContext() != nil
+            return activeSession.map { documentStore.hasHighlights(for: $0.id) } == true
         case #selector(removeHighlightUnderCursorAction(_:)):
             return activeSession != nil
         case #selector(undoLastHighlightAction(_:)):

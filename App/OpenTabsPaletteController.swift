@@ -170,6 +170,7 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
         panel.isFloatingPanel = true
         panel.level = .modalPanel
         panel.isReleasedWhenClosed = false
+        panel.isRestorable = false
         panel.hidesOnDeactivate = false
         panel.backgroundColor = SplitViewController.splitBackgroundColor
         panel.isMovableByWindowBackground = true

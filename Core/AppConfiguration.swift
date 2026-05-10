@@ -407,6 +407,12 @@ toggle_night_mode = "i"
 switch_current_theme = "none"
 # Cmd+K, Cmd+O is a built-in chord.
 open_library_pdf = "none"
+# Cmd+K, Cmd+R is a built-in chord.
+refresh_library_index = "none"
+# Cmd+K, Cmd+L is a built-in chord.
+open_library_settings = "none"
+# Cmd+K, Cmd+S is a built-in chord.
+open_shortcut_settings = "none"
 save_annotations = "command+s"
 copy_highlights_markdown = "command+shift+e"
 remove_highlight = "d"
@@ -446,6 +452,10 @@ show_recent_files_palette = "command+shift+space"
 open_containing_folder = "command+r"
 reopen_last_closed = "command+shift+t"
 new_window = "command+shift+n"
+# Cmd+K, Cmd+M is a built-in chord.
+merge_all_windows = "none"
+# Cmd+K, Cmd+N is a built-in chord.
+move_current_pdf_to_new_window = "none"
 toggle_all_pages_overview = "command+shift+o"
 toggle_demo_mode = "command+l"
 toggle_immersive_mode = "command+control+l"
@@ -492,6 +502,9 @@ exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: c
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
 switch_current_theme = "\(serializedShortcut(.switchCurrentTheme, configuration: configuration))"
 open_library_pdf = "\(serializedShortcut(.openLibraryPDF, configuration: configuration))"
+refresh_library_index = "\(serializedShortcut(.refreshLibraryIndex, configuration: configuration))"
+open_library_settings = "\(serializedShortcut(.openLibrarySettings, configuration: configuration))"
+open_shortcut_settings = "\(serializedShortcut(.openShortcutSettings, configuration: configuration))"
 save_annotations = "\(serializedShortcut(.saveAnnotations, configuration: configuration))"
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
 remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
@@ -531,6 +544,8 @@ show_recent_files_palette = "\(serializedShortcut(.showRecentFilesPalette, confi
 open_containing_folder = "\(serializedShortcut(.openContainingFolder, configuration: configuration))"
 reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
 new_window = "\(serializedShortcut(.newWindow, configuration: configuration))"
+merge_all_windows = "\(serializedShortcut(.mergeAllWindows, configuration: configuration))"
+move_current_pdf_to_new_window = "\(serializedShortcut(.moveCurrentPDFToNewWindow, configuration: configuration))"
 toggle_all_pages_overview = "\(serializedShortcut(.toggleAllPagesOverview, configuration: configuration))"
 toggle_demo_mode = "\(serializedShortcut(.toggleDemoMode, configuration: configuration))"
 toggle_immersive_mode = "\(serializedShortcut(.toggleImmersiveMode, configuration: configuration))"
@@ -639,6 +654,12 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .switchCurrentTheme, to: &configuration)
         case ("shortcuts", "open_library_pdf"):
             try applyShortcut(rawValue, command: .openLibraryPDF, to: &configuration)
+        case ("shortcuts", "refresh_library_index"):
+            try applyShortcut(rawValue, command: .refreshLibraryIndex, to: &configuration)
+        case ("shortcuts", "open_library_settings"):
+            try applyShortcut(rawValue, command: .openLibrarySettings, to: &configuration)
+        case ("shortcuts", "open_shortcut_settings"):
+            try applyShortcut(rawValue, command: .openShortcutSettings, to: &configuration)
         case ("shortcuts", "save_annotations"):
             try applyShortcut(rawValue, command: .saveAnnotations, to: &configuration)
         case ("shortcuts", "copy_highlights_markdown"):
@@ -750,6 +771,10 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .reopenLastClosed, to: &configuration)
         case ("shortcuts", "new_window"):
             try applyShortcut(rawValue, command: .newWindow, to: &configuration)
+        case ("shortcuts", "merge_all_windows"):
+            try applyShortcut(rawValue, command: .mergeAllWindows, to: &configuration)
+        case ("shortcuts", "move_current_pdf_to_new_window"):
+            try applyShortcut(rawValue, command: .moveCurrentPDFToNewWindow, to: &configuration)
         case ("shortcuts", "toggle_all_pages_overview"):
             try applyShortcut(rawValue, command: .toggleAllPagesOverview, to: &configuration)
         case ("shortcuts", "toggle_demo_mode"):
@@ -871,6 +896,9 @@ struct AppConfigurationStore {
             "toggle_night_mode",
             "switch_current_theme",
             "open_library_pdf",
+            "refresh_library_index",
+            "open_library_settings",
+            "open_shortcut_settings",
             "save_annotations",
             "copy_highlights_markdown",
             "remove_highlight",
@@ -910,6 +938,8 @@ struct AppConfigurationStore {
             "open_containing_folder",
             "reopen_last_closed",
             "new_window",
+            "merge_all_windows",
+            "move_current_pdf_to_new_window",
             "toggle_all_pages_overview",
             "toggle_demo_mode",
             "toggle_immersive_mode",

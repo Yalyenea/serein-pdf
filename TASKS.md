@@ -22,6 +22,10 @@
 - `i`:在 light / dark mode 间切换,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme,不改变 light / dark mode
 - `Cmd+K` → `Cmd+O`:打开 PDF 库二级浏览面板
+- `Cmd+K` → `Cmd+R`:刷新并重扫 PDF 库索引
+- `Cmd+K` → `Cmd+L` / `Cmd+K` → `Cmd+S`:打开 Settings 的 Library / Shortcuts 页
+- `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
+- `Cmd+K` → `Cmd+N`:把当前 PDF 移到新窗口
 - `Ctrl+D` / `Ctrl+U`:半页下滚 / 上滚
 - `g` / `G`:跳到文首 / 文末
 - `Cmd+S`:写回源 PDF
@@ -170,6 +174,7 @@
 - [x] `M10.6-004` 快捷键入口:`Cmd+K` → `Cmd+O` 打开 PDF Library 二级浏览面板,不落入标准 Open panel。
 - [x] `M10.6-005` 测试:覆盖配置读写、库扫描、chord 分发、设置窗口尺寸。
 - [x] `M10.6-006` 性能:PDF Library catalog 对同一组库文件夹复用缓存,并预计算 root / folder / search 索引,避免每次打开面板重复扫描。
+- [x] `M10.6-007` Cmd+K 工作流:增加库索引刷新、Library / Shortcuts 设置直达、合并窗口、当前 PDF 移到新窗口,并放入 macOS menubar。
 
 ## 11. Milestone 11:扩展生态(长期预研)
 

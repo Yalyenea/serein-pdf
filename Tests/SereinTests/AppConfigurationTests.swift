@@ -23,6 +23,9 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
         XCTAssertNil(configuration.shortcuts.bindings[.switchCurrentTheme])
         XCTAssertNil(configuration.shortcuts.bindings[.openLibraryPDF])
+        XCTAssertNil(configuration.shortcuts.bindings[.refreshLibraryIndex])
+        XCTAssertNil(configuration.shortcuts.bindings[.openLibrarySettings])
+        XCTAssertNil(configuration.shortcuts.bindings[.openShortcutSettings])
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.copyHighlightsMarkdown], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
@@ -44,6 +47,8 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
+        XCTAssertNil(configuration.shortcuts.bindings[.mergeAllWindows])
+        XCTAssertNil(configuration.shortcuts.bindings[.moveCurrentPDFToNewWindow])
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleContinuousReading], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "9", modifiers: [.command]))
@@ -96,6 +101,11 @@ show_all_tabs = "control+tab"
 toggle_continuous_reading = "command+option+c"
 open_containing_folder = "command+option+r"
 find_all_open = "command+option+f"
+refresh_library_index = "command+option+r"
+open_library_settings = "command+option+l"
+open_shortcut_settings = "command+option+s"
+merge_all_windows = "command+option+m"
+move_current_pdf_to_new_window = "command+option+n"
 
 [layout]
 show_recent_files_in_sidebar = false
@@ -134,6 +144,11 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleContinuousReading], KeyboardShortcut(key: "c", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findAllOpen], KeyboardShortcut(key: "f", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.refreshLibraryIndex], KeyboardShortcut(key: "r", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.openLibrarySettings], KeyboardShortcut(key: "l", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.openShortcutSettings], KeyboardShortcut(key: "s", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.mergeAllWindows], KeyboardShortcut(key: "m", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.moveCurrentPDFToNewWindow], KeyboardShortcut(key: "n", modifiers: [.command, .option]))
         XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
         XCTAssertEqual(
             configuration.library.folderURLs.map(\.path),
@@ -168,6 +183,9 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("toggle_night_mode = \"i\""))
         XCTAssertTrue(content.contains("switch_current_theme = \"none\""))
         XCTAssertTrue(content.contains("open_library_pdf = \"none\""))
+        XCTAssertTrue(content.contains("refresh_library_index = \"none\""))
+        XCTAssertTrue(content.contains("open_library_settings = \"none\""))
+        XCTAssertTrue(content.contains("open_shortcut_settings = \"none\""))
         XCTAssertTrue(content.contains("save_annotations = \"command+s\""))
         XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
@@ -188,6 +206,8 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("find_previous_match = \"command+shift+g\""))
         XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
         XCTAssertTrue(content.contains("show_recent_files_palette = \"command+shift+space\""))
+        XCTAssertTrue(content.contains("merge_all_windows = \"none\""))
+        XCTAssertTrue(content.contains("move_current_pdf_to_new_window = \"none\""))
         XCTAssertTrue(content.contains("show_all_tabs = \"control+tab\""))
         XCTAssertTrue(content.contains("toggle_continuous_reading = \"command+shift+c\""))
         XCTAssertTrue(content.contains("open_containing_folder = \"command+r\""))

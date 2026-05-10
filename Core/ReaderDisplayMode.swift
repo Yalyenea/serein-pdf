@@ -55,6 +55,9 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case toggleNightMode = "toggle_night_mode"
     case switchCurrentTheme = "switch_current_theme"
     case openLibraryPDF = "open_library_pdf"
+    case refreshLibraryIndex = "refresh_library_index"
+    case openLibrarySettings = "open_library_settings"
+    case openShortcutSettings = "open_shortcut_settings"
     case saveAnnotations = "save_annotations"
     case copyHighlightsMarkdown = "copy_highlights_markdown"
     case removeHighlight = "remove_highlight"
@@ -94,6 +97,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case openContainingFolder = "open_containing_folder"
     case reopenLastClosed = "reopen_last_closed"
     case newWindow = "new_window"
+    case mergeAllWindows = "merge_all_windows"
+    case moveCurrentPDFToNewWindow = "move_current_pdf_to_new_window"
     case toggleAllPagesOverview = "toggle_all_pages_overview"
     case toggleDemoMode = "toggle_demo_mode"
     case toggleImmersiveMode = "toggle_immersive_mode"
@@ -115,6 +120,12 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Switch Current Theme"
         case .openLibraryPDF:
             "Open from PDF Library…"
+        case .refreshLibraryIndex:
+            "Refresh PDF Library Index"
+        case .openLibrarySettings:
+            "Open Library Settings"
+        case .openShortcutSettings:
+            "Open Shortcuts Settings"
         case .saveAnnotations:
             "Save Annotations"
         case .copyHighlightsMarkdown:
@@ -193,6 +204,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Reopen Closed Tab"
         case .newWindow:
             "New Window"
+        case .mergeAllWindows:
+            "Merge All Windows"
+        case .moveCurrentPDFToNewWindow:
+            "Move Current PDF to New Window"
         case .toggleAllPagesOverview:
             "All Pages Overview"
         case .toggleDemoMode:
@@ -233,6 +248,27 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .highlightColorYellow: .yellow
         case .highlightColorGreen: .green
         default: nil
+        }
+    }
+
+    var builtInChordDisplay: String? {
+        switch self {
+        case .switchCurrentTheme:
+            "⌘K ⌘T"
+        case .openLibraryPDF:
+            "⌘K ⌘O"
+        case .refreshLibraryIndex:
+            "⌘K ⌘R"
+        case .openLibrarySettings:
+            "⌘K ⌘L"
+        case .openShortcutSettings:
+            "⌘K ⌘S"
+        case .mergeAllWindows:
+            "⌘K ⌘M"
+        case .moveCurrentPDFToNewWindow:
+            "⌘K ⌘N"
+        default:
+            nil
         }
     }
 }

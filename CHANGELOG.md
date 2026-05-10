@@ -13,6 +13,13 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a small live `PDFDocument` LRU so clean background PDFs can be released while the current pane, split pane, and dirty documents stay resident
 - Keep Show All Tabs as a lightweight text overview instead of rendering PDF thumbnails
 - Cache the PDF Library catalog per configured folder set and precompute lightweight root, folder, and search indexes so reopening the library does not rescan unchanged folders
+- Disable AppKit state restoration for Serein windows so menu-triggered UI changes do not recursively persist the PDFKit view tree
+- Hide the PDFKit document subtree from accessibility inspection to keep menu testing and automation responsive on text-heavy PDFs
+- Keep menu validation lightweight by checking for highlight annotations without building OCR-backed export snippets
+- Disable automatic AppKit item validation on Serein-managed menus and refresh their enabled/checkmark state through a lightweight menu delegate
+
+### Windows
+- Add commands to merge all Serein windows into the current window and move the current PDF into a new window
 
 ### Reading
 - Add continuous reading groups for multiple selected PDFs: `cmd+shift+c` or the tab context menu enables ordered cross-PDF page turns, tab group indentation, and a combined right-sidebar Outline grouped by PDF
@@ -21,6 +28,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Keyboard
 - Restore the VS Code-style `cmd+k`, then `cmd+t` theme chord for switching the current light or dark theme
 - Add `cmd+k`, then `cmd+o` for opening the PDF Library browser without falling through to the standard Open panel
+- Add `cmd+k` chords for refreshing the PDF Library index, jumping to Library / Shortcuts settings, merging windows, and moving the current PDF to a new window; chord-only commands are also visible in the macOS menu bar
 
 ## [0.2.0] - 2026-04-23
 

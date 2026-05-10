@@ -74,7 +74,7 @@ flowchart LR
 | 决策 | 结论 |
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
-| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,窗口只承载视图与交互 |
+| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,支持合并所有窗口与把当前 PDF 移到新窗口 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
 | 目录来源 | 右栏需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
@@ -141,6 +141,8 @@ flowchart LR
 - `I`:切换 light / dark mode,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme(亮色切 `normal` / `rose_pine_dawn`,暗色切 `normal` / `rose_pine_moon`)
 - `Cmd+K` → `Cmd+O`:从配置的 PDF 库文件夹扫描并打开二级库浏览面板
+- `Cmd+K` → `Cmd+R`:刷新并重扫 PDF 库索引
+- `Cmd+K` → `Cmd+L` / `Cmd+K` → `Cmd+S`:打开 Settings 的 Library / Shortcuts 页
 
 **文档与 tab**
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
@@ -148,6 +150,8 @@ flowchart LR
 - `Cmd+W`:关闭当前 tab
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
 - `Cmd+Shift+N`:新建窗口
+- `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
+- `Cmd+K` → `Cmd+N`:把当前 PDF 移到新窗口
 - `Cmd+Shift+Space`:最近文件启动器
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 切换,`Option+Click` / `Option+Enter` 打开到另一 pane;重复 `Ctrl+Tab` 或 `Esc` 关闭
 - `Cmd+Shift+C`:对当前选中的 tabs 开启 / 退出多 PDF 连续阅读;批量打开会预选本批 PDF,也可 `Cmd` / `Shift` 点击多选后右键开启

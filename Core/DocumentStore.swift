@@ -145,6 +145,73 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func mergeAllWindows(into targetWindowID: UUID) {
+        guard let targetIndex = windowWorkspaces.firstIndex(where: { $0.id == targetWindowID }),
+              windowWorkspaces.count > 1 else { return }
+
+        let targetID = windowWorkspaces[targetIndex].activeSessionID
+        let targetWorkspace = windowWorkspaces[targetIndex]
+        let mergedSessionIDs = windowWorkspaces.reduce(into: targetWorkspace.sessionIDs) { ids, workspace in
+            for sessionID in workspace.sessionIDs where ids.contains(sessionID) == false {
+                ids.append(sessionID)
+            }
+        }
+        let mergedRecentlyClosedURLs = windowWorkspaces.reduce(into: targetWorkspace.recentlyClosedURLs) { urls, workspace in
+            for url in workspace.recentlyClosedURLs where urls.contains(url) == false {
+                urls.append(url)
+            }
+        }
+
+        var mergedWorkspace = targetWorkspace
+        mergedWorkspace.sessionIDs = mergedSessionIDs
+        mergedWorkspace.selectedSessionIDs = []
+        mergedWorkspace.continuousReadingState = ContinuousReadingState()
+        mergedWorkspace.recentlyClosedURLs = Array(mergedRecentlyClosedURLs.suffix(Self.recentlyClosedLimit))
+        normalizeWorkspace(&mergedWorkspace, preferredSessionID: targetID)
+        windowWorkspaces = [mergedWorkspace]
+        notifyChange()
+    }
+
+    func moveActiveSessionToNewWindow(from sourceWindowID: UUID) -> UUID? {
+        guard let sourceIndex = windowWorkspaces.firstIndex(where: { $0.id == sourceWindowID }),
+              let sessionID = windowWorkspaces[sourceIndex].activeSessionID,
+              session(for: sessionID) != nil else { return nil }
+
+        var source = windowWorkspaces[sourceIndex]
+        guard source.sessionIDs.contains(sessionID) else { return nil }
+
+        var destination = WindowWorkspace(
+            sessionIDs: [sessionID],
+            selectedSessionIDs: [],
+            continuousReadingState: ContinuousReadingState(),
+            tabPresentationMode: source.tabPresentationMode,
+            isLeftSidebarVisible: source.isLeftSidebarVisible,
+            isRightSidebarVisible: source.isRightSidebarVisible,
+            rightSidebarMode: source.rightSidebarMode,
+            searchQuery: "",
+            searchScope: .currentDocument,
+            isSplitEnabled: false,
+            primarySessionID: sessionID,
+            secondarySessionID: nil,
+            focusedPane: .primary,
+            recentlyClosedURLs: []
+        )
+
+        source.sessionIDs.removeAll { $0 == sessionID }
+        source.selectedSessionIDs.remove(sessionID)
+        source.continuousReadingState.orderedSessionIDs.removeAll { $0 == sessionID }
+        if source.sessionIDs.count < 2 {
+            source.isSplitEnabled = false
+        }
+
+        normalizeWorkspace(&source)
+        normalizeWorkspace(&destination, preferredSessionID: sessionID)
+        windowWorkspaces[sourceIndex] = source
+        windowWorkspaces.append(destination)
+        notifyChange()
+        return destination.id
+    }
+
     func activeSessionID(in windowID: UUID) -> UUID? {
         windowWorkspace(for: windowID)?.activeSessionID
     }
@@ -844,6 +911,21 @@ final class DocumentStore {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return [] }
         ensureAnnotationCacheLoaded(for: sessionIndex)
         return sessions.first(where: { $0.id == sessionID })?.annotationCache.groups ?? []
+    }
+
+    func hasHighlights(for sessionID: UUID) -> Bool {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
+        if session.isAnnotationCacheLoaded {
+            return session.annotationCache.groups.isEmpty == false
+        }
+        guard let document = loadedPDFDocument(for: sessionID) else { return false }
+        for pageIndex in 0..<document.pageCount {
+            guard let page = document.page(at: pageIndex) else { continue }
+            if page.annotations.contains(where: { $0.type == "Highlight" }) {
+                return true
+            }
+        }
+        return false
     }
 
     func currentSessionSearchMatches(in windowID: UUID) -> [DocumentSearchMatch] {

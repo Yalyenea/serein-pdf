@@ -17,6 +17,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
+- Window commands can merge every Serein window into the current one or move the current PDF into a new window
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
 - Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
@@ -29,6 +30,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - `cmd+k`, then `cmd+t` switches the current light or dark theme, VS Code-style
+- `cmd+k` chords also refresh the PDF Library index, jump to Library / Shortcuts settings, merge windows, and move the current PDF to a new window
 - Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
 - Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
@@ -107,6 +109,11 @@ folders = ["/Users/your-name/Documents/Papers"]
 [shortcuts]
 switch_current_theme = "none"   # cmd+k, cmd+t is a built-in chord
 open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
+refresh_library_index = "none"  # cmd+k, cmd+r is a built-in chord
+open_library_settings = "none"  # cmd+k, cmd+l is a built-in chord
+open_shortcut_settings = "none" # cmd+k, cmd+s is a built-in chord
+merge_all_windows = "none"      # cmd+k, cmd+m is a built-in chord
+move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
 ```
 
@@ -138,6 +145,9 @@ Defined in `[shortcuts]` above. Highlights:
 | Exit highlight mode | `esc` |
 | Toggle light / dark mode | `i` |
 | Switch current theme | `cmd+k`, then `cmd+t` |
+| Refresh PDF Library index | `cmd+k`, then `cmd+r` |
+| Open Library settings | `cmd+k`, then `cmd+l` |
+| Open Shortcuts settings | `cmd+k`, then `cmd+s` |
 | Save annotations | `cmd+s` |
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
@@ -154,6 +164,8 @@ Defined in `[shortcuts]` above. Highlights:
 | Show all tabs | `ctrl+tab` |
 | Toggle continuous reading for selected tabs | `cmd+shift+c` |
 | New window | `cmd+shift+n` |
+| Merge all windows | `cmd+k`, then `cmd+m` |
+| Move current PDF to new window | `cmd+k`, then `cmd+n` |
 | Quick recent-files launcher | `cmd+shift+space` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |
 | Toggle left / right sidebar | `cmd+b` / `cmd+option+b` |

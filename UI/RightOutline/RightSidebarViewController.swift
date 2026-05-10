@@ -122,10 +122,8 @@ final class RightSidebarViewController: NSViewController {
         outlineView.translatesAutoresizingMaskIntoConstraints = false
         let searchView = searchResultsViewController.view
         searchView.translatesAutoresizingMaskIntoConstraints = false
-        let annotationsView = annotationsViewController.view
-        annotationsView.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [modeSegmented, outlineView, thumbnailView, searchView, annotationsView] {
+        for view in [modeSegmented, outlineView, thumbnailView, searchView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -174,13 +172,6 @@ final class RightSidebarViewController: NSViewController {
             searchView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ]
 
-        annotationsModeConstraints = [
-            annotationsView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            annotationsView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            annotationsView.topAnchor.constraint(equalTo: modeSegmented.bottomAnchor, constant: 10),
-            annotationsView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ]
-
         NSLayoutConstraint.activate(outlineModeConstraints)
 
         view = container
@@ -222,6 +213,7 @@ final class RightSidebarViewController: NSViewController {
             NSLayoutConstraint.deactivate(outlineModeConstraints)
             NSLayoutConstraint.deactivate(pagesModeConstraints)
             NSLayoutConstraint.deactivate(searchModeConstraints)
+            ensureAnnotationsViewLoaded()
             NSLayoutConstraint.activate(annotationsModeConstraints)
         }
 
@@ -229,7 +221,9 @@ final class RightSidebarViewController: NSViewController {
         outlineViewController.view.isHidden = mode != .outline
         thumbnailView.isHidden = mode != .pages
         searchResultsViewController.view.isHidden = mode != .search
-        annotationsViewController.view.isHidden = mode != .annotations
+        if annotationsViewController.isViewLoaded {
+            annotationsViewController.view.isHidden = mode != .annotations
+        }
 
         view.needsLayout = true
     }
@@ -240,7 +234,9 @@ final class RightSidebarViewController: NSViewController {
         }
         outlineViewController.refreshChromeColors()
         searchResultsViewController.refreshChromeColors()
-        annotationsViewController.refreshChromeColors()
+        if annotationsViewController.isViewLoaded {
+            annotationsViewController.refreshChromeColors()
+        }
     }
 
     override func viewDidLayout() {
@@ -290,6 +286,21 @@ final class RightSidebarViewController: NSViewController {
         let mode = documentStore.rightSidebarMode(in: windowID)
         modeSegmented.selectedSegment = mode.rawValue
         applyMode()
+    }
+
+    private func ensureAnnotationsViewLoaded() {
+        guard annotationsModeConstraints.isEmpty else { return }
+        let annotationsView = annotationsViewController.view
+        annotationsView.translatesAutoresizingMaskIntoConstraints = false
+        annotationsView.isHidden = false
+        view.addSubview(annotationsView)
+
+        annotationsModeConstraints = [
+            annotationsView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            annotationsView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            annotationsView.topAnchor.constraint(equalTo: modeSegmented.bottomAnchor, constant: 10),
+            annotationsView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ]
     }
 
     func selectNextSearchMatch(activate: Bool) -> SearchSidebarMatch? {

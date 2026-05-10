@@ -8,6 +8,11 @@ final class ReaderShortcutsController {
     private static let chordCommands: [(KeyboardShortcut, ShortcutCommand)] = [
         (KeyboardShortcut(key: "t", modifiers: [.command]), .switchCurrentTheme),
         (KeyboardShortcut(key: "o", modifiers: [.command]), .openLibraryPDF),
+        (KeyboardShortcut(key: "r", modifiers: [.command]), .refreshLibraryIndex),
+        (KeyboardShortcut(key: "l", modifiers: [.command]), .openLibrarySettings),
+        (KeyboardShortcut(key: "s", modifiers: [.command]), .openShortcutSettings),
+        (KeyboardShortcut(key: "m", modifiers: [.command]), .mergeAllWindows),
+        (KeyboardShortcut(key: "n", modifiers: [.command]), .moveCurrentPDFToNewWindow),
     ]
 
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]

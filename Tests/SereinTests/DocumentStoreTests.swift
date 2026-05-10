@@ -822,6 +822,24 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(sections.first?.highlights.first?.snippet.contains("beta") == true)
     }
 
+    func testHasHighlightsDoesNotBuildAnnotationCache() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "highlight-menu-validation"))
+        let annotation = PDFAnnotation(
+            bounds: NSRect(x: 20, y: 20, width: 60, height: 18),
+            forType: .highlight,
+            withProperties: nil
+        )
+
+        try store.pdfDocument(for: session.id).page(at: 0)?.addAnnotation(annotation)
+
+        XCTAssertTrue(store.hasHighlights(for: session.id))
+        XCTAssertFalse(store.session(for: session.id)?.isAnnotationCacheLoaded ?? true)
+    }
+
     func testUpdateCommentPersistsAcrossHighlightGroupAndMarksSessionDirty() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -1167,6 +1185,42 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.windowIDs(), [sourceWindowID])
         XCTAssertEqual(store.sessions.map(\.id), [session.id])
         XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [session.id])
+    }
+
+    func testMergeAllWindowsMovesSessionsIntoTargetWindow() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "merge-window-first"))
+        let targetWindowID = store.defaultWindowID
+        let secondWindowID = store.createWindow(copyingFrom: targetWindowID)
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "merge-window-second"), in: secondWindowID)
+
+        store.mergeAllWindows(into: targetWindowID)
+
+        XCTAssertEqual(store.windowIDs(), [targetWindowID])
+        XCTAssertEqual(store.sessions(in: targetWindowID).map(\.id), [first.id, second.id])
+        XCTAssertEqual(store.activeSessionID(in: targetWindowID), first.id)
+    }
+
+    func testMoveActiveSessionToNewWindowDetachesOnlyCurrentPDF() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "detach-window-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "detach-window-second"))
+        let sourceWindowID = store.defaultWindowID
+
+        let newWindowID = try XCTUnwrap(store.moveActiveSessionToNewWindow(from: sourceWindowID))
+
+        XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [first.id])
+        XCTAssertEqual(store.sessions(in: newWindowID).map(\.id), [second.id])
+        XCTAssertEqual(store.activeSessionID(in: newWindowID), second.id)
+        XCTAssertEqual(Set(store.windowIDs()), [sourceWindowID, newWindowID])
     }
 
     func testAllOpenSearchBuildsSectionsAcrossSessions() throws {

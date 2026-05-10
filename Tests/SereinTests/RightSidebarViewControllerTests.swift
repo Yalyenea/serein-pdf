@@ -5,6 +5,33 @@ import Testing
 @MainActor
 struct RightSidebarViewControllerTests {
     @Test
+    func loadingSidebarDoesNotEagerlyLoadAnnotationsPane() {
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = RightSidebarViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+
+        controller.loadViewIfNeeded()
+
+        #expect(controller.annotationsViewController.isViewLoaded == false)
+    }
+
+    @Test
+    func selectingAnnotationsLoadsAnnotationsPane() {
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = RightSidebarViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+
+        store.setRightSidebarMode(.annotations, in: store.defaultWindowID)
+
+        #expect(controller.annotationsViewController.isViewLoaded == true)
+    }
+
+    @Test
     func reapplyingSameModeDoesNotInvalidateLayout() {
         let store = DocumentStore(appConfiguration: .default)
         let controller = RightSidebarViewController(

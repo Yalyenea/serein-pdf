@@ -8,6 +8,14 @@ import Testing
 @MainActor
 struct WindowChromeTests {
     @Test
+    func mainWindowDoesNotUseAppKitStateRestoration() {
+        _ = NSApplication.shared
+        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+
+        #expect(controller.window?.isRestorable == false)
+    }
+
+    @Test
     func verticalTabsDetachToolbarStrip() {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
@@ -69,6 +77,16 @@ struct WindowChromeTests {
 
         #expect(controller.isNightModeEnabled)
         #expect(controller.pdfView.isHidden == false)
+    }
+
+    @Test
+    func readerHidesPDFKitDocumentTreeFromAccessibilityInspection() {
+        _ = NSApplication.shared
+        let controller = ReaderViewController(documentStore: DocumentStore(appConfiguration: .default))
+        controller.loadViewIfNeeded()
+
+        #expect(controller.pdfView.isAccessibilityElement() == false)
+        #expect(controller.pdfView.accessibilityChildren()?.isEmpty == true)
     }
 
     @Test

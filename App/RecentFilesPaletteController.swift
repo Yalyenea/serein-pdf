@@ -122,6 +122,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         panel.isFloatingPanel = true
         panel.level = .modalPanel
         panel.isReleasedWhenClosed = false
+        panel.isRestorable = false
         panel.hidesOnDeactivate = false
         panel.backgroundColor = SplitViewController.splitBackgroundColor
         panel.isMovableByWindowBackground = true

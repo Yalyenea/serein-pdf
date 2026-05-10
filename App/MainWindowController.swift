@@ -40,6 +40,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.titlebarAppearsTransparent = true
         window.backgroundColor = SplitViewController.splitBackgroundColor
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
 
         super.init(window: window)
 
