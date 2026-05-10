@@ -4,6 +4,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-10
+
 ### Visual
 - Refresh the app icon with a quieter Serein identity: warm paper PDF shape, rain-clear blue-gray atmosphere, and no bright annotation accent
 - Replace the centered highlight-mode badge with a compact inline reader indicator

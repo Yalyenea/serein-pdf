@@ -65,14 +65,16 @@ just run        # run dev build via SwiftPM
 just build      # produces build/Serein.app (ad-hoc signed)
 just install    # copies the .app to /Applications
 just register   # lsregister -f so Finder's Open With sees it
-just set-default  # duti -s local.yfff.Serein com.adobe.pdf all
+just dmg        # packages build/Serein-<version>.dmg
 just launch     # open /Applications/Serein.app
 ```
 
 Full release pipeline:
 
 ```sh
-just ship       # test → build → install → register → set-default
+just test
+just dmg
+just ship       # build → install → register
 ```
 
 ## Configuration
