@@ -23,6 +23,7 @@ final class DocumentStore {
     private var splitComparisonSessionIDs: Set<UUID> = []
     private var pdfDocumentCache: [UUID: PDFDocument] = [:]
     private var pdfDocumentRecency: [UUID] = []
+    private let fileMonitor = PDFFileMonitor()
     private static let recentlyClosedLimit = 10
     private static let livePDFDocumentLimit = 4
     static let undoStackLimit = 50
@@ -39,6 +40,9 @@ final class DocumentStore {
         self.appConfiguration = appConfiguration
         self.windowWorkspaces = [WindowWorkspace()]
         recentDocumentURLs = (try? recentFilesStore.loadRecentFiles()) ?? []
+        fileMonitor.onChange = { [weak self] url in
+            self?.refreshExternallyChangedFile(at: url)
+        }
     }
 
     var defaultWindowID: UUID {
@@ -282,6 +286,7 @@ final class DocumentStore {
         if let activeSessionID = newSessions.last?.id {
             activateSession(sessionID: activeSessionID, in: windowID, targetPane: targetPane, notify: false)
         }
+        syncPDFFileMonitor()
         notifyChange()
         return newSessions
     }
@@ -312,6 +317,7 @@ final class DocumentStore {
             discardSession(sessionID)
         }
         normalizeWorkspace(&windowWorkspaces[workspaceIndex], preferredSessionID: preferredSessionID)
+        syncPDFFileMonitor()
         notifyChange()
     }
 
@@ -427,6 +433,11 @@ final class DocumentStore {
 
     func selectedSessionIDs(in windowID: UUID) -> Set<UUID> {
         windowWorkspace(for: windowID)?.selectedSessionIDs ?? []
+    }
+
+    func selectedSessionIDsInWindowOrder(in windowID: UUID) -> [UUID] {
+        guard let workspace = windowWorkspace(for: windowID) else { return [] }
+        return workspace.sessionIDs.filter { workspace.selectedSessionIDs.contains($0) }
     }
 
     func selectSessions(_ sessionIDs: [UUID], in windowID: UUID) {
@@ -670,6 +681,8 @@ final class DocumentStore {
         pdfDocumentCache[sessionID] = document
         touchPDFDocument(sessionID)
         sessions[sessionIndex].pageCount = document.pageCount
+        sessions[sessionIndex].fileSnapshot = PDFFileSnapshot(url: url)
+        clampReadingPositionIfNeeded(for: sessionIndex, pageCount: document.pageCount)
         prunePDFDocumentCache()
         return document
     }
@@ -711,6 +724,21 @@ final class DocumentStore {
             return pageCount
         }
         return loadedPDFDocument(for: sessionID)?.pageCount
+    }
+
+    func refreshExternallyChangedFile(at url: URL) {
+        let normalizedURL = url.standardizedFileURL
+        let matchingIndexes = sessions.indices.filter { sessions[$0].url.standardizedFileURL == normalizedURL }
+        guard matchingIndexes.isEmpty == false,
+              let snapshot = PDFFileSnapshot(url: normalizedURL),
+              matchingIndexes.contains(where: { sessions[$0].fileSnapshot != snapshot }) else { return }
+
+        guard matchingIndexes.allSatisfy({ sessions[$0].isDirty == false }) else { return }
+
+        for index in matchingIndexes {
+            invalidateCleanSessionAfterExternalChange(at: index, snapshot: snapshot)
+        }
+        notifyChange()
     }
 
     func updateCurrentPage(index: Int, for sessionID: UUID) {
@@ -1098,6 +1126,7 @@ final class DocumentStore {
 
         sessions[sessionIndex].isDirty = false
         sessions[sessionIndex].dirtySince = nil
+        sessions[sessionIndex].fileSnapshot = PDFFileSnapshot(url: sessions[sessionIndex].url)
         prunePDFDocumentCache()
         notifyChange()
     }
@@ -1189,6 +1218,7 @@ final class DocumentStore {
 
         windowWorkspaces = restoredWindows
         normalizeAllWorkspaces()
+        syncPDFFileMonitor()
         notifyChange()
     }
 
@@ -1236,12 +1266,18 @@ final class DocumentStore {
         splitComparisonSessionIDs = splitComparisonSessionIDs.filter { sessionID in
             sessions.contains(where: { $0.id == sessionID })
         }
+        syncPDFFileMonitor()
     }
 
     private func discardSession(_ sessionID: UUID) {
         sessions.removeAll { $0.id == sessionID }
         discardPDFDocumentCache(for: sessionID)
         splitComparisonSessionIDs.remove(sessionID)
+        syncPDFFileMonitor()
+    }
+
+    private func syncPDFFileMonitor() {
+        fileMonitor.replaceMonitoredURLs(with: Set(sessions.map { $0.url.standardizedFileURL }))
     }
 
     private func preferredSecondarySession(in workspace: WindowWorkspace, excluding sessionID: UUID?) -> UUID? {
@@ -1344,6 +1380,36 @@ final class DocumentStore {
     private func ensureAnnotationCacheLoaded(for sessionIndex: Int) {
         guard sessions[sessionIndex].isAnnotationCacheLoaded == false else { return }
         rebuildAnnotationCache(for: sessionIndex)
+    }
+
+    private func invalidateCleanSessionAfterExternalChange(at sessionIndex: Array<DocumentSession>.Index, snapshot: PDFFileSnapshot) {
+        let sessionID = sessions[sessionIndex].id
+        discardPDFDocumentCache(for: sessionID)
+        sessions[sessionIndex].pageCount = nil
+        sessions[sessionIndex].outlineTree = []
+        sessions[sessionIndex].isOutlineLoaded = false
+        sessions[sessionIndex].searchCache.clear()
+        sessions[sessionIndex].annotationCache.clear()
+        sessions[sessionIndex].isAnnotationCacheLoaded = false
+        sessions[sessionIndex].undoStack.removeAll()
+        sessions[sessionIndex].redoStack.removeAll()
+        sessions[sessionIndex].fileSnapshot = snapshot
+    }
+
+    private func clampReadingPositionIfNeeded(for sessionIndex: Array<DocumentSession>.Index, pageCount: Int) {
+        guard pageCount > 0 else { return }
+        let session = sessions[sessionIndex]
+        let clampedPageIndex = min(max(session.lastReadPosition.pageIndex, 0), pageCount - 1)
+        let currentPageIndex = min(max(session.currentPageIndex, 0), pageCount - 1)
+        guard clampedPageIndex != session.lastReadPosition.pageIndex ||
+                currentPageIndex != session.currentPageIndex else { return }
+
+        sessions[sessionIndex].currentPageIndex = clampedPageIndex
+        sessions[sessionIndex].lastReadPosition = ReadingPosition(
+            pageIndex: clampedPageIndex,
+            point: clampedPageIndex == session.lastReadPosition.pageIndex ? session.lastReadPosition.point : .zero
+        )
+        persistReadingState(for: sessions[sessionIndex])
     }
 
     private func touchPDFDocument(_ sessionID: UUID) {
@@ -1530,7 +1596,8 @@ final class DocumentStore {
             leftSidebarWidth: seedState?.leftSidebarWidth ?? appConfiguration.layout.leftSidebarWidth,
             rightSidebarWidth: seedState?.rightSidebarWidth ?? appConfiguration.layout.rightSidebarWidth,
             annotationCache: seedState?.annotationCache ?? DocumentHighlightCache(),
-            isAnnotationCacheLoaded: seedState?.isAnnotationCacheLoaded ?? false
+            isAnnotationCacheLoaded: seedState?.isAnnotationCacheLoaded ?? false,
+            fileSnapshot: PDFFileSnapshot(url: url)
         )
     }
 
@@ -1598,6 +1665,8 @@ final class DocumentStore {
 
         sessions[index].url = newURL
         sessions[index].title = title
+        sessions[index].fileSnapshot = PDFFileSnapshot(url: newURL)
+        syncPDFFileMonitor()
 
         if let oldState = try? readingStateStore.loadState(for: oldURL) {
             var migratedState = oldState

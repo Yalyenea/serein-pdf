@@ -55,6 +55,7 @@ struct DocumentSession {
     var searchCache: DocumentSearchCache = DocumentSearchCache()
     var annotationCache: DocumentHighlightCache = DocumentHighlightCache()
     var isAnnotationCacheLoaded: Bool
+    var fileSnapshot: PDFFileSnapshot?
 
     init(
         id: UUID = UUID(),
@@ -77,7 +78,8 @@ struct DocumentSession {
         leftSidebarWidth: CGFloat? = nil,
         rightSidebarWidth: CGFloat? = nil,
         annotationCache: DocumentHighlightCache = DocumentHighlightCache(),
-        isAnnotationCacheLoaded: Bool = false
+        isAnnotationCacheLoaded: Bool = false,
+        fileSnapshot: PDFFileSnapshot? = nil
     ) {
         self.id = id
         self.url = url
@@ -99,5 +101,6 @@ struct DocumentSession {
         self.rightSidebarWidth = rightSidebarWidth
         self.annotationCache = annotationCache
         self.isAnnotationCacheLoaded = isAnnotationCacheLoaded
+        self.fileSnapshot = fileSnapshot ?? PDFFileSnapshot(url: url)
     }
 }

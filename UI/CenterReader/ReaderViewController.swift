@@ -830,21 +830,22 @@ final class ReaderViewController: NSViewController {
             displayedSessionID = session.id
             return
         }
+        let refreshedSession = targetSession() ?? session
 
         isApplyingStoreState = true
         defer { isApplyingStoreState = false }
 
         if isNewSession || pdfView.document !== document {
             pdfView.document = document
-            displayedSessionID = session.id
+            displayedSessionID = refreshedSession.id
             displayedReadingPosition = nil
             displayedDisplayMode = nil
             displayedScaleMode = nil
         }
 
-        applyDisplayModeIfNeeded(session)
-        applyScaleIfNeeded(session)
-        applyReadingPositionIfNeeded(session, isNewSession: isNewSession)
+        applyDisplayModeIfNeeded(refreshedSession)
+        applyScaleIfNeeded(refreshedSession)
+        applyReadingPositionIfNeeded(refreshedSession, isNewSession: isNewSession)
         configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
 

@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ 多 PDF 连续阅读 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
+文档管理 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复。
 
 ### 2.2 V1 明确不做
 
@@ -81,6 +81,7 @@ flowchart LR
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
+| PDF 热重载 | `DocumentStore` 监听已打开 PDF 的父目录;文件快照变化后只重载 clean sessions,dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
@@ -147,7 +148,7 @@ flowchart LR
 **文档与 tab**
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
 - `Cmd+R`:在 Finder 中显示当前 PDF
-- `Cmd+W`:关闭当前 tab
+- `Cmd+W`:多选 tabs 时关闭选中的 PDFs;否则关闭当前 tab
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
 - `Cmd+Shift+N`:新建窗口
 - `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
@@ -198,6 +199,7 @@ flowchart LR
 | `lastReadPosition` | 页码 + 页内位置 |
 | `outlineTree: [OutlineNode]` | 目录树 |
 | `isDirty: Bool` | 是否有未保存批注 |
+| `fileSnapshot` | 外部文件变化检测快照(mtime / size / inode) |
 | `sidebarState` | 左右栏显隐 / 宽度 |
 | `tabPresentationState` | 当前 tab 模式下的局部状态 |
 | `annotationSavePolicy` | `after10Minutes` / `never` |
@@ -211,6 +213,7 @@ flowchart LR
 - 每个 `WindowWorkspace` 独立维护自己的 session/tab 集合,open/close 不跨窗扩散
 - 维护 active session,驱动左栏 tab 与中栏 reader 联动
 - 按需创建 `PDFDocument`,用小容量 LRU 保留当前 pane / 分屏 pane / 最近文档;干净后台文档可释放
+- 监听已打开 PDF 的外部改写;clean session 清理 `PDFDocument` / Outline / Search / Annotations 缓存并触发 UI 重读,dirty session 不自动刷新
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - 提供 tab 模式切换
 - 左右互换时对调 per-session 宽度 / 可见状态
@@ -263,6 +266,7 @@ Core/                                     # 文档 / 窗口 / 配置 / 持久化
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
   DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 分屏状态
   DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等
+  PDFFileMonitor.swift                    # 已打开 PDF 的外部改写监听与文件快照
   DocumentAnnotations.swift               # 高亮分组 / 缓存 / 导出 相关数据模型
   DocumentSearch.swift                    # PDF 全文匹配与 preview snippet 构造(DocumentSearchService)
   WindowWorkspace.swift                   # 单窗口状态:tab 顺序、侧栏、搜索、分屏、焦点 pane

@@ -32,7 +32,9 @@
 - `Cmd+R`:在 Finder 中显示当前 PDF 所在位置
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 切换;`Option+Click` / `Option+Enter` 打开到另一 pane
+- `Cmd+W`:多选 tabs 时按窗口顺序关闭选中的 PDFs;否则关闭当前 tab / window
 - `Cmd+Shift+C`:对当前选中的 tabs 开启 / 退出多 PDF 连续阅读;连续组内翻页跨 PDF 边界切换,右侧 Outline 按 PDF 分组显示
+- PDF 热重载:LaTeX / Typst 等外部工具覆盖已打开 PDF 后自动刷新 clean session;dirty 批注会话不自动刷新
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行
@@ -58,6 +60,7 @@
 | M10 阅读区 Framing 打磨 | ✅ 开发完成,待手测 |
 | M10.5 多 PDF 连续阅读 | ✅ 开发完成,待手测 |
 | M10.6 PDF 库 | ✅ 开发完成,待手测 |
+| M10.7 PDF 热重载 | ✅ 开发完成,待手测 |
 | M11 扩展生态(预研) | 未开始 |
 
 ## 4. 下一步执行顺序
@@ -66,7 +69,8 @@
 - Wave 1 M10 手测：完成 `M10-021`，用真实 slide / paper PDF 验证居中与 fit width framing。
 - Wave 2 M10.5 手测：完成 `UAT-37`，用多个 slide PDF 验证连续阅读、跨 PDF 翻页与连续 Outline。
 - Wave 3 M10.6 手测：完成 `UAT-38`，配置 Book 文件夹后用 `Cmd+K` → `Cmd+O` 打开库浏览面板并打开库内 PDF。
-- Wave 4 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
+- Wave 4 M10.7 手测：完成 `UAT-39`，用 Typst / LaTeX 连续编译覆盖当前 PDF，确认阅读器自动刷新且页码/缩放保持。
+- Wave 5 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
 
 
 ## 5. Milestone 7:搜索强化与对比阅读
@@ -165,6 +169,7 @@
 - [x] `M10.5-004` 阅读行为:在组内 PDF 边界执行下一页 / 上一页 / 半页滚动时切到相邻 PDF 首页 / 末页。
 - [x] `M10.5-005` 连续 Outline:右侧 Outline 顶层按 PDF 分组,点击跨 PDF 目录项先切 session 再跳页。
 - [x] `M10.5-006` 测试:覆盖连续组顺序、关闭清理、恢复、连续 Outline 与跨 PDF 翻页。
+- [x] `M10.5-007` 多选关闭:多选 tabs 后 `Cmd+W` 一次关闭选中 PDFs,未多选时保持当前 tab / 分屏关闭语义。
 
 ## 10. Milestone 10.6:PDF 库
 
@@ -176,14 +181,21 @@
 - [x] `M10.6-006` 性能:PDF Library catalog 对同一组库文件夹复用缓存,并预计算 root / folder / search 索引,避免每次打开面板重复扫描。
 - [x] `M10.6-007` Cmd+K 工作流:增加库索引刷新、Library / Shortcuts 设置直达、合并窗口、当前 PDF 移到新窗口,并放入 macOS menubar。
 
-## 11. Milestone 11:扩展生态(长期预研)
+## 11. Milestone 10.7:PDF 热重载
+
+- [x] `M10.7-001` 文件监听:按已打开 PDF 的父目录监听外部写入 / rename / delete 事件,适配 LaTeX / Typst 覆盖式编译。
+- [x] `M10.7-002` Store 重载:文件快照变化后清理 clean session 的 `PDFDocument` / Outline / Search / Annotations 缓存,保持阅读位置、缩放与显示模式。
+- [x] `M10.7-003` dirty 保护:存在未保存 Serein 批注时不自动重载对应 PDF,避免丢失内存批注。
+- [x] `M10.7-004` 测试:覆盖 clean 重载、同 URL 多 session 重载、dirty session 不重载。
+
+## 12. Milestone 11:扩展生态(长期预研)
 
 - [ ] `M11-001` 扩展机制 RFC:`docs/extensions-rfc.md` 列选型,至少比较进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳。
 - [ ] `M11-002` PoC:若决策继续,选一条路径把"导出高亮"重写为插件,可在 app 中运行。
 - [ ] `M11-003` Serein Extension API 草稿:面向未来扩展开发者。
 - [ ] `M11-004` 若推迟,在 RFC 写清"为什么现在不做"(安全、上架、维护成本)。
 
-## 12. 手测清单(尚未覆盖)
+## 13. 手测清单(尚未覆盖)
 
 - [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
@@ -201,6 +213,8 @@
 - [ ] `UAT-35` `Cmd+0` 或默认 fit width 后,页面刚好完整显示内容,无横向裁切
 - [ ] `UAT-36` 扩展机制 RFC 存在并评审(M11 证据)
 - [ ] `UAT-37` 多选多个 slide PDF 后通过右键或 `Cmd+Shift+C` 开启连续阅读,`J/K` 或半页滚动能跨 PDF 边界,右侧 Outline 按 PDF 连续分组显示
+- [ ] `UAT-37A` 多选多个 tabs 后按 `Cmd+W`,选中的 PDFs 同时关闭,未选中的 tab 保留并成为活动 tab
 - [ ] `UAT-38` Settings > Library 添加 Book 文件夹后,`Cmd+K` → `Cmd+O` 可搜索并打开库内 PDF
+- [ ] `UAT-39` 外部编译器连续覆盖当前 PDF 后,Serein 自动刷新内容并保持当前页 / 缩放;dirty 批注会话不自动刷新
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

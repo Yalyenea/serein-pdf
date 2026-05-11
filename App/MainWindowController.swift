@@ -358,6 +358,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func requestCloseActiveSession() {
+        let selectedSessionIDs = documentStore.selectedSessionIDsInWindowOrder(in: windowID)
+        if selectedSessionIDs.count > 1 {
+            requestCloseSessions(selectedSessionIDs)
+            return
+        }
+
         if documentStore.isSplitEnabled(in: windowID) {
             let focusedPane = documentStore.focusedPane(in: windowID)
             let focusedSessionID = documentStore.displayedSessionID(for: focusedPane, in: windowID)
@@ -381,11 +387,22 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         requestCloseSession(sessionID)
     }
 
-    func requestCloseSession(_ sessionID: UUID, collapseSplitKeeping survivorPane: ReaderPane? = nil) {
-        guard let session = documentStore.session(for: sessionID) else { return }
+    private func requestCloseSessions(_ sessionIDs: [UUID]) {
+        for sessionID in sessionIDs {
+            guard requestCloseSession(sessionID) else { return }
+        }
+        if documentStore.isSplitEnabled(in: windowID),
+           documentStore.sessionCount(in: windowID) < 2 {
+            documentStore.setSplitEnabled(false, in: windowID)
+        }
+    }
+
+    @discardableResult
+    func requestCloseSession(_ sessionID: UUID, collapseSplitKeeping survivorPane: ReaderPane? = nil) -> Bool {
+        guard let session = documentStore.session(for: sessionID) else { return true }
         guard session.isDirty else {
             closeSession(sessionID, collapseSplitKeeping: survivorPane)
-            return
+            return true
         }
 
         switch presentUnsavedChangesAlert(
@@ -396,13 +413,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             do {
                 try documentStore.saveAnnotations(for: sessionID)
                 closeSession(sessionID, collapseSplitKeeping: survivorPane)
+                return true
             } catch {
                 presentSaveError(error)
+                return false
             }
         case .discard:
             closeSession(sessionID, collapseSplitKeeping: survivorPane)
+            return true
         case .cancel:
-            return
+            return false
         }
     }
 

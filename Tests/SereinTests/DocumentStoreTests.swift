@@ -170,6 +170,26 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.continuousReadingSessionIDs(in: store.defaultWindowID), [sessions[0].id, sessions[2].id])
     }
 
+    func testSelectedSessionIDsExposeWindowOrderForBatchTabCommands() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(named: "batch-close-order-first"),
+                makeTemporaryPDF(named: "batch-close-order-second"),
+                makeTemporaryPDF(named: "batch-close-order-third"),
+            ],
+            in: store.defaultWindowID
+        )
+
+        store.selectSessions([sessions[2].id, sessions[0].id], in: store.defaultWindowID)
+
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: store.defaultWindowID), [sessions[0].id, sessions[2].id])
+    }
+
     func testOpeningNewBatchClearsPriorContinuousReadingGroup() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -241,6 +261,84 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[0].id))
         XCTAssertFalse(store.isPDFDocumentLoaded(for: sessions[1].id))
         XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[4].id))
+    }
+
+    func testExternalPDFChangeInvalidatesCleanLoadedDocumentAndDerivedCaches() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let url = try makeSearchableTemporaryPDF(named: "hot-reload-clean", pages: ["old needle"])
+        let session = try store.open(documentAt: url)
+        let oldDocument = try store.pdfDocument(for: session.id)
+        XCTAssertEqual(oldDocument.pageCount, 1)
+
+        _ = store.outlineTree(for: session.id)
+        _ = store.annotationSections(in: store.defaultWindowID)
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        XCTAssertEqual(store.session(for: session.id)?.isOutlineLoaded, true)
+        XCTAssertEqual(store.session(for: session.id)?.isAnnotationCacheLoaded, true)
+        XCTAssertEqual(store.session(for: session.id)?.searchCache.matches.count, 1)
+
+        try writeTemporaryPDF(to: url, pageCount: 2)
+        store.refreshExternallyChangedFile(at: url)
+
+        let invalidatedSession = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: session.id))
+        XCTAssertNil(invalidatedSession.pageCount)
+        XCTAssertFalse(invalidatedSession.isOutlineLoaded)
+        XCTAssertTrue(invalidatedSession.outlineTree.isEmpty)
+        XCTAssertFalse(invalidatedSession.isAnnotationCacheLoaded)
+        XCTAssertTrue(invalidatedSession.annotationCache.groups.isEmpty)
+        XCTAssertTrue(invalidatedSession.searchCache.matches.isEmpty)
+
+        let reloadedDocument = try store.pdfDocument(for: session.id)
+        XCTAssertFalse(oldDocument === reloadedDocument)
+        XCTAssertEqual(reloadedDocument.pageCount, 2)
+    }
+
+    func testExternalPDFChangeReloadsEveryCleanSessionForSameURL() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let url = try makeTemporaryPDF(named: "hot-reload-duplicates", pageCount: 1)
+        let first = try store.open(documentAt: url)
+        let second = try store.open(documentAt: url)
+        _ = try store.pdfDocument(for: first.id)
+        _ = try store.pdfDocument(for: second.id)
+
+        try writeTemporaryPDF(to: url, pageCount: 3)
+        store.refreshExternallyChangedFile(at: url)
+
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: first.id))
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: second.id))
+        XCTAssertEqual(try store.pdfDocument(for: first.id).pageCount, 3)
+        XCTAssertEqual(try store.pdfDocument(for: second.id).pageCount, 3)
+    }
+
+    func testExternalPDFChangeDoesNotReloadDirtySession() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let url = try makeTemporaryPDF(named: "hot-reload-dirty", pageCount: 1)
+        let session = try store.open(documentAt: url)
+        _ = try store.pdfDocument(for: session.id)
+        let dirtyDate = Date(timeIntervalSince1970: 100)
+        store.setDirty(true, for: session.id, now: dirtyDate)
+
+        try writeTemporaryPDF(to: url, pageCount: 2)
+        store.refreshExternallyChangedFile(at: url)
+
+        let dirtySession = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: session.id))
+        XCTAssertTrue(dirtySession.isDirty)
+        XCTAssertEqual(dirtySession.dirtySince, dirtyDate)
+        XCTAssertEqual(try store.pdfDocument(for: session.id).pageCount, 1)
     }
 
     func testCloseActiveSessionFallsBackToPreviousSession() throws {
@@ -1476,6 +1574,11 @@ final class DocumentStoreTests: XCTestCase {
         )
 
         let url = temporaryDirectory.appendingPathComponent("\(name).pdf")
+        try writeTemporaryPDF(to: url, pageCount: pageCount)
+        return url
+    }
+
+    private func writeTemporaryPDF(to url: URL, pageCount: Int) throws {
         let document = PDFDocument()
         for _ in 0..<pageCount {
             let image = NSImage(size: NSSize(width: 200, height: 260))
@@ -1490,7 +1593,6 @@ final class DocumentStoreTests: XCTestCase {
         }
 
         XCTAssertTrue(document.write(to: url))
-        return url
     }
 
     func testRenameSessionUpdatesFileURLAndMigratesState() throws {

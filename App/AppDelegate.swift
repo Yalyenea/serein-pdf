@@ -1727,6 +1727,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menuItem.state = windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true ? .on : .off
             return true
         case #selector(closeCurrentTab(_:)):
+            if let windowID,
+               documentStore.selectedSessionIDs(in: windowID).count > 1 {
+                menuItem.title = menuTitle("Close Selected Tabs", for: .closeCurrentTab)
+            } else {
+                menuItem.title = menuTitle("Close Current Tab", for: .closeCurrentTab)
+            }
             return controller != nil
         case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
             return windowID.map { documentStore.sessionCount(in: $0) > 1 } == true

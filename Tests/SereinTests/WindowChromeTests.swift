@@ -723,6 +723,27 @@ struct WindowChromeTests {
     }
 
     @Test
+    func closeCommandClosesMultipleSelectedTabs() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "batch-close-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "batch-close-second"))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "batch-close-third"))
+        let windowID = controller.windowID
+
+        store.selectSessions([third.id, first.id], in: windowID)
+
+        controller.requestCloseActiveSession()
+        controller.window?.layoutIfNeeded()
+
+        #expect(store.sessions(in: windowID).map(\.id) == [second.id])
+        #expect(store.activeSessionID(in: windowID) == second.id)
+        #expect(store.selectedSessionIDs(in: windowID).isEmpty)
+        #expect(store.recentlyClosedURLs(in: windowID) == [first.url, third.url])
+    }
+
+    @Test
     func readerSplitPreservesAdjustedDividerPositionAcrossStoreRefresh() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
