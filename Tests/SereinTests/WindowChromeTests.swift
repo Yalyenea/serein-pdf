@@ -108,6 +108,31 @@ struct WindowChromeTests {
     }
 
     @Test
+    func switchingPDFShowsBriefFileNameToast() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "switch-toast-first"))
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate reader internals")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        #expect(reader.testingSwitchTitleToastIsVisible == false)
+
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "switch-toast-second"))
+        flushLayout(controller.window)
+
+        #expect(reader.testingSwitchTitleToastTitle == second.title)
+        #expect(reader.testingSwitchTitleToastIsVisible)
+    }
+
+    @Test
     func nightModeUsesSidebarPDFBackgroundOutsideFilteredContent() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance

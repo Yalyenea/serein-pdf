@@ -6,6 +6,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Reading
 - Hot-reload clean PDFs when LaTeX, Typst, or another external tool rewrites the open file in place or replaces it atomically, while leaving dirty annotation sessions untouched
+- Briefly show the current PDF file name at the top of the reader after switching documents
 
 ### Tabs
 - Let `cmd+w` close all selected PDF tabs when multiple tabs are selected, while preserving the normal current-tab/window close behavior otherwise

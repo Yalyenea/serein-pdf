@@ -62,6 +62,8 @@ final class ReaderViewController: NSViewController {
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
     private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
+    private let switchTitleToastView = NSView()
+    private let switchTitleToastLabel = NSTextField(labelWithString: "")
     private let overviewThumbnailView = PDFThumbnailView()
     private let findBarView = FindBarView()
     private var findBarTopConstraint: NSLayoutConstraint?
@@ -87,6 +89,7 @@ final class ReaderViewController: NSViewController {
     private var lastAppliedFitBoundsHeight: CGFloat = 0
     private var lastSubmittedSearchKey: SubmittedSearchKey?
     private var pendingAnnotationFocusToken: Int = 0
+    private var switchTitleToastHideWorkItem: DispatchWorkItem?
     var targetSessionID: UUID? {
         didSet {
             guard oldValue != targetSessionID else { return }
@@ -266,6 +269,22 @@ final class ReaderViewController: NSViewController {
         highlightModeIndicator.addArrangedSubview(highlightModeColorDot)
         highlightModeIndicator.addArrangedSubview(highlightModeLabel)
 
+        switchTitleToastView.translatesAutoresizingMaskIntoConstraints = false
+        switchTitleToastView.wantsLayer = true
+        switchTitleToastView.layer?.cornerRadius = 8
+        switchTitleToastView.layer?.masksToBounds = true
+        switchTitleToastView.alphaValue = 0
+        switchTitleToastView.isHidden = true
+
+        switchTitleToastLabel.translatesAutoresizingMaskIntoConstraints = false
+        switchTitleToastLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        switchTitleToastLabel.alignment = .center
+        switchTitleToastLabel.lineBreakMode = .byTruncatingMiddle
+        switchTitleToastLabel.isEditable = false
+        switchTitleToastLabel.isBordered = false
+        switchTitleToastLabel.drawsBackground = false
+        switchTitleToastView.addSubview(switchTitleToastLabel)
+
         overviewThumbnailView.translatesAutoresizingMaskIntoConstraints = false
         overviewThumbnailView.thumbnailSize = NSSize(width: 140, height: 180)
         overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
@@ -280,6 +299,7 @@ final class ReaderViewController: NSViewController {
         container.addSubview(pdfContainerView)
         container.addSubview(emptyStateLabel)
         container.addSubview(highlightModeIndicator)
+        container.addSubview(switchTitleToastView)
         container.addSubview(overviewThumbnailView)
         container.addSubview(findBarView)
 
@@ -312,6 +332,13 @@ final class ReaderViewController: NSViewController {
             highlightModeIndicator.leadingAnchor.constraint(equalTo: pdfContainerView.leadingAnchor, constant: 12),
             highlightModeColorDot.widthAnchor.constraint(equalToConstant: 7),
             highlightModeColorDot.heightAnchor.constraint(equalToConstant: 7),
+            switchTitleToastView.topAnchor.constraint(equalTo: pdfContainerView.topAnchor, constant: 10),
+            switchTitleToastView.centerXAnchor.constraint(equalTo: pdfContainerView.centerXAnchor),
+            switchTitleToastView.widthAnchor.constraint(lessThanOrEqualTo: pdfContainerView.widthAnchor, multiplier: 0.62),
+            switchTitleToastLabel.leadingAnchor.constraint(equalTo: switchTitleToastView.leadingAnchor, constant: 12),
+            switchTitleToastLabel.trailingAnchor.constraint(equalTo: switchTitleToastView.trailingAnchor, constant: -12),
+            switchTitleToastLabel.topAnchor.constraint(equalTo: switchTitleToastView.topAnchor, constant: 5),
+            switchTitleToastLabel.bottomAnchor.constraint(equalTo: switchTitleToastView.bottomAnchor, constant: -5),
             overviewLeading,
             overviewTrailing,
             overviewTop,
@@ -815,9 +842,11 @@ final class ReaderViewController: NSViewController {
             displayedScaleMode = nil
             pdfView.highlightedSelections = nil
             pdfView.currentSelection = nil
+            hideSwitchTitleToast(immediately: true)
             return
         }
 
+        let previousSessionID = displayedSessionID
         let isNewSession = displayedSessionID != session.id
         let document: PDFDocument
         do {
@@ -851,6 +880,9 @@ final class ReaderViewController: NSViewController {
 
         pdfView.isHidden = false
         emptyStateLabel.isHidden = true
+        if isNewSession, previousSessionID != nil {
+            showSwitchTitleToast(refreshedSession.title)
+        }
     }
 
     private func syncDisplayedStateWithoutRefreshIfPossible() -> Bool {
@@ -1429,9 +1461,52 @@ final class ReaderViewController: NSViewController {
         pdfView.isHidden = false
         pdfContainerView.setNightModeEnabled(isNightModeEnabled)
         findBarView.refreshChromeColors()
+        updateSwitchTitleToastAppearance()
         applyThemeFilter()
         syncPDFMarginBackgroundAfterPDFKitLayout()
         updateHighlightModeIndicator()
+    }
+
+    private func showSwitchTitleToast(_ title: String) {
+        switchTitleToastHideWorkItem?.cancel()
+        switchTitleToastLabel.stringValue = title
+        updateSwitchTitleToastAppearance()
+        switchTitleToastView.isHidden = false
+        switchTitleToastView.alphaValue = 1
+
+        let workItem = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.hideSwitchTitleToast(immediately: false)
+            }
+        }
+        switchTitleToastHideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.25, execute: workItem)
+    }
+
+    private func hideSwitchTitleToast(immediately: Bool) {
+        switchTitleToastHideWorkItem?.cancel()
+        switchTitleToastHideWorkItem = nil
+
+        guard immediately == false else {
+            switchTitleToastView.alphaValue = 0
+            switchTitleToastView.isHidden = true
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            switchTitleToastView.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                self?.switchTitleToastView.isHidden = true
+            }
+        }
+    }
+
+    private func updateSwitchTitleToastAppearance() {
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        switchTitleToastView.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(isDark ? 0.86 : 0.92).cgColor
+        switchTitleToastLabel.textColor = .labelColor
     }
 
     private func updateHighlightModeIndicator() {
@@ -1452,6 +1527,16 @@ final class ReaderViewController: NSViewController {
         }
     }
 
+}
+
+extension ReaderViewController {
+    var testingSwitchTitleToastTitle: String {
+        switchTitleToastLabel.stringValue
+    }
+
+    var testingSwitchTitleToastIsVisible: Bool {
+        switchTitleToastView.isHidden == false && switchTitleToastView.alphaValue > 0
+    }
 }
 
 extension ReaderViewController: FindBarDelegate {
