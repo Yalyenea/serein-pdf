@@ -22,6 +22,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
 - Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - `cmd+w` closes all selected tabs when multiple PDF tabs are selected; otherwise it closes the current tab/window as usual
+- `cmd+shift+w` closes the current window while preserving the normal close confirmation for unsaved annotations
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
 - Clean PDFs hot-reload when LaTeX, Typst, or another external compiler rewrites the open file in place or replaces it atomically; PDFs with unsaved Serein annotations are left untouched
 - PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
@@ -166,6 +167,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Half-page down / up | `ctrl+d` / `ctrl+u` |
 | Jump to first / last page | `g` / `shift+g` |
 | Close selected tabs, or current tab/window | `cmd+w` |
+| Close current window | `cmd+shift+w` |
 | Reopen closed tab | `cmd+shift+t` |
 | Show all tabs | `ctrl+tab` |
 | Toggle continuous reading for selected tabs | `cmd+shift+c` |

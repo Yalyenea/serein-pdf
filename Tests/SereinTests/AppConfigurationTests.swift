@@ -32,6 +32,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth]?.key, "0")
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "b", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "w", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentWindow], KeyboardShortcut(key: "w", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightColorGreen], KeyboardShortcut(key: "g", modifiers: [.command, .control]))
         XCTAssertEqual(configuration.shortcuts.bindings[.pageDown], KeyboardShortcut(key: "j", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.pageUp], KeyboardShortcut(key: "k", modifiers: []))
@@ -89,6 +90,7 @@ switch_current_theme = "command+option+t"
 save_annotations = "command+shift+s"
 toggle_left_sidebar = "command+shift+l"
 close_current_tab = "command+e"
+close_current_window = "command+shift+e"
 fit_width = "command+shift+9"
 fit_height = "command+shift+8"
 previous_tab = "command+["
@@ -132,6 +134,7 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentWindow], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth], KeyboardShortcut(key: "9", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "8", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.previousTab], KeyboardShortcut(key: "[", modifiers: [.command]))
@@ -190,6 +193,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
         XCTAssertTrue(content.contains("close_current_tab = \"command+w\""))
+        XCTAssertTrue(content.contains("close_current_window = \"command+shift+w\""))
         XCTAssertTrue(content.contains("fit_height = \"command+9\""))
         XCTAssertTrue(content.contains("fit_width = \"command+9\""))
         XCTAssertTrue(content.contains("remove_highlight = \"d\""))

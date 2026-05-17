@@ -69,6 +69,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case useSidebarTabs = "use_sidebar_tabs"
     case useTitlebarTabs = "use_titlebar_tabs"
     case closeCurrentTab = "close_current_tab"
+    case closeCurrentWindow = "close_current_window"
     case previousTab = "previous_tab"
     case nextTab = "next_tab"
     case showAllTabs = "show_all_tabs"
@@ -148,6 +149,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Use Titlebar Tabs"
         case .closeCurrentTab:
             "Close Current Tab"
+        case .closeCurrentWindow:
+            "Close Current Window"
         case .previousTab:
             "Previous Tab"
         case .nextTab:

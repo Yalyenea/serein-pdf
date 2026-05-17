@@ -150,6 +150,7 @@ flowchart LR
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
 - `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+W`:多选 tabs 时关闭选中的 PDFs;否则关闭当前 tab
+- `Cmd+Shift+W`:关闭当前窗口
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
 - `Cmd+Shift+N`:新建窗口
 - `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口

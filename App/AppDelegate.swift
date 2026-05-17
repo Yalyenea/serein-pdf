@@ -205,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .useSidebarTabs: { [weak self] in self?.useSidebarTabs(nil) },
             .useTitlebarTabs: { [weak self] in self?.useTitlebarTabs(nil) },
             .closeCurrentTab: { [weak self] in self?.closeCurrentTab(nil) },
+            .closeCurrentWindow: { [weak self] in self?.closeCurrentWindow(nil) },
             .previousTab: { [weak self] in self?.activatePreviousTab(nil) },
             .nextTab: { [weak self] in self?.activateNextTab(nil) },
             .showAllTabs: { [weak self] in self?.showAllTabs(nil) },
@@ -460,6 +461,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .closeCurrentTab,
             action: #selector(closeCurrentTab(_:))
         )
+        let closeWindowItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.closeCurrentWindow.menuTitle,
+            command: .closeCurrentWindow,
+            action: #selector(closeCurrentWindow(_:))
+        )
         let saveAnnotationsItem = makeConfiguredMenuItem(
             title: "Save Annotations",
             command: .saveAnnotations,
@@ -510,6 +516,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             copyHighlightsMarkdownItem,
             .separator(),
             closeItem,
+            closeWindowItem,
         ]
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
@@ -891,6 +898,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return
         }
         controller.requestCloseActiveSession()
+    }
+
+    @objc
+    private func closeCurrentWindow(_ sender: Any?) {
+        if let keyWindow = NSApp.keyWindow {
+            keyWindow.performClose(sender)
+            return
+        }
+        mainWindowController?.window?.performClose(sender)
     }
 
     @objc
@@ -1734,6 +1750,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 menuItem.title = menuTitle("Close Current Tab", for: .closeCurrentTab)
             }
             return controller != nil
+        case #selector(closeCurrentWindow(_:)):
+            return NSApp.keyWindow != nil || controller != nil
         case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
             return windowID.map { documentStore.sessionCount(in: $0) > 1 } == true
         case #selector(fitReaderToWidth(_:)):

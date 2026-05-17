@@ -33,6 +33,7 @@
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 切换;`Option+Click` / `Option+Enter` 打开到另一 pane
 - `Cmd+W`:多选 tabs 时按窗口顺序关闭选中的 PDFs;否则关闭当前 tab / window
+- `Cmd+Shift+W`:关闭当前窗口,沿用 dirty 批注保存确认
 - `Cmd+Shift+C`:对当前选中的 tabs 开启 / 退出多 PDF 连续阅读;连续组内翻页跨 PDF 边界切换,右侧 Outline 按 PDF 分组显示
 - PDF 热重载:LaTeX / Typst 等外部工具原地写入或原子替换已打开 PDF 后自动刷新 clean session;dirty 批注会话不自动刷新
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`

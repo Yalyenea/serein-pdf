@@ -154,6 +154,7 @@ struct AppConfiguration: Equatable, Sendable {
             .useSidebarTabs: KeyboardShortcut(key: "1", modifiers: [.command, .shift]),
             .useTitlebarTabs: KeyboardShortcut(key: "2", modifiers: [.command, .shift]),
             .closeCurrentTab: KeyboardShortcut(key: "w", modifiers: [.command]),
+            .closeCurrentWindow: KeyboardShortcut(key: "w", modifiers: [.command, .shift]),
             .previousTab: KeyboardShortcut(key: "[", modifiers: [.command, .shift]),
             .nextTab: KeyboardShortcut(key: "]", modifiers: [.command, .shift]),
             .toggleContinuousReading: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
@@ -424,6 +425,7 @@ toggle_right_sidebar = "command+option+b"
 use_sidebar_tabs = "command+shift+1"
 use_titlebar_tabs = "command+shift+2"
 close_current_tab = "command+w"
+close_current_window = "command+shift+w"
 previous_tab = "command+shift+["
 next_tab = "command+shift+]"
 show_all_tabs = "control+tab"
@@ -516,6 +518,7 @@ toggle_right_sidebar = "\(serializedShortcut(.toggleRightSidebar, configuration:
 use_sidebar_tabs = "\(serializedShortcut(.useSidebarTabs, configuration: configuration))"
 use_titlebar_tabs = "\(serializedShortcut(.useTitlebarTabs, configuration: configuration))"
 close_current_tab = "\(serializedShortcut(.closeCurrentTab, configuration: configuration))"
+close_current_window = "\(serializedShortcut(.closeCurrentWindow, configuration: configuration))"
 previous_tab = "\(serializedShortcut(.previousTab, configuration: configuration))"
 next_tab = "\(serializedShortcut(.nextTab, configuration: configuration))"
 show_all_tabs = "\(serializedShortcut(.showAllTabs, configuration: configuration))"
@@ -715,6 +718,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .useTitlebarTabs, to: &configuration)
         case ("shortcuts", "close_current_tab"):
             try applyShortcut(rawValue, command: .closeCurrentTab, to: &configuration)
+        case ("shortcuts", "close_current_window"):
+            try applyShortcut(rawValue, command: .closeCurrentWindow, to: &configuration)
         case ("shortcuts", "previous_tab"):
             try applyShortcut(rawValue, command: .previousTab, to: &configuration)
         case ("shortcuts", "next_tab"):
@@ -910,6 +915,7 @@ struct AppConfigurationStore {
             "use_sidebar_tabs",
             "use_titlebar_tabs",
             "close_current_tab",
+            "close_current_window",
             "previous_tab",
             "next_tab",
             "show_all_tabs",

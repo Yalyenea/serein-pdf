@@ -6,6 +6,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Windows
 - Support native macOS green-button window management for main reader windows, including full screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
+- Add `cmd+shift+w` to close the current window without changing `cmd+w` tab-closing behavior
 
 ### Reading
 - Hot-reload clean PDFs when LaTeX, Typst, or another external tool rewrites the open file in place or replaces it atomically, while leaving dirty annotation sessions untouched
