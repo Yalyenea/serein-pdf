@@ -341,6 +341,92 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(try store.pdfDocument(for: session.id).pageCount, 1)
     }
 
+    func testExternalPDFInPlaceWriteEventReloadsCleanSession() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let url = try makeTemporaryPDF(named: "hot-reload-in-place", pageCount: 1)
+        let session = try store.open(documentAt: url)
+        let oldDocument = try store.pdfDocument(for: session.id)
+
+        try overwriteFileInPlace(at: url, withPDFPageCount: 2)
+
+        XCTAssertTrue(waitForMainRunLoop(until: {
+            store.isPDFDocumentLoaded(for: session.id) == false
+        }))
+        let reloadedDocument = try store.pdfDocument(for: session.id)
+        XCTAssertFalse(oldDocument === reloadedDocument)
+        XCTAssertEqual(reloadedDocument.pageCount, 2)
+    }
+
+    func testExternalPDFAtomicReplaceEventReloadsCleanSession() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let url = try makeTemporaryPDF(named: "hot-reload-replace", pageCount: 1)
+        let session = try store.open(documentAt: url)
+        let oldDocument = try store.pdfDocument(for: session.id)
+
+        let replacementURL = url.deletingLastPathComponent().appendingPathComponent("replacement.pdf")
+        try writeTemporaryPDF(to: replacementURL, pageCount: 3)
+        _ = try FileManager.default.replaceItemAt(url, withItemAt: replacementURL)
+
+        XCTAssertTrue(waitForMainRunLoop(until: {
+            store.isPDFDocumentLoaded(for: session.id) == false
+        }))
+        let reloadedDocument = try store.pdfDocument(for: session.id)
+        XCTAssertFalse(oldDocument === reloadedDocument)
+        XCTAssertEqual(reloadedDocument.pageCount, 3)
+    }
+
+    func testExternalPDFInPlaceWriteEventReloadsEveryCleanSessionForSameURL() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let url = try makeTemporaryPDF(named: "hot-reload-event-duplicates", pageCount: 1)
+        let first = try store.open(documentAt: url)
+        let second = try store.open(documentAt: url)
+        _ = try store.pdfDocument(for: first.id)
+        _ = try store.pdfDocument(for: second.id)
+
+        try overwriteFileInPlace(at: url, withPDFPageCount: 4)
+
+        XCTAssertTrue(waitForMainRunLoop(until: {
+            store.isPDFDocumentLoaded(for: first.id) == false &&
+                store.isPDFDocumentLoaded(for: second.id) == false
+        }))
+        XCTAssertEqual(try store.pdfDocument(for: first.id).pageCount, 4)
+        XCTAssertEqual(try store.pdfDocument(for: second.id).pageCount, 4)
+    }
+
+    func testExternalPDFInPlaceWriteEventDoesNotReloadDirtySession() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let url = try makeTemporaryPDF(named: "hot-reload-in-place-dirty", pageCount: 1)
+        let session = try store.open(documentAt: url)
+        _ = try store.pdfDocument(for: session.id)
+        let dirtyDate = Date(timeIntervalSince1970: 100)
+        store.setDirty(true, for: session.id, now: dirtyDate)
+
+        try overwriteFileInPlace(at: url, withPDFPageCount: 2)
+        _ = waitForMainRunLoop(timeout: 0.8) { false }
+
+        let dirtySession = try XCTUnwrap(store.session(for: session.id))
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: session.id))
+        XCTAssertTrue(dirtySession.isDirty)
+        XCTAssertEqual(dirtySession.dirtySince, dirtyDate)
+        XCTAssertEqual(try store.pdfDocument(for: session.id).pageCount, 1)
+    }
+
     func testCloseActiveSessionFallsBackToPreviousSession() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -1579,6 +1665,26 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     private func writeTemporaryPDF(to url: URL, pageCount: Int) throws {
+        let document = makeTemporaryPDFDocument(pageCount: pageCount)
+        XCTAssertTrue(document.write(to: url))
+    }
+
+    private func overwriteFileInPlace(at url: URL, withPDFPageCount pageCount: Int) throws {
+        let data = try makeTemporaryPDFData(pageCount: pageCount)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: 0)
+        try handle.write(contentsOf: data)
+        try handle.close()
+    }
+
+    private func makeTemporaryPDFData(pageCount: Int) throws -> Data {
+        guard let data = makeTemporaryPDFDocument(pageCount: pageCount).dataRepresentation() else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return data
+    }
+
+    private func makeTemporaryPDFDocument(pageCount: Int) -> PDFDocument {
         let document = PDFDocument()
         for _ in 0..<pageCount {
             let image = NSImage(size: NSSize(width: 200, height: 260))
@@ -1592,7 +1698,18 @@ final class DocumentStoreTests: XCTestCase {
             document.insert(page!, at: document.pageCount)
         }
 
-        XCTAssertTrue(document.write(to: url))
+        return document
+    }
+
+    private func waitForMainRunLoop(timeout: TimeInterval = 2, until condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+        return condition()
     }
 
     func testRenameSessionUpdatesFileURLAndMigratesState() throws {

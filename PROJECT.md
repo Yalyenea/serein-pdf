@@ -81,7 +81,7 @@ flowchart LR
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
-| PDF 热重载 | `DocumentStore` 监听已打开 PDF 的父目录;文件快照变化后只重载 clean sessions,dirty 批注会话保持内存状态 |
+| PDF 热重载 | `DocumentStore` 监听已打开 PDF 文件及其父目录;原地写入或原子替换导致文件快照变化后只重载 clean sessions,dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |

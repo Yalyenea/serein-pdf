@@ -34,7 +34,7 @@
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 切换;`Option+Click` / `Option+Enter` 打开到另一 pane
 - `Cmd+W`:多选 tabs 时按窗口顺序关闭选中的 PDFs;否则关闭当前 tab / window
 - `Cmd+Shift+C`:对当前选中的 tabs 开启 / 退出多 PDF 连续阅读;连续组内翻页跨 PDF 边界切换,右侧 Outline 按 PDF 分组显示
-- PDF 热重载:LaTeX / Typst 等外部工具覆盖已打开 PDF 后自动刷新 clean session;dirty 批注会话不自动刷新
+- PDF 热重载:LaTeX / Typst 等外部工具原地写入或原子替换已打开 PDF 后自动刷新 clean session;dirty 批注会话不自动刷新
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行
@@ -183,7 +183,7 @@
 
 ## 11. Milestone 10.7:PDF 热重载
 
-- [x] `M10.7-001` 文件监听:按已打开 PDF 的父目录监听外部写入 / rename / delete 事件,适配 LaTeX / Typst 覆盖式编译。
+- [x] `M10.7-001` 文件监听:按已打开 PDF 文件及其父目录监听外部写入 / rename / delete 事件,适配 LaTeX / Typst 原地写入与覆盖式编译。
 - [x] `M10.7-002` Store 重载:文件快照变化后清理 clean session 的 `PDFDocument` / Outline / Search / Annotations 缓存,保持阅读位置、缩放与显示模式。
 - [x] `M10.7-003` dirty 保护:存在未保存 Serein 批注时不自动重载对应 PDF,避免丢失内存批注。
 - [x] `M10.7-004` 测试:覆盖 clean 重载、同 URL 多 session 重载、dirty session 不重载。
