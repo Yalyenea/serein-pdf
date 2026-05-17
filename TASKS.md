@@ -44,6 +44,7 @@
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
 - PDF 切换:从一个已显示 PDF 切到另一个 PDF 后,阅读区顶部短暂显示当前文件名
 - 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
+- 主窗口适配 macOS 原生绿灯菜单:Full Screen、Move & Resize、Fill、Center、Fill & Arrange;默认尺寸不变,最小尺寸需允许系统半屏 / 四分屏
 
 ## 3. 当前进度
 
@@ -63,6 +64,7 @@
 | M10.6 PDF 库 | ✅ 开发完成,待手测 |
 | M10.7 PDF 热重载 | ✅ 开发完成,待手测 |
 | M10.8 PDF 切换定位提示 | ✅ 开发完成,待手测 |
+| M10.9 macOS 绿灯窗口管理 | ✅ 开发完成,待手测 |
 | M11 扩展生态(预研) | 未开始 |
 
 ## 4. 下一步执行顺序

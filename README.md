@@ -18,6 +18,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
 - Window commands can merge every Serein window into the current one or move the current PDF into a new window
+- Main windows participate in native macOS green-button window management: Full Screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
 - Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - `cmd+w` closes all selected tabs when multiple PDF tabs are selected; otherwise it closes the current tab/window as usual
@@ -183,7 +184,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Undo last highlight edit | `cmd+z` |
 
 Standard macOS app/window shortcuts are available too, including `cmd+h`,
-`cmd+option+h`, and `cmd+m`.
+`cmd+option+h`, `cmd+m`, and native macOS green-button tiling shortcuts.
 
 ## Repo layout
 

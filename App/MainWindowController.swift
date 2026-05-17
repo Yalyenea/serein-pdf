@@ -6,7 +6,7 @@ extension NSToolbarItem.Identifier {
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
     static let defaultContentSize = NSSize(width: 1480, height: 960)
-    static let minimumWindowSize = NSSize(width: 1120, height: 720)
+    static let minimumWindowSize = NSSize(width: 560, height: 360)
 
     let documentStore: DocumentStore
     let windowID: UUID
@@ -28,8 +28,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.title = "Serein"
         window.setContentSize(Self.defaultContentSize)
         window.minSize = Self.minimumWindowSize
+        window.contentMinSize = Self.minimumWindowSize
+        window.minFullScreenContentSize = Self.minimumWindowSize
         window.center()
+        window.styleMask.insert(.resizable)
         window.styleMask.insert(.fullSizeContentView)
+        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.collectionBehavior.insert(.fullScreenAllowsTiling)
         window.tabbingMode = .disallowed
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false

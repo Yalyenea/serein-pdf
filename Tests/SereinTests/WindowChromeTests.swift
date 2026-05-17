@@ -1003,6 +1003,24 @@ struct WindowChromeTests {
     }
 
     @Test
+    func mainWindowSupportsSystemGreenButtonTilingActions() throws {
+        _ = NSApplication.shared
+        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        defer { controller.close() }
+        let window = try #require(controller.window)
+
+        #expect(window.styleMask.contains(.resizable))
+        #expect(window.collectionBehavior.contains(.fullScreenPrimary))
+        #expect(window.collectionBehavior.contains(.fullScreenAllowsTiling))
+        #expect(window.collectionBehavior.contains(.fullScreenDisallowsTiling) == false)
+        #expect(window.contentMinSize == MainWindowController.minimumWindowSize)
+        #expect(window.minFullScreenContentSize == MainWindowController.minimumWindowSize)
+        #expect(window.standardWindowButton(.zoomButton)?.isHidden == false)
+        #expect(MainWindowController.minimumWindowSize.width <= 640)
+        #expect(MainWindowController.minimumWindowSize.height <= 420)
+    }
+
+    @Test
     func singlePageZoomedOutDocumentStaysCentered() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)

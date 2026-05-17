@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Windows
+- Support native macOS green-button window management for main reader windows, including full screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
+
 ### Reading
 - Hot-reload clean PDFs when LaTeX, Typst, or another external tool rewrites the open file in place or replaces it atomically, while leaving dirty annotation sessions untouched
 - Briefly show the current PDF file name at the top of the reader after switching documents
