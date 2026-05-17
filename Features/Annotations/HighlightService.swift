@@ -69,26 +69,33 @@ enum HighlightService {
         }
 
         return orderedGroupIDs.compactMap { groupID in
-            guard let records = groupedRecords[groupID]?.sorted(by: recordSortOrder),
-                  let firstRecord = records.first else { return nil }
-
-            let snippet = records
-                .compactMap { annotationSnippet(for: $0, ocrCache: &ocrCache) }
-                .joined(separator: " ")
-            let comment = records
-                .compactMap(\.annotation.contents)
-                .first { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
-                ?? ""
-
-            return DocumentHighlightGroup(
+            highlightGroup(
                 groupID: groupID,
-                pageIndex: firstRecord.pageIndex,
-                snippet: snippet.isEmpty ? "Untitled Highlight" : snippet,
-                color: HighlightColor.closest(to: firstRecord.annotation.color),
-                createdAt: records.compactMap(\.annotation.modificationDate).min(),
-                comment: comment,
-                primarySelection: annotationSelection(for: firstRecord),
-                records: records
+                records: groupedRecords[groupID] ?? [],
+                ocrCache: &ocrCache
+            )
+        }
+    }
+
+    static func buildHighlightGroups(from records: [HighlightAnnotationRecord]) -> [DocumentHighlightGroup] {
+        var groupedRecords: [String: [HighlightAnnotationRecord]] = [:]
+        var orderedGroupIDs: [String] = []
+        var ocrCache: [ObjectIdentifier: [HighlightOCRService.RecognizedLine]] = [:]
+
+        for record in records {
+            let groupID = resolvedGroupID(for: record.annotation, pageIndex: record.pageIndex)
+            if groupedRecords[groupID] == nil {
+                groupedRecords[groupID] = []
+                orderedGroupIDs.append(groupID)
+            }
+            groupedRecords[groupID]?.append(record)
+        }
+
+        return orderedGroupIDs.compactMap { groupID in
+            highlightGroup(
+                groupID: groupID,
+                records: groupedRecords[groupID] ?? [],
+                ocrCache: &ocrCache
             )
         }
     }
@@ -157,6 +164,10 @@ enum HighlightService {
         return didChange
     }
 
+    static func groupIDs(for records: [HighlightAnnotationRecord]) -> Set<String> {
+        Set(records.map { resolvedGroupID(for: $0.annotation, pageIndex: $0.pageIndex) })
+    }
+
     private static func explodedSelections(_ selection: PDFSelection) -> [PDFSelection] {
         let lineSelections = selection.selectionsByLine()
         return lineSelections.isEmpty ? [selection] : lineSelections
@@ -193,6 +204,34 @@ enum HighlightService {
             return lhs.pageIndex < rhs.pageIndex
         }
         return annotationSortOrder(lhs.annotation, rhs.annotation)
+    }
+
+    private static func highlightGroup(
+        groupID: String,
+        records unsortedRecords: [HighlightAnnotationRecord],
+        ocrCache: inout [ObjectIdentifier: [HighlightOCRService.RecognizedLine]]
+    ) -> DocumentHighlightGroup? {
+        let records = unsortedRecords.sorted(by: recordSortOrder)
+        guard let firstRecord = records.first else { return nil }
+
+        let snippet = records
+            .compactMap { annotationSnippet(for: $0, ocrCache: &ocrCache) }
+            .joined(separator: " ")
+        let comment = records
+            .compactMap(\.annotation.contents)
+            .first { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+            ?? ""
+
+        return DocumentHighlightGroup(
+            groupID: groupID,
+            pageIndex: firstRecord.pageIndex,
+            snippet: snippet.isEmpty ? "Untitled Highlight" : snippet,
+            color: HighlightColor.closest(to: firstRecord.annotation.color),
+            createdAt: records.compactMap(\.annotation.modificationDate).min(),
+            comment: comment,
+            primarySelection: annotationSelection(for: firstRecord),
+            records: records
+        )
     }
 
     private static func annotationSnippet(

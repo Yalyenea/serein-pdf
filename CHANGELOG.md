@@ -22,6 +22,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Replace the centered highlight-mode badge with a compact inline reader indicator
 
 ### Performance
+- Update highlight annotation caches incrementally after local edits so applying a highlight no longer rebuilds every highlight snippet in the PDF
 - Make PDF tabs lightweight on open: sessions keep URL/title/reading state first, while `PDFDocument` loads only when a reader, sidebar, annotation, or search path needs it
 - Add a small live `PDFDocument` LRU so clean background PDFs can be released while the current pane, split pane, and dirty documents stay resident
 - Keep Show All Tabs as a lightweight text overview instead of rendering PDF thumbnails

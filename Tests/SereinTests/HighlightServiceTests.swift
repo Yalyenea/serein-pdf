@@ -62,6 +62,27 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(groups.first?.snippet, "非正定")
     }
 
+    func testBuildHighlightGroupsFromRecordsOnlyUsesChangedRecords() throws {
+        let document = try makeSearchableDocument(text: "alpha beta gamma")
+        let alphaSelection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
+        let betaSelection = try XCTUnwrap(document.findString("beta", withOptions: []).first)
+        _ = HighlightService.applyHighlight(to: alphaSelection, color: HighlightColor.pink.nsColor)
+        let betaRecords = HighlightService.applyHighlight(
+            to: betaSelection,
+            color: HighlightColor.green.nsColor,
+            createdAt: Date(timeIntervalSince1970: 42)
+        )
+        XCTAssertTrue(HighlightService.updateComment("changed only", for: betaRecords))
+
+        let groups = HighlightService.buildHighlightGroups(from: betaRecords)
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.snippet, "beta")
+        XCTAssertEqual(groups.first?.color, .green)
+        XCTAssertEqual(groups.first?.comment, "changed only")
+        XCTAssertEqual(groups.first?.createdAt, Date(timeIntervalSince1970: 42))
+    }
+
     private func makeSearchableDocument(text: String) throws -> PDFDocument {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -1006,6 +1006,78 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(sections.first?.highlights.first?.snippet.contains("beta") == true)
     }
 
+    func testAddingHighlightDoesNotBuildAnnotationCacheBeforeAnnotationsPaneLoads() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let url = try makeSearchableTemporaryPDF(
+            named: "annotation-cache-stays-lazy",
+            pages: ["alpha beta gamma"]
+        )
+        let session = try store.open(documentAt: url)
+        let selection = try XCTUnwrap(store.pdfDocument(for: session.id).findString("beta", withOptions: []).first)
+
+        let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.yellow.nsColor)
+        store.noteHighlightsAdded(records, for: session.id)
+
+        XCTAssertEqual(store.session(for: session.id)?.isDirty, true)
+        XCTAssertEqual(store.session(for: session.id)?.isAnnotationCacheLoaded, false)
+    }
+
+    func testLoadedAnnotationCacheUpdatesIncrementallyForAddedAndRemovedHighlights() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let url = try makeSearchableTemporaryPDF(
+            named: "annotation-cache-incremental",
+            pages: ["alpha beta gamma"]
+        )
+        let session = try store.open(documentAt: url)
+        let document = try store.pdfDocument(for: session.id)
+        let alphaSelection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
+        let betaSelection = try XCTUnwrap(document.findString("beta", withOptions: []).first)
+
+        let alphaRecords = HighlightService.applyHighlight(to: alphaSelection, color: HighlightColor.pink.nsColor)
+        store.noteHighlightsAdded(alphaRecords, for: session.id)
+        XCTAssertEqual(store.annotationGroups(for: session.id).count, 1)
+
+        let betaRecords = HighlightService.applyHighlight(to: betaSelection, color: HighlightColor.green.nsColor)
+        store.noteHighlightsAdded(betaRecords, for: session.id)
+        XCTAssertEqual(store.annotationGroups(for: session.id).map(\.snippet).sorted(), ["alpha", "beta"])
+
+        HighlightService.removeHighlights(betaRecords, in: document)
+        store.noteHighlightsRemoved(betaRecords, for: session.id)
+
+        let groups = store.annotationGroups(for: session.id)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups.first?.snippet, "alpha")
+    }
+
+    func testLoadedAnnotationCacheTracksUndoAndRedo() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let url = try makeSearchableTemporaryPDF(
+            named: "annotation-cache-undo-redo",
+            pages: ["alpha beta gamma"]
+        )
+        let session = try store.open(documentAt: url)
+        let selection = try XCTUnwrap(store.pdfDocument(for: session.id).findString("alpha", withOptions: []).first)
+
+        let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.pink.nsColor)
+        store.noteHighlightsAdded(records, for: session.id)
+        XCTAssertEqual(store.annotationGroups(for: session.id).count, 1)
+
+        XCTAssertTrue(store.undoLastHighlight(for: session.id))
+        XCTAssertEqual(store.annotationGroups(for: session.id).count, 0)
+
+        XCTAssertTrue(store.redoLastHighlight(for: session.id))
+        XCTAssertEqual(store.annotationGroups(for: session.id).first?.snippet, "alpha")
+    }
+
     func testHasHighlightsDoesNotBuildAnnotationCache() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

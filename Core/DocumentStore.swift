@@ -979,7 +979,7 @@ final class DocumentStore {
         sessions[sessionIndex].redoStack.removeAll()
         trimUndoStack(for: sessionIndex)
         markAnnotationsDirty(for: sessionIndex, now: now)
-        rebuildAnnotationCache(for: sessionIndex)
+        upsertCachedAnnotationGroups(from: records, for: sessionIndex)
         notifyChange()
     }
 
@@ -990,7 +990,7 @@ final class DocumentStore {
         sessions[sessionIndex].redoStack.removeAll()
         trimUndoStack(for: sessionIndex)
         markAnnotationsDirty(for: sessionIndex, now: now)
-        rebuildAnnotationCache(for: sessionIndex)
+        removeCachedAnnotationGroups(for: records, from: sessionIndex)
         notifyChange()
     }
 
@@ -1003,7 +1003,7 @@ final class DocumentStore {
               HighlightService.updateComment(comment, for: group.records) else { return false }
 
         markAnnotationsDirty(for: sessionIndex, now: now)
-        rebuildAnnotationCache(for: sessionIndex)
+        upsertCachedAnnotationGroups(from: group.records, for: sessionIndex)
         notifyChange()
         return true
     }
@@ -1040,7 +1040,12 @@ final class DocumentStore {
 
         sessions[sessionIndex].redoStack.append(operation)
         markAnnotationsDirty(for: sessionIndex, now: Date())
-        rebuildAnnotationCache(for: sessionIndex)
+        switch operation {
+        case let .added(records):
+            removeCachedAnnotationGroups(for: records, from: sessionIndex)
+        case let .removed(records):
+            upsertCachedAnnotationGroups(from: records, for: sessionIndex)
+        }
         notifyChange()
         return true
     }
@@ -1060,7 +1065,12 @@ final class DocumentStore {
 
         sessions[sessionIndex].undoStack.append(operation)
         markAnnotationsDirty(for: sessionIndex, now: Date())
-        rebuildAnnotationCache(for: sessionIndex)
+        switch operation {
+        case let .added(records):
+            upsertCachedAnnotationGroups(from: records, for: sessionIndex)
+        case let .removed(records):
+            removeCachedAnnotationGroups(for: records, from: sessionIndex)
+        }
         notifyChange()
         return true
     }
@@ -1375,6 +1385,16 @@ final class DocumentStore {
             groups: HighlightService.buildHighlightGroups(in: document)
         )
         sessions[sessionIndex].isAnnotationCacheLoaded = true
+    }
+
+    private func upsertCachedAnnotationGroups(from records: [HighlightAnnotationRecord], for sessionIndex: Int) {
+        guard sessions[sessionIndex].isAnnotationCacheLoaded else { return }
+        sessions[sessionIndex].annotationCache.upsert(HighlightService.buildHighlightGroups(from: records))
+    }
+
+    private func removeCachedAnnotationGroups(for records: [HighlightAnnotationRecord], from sessionIndex: Int) {
+        guard sessions[sessionIndex].isAnnotationCacheLoaded else { return }
+        sessions[sessionIndex].annotationCache.removeGroups(withIDs: HighlightService.groupIDs(for: records))
     }
 
     private func ensureAnnotationCacheLoaded(for sessionIndex: Int) {
