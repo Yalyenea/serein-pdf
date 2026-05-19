@@ -4,6 +4,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-19
+
 ### Windows
 - Support native macOS green-button window management for main reader windows, including full screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
 - Keep transparent-titlebar window dragging from reaching the PDF reader, so moving the window no longer scrolls the open PDF
