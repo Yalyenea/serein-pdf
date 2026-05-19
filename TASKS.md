@@ -47,6 +47,7 @@
 - PDF 切换:从一个已显示 PDF 切到另一个 PDF 后,阅读区顶部短暂显示当前文件名
 - 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
 - 主窗口适配 macOS 原生绿灯菜单:Full Screen、Move & Resize、Fill、Center、Fill & Arrange;默认尺寸不变,最小尺寸需允许系统半屏 / 四分屏
+- 透明标题栏顶部条带只负责窗口拖动,不得把拖拽事件传给 PDF 阅读区
 
 ## 3. 当前进度
 
@@ -230,5 +231,6 @@
 - [ ] `UAT-38` Settings > Library 添加 Book 文件夹后,`Cmd+K` → `Cmd+O` 可搜索并打开库内 PDF
 - [ ] `UAT-39` 外部编译器连续覆盖当前 PDF 后,Serein 自动刷新内容并保持当前页 / 缩放;dirty 批注会话不自动刷新
 - [ ] `UAT-40` 快速切换多个 PDF 后,阅读区顶部短暂显示当前文件名,随后自动淡出
+- [x] `UAT-41` 从透明标题栏顶部拖动窗口时只移动窗口,不会滑动 PDF;红黄绿按钮与水平 titlebar tabs 仍可正常点击
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

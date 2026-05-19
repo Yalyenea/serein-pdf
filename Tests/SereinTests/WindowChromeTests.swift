@@ -65,6 +65,49 @@ struct WindowChromeTests {
     }
 
     @Test
+    func transparentTitlebarDragAreaIsReservedBeforePDFContent() throws {
+        _ = NSApplication.shared
+        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        defer { controller.close() }
+        let window = try #require(controller.window as? ReaderShortcutWindow)
+        let contentView = try #require(window.contentView)
+        window.layoutIfNeeded()
+
+        #expect(window.toolbar == nil)
+        #expect(window.contentLayoutRect.maxY < contentView.bounds.maxY)
+
+        let titlebarPoint = NSPoint(x: contentView.bounds.midX, y: contentView.bounds.maxY - 2)
+        let readerPoint = NSPoint(x: contentView.bounds.midX, y: window.contentLayoutRect.maxY - 2)
+
+        #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: titlebarPoint)))
+        #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: readerPoint)) == false)
+    }
+
+    @Test
+    func transparentTitlebarDragDoesNotStealWindowControlsOrTitlebarTabs() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let window = try #require(controller.window as? ReaderShortcutWindow)
+        let contentView = try #require(window.contentView)
+        window.layoutIfNeeded()
+
+        let closeButton = try #require(window.standardWindowButton(.closeButton))
+        let closeButtonFrame = closeButton.convert(closeButton.bounds, to: nil)
+        let closeButtonPoint = NSPoint(x: closeButtonFrame.midX, y: closeButtonFrame.midY)
+        #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: closeButtonPoint)) == false)
+
+        store.setTabPresentationMode(.horizontalTitlebar)
+        store.setLeftSidebarVisible(false)
+        window.layoutIfNeeded()
+
+        #expect(window.toolbar != nil)
+        let titlebarPoint = NSPoint(x: contentView.bounds.midX, y: contentView.bounds.maxY - 2)
+        #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: titlebarPoint)) == false)
+    }
+
+    @Test
     func nightModeKeepsLivePDFViewAvailableForSnapshots() {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
@@ -1652,6 +1695,21 @@ private func pdfClipView(in pdfView: PDFView) -> NSClipView? {
 @MainActor
 private func pdfDocumentView(in pdfView: PDFView) -> NSView? {
     pdfClipView(in: pdfView)?.documentView
+}
+
+@MainActor
+private func mouseDownEvent(in window: NSWindow, at location: NSPoint) -> NSEvent {
+    NSEvent.mouseEvent(
+        with: .leftMouseDown,
+        location: location,
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: window.windowNumber,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 1,
+        pressure: 1
+    )!
 }
 
 @MainActor
