@@ -136,6 +136,16 @@ struct AppConfiguration: Equatable, Sendable {
         static let `default` = Library(folderURLs: [])
     }
 
+    struct Access: Equatable, Sendable {
+        var rootURLs: [URL]
+        var rootBookmarkData: [String: Data]
+
+        static let `default` = Access(
+            rootURLs: [URL(fileURLWithPath: "/Users", isDirectory: true)],
+            rootBookmarkData: [:]
+        )
+    }
+
     struct Shortcuts: Equatable, Sendable {
         var bindings: [ShortcutCommand: KeyboardShortcut]
 
@@ -200,6 +210,7 @@ struct AppConfiguration: Equatable, Sendable {
     var shortcuts: Shortcuts
     var layout: Layout
     var library: Library
+    var access: Access
 
     init(
         appearance: Appearance = .default,
@@ -207,7 +218,8 @@ struct AppConfiguration: Equatable, Sendable {
         annotations: Annotations = .default,
         shortcuts: Shortcuts = .default,
         layout: Layout = .default,
-        library: Library = .default
+        library: Library = .default,
+        access: Access = .default
     ) {
         self.appearance = appearance
         self.reader = reader
@@ -215,6 +227,7 @@ struct AppConfiguration: Equatable, Sendable {
         self.shortcuts = shortcuts
         self.layout = layout
         self.library = library
+        self.access = access
     }
 
     static let `default` = AppConfiguration(
@@ -223,7 +236,8 @@ struct AppConfiguration: Equatable, Sendable {
         annotations: .default,
         shortcuts: .default,
         layout: .default,
-        library: .default
+        library: .default,
+        access: .default
     )
 }
 
@@ -400,6 +414,10 @@ show_recent_files_in_sidebar = true
 [library]
 folders = []
 
+[access]
+roots = ["/Users"]
+root_bookmarks = []
+
 [shortcuts]
 highlight_selection = "a"
 exit_highlight_mode = "escape"
@@ -498,6 +516,10 @@ show_recent_files_in_sidebar = \(configuration.layout.showRecentFilesInSidebar ?
 [library]
 folders = \(serializedPathArray(configuration.library.folderURLs))
 
+[access]
+roots = \(serializedPathArray(configuration.access.rootURLs))
+root_bookmarks = \(serializedBookmarkArray(configuration.access.rootBookmarkData))
+
 [shortcuts]
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
@@ -575,6 +597,16 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
             return "\"\(escapedPath)\""
         }
         return "[\(paths.joined(separator: ", "))]"
+    }
+
+    private static func serializedBookmarkArray(_ bookmarksByPath: [String: Data]) -> String {
+        let entries = bookmarksByPath
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map { path, data in
+                let pathData = Data(path.utf8).base64EncodedString()
+                return "\"\(pathData):\(data.base64EncodedString())\""
+            }
+        return "[\(entries.joined(separator: ", "))]"
     }
 }
 
@@ -700,6 +732,11 @@ struct AppConfigurationParser {
         case ("library", "folders"):
             configuration.library.folderURLs = try parseStringArray(rawValue)
                 .map { URL(fileURLWithPath: $0).standardizedFileURL }
+        case ("access", "roots"):
+            configuration.access.rootURLs = try parseStringArray(rawValue)
+                .map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL }
+        case ("access", "root_bookmarks"):
+            configuration.access.rootBookmarkData = try parseBookmarkArray(rawValue)
         case ("shortcuts", "remove_highlight"):
             try applyShortcut(rawValue, command: .removeHighlight, to: &configuration)
         case ("shortcuts", "highlight_color_pink"):
@@ -813,6 +850,22 @@ struct AppConfigurationParser {
         return array
     }
 
+    private func parseBookmarkArray(_ rawValue: String) throws -> [String: Data] {
+        let entries = try parseStringArray(rawValue)
+        var bookmarks: [String: Data] = [:]
+        for entry in entries {
+            let parts = entry.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2,
+                  let pathData = Data(base64Encoded: parts[0]),
+                  let path = String(data: pathData, encoding: .utf8),
+                  let bookmarkData = Data(base64Encoded: parts[1]) else {
+                throw AppConfigurationError.invalidStringArray(rawValue)
+            }
+            bookmarks[path] = bookmarkData
+        }
+        return bookmarks
+    }
+
     private func applyShortcut(
         _ rawValue: String,
         command: ShortcutCommand,
@@ -896,6 +949,9 @@ struct AppConfigurationStore {
             "show_recent_files_in_sidebar",
             "[library]",
             "folders",
+            "[access]",
+            "roots",
+            "root_bookmarks",
             "highlight_selection",
             "exit_highlight_mode",
             "toggle_night_mode",

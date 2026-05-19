@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var reportedAutoSaveFailureURLs: Set<URL> = []
     private var pendingOpenURLs: [URL] = []
     private let openDocumentSelectionResolver = OpenDocumentSelectionResolver()
+    private let securityScopedAccessController = SecurityScopedAccessController()
     private var mainWindowController: MainWindowController? {
         currentWindowController()
     }
@@ -34,6 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             let configStore = try AppConfigurationStore()
             self.configStore = configStore
             appConfiguration = try configStore.load()
+            let access = securityScopedAccessController.sync(access: appConfiguration.access)
+            if access != appConfiguration.access {
+                appConfiguration.access = access
+                try configStore.save(appConfiguration)
+            }
         } catch {
             presentConfigurationError(error)
             NSApp.terminate(nil)
@@ -74,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         updateRecentFilesMenu()
         startAutoSaveTimer()
         NSApp.activate(ignoringOtherApps: true)
+        requestDefaultUsersAccessIfNeeded()
 
         if pendingOpenURLs.isEmpty == false {
             let urls = pendingOpenURLs
@@ -170,6 +177,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             presentOpenError(error)
         }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func requestDefaultUsersAccessIfNeeded() {
+        guard let configStore,
+              let usersURL = appConfiguration.access.rootURLs.first(where: { $0.standardizedFileURL.path == "/Users" }),
+              appConfiguration.access.rootBookmarkData[usersURL.standardizedFileURL.path] == nil else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.directoryURL = usersURL
+        panel.message = "/Users is already selected. Allow access once so Serein can keep reading PDFs under user folders after reinstalling."
+        panel.prompt = "Allow /Users"
+
+        guard panel.runModal() == .OK,
+              let selectedURL = panel.urls.first?.standardizedFileURL else { return }
+
+        guard selectedURL.path == usersURL.standardizedFileURL.path else {
+            presentUsersAccessSelectionError(expectedURL: usersURL, selectedURL: selectedURL)
+            return
+        }
+
+        guard let bookmarkData = SecurityScopedAccessController.makeBookmarkData(for: selectedURL) else {
+            presentUsersAccessBookmarkError(for: selectedURL)
+            return
+        }
+
+        var updatedConfiguration = appConfiguration
+        updatedConfiguration.access.rootBookmarkData[selectedURL.path] = bookmarkData
+        updatedConfiguration.access = securityScopedAccessController.sync(access: updatedConfiguration.access)
+        do {
+            try configStore.save(updatedConfiguration)
+            appConfiguration = updatedConfiguration
+        } catch {
+            presentConfigurationError(error)
+        }
+    }
+
+    private func presentUsersAccessSelectionError(expectedURL: URL, selectedURL: URL) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Choose /Users to keep broad file access"
+        alert.informativeText = "Selected \(selectedURL.path), but Serein needs \(expectedURL.path)."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func presentUsersAccessBookmarkError(for url: URL) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Unable to keep access to /Users"
+        alert.informativeText = "Serein could not create persistent access for \(url.path)."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc
@@ -1461,6 +1524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let previousConfiguration = appConfiguration
         var newConfiguration = configuration
         let libraryFoldersChanged = previousConfiguration.library.folderURLs != newConfiguration.library.folderURLs
+        newConfiguration.access = securityScopedAccessController.sync(access: newConfiguration.access)
 
         if previousConfiguration.layout.sidebarsSwapped != newConfiguration.layout.sidebarsSwapped {
             swap(&newConfiguration.layout.leftSidebarWidth, &newConfiguration.layout.rightSidebarWidth)

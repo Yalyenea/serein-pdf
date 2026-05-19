@@ -18,6 +18,8 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.reader.defaultDisplayMode, .singlePageContinuous)
         XCTAssertFalse(configuration.reader.fitWidthOnOpen)
         XCTAssertEqual(configuration.library.folderURLs, [])
+        XCTAssertEqual(configuration.access.rootURLs.map(\.path), ["/Users"])
+        XCTAssertEqual(configuration.access.rootBookmarkData, [:])
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
@@ -114,6 +116,10 @@ show_recent_files_in_sidebar = false
 
 [library]
 folders = ["/tmp/Books", "/tmp/Papers"]
+
+[access]
+roots = ["/Users"]
+root_bookmarks = []
 
 [shortcuts]
 open_library_pdf = "command+option+o"
@@ -224,6 +230,9 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("show_recent_files_in_sidebar = true"))
         XCTAssertTrue(content.contains("[library]"))
         XCTAssertTrue(content.contains("folders = []"))
+        XCTAssertTrue(content.contains("[access]"))
+        XCTAssertTrue(content.contains("roots = [\"/Users\"]"))
+        XCTAssertTrue(content.contains("root_bookmarks = []"))
     }
 
     func testLegacyGreenShortcutMigratesAwayFromFindPreviousConflict() throws {
@@ -323,6 +332,12 @@ fit_width = "command+9"
             URL(fileURLWithPath: "/tmp/Books"),
             URL(fileURLWithPath: "/tmp/Papers"),
         ]
+        configuration.access.rootURLs = [
+            URL(fileURLWithPath: "/Users", isDirectory: true),
+        ]
+        configuration.access.rootBookmarkData = [
+            "/Users": Data("users-bookmark".utf8),
+        ]
 
         try store.save(configuration)
         let reloadedConfiguration = try store.load()
@@ -335,6 +350,8 @@ fit_width = "command+9"
         XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
         XCTAssertEqual(reloadedConfiguration.annotations.autoSavePolicy, .never)
         XCTAssertEqual(reloadedConfiguration.library.folderURLs.map(\.path), ["/tmp/Books", "/tmp/Papers"])
+        XCTAssertEqual(reloadedConfiguration.access.rootURLs.map(\.path), ["/Users"])
+        XCTAssertEqual(reloadedConfiguration.access.rootBookmarkData["/Users"], Data("users-bookmark".utf8))
         XCTAssertTrue(persistedContent.contains("mode = \"dark\""))
         XCTAssertTrue(persistedContent.contains("light_theme = \"rose_pine_dawn\""))
         XCTAssertTrue(persistedContent.contains("dark_theme = \"normal\""))
@@ -342,6 +359,29 @@ fit_width = "command+9"
         XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
         XCTAssertTrue(persistedContent.contains("auto_save = \"never\""))
         XCTAssertTrue(persistedContent.contains("folders = [\"/tmp/Books\", \"/tmp/Papers\"]"))
+        XCTAssertTrue(persistedContent.contains("roots = [\"/Users\"]"))
+        XCTAssertTrue(persistedContent.contains("root_bookmarks = ["))
+    }
+
+    func testLoadAccessRootBookmarks() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+        let path = "/Users"
+        let bookmark = Data("bookmark-data".utf8)
+        let entry = "\(Data(path.utf8).base64EncodedString()):\(bookmark.base64EncodedString())"
+
+        try """
+[access]
+roots = ["\(path)"]
+root_bookmarks = ["\(entry)"]
+""".write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+
+        XCTAssertEqual(configuration.access.rootURLs.map(\.path), [path])
+        XCTAssertEqual(configuration.access.rootBookmarkData[path], bookmark)
     }
 
     func testLegacyToggleLeftTabsModeMigratesToRightSidebarMode() throws {

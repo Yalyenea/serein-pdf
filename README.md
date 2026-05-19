@@ -25,6 +25,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - `cmd+shift+w` closes the current window while preserving the normal close confirmation for unsaved annotations
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
 - Clean PDFs hot-reload when LaTeX, Typst, or another external compiler rewrites the open file in place or replaces it atomically; PDFs with unsaved Serein annotations are left untouched
+- On first launch, Serein asks for persistent access to `/Users` so PDFs under user folders stay readable after reinstalling
 - PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
@@ -113,6 +114,10 @@ show_recent_files_in_sidebar = true
 [library]
 folders = ["/Users/your-name/Documents/Papers"]
 
+[access]
+roots = ["/Users"]
+root_bookmarks = [] # managed by Serein; do not edit manually
+
 [shortcuts]
 switch_current_theme = "none"   # cmd+k, cmd+t is a built-in chord
 open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
@@ -139,6 +144,9 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
   them recursively, groups results by library root and PDF folder, keeps a
   lightweight in-session catalog cache, and invalidates it when the configured
   folders change.
+- `access.roots` defaults to `/Users`. `access.root_bookmarks` stores the
+  persistent macOS access token created on first launch, so reinstalling Serein
+  does not require re-authorizing each PDF under user folders.
 - Setting a shortcut to `none` clears it completely; Serein will not silently
   fall back to the default binding after restart.
 

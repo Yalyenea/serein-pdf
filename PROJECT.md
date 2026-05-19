@@ -120,7 +120,7 @@ flowchart LR
 
 ### 4.3 快捷键总表
 
-配置文件:`~/Library/Application Support/Serein/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`。
+配置文件:`~/Library/Application Support/Serein/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`;`access.root_bookmarks` 由 Serein 管理,默认用于跨重装保留 `/Users` 访问授权。
 
 **批注**
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
@@ -265,6 +265,7 @@ App/                                      # AppKit 入口、窗口与设置/启�
 
 Core/                                     # 文档 / 窗口 / 配置 / 持久化 核心模型
   AppConfiguration.swift                  # config.toml schema、默认值与 AppConfigurationStore 读写
+  SecurityScopedAccessController.swift    # `/Users` 等访问 root 的 security-scoped bookmark 持久访问
   PDFLibrary.swift                        # PDF 库扫描、root / folder / item catalog
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
   DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 分屏状态
