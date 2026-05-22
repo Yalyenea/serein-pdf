@@ -14,17 +14,23 @@ final class ReaderShortcutsController {
         (KeyboardShortcut(key: "m", modifiers: [.command]), .mergeAllWindows),
         (KeyboardShortcut(key: "n", modifiers: [.command]), .moveCurrentPDFToNewWindow),
     ]
+    private static let supplementalPlainShortcuts: [(KeyboardShortcut, ShortcutCommand)] = [
+        (KeyboardShortcut(key: "c", modifiers: []), .singlePageContinuous),
+    ]
 
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]
     private let handlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
+    private let supplementalHandlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
     private var isWaitingForChordKey = false
 
     init(
         shortcutsProvider: @escaping @MainActor () -> [ShortcutCommand: KeyboardShortcut],
-        handlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler]
+        handlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler],
+        supplementalHandlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler] = { [:] }
     ) {
         self.shortcutsProvider = shortcutsProvider
         self.handlerProvider = handlerProvider
+        self.supplementalHandlerProvider = supplementalHandlerProvider
     }
 
     func handleShortcutEvent(for event: NSEvent, in window: NSWindow) -> Bool {
@@ -43,9 +49,20 @@ final class ReaderShortcutsController {
     func handlePlainShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
         guard Self.shouldHandlePlainShortcut(for: window.firstResponder) else { return false }
 
-        for (command, shortcut) in shortcutsProvider() where shortcut.isPlainShortcut {
+        let shortcuts = shortcutsProvider()
+        let handlers = handlerProvider()
+        let supplementalHandlers = supplementalHandlerProvider()
+
+        for (command, shortcut) in shortcuts where shortcut.isPlainShortcut {
             guard shortcut.matches(event: event) else { continue }
-            guard let handler = handlerProvider()[command] else { continue }
+            guard let handler = handlers[command] else { continue }
+            handler()
+            return true
+        }
+
+        for (shortcut, command) in Self.supplementalPlainShortcuts where shortcuts[command] != nil {
+            guard shortcut.matches(event: event),
+                  let handler = supplementalHandlers[command] ?? handlers[command] else { continue }
             handler()
             return true
         }

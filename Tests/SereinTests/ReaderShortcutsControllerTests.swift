@@ -56,6 +56,58 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
     }
 
+    func testPlainCInvokesSinglePageContinuousSupplementalShortcut() {
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [.singlePageContinuous: KeyboardShortcut(key: "2", modifiers: [.command])]
+            },
+            handlerProvider: {
+                [.singlePageContinuous: { triggeredCommands.append(.singlePageContinuous) }]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let event = makeKeyEvent(characters: "c", modifiers: [])
+
+        XCTAssertTrue(controller.handlePlainShortcut(for: event, in: window))
+        XCTAssertEqual(triggeredCommands, [.singlePageContinuous])
+    }
+
+    func testPlainCUsesSupplementalToggleHandlerWhenProvided() {
+        var triggeredCommands: [String] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [.singlePageContinuous: KeyboardShortcut(key: "2", modifiers: [.command])]
+            },
+            handlerProvider: {
+                [.singlePageContinuous: { triggeredCommands.append("cmd-2") }]
+            },
+            supplementalHandlerProvider: {
+                [.singlePageContinuous: { triggeredCommands.append("toggle-c") }]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let event = makeKeyEvent(characters: "c", modifiers: [])
+
+        XCTAssertTrue(controller.handlePlainShortcut(for: event, in: window))
+        XCTAssertEqual(triggeredCommands, ["toggle-c"])
+    }
+
+    func testPlainCSupplementalShortcutRespectsClearedSinglePageContinuousBinding() {
+        var didTrigger = false
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [.singlePageContinuous: { didTrigger = true }]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let event = makeKeyEvent(characters: "c", modifiers: [])
+
+        XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
+        XCTAssertFalse(didTrigger)
+    }
+
     func testThemeChordInvokesSwitchCurrentTheme() {
         var triggeredCommands: [ShortcutCommand] = []
         let controller = ReaderShortcutsController(

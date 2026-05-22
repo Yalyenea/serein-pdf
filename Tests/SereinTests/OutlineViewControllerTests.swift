@@ -27,6 +27,90 @@ struct OutlineViewControllerTests {
     }
 
     @Test
+    func outlineRowsWrapLongTitlesWithLargerText() throws {
+        let store = DocumentStore(appConfiguration: .default)
+        _ = try store.open(
+            documentAt: makeTemporaryPDFWithOutline(
+                named: "wrapped-outline",
+                outlineTitles: [
+                    "A deliberately long outline title that should wrap cleanly inside the right sidebar instead of being truncated"
+                ]
+            )
+        )
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 180, height: 540)
+        controller.view.layoutSubtreeIfNeeded()
+
+        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
+              let outlineView = scrollView.documentView as? NSOutlineView,
+              let column = outlineView.tableColumns.first,
+              let item = outlineView.item(atRow: 0) as? OutlineNode,
+              let cell = controller.outlineView(outlineView, viewFor: column, item: item) as? NSTableCellView,
+              let textField = cell.textField else {
+            Issue.record("Failed to locate outline row views")
+            return
+        }
+
+        #expect(controller.outlineView(outlineView, heightOfRowByItem: item) > 40)
+        #expect(textField.lineBreakMode == .byWordWrapping)
+        #expect(textField.maximumNumberOfLines == 0)
+        #expect(textField.font?.pointSize == 13)
+        let paragraphStyle = textField.attributedStringValue.attribute(
+            .paragraphStyle,
+            at: 0,
+            effectiveRange: nil
+        ) as? NSParagraphStyle
+        #expect(paragraphStyle?.lineBreakMode == .byWordWrapping)
+        #expect(paragraphStyle?.minimumLineHeight == 14)
+        #expect(paragraphStyle?.maximumLineHeight == 14)
+    }
+
+    @Test
+    func outlineRowsKeepSingleLineTitlesCompact() throws {
+        let store = DocumentStore(appConfiguration: .default)
+        _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "compact-outline"))
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 260, height: 540)
+        controller.view.layoutSubtreeIfNeeded()
+
+        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
+              let outlineView = scrollView.documentView as? NSOutlineView,
+              let item = outlineView.item(atRow: 0) as? OutlineNode else {
+            Issue.record("Failed to locate outline row")
+            return
+        }
+
+        #expect(controller.outlineView(outlineView, heightOfRowByItem: item) <= 25)
+    }
+
+    @Test
+    func outlinePaneHidesScrollersAndDisablesHorizontalScroll() {
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+
+        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first else {
+            Issue.record("Failed to locate outline scroll view")
+            return
+        }
+
+        #expect(scrollView.hasVerticalScroller == false)
+        #expect(scrollView.hasHorizontalScroller == false)
+        #expect(scrollView.horizontalScrollElasticity == .none)
+    }
+
+    @Test
     func continuousReadingOutlineGroupsDocuments() throws {
         let store = DocumentStore(appConfiguration: .default)
         let sessions = try store.open(
@@ -61,7 +145,7 @@ struct OutlineViewControllerTests {
 }
 
 @MainActor
-private func makeTemporaryPDFWithOutline(named name: String) throws -> URL {
+private func makeTemporaryPDFWithOutline(named name: String, outlineTitles: [String] = []) throws -> URL {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("\(name)-\(UUID().uuidString)")
         .appendingPathExtension("pdf")
@@ -82,7 +166,7 @@ private func makeTemporaryPDFWithOutline(named name: String) throws -> URL {
     let root = PDFOutline()
     for index in 0..<2 {
         let item = PDFOutline()
-        item.label = "\(name) \(index + 1)"
+        item.label = index < outlineTitles.count ? outlineTitles[index] : "\(name) \(index + 1)"
         item.destination = PDFDestination(page: document.page(at: index)!, at: .zero)
         root.insertChild(item, at: index)
     }

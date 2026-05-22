@@ -987,8 +987,53 @@ struct WindowChromeTests {
         #expect(workspaceSplitView.subviews[1].isHidden)
         #expect(
             workspaceSplitView.isSubviewCollapsed(workspaceSplitView.subviews[1]) ||
-                workspaceSplitView.subviews[1].frame.width < 1
+            workspaceSplitView.subviews[1].frame.width < 1
         )
+    }
+
+    @Test
+    func enablingSplitFitsBothReadersToPaneWidth() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let first = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "split-fit-first",
+                pageSizes: [NSSize(width: 1280, height: 720)]
+            )
+        )
+        let second = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "split-fit-second",
+                pageSizes: [NSSize(width: 595, height: 842)]
+            )
+        )
+        store.setScaleMode(.manual, scaleFactor: 2.0, for: first.id)
+        store.setScaleMode(.manual, scaleFactor: 2.0, for: second.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate reader internals")
+            return
+        }
+
+        splitController.readerWorkspaceViewController.toggleSplit()
+        flushLayout(controller.window)
+
+        let primaryReader = splitController.readerWorkspaceViewController.primaryReaderViewController
+        let secondaryReader = splitController.readerWorkspaceViewController.secondaryReaderViewController
+        guard let primarySessionID = store.displayedSessionID(for: .primary, in: controller.windowID),
+              let secondarySessionID = store.displayedSessionID(for: .secondary, in: controller.windowID),
+              let primaryExpectedScale = fitWidthScaleExpected(for: primaryReader.pdfView),
+              let secondaryExpectedScale = fitWidthScaleExpected(for: secondaryReader.pdfView) else {
+            Issue.record("Failed to compute split fit-width scale")
+            return
+        }
+
+        #expect(store.session(for: primarySessionID)?.scaleMode == .fitWidth)
+        #expect(store.session(for: secondarySessionID)?.scaleMode == .fitWidth)
+        #expect(abs(primaryReader.pdfView.scaleFactor - primaryExpectedScale) < 0.05)
+        #expect(abs(secondaryReader.pdfView.scaleFactor - secondaryExpectedScale) < 0.05)
     }
 
     @Test

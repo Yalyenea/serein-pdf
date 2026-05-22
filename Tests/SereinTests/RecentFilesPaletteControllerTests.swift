@@ -4,6 +4,90 @@ import XCTest
 
 @MainActor
 final class RecentFilesPaletteControllerTests: XCTestCase {
+    func testEnterFromPanelOpensHighlightedURL() {
+        _ = NSApplication.shared
+        let first = URL(fileURLWithPath: "/tmp/first.pdf")
+        let second = URL(fileURLWithPath: "/tmp/second.pdf")
+        var openedURLs: [URL] = []
+        let controller = RecentFilesPaletteController { openedURLs = $0 }
+        controller.show(with: [first, second], relativeTo: nil)
+        defer { controller.close() }
+
+        XCTAssertTrue(
+            controller.testingHandlePanelKeyEvent(
+                makeKeyEvent(characters: "\r", keyCode: 36, window: controller.window)
+            )
+        )
+        XCTAssertEqual(openedURLs, [first])
+    }
+
+    func testKeypadEnterFromPanelOpensHighlightedURL() {
+        _ = NSApplication.shared
+        let first = URL(fileURLWithPath: "/tmp/first.pdf")
+        var openedURLs: [URL] = []
+        let controller = RecentFilesPaletteController { openedURLs = $0 }
+        controller.show(with: [first], relativeTo: nil)
+        defer { controller.close() }
+
+        XCTAssertTrue(
+            controller.testingHandlePanelKeyEvent(
+                makeKeyEvent(characters: "\r", keyCode: 76, window: controller.window)
+            )
+        )
+        XCTAssertEqual(openedURLs, [first])
+    }
+
+    func testEnterFromPanelOpensSelectedURLsInFilteredOrder() {
+        _ = NSApplication.shared
+        let first = URL(fileURLWithPath: "/tmp/alpha-first.pdf")
+        let second = URL(fileURLWithPath: "/tmp/alpha-second.pdf")
+        let third = URL(fileURLWithPath: "/tmp/beta.pdf")
+        var openedURLs: [URL] = []
+        let controller = RecentFilesPaletteController { openedURLs = $0 }
+        controller.show(with: [first, second, third], relativeTo: nil)
+        defer { controller.close() }
+        controller.testingSetQuery("alpha")
+
+        XCTAssertTrue(controller.testingHandleQueryCommand(#selector(NSResponder.moveDown(_:))))
+        XCTAssertTrue(
+            controller.testingHandleResultsKeyEvent(
+                makeKeyEvent(characters: " ", keyCode: 49, window: controller.window)
+            )
+        )
+        XCTAssertTrue(
+            controller.testingHandleResultsKeyEvent(
+                makeKeyEvent(characters: String(UnicodeScalar(NSDownArrowFunctionKey)!), keyCode: 125, window: controller.window)
+            )
+        )
+        XCTAssertTrue(
+            controller.testingHandleResultsKeyEvent(
+                makeKeyEvent(characters: " ", keyCode: 49, window: controller.window)
+            )
+        )
+
+        XCTAssertTrue(
+            controller.testingHandlePanelKeyEvent(
+                makeKeyEvent(characters: "\r", keyCode: 36, window: controller.window)
+            )
+        )
+        XCTAssertEqual(openedURLs, [first, second])
+    }
+
+    func testEnterFromPanelWithEmptyResultsDoesNotOpen() {
+        _ = NSApplication.shared
+        var openedURLs: [URL] = []
+        let controller = RecentFilesPaletteController { openedURLs = $0 }
+        controller.show(with: [], relativeTo: nil)
+        defer { controller.close() }
+
+        XCTAssertTrue(
+            controller.testingHandlePanelKeyEvent(
+                makeKeyEvent(characters: "\r", keyCode: 36, window: controller.window)
+            )
+        )
+        XCTAssertEqual(openedURLs, [])
+    }
+
     func testFirstDownArrowFromRecentHistoryOnlyEntersNavigationMode() {
         _ = NSApplication.shared
         let first = URL(fileURLWithPath: "/tmp/first.pdf")

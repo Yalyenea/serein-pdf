@@ -14,6 +14,18 @@ private final class RecentFilesPaletteResultsTableView: NSTableView {
     }
 }
 
+private final class RecentFilesPalettePanel: NSPanel {
+    var onKeyEvent: ((NSEvent) -> Bool)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown,
+           onKeyEvent?(event) == true {
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
 enum RecentFilesPaletteInteractionMode {
     case editingQuery
     case navigatingResults
@@ -110,7 +122,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         self.emptyQueryMessage = emptyQueryMessage
         self.onOpenURLs = onOpenURLs
 
-        let panel = NSPanel(
+        let panel = RecentFilesPalettePanel(
             contentRect: NSRect(origin: .zero, size: Self.panelSize),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
@@ -131,6 +143,9 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         panel.standardWindowButton(.zoomButton)?.isHidden = true
 
         super.init(window: panel)
+        panel.onKeyEvent = { [weak self] event in
+            self?.handlePanelKeyEvent(event) ?? false
+        }
         buildInterface(in: panel)
         reloadUI()
     }
@@ -356,6 +371,22 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         return true
     }
 
+    private func handlePanelKeyEvent(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control])
+        guard modifiers.isEmpty else { return false }
+
+        switch Int(event.keyCode) {
+        case 53:
+            close()
+            return true
+        case 36, 76:
+            openTargetsAndClose()
+            return true
+        default:
+            return false
+        }
+    }
+
     private func shouldReturnToQueryField(for event: NSEvent) -> Bool {
         switch Int(event.keyCode) {
         case 51, 117:
@@ -463,6 +494,10 @@ extension RecentFilesPaletteController {
 
     func testingHandleResultsKeyEvent(_ event: NSEvent) -> Bool {
         handleResultsKeyEvent(event)
+    }
+
+    func testingHandlePanelKeyEvent(_ event: NSEvent) -> Bool {
+        handlePanelKeyEvent(event)
     }
 }
 #endif

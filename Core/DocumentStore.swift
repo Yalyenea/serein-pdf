@@ -762,6 +762,14 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func toggleSinglePageContinuous(for sessionID: UUID) {
+        guard let session = session(for: sessionID) else { return }
+        setDisplayMode(
+            session.displayMode == .singlePageContinuous ? .singlePage : .singlePageContinuous,
+            for: sessionID
+        )
+    }
+
     func setScaleMode(_ mode: ReaderScaleMode, scaleFactor: CGFloat, for sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         let modeChanged = sessions[sessionIndex].scaleMode != mode

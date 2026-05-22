@@ -960,6 +960,25 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(readingStateStore.states[second.url]?.readingPosition.pageIndex, 6)
     }
 
+    func testToggleSinglePageContinuousDisplayMode() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "toggle-single-page-continuous"))
+
+        store.setDisplayMode(.singlePage, for: session.id)
+        store.toggleSinglePageContinuous(for: session.id)
+        XCTAssertEqual(store.session(for: session.id)?.displayMode, .singlePageContinuous)
+
+        store.toggleSinglePageContinuous(for: session.id)
+        XCTAssertEqual(store.session(for: session.id)?.displayMode, .singlePage)
+
+        store.setDisplayMode(.twoUpContinuous, for: session.id)
+        store.toggleSinglePageContinuous(for: session.id)
+        XCTAssertEqual(store.session(for: session.id)?.displayMode, .singlePageContinuous)
+    }
+
     func testSaveAnnotationsWritesPDFAndClearsDirtyState() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

@@ -4,6 +4,16 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reading
+- Fit both panes to width automatically when compare split opens, including PDFs that were previously pinned at a manual zoom level
+- Add plain `c` as a reader toggle between Single Page and Single Page Continuous while keeping `cmd+2` as the direct Single Page Continuous command
+
+### Right Sidebar
+- Let Outline titles wrap with larger text, tighter internal line spacing, compact dynamic row heights, and no visible scrollbars or horizontal sliding
+
+### Recent Files
+- Route Return and keypad Enter at the recent-files panel level so the highlighted or selected recent PDFs open reliably
+
 ## [0.4.0] - 2026-05-19
 
 ### Windows

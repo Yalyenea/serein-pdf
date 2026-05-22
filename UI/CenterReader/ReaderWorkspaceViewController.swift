@@ -44,6 +44,7 @@ final class ReaderWorkspaceViewController: NSViewController {
     private let secondaryHostView = ReaderPaneHostView()
     private var appliedSplitEnabled: Bool?
     private var pendingSplitGeometryUpdate = false
+    private var splitGeometryUpdateScheduled = false
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -88,7 +89,14 @@ final class ReaderWorkspaceViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        applyPendingSplitGeometryUpdate()
+        requestSplitGeometryUpdate()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        if pendingSplitGeometryUpdate, splitView.bounds.width > 0 {
+            requestSplitGeometryUpdate()
+        }
     }
 
     deinit {
@@ -290,7 +298,7 @@ final class ReaderWorkspaceViewController: NSViewController {
             splitView.subviews[1].isHidden = false
         }
         if splitStateChanged {
-            scheduleSplitGeometryUpdateIfNeeded()
+            requestSplitGeometryUpdate()
         }
 
         let focusedPane = documentStore.focusedPane(in: windowID)
@@ -324,10 +332,14 @@ final class ReaderWorkspaceViewController: NSViewController {
         ])
     }
 
-    private func scheduleSplitGeometryUpdateIfNeeded() {
-        guard pendingSplitGeometryUpdate == false else { return }
+    private func requestSplitGeometryUpdate() {
         pendingSplitGeometryUpdate = true
+        applyPendingSplitGeometryUpdate()
+        guard pendingSplitGeometryUpdate else { return }
+        guard splitGeometryUpdateScheduled == false else { return }
+        splitGeometryUpdateScheduled = true
         DispatchQueue.main.async { [weak self] in
+            self?.splitGeometryUpdateScheduled = false
             self?.applyPendingSplitGeometryUpdate()
         }
     }
@@ -343,8 +355,23 @@ final class ReaderWorkspaceViewController: NSViewController {
             splitView.setPosition(splitView.bounds.width / 2, ofDividerAt: 0)
         } else {
             splitView.setPosition(splitView.bounds.width, ofDividerAt: 0)
+            splitView.subviews[1].isHidden = true
         }
         splitView.adjustSubviews()
+        if splitEnabled == false {
+            splitView.subviews[1].isHidden = true
+        }
+        splitView.layoutSubtreeIfNeeded()
         appliedSplitEnabled = splitEnabled
+        fitReadersToWidthAfterSplitIfNeeded(splitEnabled: splitEnabled)
+    }
+
+    private func fitReadersToWidthAfterSplitIfNeeded(splitEnabled: Bool) {
+        guard splitEnabled else { return }
+        view.layoutSubtreeIfNeeded()
+        primaryReaderViewController.view.layoutSubtreeIfNeeded()
+        secondaryReaderViewController.view.layoutSubtreeIfNeeded()
+        primaryReaderViewController.fitToWidth()
+        secondaryReaderViewController.fitToWidth()
     }
 }

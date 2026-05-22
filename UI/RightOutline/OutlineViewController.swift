@@ -1,6 +1,12 @@
 import AppKit
 
 final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NSOutlineViewDelegate {
+    private static let outlineFontSize: CGFloat = 13
+    private static let rowHorizontalPadding: CGFloat = 4
+    private static let rowVerticalPadding: CGFloat = 2
+    private static let wrappedLineHeight: CGFloat = 14
+    private static let minimumRowHeight: CGFloat = 22
+
     let documentStore: DocumentStore
     let windowID: UUID
     private let titleLabel = NSTextField(labelWithString: "Outline")
@@ -69,7 +75,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         outlineView.headerView = nil
         outlineView.rowSizeStyle = .small
-        outlineView.rowHeight = 22
+        outlineView.rowHeight = Self.minimumRowHeight
         outlineView.indentationPerLevel = 12
         outlineView.floatsGroupRows = false
         outlineView.selectionHighlightStyle = .regular
@@ -80,7 +86,9 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
 
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.horizontalScrollElasticity = .none
         scrollView.documentView = outlineView
 
         for view in [titleLabel, emptyStateLabel, scrollView, pageCounterLabel] {
@@ -160,6 +168,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.deselectAll(nil)
         outlineView.reloadData()
         expandAllNodes()
+        invalidateRowHeights()
 
         let isEmpty = nodes.isEmpty
         if session == nil {
@@ -178,6 +187,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         guard targetWidth > 0,
               abs(outlineColumn.width - targetWidth) > 0.5 else { return }
         outlineColumn.width = targetWidth
+        invalidateRowHeights()
     }
 
     private func expandAllNodes() {
@@ -186,6 +196,46 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             outlineView.expandItem(outlineView.item(atRow: row), expandChildren: true)
             row += 1
         }
+    }
+
+    private func invalidateRowHeights() {
+        guard outlineView.numberOfRows > 0 else { return }
+        outlineView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<outlineView.numberOfRows))
+    }
+
+    private func font(for node: OutlineNode) -> NSFont {
+        node.isDocumentRoot
+            ? .systemFont(ofSize: Self.outlineFontSize, weight: .semibold)
+            : .systemFont(ofSize: Self.outlineFontSize, weight: .regular)
+    }
+
+    private func paragraphStyle() -> NSParagraphStyle {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byWordWrapping
+        paragraphStyle.minimumLineHeight = Self.wrappedLineHeight
+        paragraphStyle.maximumLineHeight = Self.wrappedLineHeight
+        paragraphStyle.lineSpacing = 0
+        return paragraphStyle
+    }
+
+    private func textAttributes(for node: OutlineNode) -> [NSAttributedString.Key: Any] {
+        [
+            .font: font(for: node),
+            .foregroundColor: node.isDocumentRoot ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor,
+            .paragraphStyle: paragraphStyle(),
+        ]
+    }
+
+    private func attributedTitle(for node: OutlineNode) -> NSAttributedString {
+        NSAttributedString(string: node.title, attributes: textAttributes(for: node))
+    }
+
+    private func textWidth(for item: Any) -> CGFloat {
+        let indentation = CGFloat(outlineView.level(forItem: item)) * outlineView.indentationPerLevel
+        return max(
+            outlineColumn.width - indentation - Self.rowHorizontalPadding * 2 - 20,
+            48
+        )
     }
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
@@ -203,6 +253,16 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         return node?.children[index] ?? nodes[index]
     }
 
+    func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
+        guard let node = item as? OutlineNode else { return Self.minimumRowHeight }
+        let boundingSize = NSSize(width: textWidth(for: item), height: .greatestFiniteMagnitude)
+        let textHeight = attributedTitle(for: node).boundingRect(
+            with: boundingSize,
+            options: [.usesLineFragmentOrigin]
+        ).height
+        return max(Self.minimumRowHeight, ceil(textHeight) + Self.rowVerticalPadding * 2)
+    }
+
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let node = item as? OutlineNode else { return nil }
 
@@ -216,24 +276,23 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
             textField = existing
         } else {
             textField = NSTextField(labelWithString: "")
-            textField.font = .systemFont(ofSize: 12, weight: .regular)
-            textField.lineBreakMode = .byTruncatingTail
+            textField.maximumNumberOfLines = 0
+            textField.lineBreakMode = .byWordWrapping
             textField.translatesAutoresizingMaskIntoConstraints = false
+            textField.setContentCompressionResistancePriority(.required, for: .vertical)
             cellView.textField = textField
             cellView.addSubview(textField)
 
             NSLayoutConstraint.activate([
-                textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 4),
-                textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -4),
-                textField.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
+                textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: Self.rowHorizontalPadding),
+                textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -Self.rowHorizontalPadding),
+                textField.topAnchor.constraint(equalTo: cellView.topAnchor, constant: Self.rowVerticalPadding),
+                textField.bottomAnchor.constraint(equalTo: cellView.bottomAnchor, constant: -Self.rowVerticalPadding),
             ])
         }
 
-        textField.font = node.isDocumentRoot
-            ? .systemFont(ofSize: 12, weight: .semibold)
-            : .systemFont(ofSize: 12, weight: .regular)
-        textField.textColor = node.isDocumentRoot ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor
-        textField.stringValue = node.title
+        textField.font = font(for: node)
+        textField.attributedStringValue = attributedTitle(for: node)
         return cellView
     }
 

@@ -1073,7 +1073,11 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyFitWidth(for session: DocumentSession) {
-        guard let scaleFactor = fitWidthScaleFactor(for: session) else { return }
+        guard let scaleFactor = fitWidthScaleFactor(for: session) else {
+            pendingFitWidthSessionID = session.id
+            documentStore.setScaleMode(.fitWidth, scaleFactor: session.zoomScale, for: session.id)
+            return
+        }
         guard shouldApplyFitWidth(scaleFactor, for: session) else {
             lastAppliedFitBoundsWidth = pdfView.bounds.width
             documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
@@ -1085,7 +1089,11 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyFitHeight(for session: DocumentSession) {
-        guard let scaleFactor = fitHeightScaleFactor(for: session) else { return }
+        guard let scaleFactor = fitHeightScaleFactor(for: session) else {
+            pendingFitHeightSessionID = session.id
+            documentStore.setScaleMode(.fitHeight, scaleFactor: session.zoomScale, for: session.id)
+            return
+        }
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
         lastAppliedFitBoundsHeight = pdfView.bounds.height
         documentStore.setScaleMode(.fitHeight, scaleFactor: scaleFactor, for: session.id)

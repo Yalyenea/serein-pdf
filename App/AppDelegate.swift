@@ -67,6 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             },
             handlerProvider: { [weak self] in
                 self?.shortcutHandlerMap() ?? [:]
+            },
+            supplementalHandlerProvider: { [weak self] in
+                self?.supplementalShortcutHandlerMap() ?? [:]
             }
         )
 
@@ -307,6 +310,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .swapSidebars: { [weak self] in self?.swapSidebarsAction(nil) },
             .undoLastHighlight: { [weak self] in self?.undoLastHighlightAction(nil) },
             .redoLastHighlight: { [weak self] in self?.redoLastHighlightAction(nil) },
+        ]
+    }
+
+    private func supplementalShortcutHandlerMap() -> [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] {
+        [
+            .singlePageContinuous: { [weak self] in self?.toggleSinglePageContinuous(nil) },
         ]
     }
 
@@ -1327,6 +1336,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func useSinglePageContinuous(_ sender: Any?) {
         setActiveReaderDisplayMode(.singlePageContinuous)
+    }
+
+    @objc
+    private func toggleSinglePageContinuous(_ sender: Any?) {
+        guard let controller = mainWindowController,
+              let sessionID = documentStore.activeSessionID(in: controller.windowID) else { return }
+        documentStore.toggleSinglePageContinuous(for: sessionID)
     }
 
     @objc

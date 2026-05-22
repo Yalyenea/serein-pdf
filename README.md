@@ -10,11 +10,11 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
-- Right pane hosts **Outline + Pages + Search + Annotations**, and all search / annotation previews stay on the right
+- Right pane hosts **Outline + Pages + Search + Annotations**; Outline wraps long titles with tight line spacing in a compact scrollbar-free pane, and all search / annotation previews stay on the right
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
-- Reader navigation keeps the compact Vim-style layer: `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
-- Compare split in the center reader (`cmd+ctrl+\`); focused pane receives tab switches, `option+click` sends a tab to the other pane
+- Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
+- Compare split in the center reader (`cmd+ctrl+\`); both panes fit to width when split opens, focused pane receives tab switches, `option+click` sends a tab to the other pane
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
 - Window commands can merge every Serein window into the current one or move the current PDF into a new window
@@ -168,6 +168,9 @@ Defined in `[shortcuts]` above. Highlights:
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
 | Fit width / height | `cmd+0` / `cmd+9` |
+| Toggle Single Page Continuous | `c` |
+| Single Page Continuous | `cmd+2` |
+| Other display modes | `cmd+1` / `cmd+3` / `cmd+4` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |
