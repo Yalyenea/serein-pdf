@@ -50,6 +50,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.newBlankTab], KeyboardShortcut(key: "t", modifiers: [.command]))
         XCTAssertNil(configuration.shortcuts.bindings[.mergeAllWindows])
         XCTAssertNil(configuration.shortcuts.bindings[.moveCurrentPDFToNewWindow])
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleContinuousReading], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))

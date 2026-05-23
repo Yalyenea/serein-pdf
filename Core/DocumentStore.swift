@@ -291,6 +291,28 @@ final class DocumentStore {
         return newSessions
     }
 
+    @discardableResult
+    func newBlankTab(in windowID: UUID? = nil, targetPane: ReaderPane? = nil) -> DocumentSession {
+        let targetWindowID = windowID ?? defaultWindowID
+        let session = DocumentSession.blank(
+            displayMode: appConfiguration.reader.defaultDisplayMode,
+            scaleMode: defaultScaleMode,
+            annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
+            leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
+            rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
+        )
+
+        sessions.append(session)
+        attach(sessionID: session.id, to: targetWindowID)
+        selectSessions([session.id], in: targetWindowID, notify: false)
+        if let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == targetWindowID }) {
+            windowWorkspaces[workspaceIndex].continuousReadingState = ContinuousReadingState()
+        }
+        activateSession(sessionID: session.id, in: targetWindowID, targetPane: targetPane, notify: false)
+        notifyChange()
+        return session
+    }
+
     func refreshRecentDocumentURLsFromStore() {
         let refreshedRecentURLs = (try? recentFilesStore.loadRecentFiles()) ?? recentDocumentURLs
         guard refreshedRecentURLs != recentDocumentURLs else { return }
@@ -304,11 +326,13 @@ final class DocumentStore {
 
     func close(sessionID: UUID, from windowID: UUID) {
         guard let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
-              let closedURL = session(for: sessionID)?.url,
+              let closedSession = session(for: sessionID),
               let sessionIndexInWindow = windowWorkspaces[workspaceIndex].sessionIDs.firstIndex(of: sessionID) else { return }
 
         windowWorkspaces[workspaceIndex].sessionIDs.remove(at: sessionIndexInWindow)
-        pushRecentlyClosed(closedURL, in: windowID)
+        if closedSession.isBlank == false {
+            pushRecentlyClosed(closedSession.url, in: windowID)
+        }
         let remainingWindowSessionIDs = windowWorkspaces[workspaceIndex].sessionIDs
         let preferredSessionID = remainingWindowSessionIDs.isEmpty
             ? nil
@@ -668,6 +692,9 @@ final class DocumentStore {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else {
             throw DocumentStoreError.missingSession(sessionID)
         }
+        guard sessions[sessionIndex].isBlank == false else {
+            throw DocumentStoreError.blankSession(sessionID)
+        }
         if let document = pdfDocumentCache[sessionID] {
             touchPDFDocument(sessionID)
             return document
@@ -689,6 +716,7 @@ final class DocumentStore {
 
     func outlineTree(for sessionID: UUID) -> [OutlineNode] {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return [] }
+        guard sessions[sessionIndex].isBlank == false else { return [] }
         if sessions[sessionIndex].isOutlineLoaded {
             return sessions[sessionIndex].outlineTree
         }
@@ -728,7 +756,9 @@ final class DocumentStore {
 
     func refreshExternallyChangedFile(at url: URL) {
         let normalizedURL = url.standardizedFileURL
-        let matchingIndexes = sessions.indices.filter { sessions[$0].url.standardizedFileURL == normalizedURL }
+        let matchingIndexes = sessions.indices.filter {
+            sessions[$0].isBlank == false && sessions[$0].url.standardizedFileURL == normalizedURL
+        }
         guard matchingIndexes.isEmpty == false,
               let snapshot = PDFFileSnapshot(url: normalizedURL),
               matchingIndexes.contains(where: { sessions[$0].fileSnapshot != snapshot }) else { return }
@@ -1136,6 +1166,7 @@ final class DocumentStore {
 
     func saveAnnotations(for sessionID: UUID) throws {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard sessions[sessionIndex].isBlank == false else { return }
         guard sessions[sessionIndex].isDirty else { return }
         let document = try pdfDocument(for: sessionID)
         guard document.write(to: sessions[sessionIndex].url) else {
@@ -1152,7 +1183,7 @@ final class DocumentStore {
     @discardableResult
     func autoSaveDirtySessions(now: Date = Date()) -> [URL: Error] {
         var errors: [URL: Error] = [:]
-        for session in sessions where session.isDirty {
+        for session in sessions where session.isDirty && session.isBlank == false {
             guard let interval = session.annotationSavePolicy.autoSaveInterval,
                   let dirtySince = session.dirtySince,
                   now.timeIntervalSince(dirtySince) >= interval else { continue }
@@ -1195,7 +1226,7 @@ final class DocumentStore {
         }
 
         let sessionIDByPersistedID = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.id) })
-        let firstSessionIDByURL = sessions.reduce(into: [URL: UUID]()) { mapping, session in
+        let firstSessionIDByURL = sessions.filter { $0.isBlank == false }.reduce(into: [URL: UUID]()) { mapping, session in
             mapping[session.url] = mapping[session.url] ?? session.id
         }
         let restoredWindows = persistedState.windows.isEmpty ? [WindowWorkspace()] : persistedState.windows.map { record in
@@ -1295,7 +1326,9 @@ final class DocumentStore {
     }
 
     private func syncPDFFileMonitor() {
-        fileMonitor.replaceMonitoredURLs(with: Set(sessions.map { $0.url.standardizedFileURL }))
+        fileMonitor.replaceMonitoredURLs(
+            with: Set(sessions.filter { $0.isBlank == false }.map { $0.url.standardizedFileURL })
+        )
     }
 
     private func preferredSecondarySession(in workspace: WindowWorkspace, excluding sessionID: UUID?) -> UUID? {
@@ -1557,17 +1590,29 @@ final class DocumentStore {
     }
 
     private func notifyChange() {
+        let persistedSessions = sessions.filter { $0.isBlank == false }
+        let persistedSessionIDs = Set(persistedSessions.map(\.id))
         try? persistence.saveState(
             PersistedDocumentStoreState(
-                sessions: sessions.map {
+                sessions: persistedSessions.map {
                     PersistedDocumentStoreState.SessionReference(id: $0.id, url: $0.url, title: $0.title)
                 },
                 windows: windowWorkspaces.map { workspace in
-                    PersistedDocumentStoreState.WindowRecord(
+                    let sessionIDs = workspace.sessionIDs.filter { persistedSessionIDs.contains($0) }
+                    let continuousSessionIDs = workspace.continuousReadingState.orderedSessionIDs
+                        .filter { persistedSessionIDs.contains($0) }
+                    let primarySessionID = workspace.primarySessionID.flatMap {
+                        persistedSessionIDs.contains($0) ? $0 : nil
+                    } ?? sessionIDs.last
+                    let secondarySessionID = workspace.secondarySessionID.flatMap {
+                        persistedSessionIDs.contains($0) ? $0 : nil
+                    }
+                    let isSplitEnabled = workspace.isSplitEnabled && primarySessionID != nil && secondarySessionID != nil
+                    return PersistedDocumentStoreState.WindowRecord(
                         id: workspace.id,
-                        sessionIDs: workspace.sessionIDs,
-                        sessionURLs: workspace.sessionIDs.compactMap { session(for: $0)?.url },
-                        continuousReadingSessionIDs: workspace.continuousReadingState.orderedSessionIDs,
+                        sessionIDs: sessionIDs,
+                        sessionURLs: sessionIDs.compactMap { session(for: $0)?.url },
+                        continuousReadingSessionIDs: continuousSessionIDs,
                         tabPresentationMode: workspace.tabPresentationMode,
                         isLeftSidebarVisible: workspace.isLeftSidebarVisible,
                         isRightSidebarVisible: workspace.isRightSidebarVisible,
@@ -1575,11 +1620,11 @@ final class DocumentStore {
                         searchQuery: workspace.searchQuery,
                         searchScope: workspace.searchScope,
                         splitState: PersistedDocumentStoreState.SplitStateRecord(
-                            isEnabled: workspace.isSplitEnabled,
-                            primarySessionID: workspace.primarySessionID,
-                            secondarySessionID: workspace.secondarySessionID,
-                            primarySessionURL: workspace.primarySessionID.flatMap { session(for: $0)?.url },
-                            secondarySessionURL: workspace.secondarySessionID.flatMap { session(for: $0)?.url },
+                            isEnabled: isSplitEnabled,
+                            primarySessionID: primarySessionID,
+                            secondarySessionID: secondarySessionID,
+                            primarySessionURL: primarySessionID.flatMap { session(for: $0)?.url },
+                            secondarySessionURL: secondarySessionID.flatMap { session(for: $0)?.url },
                             focusedPane: workspace.focusedPane
                         ),
                         recentlyClosedURLs: workspace.recentlyClosedURLs
@@ -1630,7 +1675,8 @@ final class DocumentStore {
     }
 
     private func duplicateSessionForSplitComparison(from sessionID: UUID) -> UUID? {
-        guard let sourceSession = session(for: sessionID) else { return nil }
+        guard let sourceSession = session(for: sessionID),
+              sourceSession.isBlank == false else { return nil }
         do {
             let duplicate = try makeSession(documentAt: sourceSession.url, seedState: sourceSession)
             sessions.append(duplicate)
@@ -1647,7 +1693,9 @@ final class DocumentStore {
         in workspace: WindowWorkspace,
         excluding excludedSessionID: UUID?
     ) -> UUID? {
-        guard let targetURL = session(for: sessionID)?.url else { return nil }
+        guard let targetSession = session(for: sessionID),
+              targetSession.isBlank == false else { return nil }
+        let targetURL = targetSession.url
         return workspace.sessionIDs.first { candidateID in
             guard candidateID != sessionID else { return false }
             if let excludedSessionID, candidateID == excludedSessionID {
@@ -1658,6 +1706,7 @@ final class DocumentStore {
     }
 
     private func persistReadingState(for session: DocumentSession) {
+        guard session.isBlank == false else { return }
         try? readingStateStore.saveState(
             PersistedReadingState(
                 url: session.url,
@@ -1673,6 +1722,11 @@ final class DocumentStore {
 
     func renameSession(_ title: String, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard sessions[index].isBlank == false else {
+            sessions[index].title = title.isEmpty ? "Untitled" : title
+            notifyChange()
+            return
+        }
         let oldURL = sessions[index].url
         let newURL = oldURL.deletingLastPathComponent().appendingPathComponent(title).appendingPathExtension("pdf")
 
@@ -1733,6 +1787,7 @@ final class DocumentStore {
 
 enum DocumentStoreError: Error, LocalizedError {
     case missingSession(UUID)
+    case blankSession(UUID)
     case unreadableDocument(URL)
     case failedToSaveDocument(URL)
 
@@ -1740,6 +1795,8 @@ enum DocumentStoreError: Error, LocalizedError {
         switch self {
         case let .missingSession(id):
             "Missing PDF session \(id.uuidString)"
+        case let .blankSession(id):
+            "Blank tab \(id.uuidString) has no PDF"
         case let .unreadableDocument(url):
             "Unable to open PDF at \(url.path)"
         case let .failedToSaveDocument(url):

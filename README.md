@@ -10,6 +10,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
+- `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
 - Right pane hosts **Outline + Pages + Search + Annotations**; Outline wraps long titles with tight line spacing in a compact scrollbar-free pane, and all search / annotation previews stay on the right
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
@@ -19,7 +20,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
 - Window commands can merge every Serein window into the current one or move the current PDF into a new window
 - Main windows participate in native macOS green-button window management: Full Screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
-- Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every PDF tab in the current window; `option+enter` / `option+click` opens the chosen PDF in the other split pane
+- Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every tab in the current window; `option+enter` / `option+click` opens the chosen PDF or blank tab in the other split pane
 - Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - `cmd+w` closes all selected tabs when multiple PDF tabs are selected; otherwise it closes the current tab/window as usual
 - `cmd+shift+w` closes the current window while preserving the normal close confirmation for unsaved annotations
@@ -124,6 +125,7 @@ open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
 refresh_library_index = "none"  # cmd+k, cmd+r is a built-in chord
 open_library_settings = "none"  # cmd+k, cmd+l is a built-in chord
 open_shortcut_settings = "none" # cmd+k, cmd+s is a built-in chord
+new_blank_tab = "command+t"
 merge_all_windows = "none"      # cmd+k, cmd+m is a built-in chord
 move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
@@ -167,6 +169,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
+| New blank tab | `cmd+t` |
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Toggle Single Page Continuous | `c` |
 | Single Page Continuous | `cmd+2` |

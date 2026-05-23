@@ -97,6 +97,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case showRecentFilesPalette = "show_recent_files_palette"
     case openContainingFolder = "open_containing_folder"
     case reopenLastClosed = "reopen_last_closed"
+    case newBlankTab = "new_blank_tab"
     case newWindow = "new_window"
     case mergeAllWindows = "merge_all_windows"
     case moveCurrentPDFToNewWindow = "move_current_pdf_to_new_window"
@@ -205,6 +206,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Show in Finder"
         case .reopenLastClosed:
             "Reopen Closed Tab"
+        case .newBlankTab:
+            "New Blank Tab"
         case .newWindow:
             "New Window"
         case .mergeAllWindows:

@@ -299,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .showRecentFilesPalette: { [weak self] in self?.showRecentFilesPalette(nil) },
             .openContainingFolder: { [weak self] in self?.openContainingFolder(nil) },
             .reopenLastClosed: { [weak self] in self?.reopenLastClosed(nil) },
+            .newBlankTab: { [weak self] in self?.newBlankTab(nil) },
             .newWindow: { [weak self] in self?.newWindow(nil) },
             .mergeAllWindows: { [weak self] in self?.mergeAllWindows(nil) },
             .moveCurrentPDFToNewWindow: { [weak self] in self?.moveCurrentPDFToNewWindow(nil) },
@@ -483,6 +484,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .newWindow,
             action: #selector(newWindow(_:))
         )
+        let newBlankTabItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.newBlankTab.menuTitle,
+            command: .newBlankTab,
+            action: #selector(newBlankTab(_:))
+        )
         let openItem = NSMenuItem(
             title: "Open…",
             action: #selector(openDocument(_:)),
@@ -571,6 +577,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         fileMenu.items = [
             settingsItem,
             .separator(),
+            newBlankTabItem,
             newWindowItem,
             openItem,
             quickOpenRecentItem,
@@ -1005,6 +1012,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func useTitlebarTabs(_ sender: Any?) {
         guard let controller = mainWindowController else { return }
         documentStore.setTabPresentationMode(.horizontalTitlebar, in: controller.windowID)
+    }
+
+    @objc
+    private func newBlankTab(_ sender: Any?) {
+        let controller: MainWindowController
+        if let currentController = mainWindowController {
+            controller = currentController
+        } else {
+            let windowID = documentStore.defaultWindowID
+            controller = makeWindowController(windowID: windowID)
+            controller.showWindow(sender)
+        }
+
+        controller.hideFindBar()
+        documentStore.newBlankTab(in: controller.windowID)
+        controller.window?.makeKeyAndOrderFront(sender)
     }
 
     @objc
@@ -1464,7 +1487,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func openContainingFolder(_ sender: Any?) {
         guard let windowID = mainWindowController?.windowID ?? mainWindowControllers.values.first?.windowID,
-              let activeURL = documentStore.activeSession(in: windowID)?.url else { return }
+              let activeSession = documentStore.activeSession(in: windowID),
+              activeSession.isBlank == false else { return }
+        let activeURL = activeSession.url
         NSWorkspace.shared.activateFileViewerSelecting([activeURL])
     }
 
@@ -1752,32 +1777,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let controller = mainWindowController
         let windowID = controller?.windowID
         let activeSession = windowID.flatMap { documentStore.activeSession(in: $0) }
+        let activePDFSession = activeSession?.isBlank == false ? activeSession : nil
 
         switch menuItem.action {
+        case #selector(newBlankTab(_:)):
+            return true
         case #selector(newWindow(_:)):
             return true
         case #selector(mergeAllWindows(_:)):
             return mainWindowControllers.count > 1
         case #selector(moveCurrentPDFToNewWindow(_:)):
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(refreshLibraryIndex(_:)), #selector(showLibraryPalette(_:)):
             return appConfiguration.library.folderURLs.isEmpty == false
         case #selector(openLibrarySettings(_:)), #selector(openShortcutSettings(_:)):
             return true
         case #selector(highlightSelection(_:)):
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(exitHighlightMode(_:)):
             menuItem.state = controller?.isHighlightModeEnabled == true ? .on : .off
             return controller?.isHighlightModeEnabled == true
         case #selector(toggleNightMode(_:)):
             menuItem.state = controller?.isNightModeEnabled == true ? .on : .off
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(saveAnnotations(_:)):
-            return activeSession?.isDirty == true
+            return activePDFSession?.isDirty == true
         case #selector(exportHighlights(_:)), #selector(copyHighlightsMarkdown(_:)):
-            return activeSession.map { documentStore.hasHighlights(for: $0.id) } == true
+            return activePDFSession.map { documentStore.hasHighlights(for: $0.id) } == true
         case #selector(removeHighlightUnderCursorAction(_:)):
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(undoLastHighlightAction(_:)):
             guard activeEditableTextResponder() == nil else { return false }
             return controller?.hasUndoableHighlight == true
@@ -1794,7 +1822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menuItem.state = controller?.currentHighlightColor == .green ? .on : .off
             return true
         case #selector(findInCurrentDocument(_:)), #selector(findInAllOpenDocuments(_:)):
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(showRecentFilesPalette(_:)):
             return documentStore.recentDocumentURLs.isEmpty == false
         case #selector(showAllTabs(_:)):
@@ -1807,7 +1835,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             }
             return false
         case #selector(openContainingFolder(_:)):
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
             return controller?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):
@@ -1835,56 +1863,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
             return windowID.map { documentStore.sessionCount(in: $0) > 1 } == true
         case #selector(fitReaderToWidth(_:)):
-            menuItem.state = activeSession?.scaleMode == .fitWidth ? .on : .off
-            return activeSession != nil
+            menuItem.state = activePDFSession?.scaleMode == .fitWidth ? .on : .off
+            return activePDFSession != nil
         case #selector(fitReaderToHeight(_:)):
-            menuItem.state = activeSession?.scaleMode == .fitHeight ? .on : .off
-            return activeSession != nil
+            menuItem.state = activePDFSession?.scaleMode == .fitHeight ? .on : .off
+            return activePDFSession != nil
         case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(goToNextPageAction(_:)),
              #selector(goToPreviousPageAction(_:)),
              #selector(scrollHalfPageDownAction(_:)),
              #selector(scrollHalfPageUpAction(_:)):
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(goToFirstPageAction(_:)), #selector(goToLastPageAction(_:)):
-            return activeSession != nil && (controller?.currentPageCount ?? 0) > 0
+            return activePDFSession != nil && (controller?.currentPageCount ?? 0) > 0
         case #selector(navigateBackAction(_:)):
             return controller?.canGoBack == true
         case #selector(navigateForwardAction(_:)):
             return controller?.canGoForward == true
         case #selector(showGotoPageDialog(_:)):
-            return activeSession != nil && (controller?.currentPageCount ?? 0) > 0
+            return activePDFSession != nil && (controller?.currentPageCount ?? 0) > 0
         case #selector(reopenLastClosed(_:)):
             return windowID.map { documentStore.recentlyClosedURLs(in: $0).isEmpty == false } == true
         case #selector(toggleAllPagesOverview(_:)):
             menuItem.state = controller?.isAllPagesOverviewActive == true ? .on : .off
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(toggleDemoModeAction(_:)):
             menuItem.state = controller?.isDemoModeEnabled == true ? .on : .off
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(toggleImmersiveModeAction(_:)):
             menuItem.state = controller?.isImmersiveModeEnabled == true ? .on : .off
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(toggleReaderSplitAction(_:)):
             menuItem.state = controller?.isReaderSplitEnabled == true ? .on : .off
-            return activeSession != nil
+            return activePDFSession != nil
         case #selector(toggleRightSidebarModeAction(_:)):
             return windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true
         case #selector(swapSidebarsAction(_:)):
             return true
         case #selector(useSinglePage(_:)):
-            menuItem.state = activeSession?.displayMode == .singlePage ? .on : .off
-            return activeSession != nil
+            menuItem.state = activePDFSession?.displayMode == .singlePage ? .on : .off
+            return activePDFSession != nil
         case #selector(useSinglePageContinuous(_:)):
-            menuItem.state = activeSession?.displayMode == .singlePageContinuous ? .on : .off
-            return activeSession != nil
+            menuItem.state = activePDFSession?.displayMode == .singlePageContinuous ? .on : .off
+            return activePDFSession != nil
         case #selector(useTwoUp(_:)):
-            menuItem.state = activeSession?.displayMode == .twoUp ? .on : .off
-            return activeSession != nil
+            menuItem.state = activePDFSession?.displayMode == .twoUp ? .on : .off
+            return activePDFSession != nil
         case #selector(useTwoUpContinuous(_:)):
-            menuItem.state = activeSession?.displayMode == .twoUpContinuous ? .on : .off
-            return activeSession != nil
+            menuItem.state = activePDFSession?.displayMode == .twoUpContinuous ? .on : .off
+            return activePDFSession != nil
         default:
             return true
         }

@@ -32,9 +32,12 @@ enum AnnotationSavePolicy: String, CaseIterable, Equatable, Codable, Sendable {
 }
 
 struct DocumentSession {
+    private static let blankURLScheme = "serein-blank"
+
     let id: UUID
     var url: URL
     var title: String
+    var isBlank: Bool
     var pageCount: Int?
     var currentPageIndex: Int
     var displayMode: ReaderDisplayMode
@@ -61,6 +64,7 @@ struct DocumentSession {
         id: UUID = UUID(),
         url: URL,
         title: String? = nil,
+        isBlank: Bool = false,
         pdfDocument: PDFDocument? = nil,
         pageCount: Int? = nil,
         currentPageIndex: Int = 0,
@@ -84,6 +88,7 @@ struct DocumentSession {
         self.id = id
         self.url = url
         self.title = title ?? url.deletingPathExtension().lastPathComponent
+        self.isBlank = isBlank
         self.pageCount = pageCount ?? pdfDocument?.pageCount
         self.currentPageIndex = currentPageIndex
         self.displayMode = displayMode
@@ -101,6 +106,29 @@ struct DocumentSession {
         self.rightSidebarWidth = rightSidebarWidth
         self.annotationCache = annotationCache
         self.isAnnotationCacheLoaded = isAnnotationCacheLoaded
-        self.fileSnapshot = fileSnapshot ?? PDFFileSnapshot(url: url)
+        self.fileSnapshot = isBlank ? nil : (fileSnapshot ?? PDFFileSnapshot(url: url))
+    }
+
+    static func blank(
+        id: UUID = UUID(),
+        title: String = "Untitled",
+        displayMode: ReaderDisplayMode,
+        scaleMode: ReaderScaleMode,
+        annotationSavePolicy: AnnotationSavePolicy,
+        leftSidebarWidth: CGFloat?,
+        rightSidebarWidth: CGFloat?
+    ) -> DocumentSession {
+        DocumentSession(
+            id: id,
+            url: URL(string: "\(blankURLScheme)://tab/\(id.uuidString)")!,
+            title: title,
+            isBlank: true,
+            displayMode: displayMode,
+            scaleMode: scaleMode,
+            annotationSavePolicy: annotationSavePolicy,
+            leftSidebarWidth: leftSidebarWidth,
+            rightSidebarWidth: rightSidebarWidth,
+            fileSnapshot: nil
+        )
     }
 }

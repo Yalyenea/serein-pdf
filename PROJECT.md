@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -147,6 +147,7 @@ flowchart LR
 - `Cmd+K` → `Cmd+L` / `Cmd+K` → `Cmd+S`:打开 Settings 的 Library / Shortcuts 页
 
 **文档与 tab**
+- `Cmd+T`:新建空白 tab;空白 tab 不绑定 PDF、不进入最近 / 重开历史、不跨启动恢复
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
 - `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+W`:多选 tabs 时关闭选中的 PDFs;否则关闭当前 tab

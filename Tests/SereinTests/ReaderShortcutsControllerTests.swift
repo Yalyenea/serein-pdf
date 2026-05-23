@@ -123,6 +123,27 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(triggeredCommands, [.switchCurrentTheme])
     }
 
+    func testCommandTMenuShortcutDoesNotBlockThemeChord() {
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [.newBlankTab: KeyboardShortcut(key: "t", modifiers: [.command])]
+            },
+            handlerProvider: {
+                [
+                    .newBlankTab: { triggeredCommands.append(.newBlankTab) },
+                    .switchCurrentTheme: { triggeredCommands.append(.switchCurrentTheme) },
+                ]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifiers: [.command]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifiers: [.command]), in: window))
+        XCTAssertEqual(triggeredCommands, [.switchCurrentTheme])
+    }
+
     func testLibraryChordInvokesOpenLibraryPDF() {
         var triggeredCommands: [ShortcutCommand] = []
         let controller = ReaderShortcutsController(

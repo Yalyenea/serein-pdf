@@ -26,6 +26,28 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
         secondarySessionID: UUID? = nil,
         focusedPane: ReaderPane = .primary
     ) {
+        if session.isBlank {
+            self.sessionID = session.id
+            self.title = session.title
+            self.subtitle = "Blank tab"
+            self.pageText = "Blank"
+            self.pageIndex = 0
+            self.pageCount = 0
+            if session.id == primarySessionID {
+                self.paneBadge = "P"
+                self.isFocusedPane = focusedPane == .primary
+            } else if session.id == secondarySessionID {
+                self.paneBadge = "S"
+                self.isFocusedPane = focusedPane == .secondary
+            } else {
+                self.paneBadge = nil
+                self.isFocusedPane = false
+            }
+            self.isActive = isActive
+            self.isDirty = false
+            return
+        }
+
         let pageCount = session.pageCount
         let pageIndex = pageCount.map { $0 > 0 ? min(max(session.currentPageIndex, 0), $0 - 1) : 0 }
             ?? max(session.currentPageIndex, 0)

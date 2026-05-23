@@ -74,6 +74,54 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSession?.title, "single")
     }
 
+    func testNewBlankTabCreatesActiveUntitledSessionWithoutRecentFile() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+
+        let session = store.newBlankTab()
+
+        XCTAssertTrue(session.isBlank)
+        XCTAssertEqual(session.title, "Untitled")
+        XCTAssertEqual(store.sessions.map(\.id), [session.id])
+        XCTAssertEqual(store.activeSessionID, session.id)
+        XCTAssertTrue(store.recentDocumentURLs.isEmpty)
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: session.id))
+    }
+
+    func testClosingBlankTabDoesNotPushRecentlyClosedURL() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "blank-close-anchor"))
+        let blank = store.newBlankTab()
+
+        store.close(sessionID: blank.id)
+
+        XCTAssertEqual(store.recentlyClosedURLs, [])
+        XCTAssertEqual(store.activeSessionID, pdf.id)
+    }
+
+    func testBlankTabsAreNotPersisted() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "blank-persisted-anchor"))
+        _ = store.newBlankTab()
+
+        let state = try XCTUnwrap(persistence.state)
+        XCTAssertEqual(state.sessions.map(\.url), [pdf.url])
+        XCTAssertEqual(state.windows.first?.sessionIDs, [pdf.id])
+        XCTAssertEqual(state.windows.first?.splitState.primarySessionID, pdf.id)
+    }
+
     func testOpenMultipleDocumentsKeepsAllSessionsAndActivatesLast() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

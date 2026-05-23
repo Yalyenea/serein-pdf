@@ -548,7 +548,7 @@ final class ReaderViewController: NSViewController {
         } else {
             overviewThumbnailView.isHidden = true
             pdfContainerView.isHidden = false
-            emptyStateLabel.isHidden = targetSession() != nil
+            emptyStateLabel.isHidden = targetSession()?.isBlank == false
             if let left = overviewSavedLeftSidebar {
                 documentStore.setLeftSidebarVisible(left, in: windowID)
             }
@@ -837,6 +837,21 @@ final class ReaderViewController: NSViewController {
             emptyStateLabel.stringValue = "Open a PDF to start reading."
             emptyStateLabel.isHidden = false
             displayedSessionID = nil
+            displayedReadingPosition = nil
+            displayedDisplayMode = nil
+            displayedScaleMode = nil
+            pdfView.highlightedSelections = nil
+            pdfView.currentSelection = nil
+            hideSwitchTitleToast(immediately: true)
+            return
+        }
+
+        if session.isBlank {
+            pdfView.document = nil
+            pdfView.isHidden = true
+            emptyStateLabel.stringValue = "Open a PDF to start reading."
+            emptyStateLabel.isHidden = false
+            displayedSessionID = session.id
             displayedReadingPosition = nil
             displayedDisplayMode = nil
             displayedScaleMode = nil

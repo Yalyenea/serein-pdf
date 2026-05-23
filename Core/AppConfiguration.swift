@@ -191,6 +191,7 @@ struct AppConfiguration: Equatable, Sendable {
             .showRecentFilesPalette: KeyboardShortcut(key: "space", modifiers: [.command, .shift]),
             .openContainingFolder: KeyboardShortcut(key: "r", modifiers: [.command]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
+            .newBlankTab: KeyboardShortcut(key: "t", modifiers: [.command]),
             .showAllTabs: KeyboardShortcut(key: "tab", modifiers: [.control]),
             .newWindow: KeyboardShortcut(key: "n", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
@@ -471,6 +472,7 @@ goto_page = "command+option+g"
 show_recent_files_palette = "command+shift+space"
 open_containing_folder = "command+r"
 reopen_last_closed = "command+shift+t"
+new_blank_tab = "command+t"
 new_window = "command+shift+n"
 # Cmd+K, Cmd+M is a built-in chord.
 merge_all_windows = "none"
@@ -568,6 +570,7 @@ goto_page = "\(serializedShortcut(.gotoPage, configuration: configuration))"
 show_recent_files_palette = "\(serializedShortcut(.showRecentFilesPalette, configuration: configuration))"
 open_containing_folder = "\(serializedShortcut(.openContainingFolder, configuration: configuration))"
 reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
+new_blank_tab = "\(serializedShortcut(.newBlankTab, configuration: configuration))"
 new_window = "\(serializedShortcut(.newWindow, configuration: configuration))"
 merge_all_windows = "\(serializedShortcut(.mergeAllWindows, configuration: configuration))"
 move_current_pdf_to_new_window = "\(serializedShortcut(.moveCurrentPDFToNewWindow, configuration: configuration))"
@@ -811,6 +814,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .openContainingFolder, to: &configuration)
         case ("shortcuts", "reopen_last_closed"):
             try applyShortcut(rawValue, command: .reopenLastClosed, to: &configuration)
+        case ("shortcuts", "new_blank_tab"):
+            try applyShortcut(rawValue, command: .newBlankTab, to: &configuration)
         case ("shortcuts", "new_window"):
             try applyShortcut(rawValue, command: .newWindow, to: &configuration)
         case ("shortcuts", "merge_all_windows"):
