@@ -37,7 +37,8 @@
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 切换;`Option+Click` / `Option+Enter` 打开到另一 pane
 - `Cmd+W`:多选 tabs 时按窗口顺序关闭选中的 PDFs;否则关闭当前 tab / window
 - `Cmd+Shift+W`:关闭当前窗口,沿用 dirty 批注保存确认
-- `Cmd+Shift+C`:对当前选中的 tabs 开启 / 退出多 PDF 连续阅读;连续组内翻页跨 PDF 边界切换,右侧 Outline 按 PDF 分组显示
+- `Cmd+Shift+C`:复制当前 PDF 路径到剪贴板
+- 多 PDF 连续阅读:对当前选中的 tabs 通过 tab 右键菜单开启 / 退出;连续组内翻页跨 PDF 边界切换,右侧 Outline 按 PDF 分组显示
 - PDF 热重载:LaTeX / Typst 等外部工具原地写入或原子替换已打开 PDF 后自动刷新 clean session;dirty 批注会话不自动刷新
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
@@ -72,6 +73,7 @@
 | M10.9 macOS 绿灯窗口管理 | ✅ 开发完成,待手测 |
 | M10.10 阅读交互打磨 | ✅ 开发完成,待手测 |
 | M10.11 空白标签页 | ✅ 开发完成,待手测 |
+| M10.12 当前 PDF 路径复制 | ✅ 开发完成,待手测 |
 | M11 扩展生态(预研) | 未开始 |
 
 ## 4. 下一步执行顺序
@@ -82,7 +84,8 @@
 - Wave 3 M10.6 手测：完成 `UAT-38`，配置 Book 文件夹后用 `Cmd+K` → `Cmd+O` 打开库浏览面板并打开库内 PDF。
 - Wave 4 M10.7 手测：完成 `UAT-39`，用 Typst / LaTeX 连续编译覆盖当前 PDF，确认阅读器自动刷新且页码/缩放保持。
 - Wave 5 M10.11 手测：完成 `UAT-46`，确认 `Cmd+T` 空白 tab 在两种 tab 模式下表现一致。
-- Wave 6 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
+- Wave 6 M10.12 手测：完成 `UAT-47`，确认 `Cmd+Shift+C` 复制当前 PDF 路径。
+- Wave 7 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
 
 
 ## 5. Milestone 7:搜索强化与对比阅读
@@ -176,7 +179,7 @@
 ## 9. Milestone 10.5:多 PDF 连续阅读
 
 - [x] `M10.5-001` 窗口级连续阅读状态:在 `WindowWorkspace` 保存 selected tabs 与有序连续组,并随持久化恢复。
-- [x] `M10.5-002` tab 入口:批量打开自动预选本批 PDF;`Cmd` / `Shift` 点击支持多选;右键或 `Cmd+Shift+C` 开启 / 退出连续阅读。
+- [x] `M10.5-002` tab 入口:批量打开自动预选本批 PDF;`Cmd` / `Shift` 点击支持多选;右键开启 / 退出连续阅读。
 - [x] `M10.5-003` tab 表达:连续组内 tab 轻量缩进并显示细分组标记,垂直 / 标题栏 tabs 共用模型。
 - [x] `M10.5-004` 阅读行为:在组内 PDF 边界执行下一页 / 上一页 / 半页滚动时切到相邻 PDF 首页 / 末页。
 - [x] `M10.5-005` 连续 Outline:右侧 Outline 顶层按 PDF 分组,点击跨 PDF 目录项先切 session 再跳页。
@@ -222,14 +225,20 @@
 - [x] `M10.11-003` 历史与持久化:空白 tab 不进入最近文件、不进入最近关闭栈、不写入跨启动会话。
 - [x] `M10.11-004` 测试:覆盖空白 tab 创建、关闭历史、持久化过滤与默认快捷键。
 
-## 15. Milestone 11:扩展生态(长期预研)
+## 15. Milestone 10.12:当前 PDF 路径复制
+
+- [x] `M10.12-001` 快捷键入口:`Cmd+Shift+C` 复制当前 PDF 路径到剪贴板。
+- [x] `M10.12-002` 配置迁移:新增 `copy_current_pdf_path`,连续阅读默认快捷键改为 `none`,保留 tab 右键入口。
+- [x] `M10.12-003` 测试:覆盖默认快捷键、旧连续阅读键位迁移与配置回写。
+
+## 16. Milestone 11:扩展生态(长期预研)
 
 - [ ] `M11-001` 扩展机制 RFC:`docs/extensions-rfc.md` 列选型,至少比较进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳。
 - [ ] `M11-002` PoC:若决策继续,选一条路径把"导出高亮"重写为插件,可在 app 中运行。
 - [ ] `M11-003` Serein Extension API 草稿:面向未来扩展开发者。
 - [ ] `M11-004` 若推迟,在 RFC 写清"为什么现在不做"(安全、上架、维护成本)。
 
-## 16. 手测清单(尚未覆盖)
+## 17. 手测清单(尚未覆盖)
 
 - [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
@@ -246,7 +255,7 @@
 - [ ] `UAT-34` 单页非连续模式缩小后页面保持居中,slide PDF 不贴边
 - [ ] `UAT-35` `Cmd+0` 或默认 fit width 后,页面刚好完整显示内容,无横向裁切
 - [ ] `UAT-36` 扩展机制 RFC 存在并评审(M11 证据)
-- [ ] `UAT-37` 多选多个 slide PDF 后通过右键或 `Cmd+Shift+C` 开启连续阅读,`J/K` 或半页滚动能跨 PDF 边界,右侧 Outline 按 PDF 连续分组显示
+- [ ] `UAT-37` 多选多个 slide PDF 后通过右键开启连续阅读,`J/K` 或半页滚动能跨 PDF 边界,右侧 Outline 按 PDF 连续分组显示
 - [ ] `UAT-37A` 多选多个 tabs 后按 `Cmd+W`,选中的 PDFs 同时关闭,未选中的 tab 保留并成为活动 tab
 - [ ] `UAT-38` Settings > Library 添加 Book 文件夹后,`Cmd+K` → `Cmd+O` 可搜索并打开库内 PDF
 - [ ] `UAT-39` 外部编译器连续覆盖当前 PDF 后,Serein 自动刷新内容并保持当前页 / 缩放;dirty 批注会话不自动刷新
@@ -257,5 +266,6 @@
 - [ ] `UAT-44` 最近文件启动器中方向键选中文件后按 Enter / keypad Enter 都能打开
 - [ ] `UAT-45` 阅读区按 `C` 可在单页连续 / 单页不连续间切换,`Cmd+2` 仍直接进入单页连续模式
 - [ ] `UAT-46` 按 `Cmd+T` 新建空白 tab,确认左侧 / 标题栏 tabs 都显示 Untitled,关闭后不会出现在重开历史或最近文件
+- [ ] `UAT-47` 打开真实 PDF 后按 `Cmd+Shift+C`,确认系统剪贴板内容等于当前 PDF 绝对路径;空白 tab 下菜单项不可用
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

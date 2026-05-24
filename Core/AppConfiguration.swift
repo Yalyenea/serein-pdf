@@ -155,6 +155,7 @@ struct AppConfiguration: Equatable, Sendable {
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
+            .copyCurrentPDFPath: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
             .removeHighlight: KeyboardShortcut(key: "d", modifiers: []),
             .highlightColorPink: KeyboardShortcut(key: "p", modifiers: [.command, .shift]),
             .highlightColorYellow: KeyboardShortcut(key: "y", modifiers: [.command, .shift]),
@@ -167,7 +168,6 @@ struct AppConfiguration: Equatable, Sendable {
             .closeCurrentWindow: KeyboardShortcut(key: "w", modifiers: [.command, .shift]),
             .previousTab: KeyboardShortcut(key: "[", modifiers: [.command, .shift]),
             .nextTab: KeyboardShortcut(key: "]", modifiers: [.command, .shift]),
-            .toggleContinuousReading: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
             .fitHeight: KeyboardShortcut(key: "9", modifiers: [.command]),
             .fitWidth: KeyboardShortcut(key: "0", modifiers: [.command]),
             .zoomIn: KeyboardShortcut(key: "=", modifiers: [.command]),
@@ -435,6 +435,7 @@ open_library_settings = "none"
 open_shortcut_settings = "none"
 save_annotations = "command+s"
 copy_highlights_markdown = "command+shift+e"
+copy_current_pdf_path = "command+shift+c"
 remove_highlight = "d"
 highlight_color_pink = "command+shift+p"
 highlight_color_yellow = "command+shift+y"
@@ -448,7 +449,7 @@ close_current_window = "command+shift+w"
 previous_tab = "command+shift+["
 next_tab = "command+shift+]"
 show_all_tabs = "control+tab"
-toggle_continuous_reading = "command+shift+c"
+toggle_continuous_reading = "none"
 fit_height = "command+9"
 fit_width = "command+0"
 zoom_in = "command+="
@@ -533,6 +534,7 @@ open_library_settings = "\(serializedShortcut(.openLibrarySettings, configuratio
 open_shortcut_settings = "\(serializedShortcut(.openShortcutSettings, configuration: configuration))"
 save_annotations = "\(serializedShortcut(.saveAnnotations, configuration: configuration))"
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
+copy_current_pdf_path = "\(serializedShortcut(.copyCurrentPDFPath, configuration: configuration))"
 remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
 highlight_color_pink = "\(serializedShortcut(.highlightColorPink, configuration: configuration))"
 highlight_color_yellow = "\(serializedShortcut(.highlightColorYellow, configuration: configuration))"
@@ -702,6 +704,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .saveAnnotations, to: &configuration)
         case ("shortcuts", "copy_highlights_markdown"):
             try applyShortcut(rawValue, command: .copyHighlightsMarkdown, to: &configuration)
+        case ("shortcuts", "copy_current_pdf_path"):
+            try applyShortcut(rawValue, command: .copyCurrentPDFPath, to: &configuration)
         case ("reader", "default_display_mode"):
             let value = parseString(rawValue)
             guard let displayMode = ReaderDisplayMode(rawValue: value) else {
@@ -967,6 +971,7 @@ struct AppConfigurationStore {
             "open_shortcut_settings",
             "save_annotations",
             "copy_highlights_markdown",
+            "copy_current_pdf_path",
             "remove_highlight",
             "highlight_color_pink",
             "highlight_color_yellow",
@@ -1022,6 +1027,7 @@ struct AppConfigurationStore {
         let legacyGreenHighlight = KeyboardShortcut(key: "g", modifiers: [.command, .shift])
         let legacyImmersiveMode = KeyboardShortcut(key: "l", modifiers: [.command, .option])
         let legacyShowAllTabs = KeyboardShortcut(key: "t", modifiers: [.command, .option])
+        let legacyContinuousReading = KeyboardShortcut(key: "c", modifiers: [.command, .shift])
         var didMigrate = false
         if configuration.shortcuts.bindings[.removeHighlight] == legacyRemoveHighlight {
             configuration.shortcuts.bindings[.removeHighlight] = KeyboardShortcut(key: "d", modifiers: [])
@@ -1044,6 +1050,14 @@ struct AppConfigurationStore {
             configuration.shortcuts.bindings[.showAllTabs] =
                 AppConfiguration.default.shortcuts.bindings[.showAllTabs]
                 ?? KeyboardShortcut(key: "tab", modifiers: [.control])
+            didMigrate = true
+        }
+        if existingContent.contains("copy_current_pdf_path") == false,
+           configuration.shortcuts.bindings[.toggleContinuousReading] == legacyContinuousReading {
+            configuration.shortcuts.bindings[.copyCurrentPDFPath] =
+                AppConfiguration.default.shortcuts.bindings[.copyCurrentPDFPath]
+                ?? legacyContinuousReading
+            configuration.shortcuts.bindings[.toggleContinuousReading] = nil
             didMigrate = true
         }
 

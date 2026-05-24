@@ -21,7 +21,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Window commands can merge every Serein window into the current one or move the current PDF into a new window
 - Main windows participate in native macOS green-button window management: Full Screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every tab in the current window; `option+enter` / `option+click` opens the chosen PDF or blank tab in the other split pane
-- Continuous reading groups (`cmd+shift+c` or tab context menu) let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
+- Continuous reading groups from the tab context menu let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - `cmd+w` closes all selected tabs when multiple PDF tabs are selected; otherwise it closes the current tab/window as usual
 - `cmd+shift+w` closes the current window while preserving the normal close confirmation for unsaved annotations
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
@@ -126,6 +126,8 @@ refresh_library_index = "none"  # cmd+k, cmd+r is a built-in chord
 open_library_settings = "none"  # cmd+k, cmd+l is a built-in chord
 open_shortcut_settings = "none" # cmd+k, cmd+s is a built-in chord
 new_blank_tab = "command+t"
+copy_current_pdf_path = "command+shift+c"
+toggle_continuous_reading = "none"
 merge_all_windows = "none"      # cmd+k, cmd+m is a built-in chord
 move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
@@ -167,6 +169,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Open Shortcuts settings | `cmd+k`, then `cmd+s` |
 | Save annotations | `cmd+s` |
 | Copy highlights as Markdown | `cmd+shift+e` |
+| Copy current PDF path | `cmd+shift+c` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
 | New blank tab | `cmd+t` |
@@ -184,7 +187,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Close current window | `cmd+shift+w` |
 | Reopen closed tab | `cmd+shift+t` |
 | Show all tabs | `ctrl+tab` |
-| Toggle continuous reading for selected tabs | `cmd+shift+c` |
+| Toggle continuous reading for selected tabs | Tab context menu |
 | New window | `cmd+shift+n` |
 | Merge all windows | `cmd+k`, then `cmd+m` |
 | Move current PDF to new window | `cmd+k`, then `cmd+n` |

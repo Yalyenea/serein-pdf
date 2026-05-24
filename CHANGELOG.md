@@ -10,6 +10,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Tabs
 - Add `cmd+t` to create an untitled blank tab; blank tabs are not PDF-backed, do not enter recent/reopen history, and are not restored after relaunch
+- Add `cmd+shift+c` to copy the current PDF path, and leave continuous reading on the tab context menu by default
 
 ### Right Sidebar
 - Let Outline titles wrap with larger text, tighter internal line spacing, compact dynamic row heights, and no visible scrollbars or horizontal sliding

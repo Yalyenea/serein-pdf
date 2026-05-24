@@ -262,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .openShortcutSettings: { [weak self] in self?.openShortcutSettings(nil) },
             .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
+            .copyCurrentPDFPath: { [weak self] in self?.copyCurrentPDFPath(nil) },
             .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
             .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
             .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
@@ -514,6 +515,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .openContainingFolder,
             action: #selector(openContainingFolder(_:))
         )
+        let copyCurrentPDFPathItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.copyCurrentPDFPath.menuTitle,
+            command: .copyCurrentPDFPath,
+            action: #selector(copyCurrentPDFPath(_:))
+        )
         let findItem = NSMenuItem(
             title: "Find…",
             action: #selector(findInCurrentDocument(_:)),
@@ -584,6 +590,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             openLibraryItem,
             refreshLibraryItem,
             openContainingFolderItem,
+            copyCurrentPDFPathItem,
             recentItem,
             reopenClosedItem,
             findItem,
@@ -1425,6 +1432,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
     }
 
+    @objc
+    private func copyCurrentPDFPath(_ sender: Any?) {
+        guard let windowID = mainWindowController?.windowID ?? mainWindowControllers.values.first?.windowID,
+              let activeSession = documentStore.activeSession(in: windowID),
+              activeSession.isBlank == false else { return }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(activeSession.url.path, forType: .string)
+    }
+
     private func setActiveReaderDisplayMode(_ mode: ReaderDisplayMode) {
         guard let controller = mainWindowController,
               let sessionID = documentStore.activeSessionID(in: controller.windowID) else { return }
@@ -1834,7 +1852,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                     || documentStore.selectedSessionIDs(in: windowID).count > 1
             }
             return false
-        case #selector(openContainingFolder(_:)):
+        case #selector(openContainingFolder(_:)), #selector(copyCurrentPDFPath(_:)):
             return activePDFSession != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
             return controller?.isFindBarVisible == true

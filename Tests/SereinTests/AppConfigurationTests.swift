@@ -30,6 +30,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertNil(configuration.shortcuts.bindings[.openShortcutSettings])
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.copyHighlightsMarkdown], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.copyCurrentPDFPath], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth]?.key, "0")
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "b", modifiers: [.command]))
@@ -53,7 +54,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.newBlankTab], KeyboardShortcut(key: "t", modifiers: [.command]))
         XCTAssertNil(configuration.shortcuts.bindings[.mergeAllWindows])
         XCTAssertNil(configuration.shortcuts.bindings[.moveCurrentPDFToNewWindow])
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleContinuousReading], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
+        XCTAssertNil(configuration.shortcuts.bindings[.toggleContinuousReading])
         XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "9", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
@@ -91,6 +92,7 @@ exit_highlight_mode = "escape"
 toggle_night_mode = "n"
 switch_current_theme = "command+option+t"
 save_annotations = "command+shift+s"
+copy_current_pdf_path = "command+shift+c"
 toggle_left_sidebar = "command+shift+l"
 close_current_tab = "command+e"
 close_current_window = "command+shift+e"
@@ -139,6 +141,7 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.switchCurrentTheme], KeyboardShortcut(key: "t", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openLibraryPDF], KeyboardShortcut(key: "o", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.copyCurrentPDFPath], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentWindow], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
@@ -198,6 +201,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("open_shortcut_settings = \"none\""))
         XCTAssertTrue(content.contains("save_annotations = \"command+s\""))
         XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
+        XCTAssertTrue(content.contains("copy_current_pdf_path = \"command+shift+c\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
         XCTAssertTrue(content.contains("close_current_tab = \"command+w\""))
         XCTAssertTrue(content.contains("close_current_window = \"command+shift+w\""))
@@ -220,7 +224,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("merge_all_windows = \"none\""))
         XCTAssertTrue(content.contains("move_current_pdf_to_new_window = \"none\""))
         XCTAssertTrue(content.contains("show_all_tabs = \"control+tab\""))
-        XCTAssertTrue(content.contains("toggle_continuous_reading = \"command+shift+c\""))
+        XCTAssertTrue(content.contains("toggle_continuous_reading = \"none\""))
         XCTAssertTrue(content.contains("open_containing_folder = \"command+r\""))
         XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
         XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
@@ -314,6 +318,30 @@ fit_width = "command+9"
         XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
         XCTAssertTrue(persistedContent.contains("show_all_tabs = \"control+tab\""))
         XCTAssertFalse(persistedContent.contains("show_all_tabs = \"command+option+t\""))
+    }
+
+    func testBootstrapMigratesLegacyContinuousReadingShortcutToCopyPath() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(of: "copy_current_pdf_path = \"command+shift+c\"\n", with: "")
+            .replacingOccurrences(
+                of: "toggle_continuous_reading = \"none\"",
+                with: "toggle_continuous_reading = \"command+shift+c\""
+            )
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(configuration.shortcuts.bindings[.copyCurrentPDFPath], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
+        XCTAssertNil(configuration.shortcuts.bindings[.toggleContinuousReading])
+        XCTAssertTrue(persistedContent.contains("copy_current_pdf_path = \"command+shift+c\""))
+        XCTAssertTrue(persistedContent.contains("toggle_continuous_reading = \"none\""))
+        XCTAssertFalse(persistedContent.contains("toggle_continuous_reading = \"command+shift+c\""))
     }
 
     func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {
