@@ -291,3 +291,11 @@ extension TitlebarTabItemView: NSTextFieldDelegate {
         return false
     }
 }
+
+#if DEBUG
+extension TitlebarTabItemView {
+    var testingIsEditing: Bool {
+        titleLabel.isEditable
+    }
+}
+#endif

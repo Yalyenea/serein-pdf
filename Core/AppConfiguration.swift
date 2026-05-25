@@ -342,8 +342,13 @@ struct KeyboardShortcut: Equatable, Sendable {
         return KeyboardShortcut(key: normalizedKey, modifiers: modifiers)
     }
 
-    private static func isSupportedKeyToken(_ token: String) -> Bool {
-        token.count == 1 || token == "escape" || token == "space" || token == "tab"
+    static func isSupportedKeyToken(_ token: String) -> Bool {
+        if token == "escape" || token == "space" || token == "tab" {
+            return true
+        }
+        return token.count == 1 && token.unicodeScalars.allSatisfy {
+            CharacterSet.controlCharacters.contains($0) == false
+        }
     }
 }
 

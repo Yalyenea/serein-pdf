@@ -70,6 +70,14 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertTrue(configuration.layout.showRecentFilesInSidebar)
     }
 
+    func testKeyboardShortcutRejectsRawControlCharacters() {
+        XCTAssertFalse(KeyboardShortcut.isSupportedKeyToken("\r"))
+        XCTAssertFalse(KeyboardShortcut.isSupportedKeyToken("\n"))
+        XCTAssertFalse(KeyboardShortcut.isSupportedKeyToken("\u{7f}"))
+        XCTAssertTrue(KeyboardShortcut.isSupportedKeyToken("tab"))
+        XCTAssertTrue(KeyboardShortcut.isSupportedKeyToken("escape"))
+    }
+
     func testLoadTomlOverridesReaderDefaultsAndShortcuts() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

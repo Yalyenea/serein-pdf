@@ -1343,6 +1343,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         alert.accessoryView = field
         alert.addButton(withTitle: "Go")
         alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        field.target = alert.buttons.first
+        field.action = #selector(NSButton.performClick(_:))
+        field.selectText(nil)
 
         guard alert.runModal() == .alertFirstButtonReturn,
               let pageNumber = Int(field.stringValue.trimmingCharacters(in: .whitespaces)) else { return }

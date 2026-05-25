@@ -114,6 +114,79 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertGreaterThan(wideButtonWidth, narrowButtonWidth)
     }
 
+    func testVerticalTabsReturnRenameStaysInOwnWindow() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "vertical-return-own-window"))
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let window = makeWindow(for: controller.view)
+        defer { window.close() }
+
+        XCTAssertNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: window)))
+        XCTAssertTrue(controller.testingIsSelectedTabEditing)
+    }
+
+    func testVerticalTabsReturnRenameIgnoresOtherWindowsAndTextEditing() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "vertical-return-scoped"))
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let window = makeWindow(for: controller.view)
+        let otherWindow = makeWindow(for: NSView(frame: NSRect(x: 0, y: 0, width: 240, height: 120)))
+        defer {
+            otherWindow.close()
+            window.close()
+        }
+
+        XCTAssertNotNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: otherWindow)))
+        XCTAssertFalse(controller.testingIsSelectedTabEditing)
+
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+        controller.view.addSubview(textView)
+        window.makeFirstResponder(textView)
+
+        XCTAssertNotNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: window)))
+        XCTAssertFalse(controller.testingIsSelectedTabEditing)
+    }
+
+    func testTitlebarTabsReturnRenameRequiresVisibleHorizontalModeOwnWindow() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-return-own-window"))
+        store.setTabPresentationMode(.horizontalTitlebar, in: store.defaultWindowID)
+        let controller = TitlebarTabsController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let window = makeWindow(for: controller.view)
+        defer { window.close() }
+
+        XCTAssertNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: window)))
+        XCTAssertTrue(controller.testingIsSelectedTabEditing)
+    }
+
+    func testTitlebarTabsReturnRenameIgnoresOtherWindowsAndHiddenStrip() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-return-scoped"))
+        store.setTabPresentationMode(.horizontalTitlebar, in: store.defaultWindowID)
+        let controller = TitlebarTabsController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let window = makeWindow(for: controller.view)
+        let otherWindow = makeWindow(for: NSView(frame: NSRect(x: 0, y: 0, width: 240, height: 120)))
+        defer {
+            otherWindow.close()
+            window.close()
+        }
+
+        XCTAssertNotNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: otherWindow)))
+        XCTAssertFalse(controller.testingIsSelectedTabEditing)
+
+        controller.setTabsStripVisible(false)
+        XCTAssertNotNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: window)))
+        XCTAssertFalse(controller.testingIsSelectedTabEditing)
+    }
+
     private func makeTemporaryPDF(named name: String) throws -> URL {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -131,5 +204,41 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         document.insert(page!, at: 0)
         XCTAssertTrue(document.write(to: url))
         return url
+    }
+
+    private func makeStore() -> DocumentStore {
+        DocumentStore(
+            persistence: VTInMemoryDocumentStorePersistence(),
+            readingStateStore: VTInMemoryReadingStateStore(),
+            recentFilesStore: VTInMemoryRecentFilesStore()
+        )
+    }
+
+    private func makeWindow(for contentView: NSView) -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = contentView
+        window.makeKeyAndOrderFront(nil)
+        return window
+    }
+
+    private func returnKeyEvent(in window: NSWindow, modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: "\r",
+            charactersIgnoringModifiers: "\r",
+            isARepeat: false,
+            keyCode: 36
+        )!
     }
 }
