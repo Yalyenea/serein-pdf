@@ -473,7 +473,10 @@ final class SplitViewController: NSSplitViewController {
     private func wireInteractions() {
         let alternateActivation: (UUID) -> Void = { [weak self] sessionID in
             guard let self else { return }
-            let targetPane = self.documentStore.focusedPane(in: self.windowID).other
+            let focusedPane = self.documentStore.focusedPane(in: self.windowID)
+            let targetPane = self.documentStore.isSplitEnabled(in: self.windowID)
+                ? focusedPane
+                : focusedPane.other
             self.documentStore.activate(sessionID: sessionID, in: self.windowID, targetPane: targetPane)
         }
         verticalTabsViewController.onAlternateSessionActivationRequested = alternateActivation
@@ -521,7 +524,9 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func activateSearchMatch(_ match: SearchSidebarMatch) {
-        let targetPane = documentStore.focusedPane(in: windowID)
+        let targetPane = documentStore.isSplitEnabled(in: windowID)
+            ? documentStore.focusedPane(in: windowID)
+            : nil
         documentStore.activate(sessionID: match.sessionID, in: windowID, targetPane: targetPane)
         readerWorkspaceViewController.activeReaderViewController().go(to: match.selection)
         syncFindStatus()

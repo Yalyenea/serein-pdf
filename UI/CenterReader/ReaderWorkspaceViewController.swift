@@ -42,7 +42,11 @@ final class ReaderWorkspaceViewController: NSViewController {
     private let splitView = NSSplitView()
     private let primaryHostView = ReaderPaneHostView()
     private let secondaryHostView = ReaderPaneHostView()
+    private let splitCandidateBackdrop = NSView()
+    private let splitCandidateLabel = NSTextField(labelWithString: "Second pane")
+    private let splitCandidatePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private var appliedSplitEnabled: Bool?
+    private var appliedSecondarySessionID: UUID?
     private var pendingSplitGeometryUpdate = false
     private var splitGeometryUpdateScheduled = false
 
@@ -121,6 +125,7 @@ final class ReaderWorkspaceViewController: NSViewController {
 
         embed(primaryReaderViewController, in: primaryHostView)
         embed(secondaryReaderViewController, in: secondaryHostView)
+        installSplitCandidateView()
 
         container.addSubview(splitView)
         NSLayoutConstraint.activate([
@@ -217,7 +222,8 @@ final class ReaderWorkspaceViewController: NSViewController {
             return
         }
         documentStore.updateCurrentPage(index: target.pageIndex, for: target.sessionID)
-        documentStore.activate(sessionID: target.sessionID, in: windowID, targetPane: focusedPane)
+        let targetPane = documentStore.isSplitEnabled(in: windowID) ? focusedPane : nil
+        documentStore.activate(sessionID: target.sessionID, in: windowID, targetPane: targetPane)
     }
 
     @discardableResult
@@ -292,19 +298,85 @@ final class ReaderWorkspaceViewController: NSViewController {
         )
 
         let splitEnabled = documentStore.isSplitEnabled(in: windowID)
+        let secondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
         let splitStateChanged = appliedSplitEnabled != splitEnabled
+        let secondarySessionChanged = appliedSecondarySessionID != secondarySessionID
         secondaryHostView.isHidden = !splitEnabled
         if splitEnabled, splitView.subviews.count > 1 {
             splitView.subviews[1].isHidden = false
         }
-        if splitStateChanged {
+        if splitStateChanged || (splitEnabled && secondarySessionChanged) {
             requestSplitGeometryUpdate()
         }
 
         let focusedPane = documentStore.focusedPane(in: windowID)
         primaryHostView.isFocused = focusedPane == .primary || splitEnabled == false
         secondaryHostView.isFocused = splitEnabled && focusedPane == .secondary
+        syncSplitCandidateView()
         onFocusedReaderDidChange?(activeReaderViewController().pdfView)
+    }
+
+    private func installSplitCandidateView() {
+        splitCandidateBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        splitCandidateBackdrop.wantsLayer = true
+        splitCandidateBackdrop.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
+        splitCandidateBackdrop.isHidden = true
+
+        splitCandidateLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        splitCandidateLabel.textColor = .secondaryLabelColor
+        splitCandidateLabel.alignment = .center
+        splitCandidateLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        splitCandidatePopup.controlSize = .small
+        splitCandidatePopup.font = .systemFont(ofSize: 12)
+        splitCandidatePopup.target = self
+        splitCandidatePopup.action = #selector(chooseSplitCandidate(_:))
+        splitCandidatePopup.translatesAutoresizingMaskIntoConstraints = false
+        splitCandidatePopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+
+        let stack = NSStackView(views: [splitCandidateLabel, splitCandidatePopup])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        splitCandidateBackdrop.addSubview(stack)
+        secondaryHostView.addSubview(splitCandidateBackdrop)
+        NSLayoutConstraint.activate([
+            splitCandidateBackdrop.leadingAnchor.constraint(equalTo: secondaryHostView.leadingAnchor),
+            splitCandidateBackdrop.trailingAnchor.constraint(equalTo: secondaryHostView.trailingAnchor),
+            splitCandidateBackdrop.topAnchor.constraint(equalTo: secondaryHostView.topAnchor),
+            splitCandidateBackdrop.bottomAnchor.constraint(equalTo: secondaryHostView.bottomAnchor),
+            stack.centerXAnchor.constraint(equalTo: splitCandidateBackdrop.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: splitCandidateBackdrop.centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: splitCandidateBackdrop.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: splitCandidateBackdrop.trailingAnchor, constant: -24),
+        ])
+    }
+
+    private func syncSplitCandidateView() {
+        splitCandidateBackdrop.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
+        let candidates = documentStore.splitCandidateSessions(in: windowID)
+        let shouldShow = documentStore.isSplitEnabled(in: windowID) &&
+            documentStore.displayedSessionID(for: .secondary, in: windowID) == nil &&
+            candidates.isEmpty == false
+        splitCandidateBackdrop.isHidden = !shouldShow
+        guard shouldShow else { return }
+
+        splitCandidatePopup.removeAllItems()
+        let primarySessionID = documentStore.displayedSessionID(for: .primary, in: windowID)
+        for candidate in candidates {
+            let title = candidate.id == primarySessionID ? "Same PDF - \(candidate.title)" : candidate.title
+            splitCandidatePopup.addItem(withTitle: title)
+            splitCandidatePopup.lastItem?.representedObject = candidate.id.uuidString
+        }
+    }
+
+    @objc
+    private func chooseSplitCandidate(_ sender: NSPopUpButton) {
+        guard let uuidString = sender.selectedItem?.representedObject as? String,
+              let sessionID = UUID(uuidString: uuidString) else { return }
+        documentStore.activate(sessionID: sessionID, in: windowID, targetPane: .secondary)
     }
 
     private func syncSearchHighlights(for reader: ReaderViewController, sessionID: UUID?) {
@@ -363,6 +435,7 @@ final class ReaderWorkspaceViewController: NSViewController {
         }
         splitView.layoutSubtreeIfNeeded()
         appliedSplitEnabled = splitEnabled
+        appliedSecondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
         fitReadersToWidthAfterSplitIfNeeded(splitEnabled: splitEnabled)
     }
 

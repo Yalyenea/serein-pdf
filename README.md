@@ -15,12 +15,13 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
-- Compare split in the center reader (`cmd+ctrl+\`); both panes fit to width when split opens, focused pane receives tab switches, `option+click` sends a tab to the other pane
+- Compare split in the center reader (`cmd+ctrl+\`) opens the current PDF beside a compact candidate chooser; the first candidate is the same PDF, with independent page and zoom state
+- Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
 - Window commands can merge every Serein window into the current one or move the current PDF into a new window
 - Main windows participate in native macOS green-button window management: Full Screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
-- Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every tab in the current window; `option+enter` / `option+click` opens the chosen PDF or blank tab in the other split pane
+- Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every tab in the current window; `option+enter` / `option+click` uses the same split-edit behavior as the tab strip
 - Continuous reading groups from the tab context menu let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - `cmd+w` closes all selected tabs when multiple PDF tabs are selected; otherwise it closes the current tab/window as usual
 - `cmd+shift+w` closes the current window while preserving the normal close confirmation for unsaved annotations

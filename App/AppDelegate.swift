@@ -1125,8 +1125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 guard let self,
                       let windowID = self.openTabsPaletteWindowID else { return }
                 self.documentStore.clearSearch(in: windowID)
+                let focusedPane = self.documentStore.focusedPane(in: windowID)
                 let targetPane = alternatePane
-                    ? self.documentStore.focusedPane(in: windowID).other
+                    ? (self.documentStore.isSplitEnabled(in: windowID) ? focusedPane : focusedPane.other)
                     : nil
                 self.documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
             }

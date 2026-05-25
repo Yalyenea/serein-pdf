@@ -605,10 +605,42 @@ struct WindowChromeTests {
         controller.toggleReaderSplit()
         controller.window?.layoutIfNeeded()
         #expect(controller.isReaderSplitEnabled == true)
+        #expect(store.splitCandidateSessions(in: controller.windowID).map(\.id).count == 1)
 
         controller.toggleReaderSplit()
         controller.window?.layoutIfNeeded()
         #expect(controller.isReaderSplitEnabled == false)
+    }
+
+    @Test
+    func alternateTabActivationUsesBrowserSplitEditSemantics() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-second"))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-third"))
+        let windowID = controller.windowID
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split controller")
+            return
+        }
+
+        store.activate(sessionID: first.id, in: windowID)
+        splitController.verticalTabsViewController.onAlternateSessionActivationRequested?(second.id)
+
+        #expect(store.isSplitEnabled(in: windowID))
+        #expect(store.displayedSessionID(for: .primary, in: windowID) == first.id)
+        #expect(store.displayedSessionID(for: .secondary, in: windowID) == second.id)
+        #expect(store.focusedPane(in: windowID) == .secondary)
+
+        store.setFocusedPane(.primary, in: windowID)
+        splitController.titlebarTabsController.onAlternateSessionActivationRequested?(third.id)
+
+        #expect(store.displayedSessionID(for: .primary, in: windowID) == third.id)
+        #expect(store.displayedSessionID(for: .secondary, in: windowID) == second.id)
+        #expect(store.focusedPane(in: windowID) == .primary)
+        #expect(store.splitPair(in: windowID) == ReaderSplitPair(primarySessionID: third.id, secondarySessionID: second.id))
     }
 
     @Test
@@ -751,6 +783,7 @@ struct WindowChromeTests {
         let windowID = controller.windowID
 
         store.setSplitEnabled(true, in: windowID)
+        store.activate(sessionID: first.id, in: windowID, targetPane: .secondary)
         store.setFocusedPane(.secondary, in: windowID)
         controller.window?.layoutIfNeeded()
 
@@ -776,6 +809,7 @@ struct WindowChromeTests {
         let windowID = controller.windowID
 
         store.setSplitEnabled(true, in: windowID)
+        store.activate(sessionID: session.id, in: windowID, targetPane: .secondary)
         store.setFocusedPane(.secondary, in: windowID)
         controller.window?.layoutIfNeeded()
 
@@ -821,6 +855,7 @@ struct WindowChromeTests {
         let windowID = controller.windowID
 
         store.setSplitEnabled(true, in: windowID)
+        store.activate(sessionID: first.id, in: windowID, targetPane: .secondary)
         controller.window?.layoutIfNeeded()
 
         guard let splitController = controller.window?.contentViewController as? SplitViewController,
@@ -1018,6 +1053,9 @@ struct WindowChromeTests {
         }
 
         splitController.readerWorkspaceViewController.toggleSplit()
+        flushLayout(controller.window)
+        #expect(store.splitCandidateSessions(in: controller.windowID).map(\.id) == [second.id, first.id])
+        store.activate(sessionID: first.id, in: controller.windowID, targetPane: .secondary)
         flushLayout(controller.window)
 
         let primaryReader = splitController.readerWorkspaceViewController.primaryReaderViewController

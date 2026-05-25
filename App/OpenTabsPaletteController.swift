@@ -149,7 +149,7 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
     private let titleLabel = NSTextField(labelWithString: "Show All Tabs")
     private let secondaryLabel = NSTextField(labelWithString: "")
     private let footerLabel = NSTextField(
-        labelWithString: "H/J/K/L 或 ↑/↓/←/→ 选中    Enter 打开    Option+Enter 打开到另一 pane    Esc 关闭"
+        labelWithString: "H/J/K/L 或 ↑/↓/←/→ 选中    Enter 打开    Option+Enter 编辑分屏    Esc 关闭"
     )
     private let emptyLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()

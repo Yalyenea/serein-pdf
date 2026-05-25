@@ -65,6 +65,21 @@ struct ContinuousReadingTarget: Equatable, Sendable {
     var pageIndex: Int
 }
 
+struct ReaderSplitPair: Equatable, Sendable {
+    var primarySessionID: UUID
+    var secondarySessionID: UUID
+
+    func pane(containing sessionID: UUID) -> ReaderPane? {
+        if primarySessionID == sessionID {
+            return .primary
+        }
+        if secondarySessionID == sessionID {
+            return .secondary
+        }
+        return nil
+    }
+}
+
 struct WindowWorkspace: Equatable, Sendable {
     let id: UUID
     var sessionIDs: [UUID]
@@ -79,6 +94,7 @@ struct WindowWorkspace: Equatable, Sendable {
     var isSplitEnabled: Bool
     var primarySessionID: UUID?
     var secondarySessionID: UUID?
+    var splitPair: ReaderSplitPair?
     var focusedPane: ReaderPane
     var recentlyClosedURLs: [URL]
 
@@ -96,6 +112,7 @@ struct WindowWorkspace: Equatable, Sendable {
         isSplitEnabled: Bool = false,
         primarySessionID: UUID? = nil,
         secondarySessionID: UUID? = nil,
+        splitPair: ReaderSplitPair? = nil,
         focusedPane: ReaderPane = .primary,
         recentlyClosedURLs: [URL] = []
     ) {
@@ -112,6 +129,7 @@ struct WindowWorkspace: Equatable, Sendable {
         self.isSplitEnabled = isSplitEnabled
         self.primarySessionID = primarySessionID
         self.secondarySessionID = secondarySessionID
+        self.splitPair = splitPair
         self.focusedPane = focusedPane
         self.recentlyClosedURLs = recentlyClosedURLs
     }

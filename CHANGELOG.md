@@ -5,6 +5,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Reading
+- Make compare split behave like a browser split pair: normal tab activation restores or hides the pair, while Option activation edits the focused pane
+- Add a compact secondary-pane candidate chooser for compare split, including a same-PDF comparison session with independent reading state and no regular tab/history/persistence footprint
 - Fit both panes to width automatically when compare split opens, including PDFs that were previously pinned at a manual zoom level
 - Add plain `c` as a reader toggle between Single Page and Single Page Continuous while keeping `cmd+2` as the direct Single Page Continuous command
 

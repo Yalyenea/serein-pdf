@@ -34,10 +34,13 @@
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `C`:在单页连续 / 单页不连续间切换;`Cmd+2`:直接切换到单页连续阅读模式
 - `Cmd+T`:新建空白 tab;空白 tab 不绑定 PDF、不进入最近 / 重开历史、不跨启动恢复
-- `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 切换;`Option+Click` / `Option+Enter` 打开到另一 pane
+- `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 普通切换;`Option+Click` / `Option+Enter` 进入 split-edit
 - `Cmd+W`:多选 tabs 时按窗口顺序关闭选中的 PDFs;否则关闭当前 tab / window
 - `Cmd+Shift+W`:关闭当前窗口,沿用 dirty 批注保存确认
 - `Cmd+Shift+C`:复制当前 PDF 路径到剪贴板
+- `Cmd+Ctrl+\`:左侧保持当前 PDF,右侧进入候选态;首项为同一个 PDF,后续为当前窗口其他 PDF
+- 分屏 pair:普通 tab 点击恢复 pair 或离开 pair;`Option` 激活才替换当前焦点 pane,未分屏时建立当前 PDF + 目标 PDF pair
+- 同 PDF comparison session:内部 session,独立页码 / 缩放,不显示普通 tab、不进最近 / 重开 / 持久化 / All Open 搜索
 - 多 PDF 连续阅读:对当前选中的 tabs 通过 tab 右键菜单开启 / 退出;连续组内翻页跨 PDF 边界切换,右侧 Outline 按 PDF 分组显示
 - PDF 热重载:LaTeX / Typst 等外部工具原地写入或原子替换已打开 PDF 后自动刷新 clean session;dirty 批注会话不自动刷新
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
@@ -74,6 +77,7 @@
 | M10.10 阅读交互打磨 | ✅ 开发完成,待手测 |
 | M10.11 空白标签页 | ✅ 开发完成,待手测 |
 | M10.12 当前 PDF 路径复制 | ✅ 开发完成,待手测 |
+| M10.13 浏览器式分屏 | ✅ 开发完成,待手测 |
 | M11 扩展生态(预研) | 未开始 |
 
 ## 4. 下一步执行顺序
@@ -85,7 +89,8 @@
 - Wave 4 M10.7 手测：完成 `UAT-39`，用 Typst / LaTeX 连续编译覆盖当前 PDF，确认阅读器自动刷新且页码/缩放保持。
 - Wave 5 M10.11 手测：完成 `UAT-46`，确认 `Cmd+T` 空白 tab 在两种 tab 模式下表现一致。
 - Wave 6 M10.12 手测：完成 `UAT-47`，确认 `Cmd+Shift+C` 复制当前 PDF 路径。
-- Wave 7 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
+- Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
+- Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
 
 
 ## 5. Milestone 7:搜索强化与对比阅读
@@ -102,11 +107,11 @@
 ### 5.2 同窗分屏 / 多窗口
 
 - [x] `M7-010` 同窗分屏容器:中栏拆水平双 Reader;`Cmd+Ctrl+\` 切换;各 Reader 独立 `displayedSessionID`。
-- [x] `M7-011` 分屏 tab 切换落点:从左栏激活进焦点 Reader;`Option+Click` 丢到另一侧。
-- [x] `M7-012` 分屏状态持久化:`PersistedDocumentStoreState` 持久化窗口 split 状态并恢复。
+- [x] `M7-011` 分屏 tab 切换落点:完成基础双 Reader 与 Option 分屏入口;最终浏览器式 pair 语义见 `M10.13`。
+- [x] `M7-012` 分屏状态持久化:保留 legacy splitState 编解码兼容;当前启动恢复默认单屏,运行期 pair 不持久化。
 - [x] `M7-013` 新建窗口命令:`ShortcutCommand.newWindow`,默认 `Cmd+Shift+N`;`AppDelegate` 支持多 `MainWindowController`;`DocumentStore` 暴露多窗口接口。
 - [x] `M7-014` 多窗口关闭协调:关闭一窗不影响其他;最后一窗关闭走 terminate;`Cmd+Shift+T` 优先本窗内重开。
-- [x] `M7-015` 多窗口状态持久化:记录各窗口 session 集合 / active session / split / search / sidebar 布局。
+- [x] `M7-015` 多窗口状态持久化:记录各窗口 session 集合 / active session / search / sidebar 布局;split pair 为运行期状态。
 - [x] `M7-016` 测试:`DocumentStoreTests` 覆盖多窗口、分屏、搜索缓存、恢复与性能基线。
 
 ### 5.3 文档与验收
@@ -153,7 +158,7 @@
 - [x] `M9-005` 测试:覆盖搜索过滤、多选打开、空列表与帮助切换。
 - [x] `M9-006` Show All Tabs:`Ctrl+Tab` 显示当前窗口所有 PDF tab 的轻量文本总览,不渲染缩略图,支持点击、方向键、H/J/K/L、Enter 切换、Esc 关闭。
 - [x] `M9-007` Show All Tabs 关闭语义:严格单选,重复 `Ctrl+Tab` / `Esc` / app 失焦关闭,打开后关闭。
-- [x] `M9-008` Show All Tabs 分屏联动:`Option+Click` / `Option+Enter` 打开到另一 pane,必要时自动开启分屏。
+- [x] `M9-008` Show All Tabs 分屏联动:`Option+Click` / `Option+Enter` 进入 split-edit,未分屏时建立当前 PDF + 目标 PDF pair。
 - [x] `M9-009` 多 PDF 打开懒加载:tab session 先保存 URL/title/阅读状态;live `PDFDocument` 由小容量 LRU 按需加载,干净后台文档可释放。
 - [x] `M9-010` 右栏缓存延迟构建:outline / annotations / search 在对应面板或搜索动作需要时才解析 PDF。
 
@@ -231,14 +236,23 @@
 - [x] `M10.12-002` 配置迁移:新增 `copy_current_pdf_path`,连续阅读默认快捷键改为 `none`,保留 tab 右键入口。
 - [x] `M10.12-003` 测试:覆盖默认快捷键、旧连续阅读键位迁移与配置回写。
 
-## 16. Milestone 11:扩展生态(长期预研)
+## 16. Milestone 10.13:浏览器式分屏
+
+- [x] `M10.13-001` 状态模型:在 `WindowWorkspace` 增加运行期 `ReaderSplitPair`,把"显示双 Reader"与"绑定哪两个 PDF"分开。
+- [x] `M10.13-002` 普通 tab 语义:点击 pair 内任一 PDF 恢复 A/B 分屏;点击其他 PDF 显示单屏并保留 pair。
+- [x] `M10.13-003` split-edit 语义:`Option+Click` / `Option+Enter` 替换当前焦点 pane;未分屏时建立当前 PDF + 目标 PDF pair。
+- [x] `M10.13-004` 同 PDF 对比:内部 comparison session 独立页码 / 缩放,不显示普通 tab、不进最近 / 重开 / 持久化 / All Open 搜索。
+- [x] `M10.13-005` 候选 UI:`Cmd+Ctrl+\` 后右侧显示紧凑候选,首项为同一个 PDF,后续为当前窗口其他 PDF。
+- [x] `M10.13-006` 测试与文档:覆盖 pair 隐藏 / 恢复、Option 替换、同 PDF clone、vertical/titlebar tabs 一致性,同步 README / PROJECT / TASKS / CHANGELOG。
+
+## 17. Milestone 11:扩展生态(长期预研)
 
 - [ ] `M11-001` 扩展机制 RFC:`docs/extensions-rfc.md` 列选型,至少比较进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳。
 - [ ] `M11-002` PoC:若决策继续,选一条路径把"导出高亮"重写为插件,可在 app 中运行。
 - [ ] `M11-003` Serein Extension API 草稿:面向未来扩展开发者。
 - [ ] `M11-004` 若推迟,在 RFC 写清"为什么现在不做"(安全、上架、维护成本)。
 
-## 17. 手测清单(尚未覆盖)
+## 18. 手测清单(尚未覆盖)
 
 - [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
@@ -267,5 +281,8 @@
 - [ ] `UAT-45` 阅读区按 `C` 可在单页连续 / 单页不连续间切换,`Cmd+2` 仍直接进入单页连续模式
 - [ ] `UAT-46` 按 `Cmd+T` 新建空白 tab,确认左侧 / 标题栏 tabs 都显示 Untitled,关闭后不会出现在重开历史或最近文件
 - [ ] `UAT-47` 打开真实 PDF 后按 `Cmd+Shift+C`,确认系统剪贴板内容等于当前 PDF 绝对路径;空白 tab 下菜单项不可用
+- [ ] `UAT-48` `Cmd+Ctrl+\` 后右侧出现候选,选"同一个 PDF"后两个 pane 独立页码 / 缩放且都 fit width
+- [ ] `UAT-49` 建立 A/B pair 后普通点击 C 显示单屏 C,再点击 A 或 B 恢复 A/B 分屏
+- [ ] `UAT-50` 已分屏时 `Option+Click` / `Option+Enter` 替换当前焦点 pane,垂直 tabs 与标题栏 tabs 行为一致
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

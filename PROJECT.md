@@ -86,6 +86,8 @@ flowchart LR
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
+| 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
+| 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;窗口 UI 状态挂在 `WindowWorkspace` |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,per-session 宽度 / 可见状态原子对调 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
@@ -99,7 +101,7 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader,焦点 pane 决定 tab 落点 |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏 |
 | 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无可见滚动条;所有预览类内容都在右栏,不回流到中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
@@ -158,16 +160,16 @@ flowchart LR
 - `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
 - `Cmd+K` → `Cmd+N`:把当前 PDF 移到新窗口
 - `Cmd+Shift+Space`:最近文件启动器
-- `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 切换,`Option+Click` / `Option+Enter` 打开到另一 pane;重复 `Ctrl+Tab` 或 `Esc` 关闭
+- `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 普通切换,`Option+Click` / `Option+Enter` 进入 split-edit;重复 `Ctrl+Tab` 或 `Esc` 关闭
 - 多 PDF 连续阅读:批量打开会预选本批 PDF,也可 `Cmd` / `Shift` 点击多选后通过 tab 右键菜单开启 / 退出
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
-- `Option+Click` tab:丢到另一 pane(必要时自动开分屏)
+- `Option+Click` tab:进入 split-edit;已分屏时替换当前焦点 pane,未分屏时以当前 PDF + 目标 PDF 建 pair
 
 **布局**
 - `Cmd+B` / `Cmd+Option+B`:切换左 / 右侧栏
 - `Cmd+Shift+1` / `Cmd+Shift+2`:垂直 sidebar tabs / 水平 titlebar tabs
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
-- `Cmd+Ctrl+\`:切换同窗分屏,进入分屏后两个 pane 自动适应宽度(新窗口与重启恢复默认单屏)
+- `Cmd+Ctrl+\`:切换同窗分屏;左侧保持当前 PDF,右侧显示紧凑候选,首项为同一个 PDF;选中目标后两个 pane 自动适应宽度(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
 - `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
 - `Cmd+Ctrl+L`:进入 / 退出沉浸模式(隐藏侧栏与 tab chrome,只保留 PDF 页面)
@@ -216,7 +218,7 @@ flowchart LR
 - 管理 sessions(open / close / activate / reorder)
 - 维护多个 `WindowWorkspace`,驱动多窗口 / 分屏 / 焦点 pane / 右栏模式 / 搜索 scope
 - 每个 `WindowWorkspace` 独立维护自己的 session/tab 集合,open/close 不跨窗扩散
-- 维护 active session,驱动左栏 tab 与中栏 reader 联动
+- 维护 active session 与运行期 split pair,驱动左栏 tab 与中栏 reader 联动
 - 按需创建 `PDFDocument`,用小容量 LRU 保留当前 pane / 分屏 pane / 最近文档;干净后台文档可释放
 - 监听已打开 PDF 的外部改写;clean session 清理 `PDFDocument` / Outline / Search / Annotations 缓存并触发 UI 重读,dirty session 不自动刷新
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
@@ -234,9 +236,10 @@ flowchart LR
 | `tabPresentationMode` | 当前窗口 tabs 形态 |
 | `rightSidebarMode` | `outline` / `pages` / `search` |
 | `searchQuery` / `searchScope` | 当前窗口搜索上下文 |
-| `isSplitEnabled` | 是否双 Reader |
-| `primarySessionID` / `secondarySessionID` | 两个 pane 当前展示的 session |
-| `focusedPane` | tab 激活与搜索跳转的落点 |
+| `isSplitEnabled` | 当前是否显示双 Reader |
+| `primarySessionID` / `secondarySessionID` | 两个 pane 当前展示的 session;secondary 可为空候选态 |
+| `splitPair` | 当前运行期绑定的两个 PDF,不跨启动恢复 |
+| `focusedPane` | split-edit 与搜索跳转的落点 |
 | `recentlyClosedURLs` | 本窗最近关闭栈 |
 ### 5.4 辅助模型
 
@@ -246,6 +249,7 @@ flowchart LR
 | `OutlineNode` | 目录树节点 |
 | `ReadingPosition` | 页码 + 页内定位 |
 | `TabPresentationMode` | `verticalSidebar` / `horizontalTitlebar` |
+| `ReaderSplitPair` | 浏览器式分屏绑定,把"显示分屏"与"绑定哪两个 PDF"分开 |
 | `AnnotationSavePolicy` | `after10Minutes` / `never` |
 | `HighlightUndoOperation` | undo 栈元素 |
 
@@ -270,7 +274,7 @@ Core/                                     # 文档 / 窗口 / 配置 / 持久化
   SecurityScopedAccessController.swift    # `/Users` 等访问 root 的 security-scoped bookmark 持久访问
   PDFLibrary.swift                        # PDF 库扫描、root / folder / item catalog
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
-  DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 分屏状态
+  DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 非运行期窗口状态
   DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等
   PDFFileMonitor.swift                    # 已打开 PDF 的外部改写监听与文件快照
   DocumentAnnotations.swift               # 高亮分组 / 缓存 / 导出 相关数据模型

@@ -1355,9 +1355,10 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertTrue(store.isSplitEnabled(in: windowID))
         XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), second.id)
-        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), first.id)
+        XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowID))
         XCTAssertEqual(store.activeSessionID(in: windowID), second.id)
 
+        store.activate(sessionID: first.id, in: windowID, targetPane: .secondary)
         store.setFocusedPane(.secondary, in: windowID)
         XCTAssertEqual(store.activeSessionID(in: windowID), first.id)
 
@@ -1366,6 +1367,59 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertNotEqual(duplicatedSecondID, second.id)
         XCTAssertEqual(store.session(for: duplicatedSecondID)?.url, second.url)
         XCTAssertEqual(store.activeSessionID(in: windowID), duplicatedSecondID)
+        XCTAssertEqual(store.sessions(in: windowID).map(\.id), [first.id, second.id])
+    }
+
+    func testBrowserSplitPairHidesAndRestoresAroundOtherTabs() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "split-pair-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "split-pair-second"))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "split-pair-third"))
+        let windowID = store.defaultWindowID
+
+        store.activate(sessionID: first.id, in: windowID)
+        store.activate(sessionID: second.id, in: windowID, targetPane: .secondary)
+
+        XCTAssertTrue(store.isSplitEnabled(in: windowID))
+        XCTAssertEqual(store.splitPair(in: windowID), ReaderSplitPair(primarySessionID: first.id, secondarySessionID: second.id))
+
+        store.activate(sessionID: third.id, in: windowID)
+
+        XCTAssertFalse(store.isSplitEnabled(in: windowID))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), third.id)
+        XCTAssertEqual(store.splitPair(in: windowID), ReaderSplitPair(primarySessionID: first.id, secondarySessionID: second.id))
+
+        store.activate(sessionID: second.id, in: windowID)
+
+        XCTAssertTrue(store.isSplitEnabled(in: windowID))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), first.id)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), second.id)
+        XCTAssertEqual(store.focusedPane(in: windowID), .secondary)
+    }
+
+    func testOptionActivationReplacesFocusedSplitPane() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "split-option-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "split-option-second"))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "split-option-third"))
+        let windowID = store.defaultWindowID
+
+        store.activate(sessionID: first.id, in: windowID)
+        store.activate(sessionID: second.id, in: windowID, targetPane: .secondary)
+        store.activate(sessionID: third.id, in: windowID, targetPane: .secondary)
+
+        XCTAssertTrue(store.isSplitEnabled(in: windowID))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), first.id)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), third.id)
+        XCTAssertEqual(store.splitPair(in: windowID), ReaderSplitPair(primarySessionID: first.id, secondarySessionID: third.id))
     }
 
     func testSplitWithSingleSessionCreatesIndependentComparisonSession() throws {
@@ -1378,17 +1432,42 @@ final class DocumentStoreTests: XCTestCase {
         let windowID = store.defaultWindowID
 
         store.setSplitEnabled(true, in: windowID)
+        XCTAssertEqual(store.splitCandidateSessions(in: windowID).map(\.id), [session.id])
+        store.activate(sessionID: session.id, in: windowID, targetPane: .secondary)
 
         let primaryID = try XCTUnwrap(store.displayedSessionID(for: .primary, in: windowID))
         let secondaryID = try XCTUnwrap(store.displayedSessionID(for: .secondary, in: windowID))
         XCTAssertNotEqual(primaryID, secondaryID)
         XCTAssertEqual(store.sessions.count, 2)
+        XCTAssertEqual(store.sessions(in: windowID).map(\.id), [session.id])
         XCTAssertEqual(store.session(for: primaryID)?.url, session.url)
         XCTAssertEqual(store.session(for: secondaryID)?.url, session.url)
 
         store.setScaleMode(.manual, scaleFactor: 2.0, for: primaryID)
         XCTAssertEqual(store.session(for: primaryID)?.zoomScale, 2.0)
         XCTAssertEqual(store.session(for: secondaryID)?.zoomScale, session.zoomScale)
+    }
+
+    func testComparisonSessionStaysOutOfTabsAndPersistence() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "split-internal-comparison"))
+        let windowID = store.defaultWindowID
+
+        store.setSplitEnabled(true, in: windowID)
+        store.activate(sessionID: session.id, in: windowID, targetPane: .secondary)
+
+        let comparisonID = try XCTUnwrap(store.displayedSessionID(for: .secondary, in: windowID))
+        XCTAssertNotEqual(comparisonID, session.id)
+        XCTAssertEqual(store.sessions.count, 2)
+        XCTAssertEqual(store.sessions(in: windowID).map(\.id), [session.id])
+        XCTAssertEqual(persistence.state?.sessions.map(\.id), [session.id])
+        XCTAssertEqual(persistence.state?.windows.first?.sessionIDs, [session.id])
+        XCTAssertNil(persistence.state?.windows.first?.splitState.secondarySessionID)
     }
 
     func testActivatingSameSessionIntoOtherPaneReusesExistingComparisonSession() throws {
@@ -1402,8 +1481,10 @@ final class DocumentStoreTests: XCTestCase {
 
         store.setSplitEnabled(true, in: windowID)
         let primaryID = try XCTUnwrap(store.displayedSessionID(for: .primary, in: windowID))
-        let initialSecondaryID = try XCTUnwrap(store.displayedSessionID(for: .secondary, in: windowID))
 
+        store.activate(sessionID: primaryID, in: windowID, targetPane: .secondary)
+        let initialSecondaryID = try XCTUnwrap(store.displayedSessionID(for: .secondary, in: windowID))
+        store.activate(sessionID: primaryID, in: windowID)
         store.activate(sessionID: primaryID, in: windowID, targetPane: .secondary)
 
         XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), initialSecondaryID)
@@ -1420,6 +1501,7 @@ final class DocumentStoreTests: XCTestCase {
         let windowID = store.defaultWindowID
 
         store.setSplitEnabled(true, in: windowID)
+        store.activate(sessionID: session.id, in: windowID, targetPane: .secondary)
         XCTAssertEqual(store.sessions.count, 2)
 
         store.setSplitEnabled(false, in: windowID)
