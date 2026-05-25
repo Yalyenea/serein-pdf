@@ -164,7 +164,7 @@ private final class ShortcutCaptureButton: NSButton {
             characters
         }
 
-        guard key.count == 1 || key == "escape" || key == "space" || key == "tab" else {
+        guard KeyboardShortcut.isSupportedKeyToken(key) else {
             NSSound.beep()
             return
         }

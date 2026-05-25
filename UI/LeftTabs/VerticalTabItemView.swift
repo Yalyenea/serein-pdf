@@ -296,3 +296,11 @@ extension VerticalTabItemView: NSTextFieldDelegate {
         return false
     }
 }
+
+#if DEBUG
+extension VerticalTabItemView {
+    var testingIsEditing: Bool {
+        titleLabel.isEditable
+    }
+}
+#endif

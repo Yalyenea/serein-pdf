@@ -9,6 +9,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a compact secondary-pane candidate chooser for compare split, including a same-PDF comparison session with independent reading state and no regular tab/history/persistence footprint
 - Fit both panes to width automatically when compare split opens, including PDFs that were previously pinned at a manual zoom level
 - Add plain `c` as a reader toggle between Single Page and Single Page Continuous while keeping `cmd+2` as the direct Single Page Continuous command
+- Focus the Go to Page input immediately and keep Return from being intercepted by tab rename handlers
 
 ### Tabs
 - Add `cmd+t` to create an untitled blank tab; blank tabs are not PDF-backed, do not enter recent/reopen history, and are not restored after relaunch

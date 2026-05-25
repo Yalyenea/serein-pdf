@@ -218,7 +218,7 @@ final class TitlebarTabsController: NSViewController {
         // Double-click on a tab → rename
         let mouse = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self, event.clickCount == 2 else { return event }
-            guard view.window != nil else { return event }
+            guard eventBelongsToOwnWindow(event) else { return event }
             let locationInView = view.convert(event.locationInWindow, from: nil)
             guard view.bounds.contains(locationInView) else { return event }
             guard let selectedView = stackView.arrangedSubviews.compactMap({ $0 as? TitlebarTabItemView }).first(where: { $0.isSelected }) else { return event }
@@ -229,12 +229,50 @@ final class TitlebarTabsController: NSViewController {
 
         // Enter on selected tab → rename (macOS Finder convention)
         let key = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.characters == "\r" || event.characters == "\n" else { return event }
-            guard view.window?.firstResponder is NSTextView == false else { return event }
-            guard let selectedView = stackView.arrangedSubviews.compactMap({ $0 as? TitlebarTabItemView }).first(where: { $0.isSelected }) else { return event }
-            selectedView.beginEditing()
-            return nil
+            self?.handleRenameKeyEvent(event) ?? event
         }
         eventMonitors.append(key as Any)
     }
+
+    private func handleRenameKeyEvent(_ event: NSEvent) -> NSEvent? {
+        guard isPlainReturnKeyEvent(event) else { return event }
+        guard isTabsStripVisible else { return event }
+        guard documentStore.tabPresentationMode(in: windowID) == .horizontalTitlebar else { return event }
+        guard eventBelongsToOwnWindow(event), let window = view.window else { return event }
+        guard window.firstResponder is NSTextView == false else { return event }
+        guard let selectedView = selectedTabItemView() else { return event }
+        selectedView.beginEditing()
+        return nil
+    }
+
+    private func isPlainReturnKeyEvent(_ event: NSEvent) -> Bool {
+        guard event.characters == "\r" || event.characters == "\n" else { return false }
+        return event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+    }
+
+    private func selectedTabItemView() -> TitlebarTabItemView? {
+        stackView.arrangedSubviews
+            .compactMap { $0 as? TitlebarTabItemView }
+            .first { $0.isSelected }
+    }
+
+    private func eventBelongsToOwnWindow(_ event: NSEvent) -> Bool {
+        guard let window = view.window else { return false }
+        if let eventWindow = event.window {
+            return eventWindow === window
+        }
+        return event.windowNumber == window.windowNumber
+    }
 }
+
+#if DEBUG
+extension TitlebarTabsController {
+    var testingIsSelectedTabEditing: Bool {
+        selectedTabItemView()?.testingIsEditing == true
+    }
+
+    func testingHandleRenameKeyEvent(_ event: NSEvent) -> NSEvent? {
+        handleRenameKeyEvent(event)
+    }
+}
+#endif
