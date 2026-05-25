@@ -330,7 +330,8 @@ Resources/                                # 资源
   AppIcon.png                             # 应用图标(源文件)
 
 Scripts/                                  # 打包脚本
-  make-app.sh                             # 构建 .app(ad-hoc 签名)
+  ensure-local-codesign-identity.sh       # 创建 / 复用本机稳定签名身份
+  make-app.sh                             # 构建 .app(稳定本机签名)
   make-dmg.sh                             # 打包 .dmg
   make-icon.sh                            # 生成 .icns 图标
 

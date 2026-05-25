@@ -70,12 +70,19 @@ just run        # run dev build via SwiftPM
 ## Ship to your Mac
 
 ```sh
-just build      # produces build/Serein.app (ad-hoc signed)
+just signing-identity # creates/reuses the local Serein signing identity
+just build      # produces build/Serein.app (signed with the local identity)
 just install    # copies the .app to /Applications
 just register   # lsregister -f so Finder's Open With sees it
 just dmg        # packages build/Serein-<version>.dmg
 just launch     # open /Applications/Serein.app
 ```
+
+`just build` signs with `Serein Local Code Signing` by default, creating that
+self-signed code-signing identity in the login keychain on first use. Keeping a
+stable signing identity prevents local reinstalls from changing the app identity
+to a new cdhash-only ad-hoc signature. Set `SEREIN_CODESIGN_IDENTITY` to use a
+different local or Developer ID identity.
 
 Full release pipeline:
 

@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Packaging
+- Sign local app builds with a stable `Serein Local Code Signing` identity instead of ad-hoc cdhash-only signatures, so reinstalling the app keeps a consistent macOS identity for persisted file access.
+
 ### Reading
 - Make compare split behave like a browser split pair: normal tab activation restores or hides the pair, while Option activation edits the focused pane
 - Add a compact secondary-pane candidate chooser for compare split, including a same-PDF comparison session with independent reading state and no regular tab/history/persistence footprint

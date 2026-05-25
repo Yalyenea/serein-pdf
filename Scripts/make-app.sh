@@ -8,6 +8,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT_DIR="${1:-$PROJECT_ROOT/build}"
 APP_NAME="Serein"
 APP_BUNDLE="$OUTPUT_DIR/$APP_NAME.app"
+CODESIGN_IDENTITY="${SEREIN_CODESIGN_IDENTITY:-Serein Local Code Signing}"
 
 cd "$PROJECT_ROOT"
 
@@ -42,7 +43,10 @@ if [[ -d "$PROJECT_ROOT/Resources/Assets.xcassets" ]]; then
     actool --compile "$APP_BUNDLE/Contents/Resources" --platform macosx --minimum-deployment-target 14.0 "$PROJECT_ROOT/Resources/Assets.xcassets" >/dev/null
 fi
 
-# Ad-hoc sign so Gatekeeper / Launch Services accept the bundle locally.
-codesign --force --sign - --timestamp=none "$APP_BUNDLE" >/dev/null
+echo "==> ensuring local signing identity"
+"$PROJECT_ROOT/Scripts/ensure-local-codesign-identity.sh" "$CODESIGN_IDENTITY"
+
+echo "==> signing with $CODESIGN_IDENTITY"
+codesign --force --sign "$CODESIGN_IDENTITY" --timestamp=none "$APP_BUNDLE" >/dev/null
 
 echo "built: $APP_BUNDLE"
