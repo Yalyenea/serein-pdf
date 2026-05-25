@@ -21,6 +21,10 @@ test:
 run:
     swift run
 
+# Ensure the stable local signing identity exists in the login keychain.
+signing-identity:
+    ./Scripts/ensure-local-codesign-identity.sh
+
 # Build a release .app bundle under build/Serein.app.
 build:
     ./Scripts/make-app.sh {{BUILD_DIR}}

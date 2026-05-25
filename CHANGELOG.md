@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Packaging
+- Sign local app builds with a stable `Serein Local Code Signing` identity instead of ad-hoc cdhash-only signatures, so reinstalling the app keeps a consistent macOS identity for persisted file access.
+
 ## [0.4.0] - 2026-05-19
 
 ### Windows

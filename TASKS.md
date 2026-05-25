@@ -15,6 +15,7 @@
 - `TabPresentationMode`:`verticalSidebar` / `horizontalTitlebar`
 - 外观配置:`mode(system/light/dark)` + `light_theme(normal/rose_pine_dawn)` + `dark_theme(normal/rose_pine_moon)`
 - 访问配置:`access.roots` 默认保存 `/Users`,`access.root_bookmarks` 保存启动时生成的持久访问授权,避免重装后逐个文件请求权限
+- 本地安装签名:`just build` / `just install` 使用 `Serein Local Code Signing` 稳定签名身份,避免重装后变成新的 cdhash-only app 身份
 - PDF 库配置:`library.folders` 保存一个或多个文件夹,打开库时递归扫描 PDF,建立轻量索引并缓存,按库 root / 子文件夹 / PDF 列表二级浏览
 - 默认高亮色:偏轻、低饱和、清晰的粉色
 - `a`:有选区 → 立即高亮;无选区 → 进入高亮模式
@@ -188,6 +189,7 @@
 - [x] `M10.6-006` 性能:PDF Library catalog 对同一组库文件夹复用缓存,并预计算 root / folder / search 索引,避免每次打开面板重复扫描。
 - [x] `M10.6-007` Cmd+K 工作流:增加库索引刷新、Library / Shortcuts 设置直达、合并窗口、当前 PDF 移到新窗口,并放入 macOS menubar。
 - [x] `M10.6-008` 权限:首次启动请求 `/Users` 持久 security-scoped bookmark,启动和配置变化时恢复访问,避免重装后反复询问用户文件夹内 PDF 授权。
+- [x] `M10.6-009` 本地签名:构建时创建 / 复用 `Serein Local Code Signing` 身份并签名 `.app`,避免重装后 ad-hoc cdhash 变化导致 macOS 文件访问信任失效。
 
 ## 11. Milestone 10.7:PDF 热重载
 
