@@ -16,7 +16,7 @@ final class SplitViewController: NSSplitViewController {
     private var outlineSidebarItem: NSSplitViewItem!
     private var centerItem: NSSplitViewItem!
     private var appliedSwapped: Bool?
-    private var appliedWidthsForSessionID: UUID?
+    private var hasAppliedSidebarWidths = false
     private var isApplyingSidebarWidths = false
     private var pendingSidebarWidthApply = false
 
@@ -97,7 +97,7 @@ final class SplitViewController: NSSplitViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         applyStoreState()
-        applySidebarWidthsForActiveSession()
+        applySidebarWidthsForWindow()
     }
 
     override func viewDidLayout() {
@@ -108,25 +108,26 @@ final class SplitViewController: NSSplitViewController {
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
         syncSidebarVisibilityFromSplitView()
-        guard let sessionID = activeSessionIDForSidebarPersistence(),
-              let session = documentStore.session(for: sessionID) else { return }
+        guard isApplyingSidebarWidths == false,
+              hasAppliedSidebarWidths else { return }
 
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
         let leftItem = swapped ? outlineSidebarItem : tabsSidebarItem
         let rightItem = swapped ? tabsSidebarItem : outlineSidebarItem
+        let storedWidths = documentStore.sidebarWidths(in: windowID)
         let leftWidth = leftItem?.isCollapsed == true
-            ? nil
-            : splitView.arrangedSubviews[safe: 0]?.frame.width
+            ? storedWidths.left
+            : splitView.arrangedSubviews[safe: 0]?.frame.width ?? storedWidths.left
         let rightWidth = rightItem?.isCollapsed == true
-            ? nil
-            : splitView.arrangedSubviews[safe: 2]?.frame.width
-        guard sidebarWidthChangedMeaningfully(current: leftWidth, stored: session.leftSidebarWidth) ||
-                sidebarWidthChangedMeaningfully(current: rightWidth, stored: session.rightSidebarWidth) else { return }
+            ? storedWidths.right
+            : splitView.arrangedSubviews[safe: 2]?.frame.width ?? storedWidths.right
+        guard sidebarWidthChangedMeaningfully(current: leftWidth, stored: storedWidths.left) ||
+                sidebarWidthChangedMeaningfully(current: rightWidth, stored: storedWidths.right) else { return }
 
         documentStore.updateSidebarWidths(
             left: leftWidth,
             right: rightWidth,
-            for: sessionID
+            in: windowID
         )
     }
 
@@ -161,7 +162,7 @@ final class SplitViewController: NSSplitViewController {
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         rebuildSplitItemsIfSwapChanged()
         applyStoreState()
-        applySidebarWidthsForActiveSession()
+        applySidebarWidthsForWindow()
     }
 
     private func rebuildSplitItemsIfSwapChanged() {
@@ -191,7 +192,7 @@ final class SplitViewController: NSSplitViewController {
         addSplitViewItem(rightItem)
 
         appliedSwapped = swapped
-        appliedWidthsForSessionID = nil
+        hasAppliedSidebarWidths = false
     }
 
     private func applyStoreState() {
@@ -217,45 +218,35 @@ final class SplitViewController: NSSplitViewController {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pendingSidebarWidthApply = false
-            self.applySidebarWidthsForActiveSession()
+            self.applySidebarWidthsForWindow()
         }
     }
 
-    private func applySidebarWidthsForActiveSession() {
+    private func applySidebarWidthsForWindow() {
         guard splitView.bounds.width > 0,
               splitView.arrangedSubviews.count >= 3 else { return }
 
         let layout = documentStore.appConfiguration.layout
-        let sessionID = documentStore.activeSessionID(in: windowID)
         let leftIsVisible = documentStore.isLeftSidebarVisible(in: windowID)
         let rightIsVisible = documentStore.isRightSidebarVisible(in: windowID)
-        let preferredLeft: CGFloat
-        let preferredRight: CGFloat
-
-        if let session = documentStore.activeSession(in: windowID) {
-            preferredLeft = session.leftSidebarWidth ?? layout.leftSidebarWidth
-            preferredRight = session.rightSidebarWidth ?? layout.rightSidebarWidth
-        } else {
-            preferredLeft = layout.leftSidebarWidth
-            preferredRight = layout.rightSidebarWidth
-        }
+        let preferredWidths = documentStore.sidebarWidths(in: windowID)
 
         let targetLeft = leftIsVisible
-            ? min(max(preferredLeft, layout.leftSidebarMinWidth), layout.leftSidebarMaxWidth)
+            ? min(max(preferredWidths.left, layout.leftSidebarMinWidth), layout.leftSidebarMaxWidth)
             : nil
         let targetRight = rightIsVisible
-            ? min(max(preferredRight, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
+            ? min(max(preferredWidths.right, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
             : nil
         let total = splitView.bounds.width
         let requiredWidth = (targetLeft ?? 0) + (targetRight ?? 0) + centerItem.minimumThickness
         guard total >= requiredWidth else {
-            appliedWidthsForSessionID = nil
+            hasAppliedSidebarWidths = false
             return
         }
 
         let currentWidths = currentSidebarWidths()
         let alreadyApplied =
-            appliedWidthsForSessionID == sessionID &&
+            hasAppliedSidebarWidths &&
             widthsMatch(currentWidths.left, targetWidth: targetLeft) &&
             widthsMatch(currentWidths.right, targetWidth: targetRight)
         if alreadyApplied {
@@ -272,7 +263,7 @@ final class SplitViewController: NSSplitViewController {
             splitView.setPosition(total - targetRight, ofDividerAt: 1)
         }
 
-        appliedWidthsForSessionID = sessionID
+        hasAppliedSidebarWidths = true
     }
 
     private func currentSidebarWidths() -> (left: CGFloat?, right: CGFloat?) {
@@ -293,14 +284,6 @@ final class SplitViewController: NSSplitViewController {
         default:
             false
         }
-    }
-
-    private func activeSessionIDForSidebarPersistence() -> UUID? {
-        guard isApplyingSidebarWidths == false,
-              appliedWidthsForSessionID != nil,
-              let sessionID = documentStore.activeSessionID(in: windowID),
-              appliedWidthsForSessionID == sessionID else { return nil }
-        return sessionID
     }
 
     private func sidebarWidthChangedMeaningfully(current: CGFloat?, stored: CGFloat?) -> Bool {

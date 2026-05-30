@@ -33,6 +33,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
+- Settings General can edit the default left and right sidebar widths
 - Theme controls now split into `Mode`, `Light Theme`, and `Dark Theme`
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
@@ -49,7 +50,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
 - Immersive mode (`cmd+ctrl+l`) hides sidebars and tab chrome while keeping the current window size
-- Per-PDF memory: scale and page persist across launches; sidebar widths follow the current layout config on launch
+- Per-PDF memory: scale and page persist across launches; sidebar widths are window-level runtime state seeded from layout defaults
 - Switching PDFs briefly shows the current file name at the top of the reader, so fast tab changes stay oriented without adding permanent chrome
 - Config-driven defaults via `~/Library/Application Support/Serein/config.toml`
 
@@ -144,14 +145,15 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
 ```
 
-- Layout widths apply on launch and restore for all PDFs. Dragging a sidebar
-  only changes the current runtime session; restart goes back to the config.
+- Layout widths seed new and restored windows. Dragging a sidebar changes the
+  current window runtime width, switching PDFs does not resize panes, and
+  restart goes back to the config defaults.
 - `mode = "system"` follows the current macOS appearance.
 - `light_theme` and `dark_theme` are selected independently, so you can pair
   `Normal` light with `Rose Pine Moon`, or `Rose Pine Dawn` with `Normal`
   dark, without changing the mode model.
-- `sidebars_swapped = true` flips the left and right panes — widths travel
-  with the panes so your narrow tabs pane stays narrow after the swap.
+- `sidebars_swapped = true` flips the left and right panes — window-level widths
+  travel with the panes so your narrow tabs pane stays narrow after the swap.
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.

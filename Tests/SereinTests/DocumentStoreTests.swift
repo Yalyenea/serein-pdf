@@ -883,7 +883,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(session.scaleMode, .manual)
     }
 
-    func testConfiguredLayoutWidthsOverrideRestoredSidebarWidths() throws {
+    func testConfiguredLayoutWidthsIgnoreRestoredPerPDFSidebarWidths() throws {
         let url = try makeTemporaryPDF(named: "restored-layout-widths")
         let readingStateStore = InMemoryReadingStateStore()
         readingStateStore.states[url] = PersistedReadingState(
@@ -918,8 +918,9 @@ final class DocumentStoreTests: XCTestCase {
 
         let session = try store.open(documentAt: url)
 
-        XCTAssertEqual(session.leftSidebarWidth, 320)
-        XCTAssertEqual(session.rightSidebarWidth, 320)
+        XCTAssertEqual(session.url, url)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).left, 320)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).right, 320)
     }
 
     func testUpdateReadingPositionPersistsScaleAndPoint() throws {
@@ -1276,13 +1277,13 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(secondSession.annotationSavePolicy, .never)
     }
 
-    func testUpdateAppConfigurationAppliesLayoutWidthsToExistingSessions() throws {
+    func testUpdateAppConfigurationAppliesLayoutWidthsToWindowRuntimeState() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
             readingStateStore: InMemoryReadingStateStore()
         )
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "settings-layout-widths"))
-        store.updateSidebarWidths(left: 180, right: 260, for: session.id)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "settings-layout-widths"))
+        store.updateSidebarWidths(left: 180, right: 260, in: store.defaultWindowID)
 
         store.updateAppConfiguration(
             AppConfiguration(
@@ -1301,9 +1302,8 @@ final class DocumentStoreTests: XCTestCase {
             )
         )
 
-        let updated = try XCTUnwrap(store.session(for: session.id))
-        XCTAssertEqual(updated.leftSidebarWidth, 310)
-        XCTAssertEqual(updated.rightSidebarWidth, 410)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).left, 310)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).right, 410)
     }
 
     func testUpdateAppConfigurationDisablingFitWidthFlipsExistingSessionsToManual() throws {
@@ -1367,7 +1367,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(readingStateStore.states[session.url]?.scaleMode, .manual)
     }
 
-    func testUpdateAppConfigurationSwapsPerSessionWidthsAndVisibilities() throws {
+    func testUpdateAppConfigurationSwapsWindowSidebarWidthsAndVisibilities() throws {
         let readingStateStore = InMemoryReadingStateStore()
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -1375,8 +1375,8 @@ final class DocumentStoreTests: XCTestCase {
             recentFilesStore: InMemoryRecentFilesStore()
         )
 
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "swap-widths"))
-        store.updateSidebarWidths(left: 40, right: 320, for: session.id)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "swap-widths"))
+        store.updateSidebarWidths(left: 40, right: 320, in: store.defaultWindowID)
         store.setLeftSidebarVisible(true)
         store.setRightSidebarVisible(false)
 
@@ -1384,9 +1384,8 @@ final class DocumentStoreTests: XCTestCase {
         swappedConfig.layout.sidebarsSwapped = true
         store.updateAppConfiguration(swappedConfig)
 
-        let swapped = try XCTUnwrap(store.session(for: session.id))
-        XCTAssertEqual(swapped.leftSidebarWidth, 320)
-        XCTAssertEqual(swapped.rightSidebarWidth, 40)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).left, 320)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).right, 40)
         XCTAssertFalse(store.isLeftSidebarVisible)
         XCTAssertTrue(store.isRightSidebarVisible)
 
@@ -1394,9 +1393,8 @@ final class DocumentStoreTests: XCTestCase {
         unswappedConfig.layout.sidebarsSwapped = false
         store.updateAppConfiguration(unswappedConfig)
 
-        let restored = try XCTUnwrap(store.session(for: session.id))
-        XCTAssertEqual(restored.leftSidebarWidth, 40)
-        XCTAssertEqual(restored.rightSidebarWidth, 320)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).left, 40)
+        XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).right, 320)
         XCTAssertTrue(store.isLeftSidebarVisible)
         XCTAssertFalse(store.isRightSidebarVisible)
     }

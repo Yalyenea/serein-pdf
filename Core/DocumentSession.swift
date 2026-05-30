@@ -51,8 +51,6 @@ struct DocumentSession {
     var sidebarState: SidebarState
     var tabPresentationState: TabPresentationState
     var annotationSavePolicy: AnnotationSavePolicy
-    var leftSidebarWidth: CGFloat?
-    var rightSidebarWidth: CGFloat?
     var undoStack: [HighlightUndoOperation] = []
     var redoStack: [HighlightUndoOperation] = []
     var searchCache: DocumentSearchCache = DocumentSearchCache()
@@ -79,8 +77,6 @@ struct DocumentSession {
         sidebarState: SidebarState = SidebarState(),
         tabPresentationState: TabPresentationState = TabPresentationState(),
         annotationSavePolicy: AnnotationSavePolicy = .default,
-        leftSidebarWidth: CGFloat? = nil,
-        rightSidebarWidth: CGFloat? = nil,
         annotationCache: DocumentHighlightCache = DocumentHighlightCache(),
         isAnnotationCacheLoaded: Bool = false,
         fileSnapshot: PDFFileSnapshot? = nil
@@ -102,8 +98,6 @@ struct DocumentSession {
         self.sidebarState = sidebarState
         self.tabPresentationState = tabPresentationState
         self.annotationSavePolicy = annotationSavePolicy
-        self.leftSidebarWidth = leftSidebarWidth
-        self.rightSidebarWidth = rightSidebarWidth
         self.annotationCache = annotationCache
         self.isAnnotationCacheLoaded = isAnnotationCacheLoaded
         self.fileSnapshot = isBlank ? nil : (fileSnapshot ?? PDFFileSnapshot(url: url))
@@ -114,9 +108,7 @@ struct DocumentSession {
         title: String = "Untitled",
         displayMode: ReaderDisplayMode,
         scaleMode: ReaderScaleMode,
-        annotationSavePolicy: AnnotationSavePolicy,
-        leftSidebarWidth: CGFloat?,
-        rightSidebarWidth: CGFloat?
+        annotationSavePolicy: AnnotationSavePolicy
     ) -> DocumentSession {
         DocumentSession(
             id: id,
@@ -126,8 +118,6 @@ struct DocumentSession {
             displayMode: displayMode,
             scaleMode: scaleMode,
             annotationSavePolicy: annotationSavePolicy,
-            leftSidebarWidth: leftSidebarWidth,
-            rightSidebarWidth: rightSidebarWidth,
             fileSnapshot: nil
         )
     }

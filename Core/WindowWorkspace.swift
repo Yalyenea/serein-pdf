@@ -97,6 +97,8 @@ struct WindowWorkspace: Equatable, Sendable {
     var splitPair: ReaderSplitPair?
     var focusedPane: ReaderPane
     var recentlyClosedURLs: [URL]
+    var leftSidebarWidth: CGFloat?
+    var rightSidebarWidth: CGFloat?
 
     init(
         id: UUID = UUID(),
@@ -114,7 +116,9 @@ struct WindowWorkspace: Equatable, Sendable {
         secondarySessionID: UUID? = nil,
         splitPair: ReaderSplitPair? = nil,
         focusedPane: ReaderPane = .primary,
-        recentlyClosedURLs: [URL] = []
+        recentlyClosedURLs: [URL] = [],
+        leftSidebarWidth: CGFloat? = nil,
+        rightSidebarWidth: CGFloat? = nil
     ) {
         self.id = id
         self.sessionIDs = sessionIDs
@@ -132,6 +136,8 @@ struct WindowWorkspace: Equatable, Sendable {
         self.splitPair = splitPair
         self.focusedPane = focusedPane
         self.recentlyClosedURLs = recentlyClosedURLs
+        self.leftSidebarWidth = leftSidebarWidth
+        self.rightSidebarWidth = rightSidebarWidth
     }
 
     var activeSessionID: UUID? {

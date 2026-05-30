@@ -97,7 +97,7 @@
 - Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
 - Wave 7.5 M10.12.1 手测：确认 `Cmd+Option+G` 打开 Go to Page 后输入框自动聚焦，输入页码按 Return 跳页且不触发 tab 重命名。
 - Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
-- Wave 9 M12 体验分流：继续做 `M12-001` → `M12-002` → `M12-005`，暂缓项只在出现明确样本或需求边界后启动。
+- Wave 9 M12 体验分流：`M12-001` 已完成，`M12-002` 先暂缓；下一步继续做 `M12-005`，暂缓项只在出现明确样本或需求边界后启动。
 
 ## 5. Milestone 7:搜索强化与对比阅读
 
@@ -263,8 +263,7 @@
 
 ### 18.1 值得做
 
-- [ ] `M12-001` 侧边栏宽度收口:取消 per-PDF sidebar width 记忆,改为窗口运行期宽度 + 配置默认宽度;切 PDF 不应导致左右侧栏宽度跳变。
-- [ ] `M12-002` 批注双向定位:右栏 Annotations 点击高亮仍跳到 PDF;新增从 PDF 高亮点击/选择反向定位右栏对应评论,并保持当前 comment 编辑状态稳定。
+- [x] `M12-001` 侧边栏宽度收口:取消 per-PDF sidebar width 记忆,改为窗口运行期宽度 + 配置默认宽度;Settings General 可编辑左右默认宽度;切 PDF 不应导致左右侧栏宽度跳变。
 - [x] `M12-003` 高亮导出模板优化:Markdown 默认模板按页输出 snippet + comment,适合笔记粘贴;Plain / JSON 保留颜色等元信息。
 - [x] `M12-004` 系统 Share 与干净副本分享:接入 macOS `NSSharingServicePicker`,支持 `Cmd+K` → `Cmd+E`;提供导出/分享移除可见用户批注、保留链接与表单控件的 PDF 副本。
 - [ ] `M12-005` 高亮颜色主题化:按 `normal` / `rose_pine_dawn` / `rose_pine_moon` 优化 pink / yellow / green,保持低饱和、清晰、打印与暗色下不过刺眼。
@@ -277,6 +276,7 @@
 - [ ] `M12-D003` Zed / VS Code / LaTeX / Typst PDF sync:暂缓。热重载已覆盖基础编译预览;SyncTeX / 编辑器反向定位属于更大集成,先写 RFC 再决定。
 - [ ] `M12-D004` 双屏同步滚动对照阅读:暂缓。需要跨窗口或跨 pane 阅读位置同步模型;等同窗分屏和同 PDF comparison 手测稳定后再启动。
 - [ ] `M12-D005` 外部 rename 自动更新打开文档名称:暂缓。App 内重命名已更新文件、session、recent;Finder 外部 rename 需先定义如何从旧路径可靠发现新路径。
+- [ ] `M12-D006` 批注双向定位:暂缓。右栏 Annotations 点击高亮已可跳到 PDF;从 PDF 高亮反向定位右栏评论先等点击/编辑态需求边界更明确后再做。
 
 ## 19. 手测清单(尚未覆盖)
 
@@ -311,5 +311,6 @@
 - [ ] `UAT-49` 建立 A/B pair 后普通点击 C 显示单屏 C,再点击 A 或 B 恢复 A/B 分屏
 - [ ] `UAT-50` 已分屏时 `Option+Click` / `Option+Enter` 替换当前焦点 pane,垂直 tabs 与标题栏 tabs 行为一致
 - [x] `UAT-51` `File > Share…` 可分享 Original / Clean Copy / Highlights,`File > Export Clean Copy…` 可导出保留链接与表单控件的干净副本,`Cmd+K` → `Cmd+E` 可触发 Share
+- [x] `UAT-52` 拖动左右侧栏后切换 PDF 宽度不跳变;Settings General 修改左右默认宽度后会写入配置并更新窗口运行期宽度
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

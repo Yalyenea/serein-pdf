@@ -1,7 +1,7 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 520, height: 397)
+    static let generalContentSize = NSSize(width: 560, height: 440)
     static let libraryContentSize = NSSize(width: 680, height: 460)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
 }
@@ -182,7 +182,7 @@ private final class ShortcutCaptureButton: NSButton {
     }
 }
 
-private final class SettingsViewController: NSViewController {
+private final class SettingsViewController: NSViewController, NSTextFieldDelegate {
     var onConfigurationChanged: ((AppConfiguration) -> Void)?
     var onPreferredContentSizeChanged: ((NSSize) -> Void)?
 
@@ -223,13 +223,17 @@ private final class SettingsViewController: NSViewController {
         target: nil,
         action: nil
     )
+    private let leftSidebarWidthField = NSTextField()
+    private let leftSidebarWidthStepper = NSStepper()
+    private let rightSidebarWidthField = NSTextField()
+    private let rightSidebarWidthStepper = NSStepper()
     private let showRecentInSidebarCheckbox = NSButton(
         checkboxWithTitle: "Show recent PDFs in left sidebar footer",
         target: nil,
         action: nil
     )
     private let footnoteLabel = NSTextField(
-        wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Auto-save applies immediately to open PDFs."
+        wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Sidebar width defaults and auto-save apply immediately."
     )
 
     private var shortcutButtons: [ShortcutCommand: ShortcutCaptureButton] = [:]
@@ -344,6 +348,7 @@ private final class SettingsViewController: NSViewController {
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
+        applySidebarWidthControls(configuration.layout)
         showRecentInSidebarCheckbox.state = configuration.layout.showRecentFilesInSidebar ? .on : .off
         shortcutsErrorLabel.stringValue = ""
         rebuildLibraryFolderRows()
@@ -393,8 +398,32 @@ private final class SettingsViewController: NSViewController {
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
         updatedConfiguration.annotations.autoSavePolicy = autoSavePolicy
         updatedConfiguration.layout.sidebarsSwapped = swapSidebarsCheckbox.state == .on
+        updatedConfiguration.layout.leftSidebarWidth = normalizedSidebarWidth(
+            from: leftSidebarWidthField,
+            minWidth: updatedConfiguration.layout.leftSidebarMinWidth,
+            maxWidth: updatedConfiguration.layout.leftSidebarMaxWidth
+        )
+        updatedConfiguration.layout.rightSidebarWidth = normalizedSidebarWidth(
+            from: rightSidebarWidthField,
+            minWidth: updatedConfiguration.layout.rightSidebarMinWidth,
+            maxWidth: updatedConfiguration.layout.rightSidebarMaxWidth
+        )
         updatedConfiguration.layout.showRecentFilesInSidebar = showRecentInSidebarCheckbox.state == .on
         publishConfigurationIfChanged(updatedConfiguration)
+    }
+
+    @objc
+    private func handleSidebarWidthStepperChanged(_ sender: NSStepper) {
+        guard isApplyingConfiguration == false else { return }
+        switch sender {
+        case leftSidebarWidthStepper:
+            leftSidebarWidthField.integerValue = Int(sender.doubleValue.rounded())
+        case rightSidebarWidthStepper:
+            rightSidebarWidthField.integerValue = Int(sender.doubleValue.rounded())
+        default:
+            return
+        }
+        handleGeneralControlChanged(sender)
     }
 
     private func applySelectedPage() {
@@ -445,6 +474,25 @@ private final class SettingsViewController: NSViewController {
         swapSidebarsCheckbox.target = self
         swapSidebarsCheckbox.action = #selector(handleGeneralControlChanged(_:))
 
+        configureSidebarWidthField(
+            leftSidebarWidthField,
+            identifier: "leftSidebarWidthField"
+        )
+        configureSidebarWidthField(
+            rightSidebarWidthField,
+            identifier: "rightSidebarWidthField"
+        )
+        configureSidebarWidthStepper(
+            leftSidebarWidthStepper,
+            minWidth: configuration.layout.leftSidebarMinWidth,
+            maxWidth: configuration.layout.leftSidebarMaxWidth
+        )
+        configureSidebarWidthStepper(
+            rightSidebarWidthStepper,
+            minWidth: configuration.layout.rightSidebarMinWidth,
+            maxWidth: configuration.layout.rightSidebarMaxWidth
+        )
+
         showRecentInSidebarCheckbox.translatesAutoresizingMaskIntoConstraints = false
         showRecentInSidebarCheckbox.controlSize = .small
         showRecentInSidebarCheckbox.target = self
@@ -461,6 +509,8 @@ private final class SettingsViewController: NSViewController {
         layoutOptionsStack.spacing = 6
         layoutOptionsStack.translatesAutoresizingMaskIntoConstraints = false
 
+        let sidebarDefaultsStack = makeSidebarDefaultsStack()
+
         let grid = NSGridView(views: [
             [makeRowLabel("Mode"), modePopUp],
             [makeRowLabel("Light Theme"), lightThemePopUp],
@@ -468,6 +518,7 @@ private final class SettingsViewController: NSViewController {
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
+            [makeRowLabel("Sidebar Widths"), sidebarDefaultsStack],
             [makeRowLabel("Layout"), layoutOptionsStack],
         ])
         grid.translatesAutoresizingMaskIntoConstraints = false
@@ -493,6 +544,86 @@ private final class SettingsViewController: NSViewController {
             footnoteLabel.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 16),
             footnoteLabel.bottomAnchor.constraint(lessThanOrEqualTo: generalContainer.bottomAnchor, constant: -20),
         ])
+    }
+
+    private func configureSidebarWidthField(_ field: NSTextField, identifier: String) {
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.controlSize = .small
+        field.alignment = .right
+        field.identifier = NSUserInterfaceItemIdentifier(identifier)
+        field.target = self
+        field.action = #selector(handleGeneralControlChanged(_:))
+        field.delegate = self
+    }
+
+    private func configureSidebarWidthStepper(_ stepper: NSStepper, minWidth: CGFloat, maxWidth: CGFloat) {
+        stepper.translatesAutoresizingMaskIntoConstraints = false
+        stepper.controlSize = .small
+        stepper.minValue = Double(minWidth)
+        stepper.maxValue = Double(maxWidth)
+        stepper.increment = 10
+        stepper.target = self
+        stepper.action = #selector(handleSidebarWidthStepperChanged(_:))
+    }
+
+    private func makeSidebarDefaultsStack() -> NSStackView {
+        let stack = NSStackView(views: [
+            makeSidebarWidthRow(title: "Left", field: leftSidebarWidthField, stepper: leftSidebarWidthStepper),
+            makeSidebarWidthRow(title: "Right", field: rightSidebarWidthField, stepper: rightSidebarWidthStepper),
+        ])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
+
+    private func makeSidebarWidthRow(title: String, field: NSTextField, stepper: NSStepper) -> NSView {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let suffix = NSTextField(labelWithString: "pt")
+        suffix.font = .systemFont(ofSize: 12)
+        suffix.textColor = .secondaryLabelColor
+        suffix.translatesAutoresizingMaskIntoConstraints = false
+
+        let row = NSStackView(views: [label, field, stepper, suffix])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 6
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            label.widthAnchor.constraint(equalToConstant: 36),
+            field.widthAnchor.constraint(equalToConstant: 64),
+        ])
+
+        return row
+    }
+
+    private func applySidebarWidthControls(_ layout: AppConfiguration.Layout) {
+        leftSidebarWidthField.integerValue = Int(layout.leftSidebarWidth.rounded())
+        leftSidebarWidthStepper.minValue = Double(layout.leftSidebarMinWidth)
+        leftSidebarWidthStepper.maxValue = Double(layout.leftSidebarMaxWidth)
+        leftSidebarWidthStepper.doubleValue = Double(layout.leftSidebarWidth)
+
+        rightSidebarWidthField.integerValue = Int(layout.rightSidebarWidth.rounded())
+        rightSidebarWidthStepper.minValue = Double(layout.rightSidebarMinWidth)
+        rightSidebarWidthStepper.maxValue = Double(layout.rightSidebarMaxWidth)
+        rightSidebarWidthStepper.doubleValue = Double(layout.rightSidebarWidth)
+    }
+
+    private func normalizedSidebarWidth(from field: NSTextField, minWidth: CGFloat, maxWidth: CGFloat) -> CGFloat {
+        min(max(CGFloat(field.doubleValue.rounded()), minWidth), maxWidth)
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard isApplyingConfiguration == false,
+              let field = obj.object as? NSTextField,
+              field === leftSidebarWidthField || field === rightSidebarWidthField else { return }
+        handleGeneralControlChanged(field)
     }
 
     private func buildLibraryPage() {

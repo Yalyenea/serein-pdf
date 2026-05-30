@@ -88,8 +88,8 @@ flowchart LR
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
 | 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
-| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;窗口 UI 状态挂在 `WindowWorkspace` |
-| 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,per-session 宽度 / 可见状态原子对调 |
+| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
+| 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
 
@@ -115,7 +115,7 @@ flowchart LR
 - 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
 - `rose_pine_dawn` 不只改阅读区外围,也把 PDF 白底映射成暖纸色
 - 反色夜间模式采用暖色、低刺激的 Rose Pine Moon 映射,避免生硬黄蓝互翻
-- `Settings` 按当前页内容自适应尺寸,`Shortcuts` 页会自动放大到合适大小
+- `Settings` 按当前页内容自适应尺寸,`General` 页可编辑左右侧栏默认宽度,`Shortcuts` 页会自动放大到合适大小
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
 - 默认高亮色:偏轻、低饱和但清晰的粉色
@@ -209,7 +209,6 @@ flowchart LR
 | `outlineTree: [OutlineNode]` | 目录树 |
 | `isDirty: Bool` | 是否有未保存批注 |
 | `fileSnapshot` | 外部文件变化检测快照(mtime / size / inode) |
-| `sidebarState` | 左右栏显隐 / 宽度 |
 | `tabPresentationState` | 当前 tab 模式下的局部状态 |
 | `annotationSavePolicy` | `after10Minutes` / `never` |
 | `undoStack` | 高亮撤销栈,上限 50 |
@@ -225,7 +224,7 @@ flowchart LR
 - 监听已打开 PDF 的外部改写;clean session 清理 `PDFDocument` / Outline / Search / Annotations 缓存并触发 UI 重读,dirty session 不自动刷新
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - 提供 tab 模式切换
-- 左右互换时对调 per-session 宽度 / 可见状态
+- 左右互换时对调 `WindowWorkspace` 的 window-level 宽度 / 可见状态
 
 ### 5.3 `WindowWorkspace`
 
@@ -243,6 +242,7 @@ flowchart LR
 | `splitPair` | 当前运行期绑定的两个 PDF,不跨启动恢复 |
 | `focusedPane` | split-edit 与搜索跳转的落点 |
 | `recentlyClosedURLs` | 本窗最近关闭栈 |
+| `leftSidebarWidth` / `rightSidebarWidth` | 当前窗口运行期侧栏宽度,由配置默认值初始化,不随 PDF 切换 |
 ### 5.4 辅助模型
 
 | 模型 | 用途 |

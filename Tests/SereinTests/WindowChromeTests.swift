@@ -486,7 +486,7 @@ struct WindowChromeTests {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
         let controller = MainWindowController(documentStore: store)
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "right-sidebar-mode-width"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "right-sidebar-mode-width"))
         flushLayout(controller.window)
 
         guard let splitController = controller.window?.contentViewController as? SplitViewController else {
@@ -500,7 +500,7 @@ struct WindowChromeTests {
 
         let baselineWidth = splitController.splitView.arrangedSubviews[2].frame.width
         #expect(baselineWidth > 120)
-        #expect(store.session(for: session.id)?.rightSidebarWidth != nil)
+        #expect(abs(store.sidebarWidths(in: controller.windowID).right - baselineWidth) < 0.5)
 
         for mode in RightSidebarMode.allCases {
             store.setRightSidebarMode(mode, in: controller.windowID)
@@ -512,8 +512,8 @@ struct WindowChromeTests {
                 "Mode \(mode) changed right sidebar width from \(baselineWidth) to \(currentWidth)"
             )
             #expect(
-                abs((store.session(for: session.id)?.rightSidebarWidth ?? 0) - baselineWidth) < 0.5,
-                "Mode \(mode) mutated stored right sidebar width"
+                abs(store.sidebarWidths(in: controller.windowID).right - baselineWidth) < 0.5,
+                "Mode \(mode) mutated stored window sidebar width"
             )
         }
     }
@@ -569,6 +569,33 @@ struct WindowChromeTests {
             abs(searchWidth - annotationsWidth) < 0.5,
             "search width \(searchWidth) != annotations width \(annotationsWidth)"
         )
+    }
+
+    @Test
+    func switchingTabsKeepsWindowSidebarWidths() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "window-sidebar-first"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "window-sidebar-second"))
+        flushLayout(controller.window)
+
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        splitController.splitView.setPosition(860, ofDividerAt: 1)
+        splitController.splitView.adjustSubviews()
+        flushLayout(controller.window)
+
+        let baselineRightWidth = splitController.splitView.arrangedSubviews[2].frame.width
+        #expect(abs(store.sidebarWidths(in: controller.windowID).right - baselineRightWidth) < 0.5)
+
+        store.activate(sessionID: first.id, in: controller.windowID)
+        flushLayout(controller.window)
+
+        let widthAfterSwitch = splitController.splitView.arrangedSubviews[2].frame.width
+        #expect(abs(widthAfterSwitch - baselineRightWidth) < 0.5)
+        #expect(abs(store.sidebarWidths(in: controller.windowID).right - baselineRightWidth) < 0.5)
     }
 
     @Test
@@ -1079,7 +1106,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 520, height: 397))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 560, height: 440))
     }
 
     @Test
@@ -1101,7 +1128,31 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 520, height: 397))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 560, height: 440))
+    }
+
+    @Test
+    func settingsWindowCanEditSidebarDefaultWidths() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) { configuration in
+            publishedConfigurations.append(configuration)
+        }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let leftField = try #require(textField(identifier: "leftSidebarWidthField", in: contentView))
+        let rightField = try #require(textField(identifier: "rightSidebarWidthField", in: contentView))
+        leftField.integerValue = 260
+        rightField.integerValue = 360
+
+        let action = try #require(leftField.action)
+        let target = try #require(leftField.target)
+        NSApp.sendAction(action, to: target, from: leftField)
+
+        let updatedConfiguration = try #require(publishedConfigurations.last)
+        #expect(updatedConfiguration.layout.leftSidebarWidth == 260)
+        #expect(updatedConfiguration.layout.rightSidebarWidth == 360)
     }
 
     @Test
@@ -1819,6 +1870,11 @@ private func textFields(in root: NSView) -> [NSTextField] {
         pending.append(contentsOf: view.subviews)
     }
     return matches
+}
+
+@MainActor
+private func textField(identifier: String, in root: NSView) -> NSTextField? {
+    textFields(in: root).first { $0.identifier?.rawValue == identifier }
 }
 
 @MainActor

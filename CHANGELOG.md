@@ -29,6 +29,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add `File > Export Clean Copy…` and a PDFKit clean-copy path that removes visible/user annotations while preserving links and form widgets.
 - Make Markdown highlights export page-grouped and note-friendly, keeping snippets and comments without color metadata.
 
+### Settings and Windows
+- Make sidebar widths window-level runtime state seeded from layout defaults, so switching PDFs no longer resizes sidebars.
+- Let Settings General edit default left and right sidebar widths.
+
 ## [0.4.0] - 2026-05-19
 
 ### Windows

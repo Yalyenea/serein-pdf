@@ -38,7 +38,12 @@ final class DocumentStore {
         self.readingStateStore = readingStateStore
         self.recentFilesStore = recentFilesStore
         self.appConfiguration = appConfiguration
-        self.windowWorkspaces = [WindowWorkspace()]
+        self.windowWorkspaces = [
+            WindowWorkspace(
+                leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
+                rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
+            ),
+        ]
         recentDocumentURLs = (try? recentFilesStore.loadRecentFiles()) ?? []
         fileMonitor.onChange = { [weak self] url in
             self?.refreshExternallyChangedFile(at: url)
@@ -49,7 +54,10 @@ final class DocumentStore {
         if let id = windowWorkspaces.first?.id {
             return id
         }
-        let fallback = WindowWorkspace()
+        let fallback = WindowWorkspace(
+            leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
+            rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
+        )
         windowWorkspaces = [fallback]
         return fallback.id
     }
@@ -84,6 +92,16 @@ final class DocumentStore {
 
     func isRightSidebarVisible(in windowID: UUID) -> Bool {
         windowWorkspace(for: windowID)?.isRightSidebarVisible ?? true
+    }
+
+    func sidebarWidths(in windowID: UUID) -> (left: CGFloat, right: CGFloat) {
+        guard let workspace = windowWorkspace(for: windowID) else {
+            return (appConfiguration.layout.leftSidebarWidth, appConfiguration.layout.rightSidebarWidth)
+        }
+        return (
+            workspace.leftSidebarWidth ?? appConfiguration.layout.leftSidebarWidth,
+            workspace.rightSidebarWidth ?? appConfiguration.layout.rightSidebarWidth
+        )
     }
 
     var recentlyClosedURLs: [URL] {
@@ -135,7 +153,9 @@ final class DocumentStore {
             primarySessionID: nil,
             secondarySessionID: nil,
             focusedPane: .primary,
-            recentlyClosedURLs: []
+            recentlyClosedURLs: [],
+            leftSidebarWidth: source.leftSidebarWidth,
+            rightSidebarWidth: source.rightSidebarWidth
         )
         normalizeWorkspace(&copy)
         windowWorkspaces.append(copy)
@@ -200,7 +220,9 @@ final class DocumentStore {
             primarySessionID: sessionID,
             secondarySessionID: nil,
             focusedPane: .primary,
-            recentlyClosedURLs: []
+            recentlyClosedURLs: [],
+            leftSidebarWidth: source.leftSidebarWidth,
+            rightSidebarWidth: source.rightSidebarWidth
         )
 
         source.sessionIDs.removeAll { $0 == sessionID }
@@ -320,9 +342,7 @@ final class DocumentStore {
         let session = DocumentSession.blank(
             displayMode: appConfiguration.reader.defaultDisplayMode,
             scaleMode: defaultScaleMode,
-            annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
-            leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
-            rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
+            annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
         )
 
         sessions.append(session)
@@ -1098,17 +1118,23 @@ final class DocumentStore {
         let layoutWidthsChanged =
             appConfiguration.layout.leftSidebarWidth != configuration.layout.leftSidebarWidth ||
             appConfiguration.layout.rightSidebarWidth != configuration.layout.rightSidebarWidth
-        let applyLayoutWidthsDirectly = layoutWidthsChanged && previousSwapped == newSwapped
         appConfiguration = configuration
 
         let fitWidthChanged = previousFitWidthOnOpen != configuration.reader.fitWidthOnOpen
         let targetScaleMode: ReaderScaleMode = configuration.reader.fitWidthOnOpen ? .fitWidth : .manual
 
-        if previousSwapped != newSwapped {
-            for index in windowWorkspaces.indices {
+        for index in windowWorkspaces.indices {
+            if previousSwapped != newSwapped {
                 let leftVisible = windowWorkspaces[index].isLeftSidebarVisible
                 windowWorkspaces[index].isLeftSidebarVisible = windowWorkspaces[index].isRightSidebarVisible
                 windowWorkspaces[index].isRightSidebarVisible = leftVisible
+                let leftWidth = windowWorkspaces[index].leftSidebarWidth
+                windowWorkspaces[index].leftSidebarWidth = windowWorkspaces[index].rightSidebarWidth
+                windowWorkspaces[index].rightSidebarWidth = leftWidth
+            }
+            if layoutWidthsChanged {
+                windowWorkspaces[index].leftSidebarWidth = configuration.layout.leftSidebarWidth
+                windowWorkspaces[index].rightSidebarWidth = configuration.layout.rightSidebarWidth
             }
         }
 
@@ -1116,17 +1142,6 @@ final class DocumentStore {
             sessions[index].annotationSavePolicy = configuration.annotations.autoSavePolicy
             if fitWidthChanged, sessions[index].scaleMode != targetScaleMode {
                 sessions[index].scaleMode = targetScaleMode
-                persistReadingState(for: sessions[index])
-            }
-            if applyLayoutWidthsDirectly {
-                sessions[index].leftSidebarWidth = configuration.layout.leftSidebarWidth
-                sessions[index].rightSidebarWidth = configuration.layout.rightSidebarWidth
-                persistReadingState(for: sessions[index])
-            }
-            if previousSwapped != newSwapped {
-                let storedLeftWidth = sessions[index].leftSidebarWidth
-                sessions[index].leftSidebarWidth = sessions[index].rightSidebarWidth
-                sessions[index].rightSidebarWidth = storedLeftWidth
                 persistReadingState(for: sessions[index])
             }
         }
@@ -1198,9 +1213,7 @@ final class DocumentStore {
                     scaleMode: resolvedScaleMode(restoredState?.scaleMode),
                     zoomScale: restoredState?.scaleFactor ?? 1.0,
                     lastReadPosition: restoredState?.readingPosition ?? .zero,
-                    annotationSavePolicy: appConfiguration.annotations.autoSavePolicy,
-                    leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
-                    rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
+                    annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
                 )
             sessions.append(session)
         }
@@ -1241,7 +1254,9 @@ final class DocumentStore {
                 primarySessionID: restoredActiveSessionID,
                 secondarySessionID: nil,
                 focusedPane: .primary,
-                recentlyClosedURLs: record.recentlyClosedURLs
+                recentlyClosedURLs: record.recentlyClosedURLs,
+                leftSidebarWidth: appConfiguration.layout.leftSidebarWidth,
+                rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
             )
         }
 
@@ -1771,8 +1786,6 @@ final class DocumentStore {
             outlineTree: seedState?.outlineTree ?? [],
             isOutlineLoaded: seedState?.isOutlineLoaded ?? false,
             annotationSavePolicy: seedState?.annotationSavePolicy ?? appConfiguration.annotations.autoSavePolicy,
-            leftSidebarWidth: seedState?.leftSidebarWidth ?? appConfiguration.layout.leftSidebarWidth,
-            rightSidebarWidth: seedState?.rightSidebarWidth ?? appConfiguration.layout.rightSidebarWidth,
             annotationCache: seedState?.annotationCache ?? DocumentHighlightCache(),
             isAnnotationCacheLoaded: seedState?.isAnnotationCacheLoaded ?? false,
             fileSnapshot: PDFFileSnapshot(url: url)
@@ -1820,8 +1833,8 @@ final class DocumentStore {
                 scaleMode: session.scaleMode,
                 scaleFactor: session.zoomScale,
                 readingPosition: session.lastReadPosition,
-                leftSidebarWidth: session.leftSidebarWidth,
-                rightSidebarWidth: session.rightSidebarWidth
+                leftSidebarWidth: nil,
+                rightSidebarWidth: nil
             )
         )
     }
@@ -1874,20 +1887,15 @@ final class DocumentStore {
         notifyChange()
     }
 
-    func updateSidebarWidths(
-        left leftWidth: CGFloat?,
-        right rightWidth: CGFloat?,
-        for sessionID: UUID
-    ) {
-        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+    func updateSidebarWidths(left leftWidth: CGFloat, right rightWidth: CGFloat, in windowID: UUID) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         let needsUpdate =
-            sessions[sessionIndex].leftSidebarWidth != leftWidth ||
-            sessions[sessionIndex].rightSidebarWidth != rightWidth
+            windowWorkspaces[index].leftSidebarWidth != leftWidth ||
+            windowWorkspaces[index].rightSidebarWidth != rightWidth
         guard needsUpdate else { return }
 
-        sessions[sessionIndex].leftSidebarWidth = leftWidth
-        sessions[sessionIndex].rightSidebarWidth = rightWidth
-        persistReadingState(for: sessions[sessionIndex])
+        windowWorkspaces[index].leftSidebarWidth = leftWidth
+        windowWorkspaces[index].rightSidebarWidth = rightWidth
     }
 }
 
