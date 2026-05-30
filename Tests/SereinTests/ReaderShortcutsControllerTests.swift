@@ -164,6 +164,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             ("r", .refreshLibraryIndex),
             ("l", .openLibrarySettings),
             ("s", .openShortcutSettings),
+            ("e", .shareDocument),
             ("m", .mergeAllWindows),
             ("n", .moveCurrentPDFToNewWindow),
         ]

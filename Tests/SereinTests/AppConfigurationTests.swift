@@ -29,6 +29,8 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertNil(configuration.shortcuts.bindings[.openLibrarySettings])
         XCTAssertNil(configuration.shortcuts.bindings[.openShortcutSettings])
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
+        XCTAssertNil(configuration.shortcuts.bindings[.shareDocument])
+        XCTAssertNil(configuration.shortcuts.bindings[.exportCleanCopy])
         XCTAssertEqual(configuration.shortcuts.bindings[.copyHighlightsMarkdown], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.copyCurrentPDFPath], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
@@ -100,6 +102,8 @@ exit_highlight_mode = "escape"
 toggle_night_mode = "n"
 switch_current_theme = "command+option+t"
 save_annotations = "command+shift+s"
+share_document = "command+option+e"
+export_clean_copy = "command+option+shift+e"
 copy_current_pdf_path = "command+shift+c"
 toggle_left_sidebar = "command+shift+l"
 close_current_tab = "command+e"
@@ -149,6 +153,8 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.switchCurrentTheme], KeyboardShortcut(key: "t", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openLibraryPDF], KeyboardShortcut(key: "o", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.shareDocument], KeyboardShortcut(key: "e", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.exportCleanCopy], KeyboardShortcut(key: "e", modifiers: [.command, .option, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.copyCurrentPDFPath], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
@@ -208,6 +214,8 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("open_library_settings = \"none\""))
         XCTAssertTrue(content.contains("open_shortcut_settings = \"none\""))
         XCTAssertTrue(content.contains("save_annotations = \"command+s\""))
+        XCTAssertTrue(content.contains("share_document = \"none\""))
+        XCTAssertTrue(content.contains("export_clean_copy = \"none\""))
         XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
         XCTAssertTrue(content.contains("copy_current_pdf_path = \"command+shift+c\""))
         XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))

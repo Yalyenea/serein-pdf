@@ -1050,6 +1050,66 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(reopenedDocument?.page(at: 0)?.annotations.count, 1)
     }
 
+    func testCleanCopyDataDoesNotMutateSessionDocumentOrDirtyState() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "clean-copy-data"))
+        let document = try store.pdfDocument(for: session.id)
+        let page = try XCTUnwrap(document.page(at: 0))
+        let highlight = PDFAnnotation(
+            bounds: NSRect(x: 20, y: 20, width: 60, height: 18),
+            forType: .highlight,
+            withProperties: nil
+        )
+        let link = PDFAnnotation(
+            bounds: NSRect(x: 20, y: 50, width: 60, height: 18),
+            forType: .link,
+            withProperties: nil
+        )
+        page.addAnnotation(highlight)
+        page.addAnnotation(link)
+        store.setDirty(true, for: session.id)
+
+        let cleanData = try store.cleanCopyData(for: session.id)
+        let cleanDocument = try XCTUnwrap(PDFDocument(data: cleanData))
+        let cleanTypes = try XCTUnwrap(cleanDocument.page(at: 0)?.annotations.compactMap(\.type).sorted())
+
+        XCTAssertEqual(cleanTypes, ["Link"])
+        XCTAssertEqual(document.page(at: 0)?.annotations.count, 2)
+        XCTAssertTrue(store.session(for: session.id)?.isDirty == true)
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: session.id))
+    }
+
+    func testWriteCleanCopyDoesNotOverwriteSourcePDF() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore()
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "write-clean-copy"))
+        let document = try store.pdfDocument(for: session.id)
+        let page = try XCTUnwrap(document.page(at: 0))
+        page.addAnnotation(
+            PDFAnnotation(
+                bounds: NSRect(x: 20, y: 20, width: 60, height: 18),
+                forType: .highlight,
+                withProperties: nil
+            )
+        )
+        store.setDirty(true, for: session.id)
+
+        let cleanURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("pdf")
+        try store.writeCleanCopy(for: session.id, to: cleanURL)
+
+        XCTAssertTrue(store.session(for: session.id)?.isDirty == true)
+        XCTAssertEqual(PDFDocument(url: session.url)?.page(at: 0)?.annotations.count, 0)
+        XCTAssertEqual(PDFDocument(url: cleanURL)?.page(at: 0)?.annotations.count, 0)
+        XCTAssertEqual(document.page(at: 0)?.annotations.count, 1)
+    }
+
     func testAnnotationSectionsExposeSnippetColorAndPageGrouping() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

@@ -39,6 +39,8 @@
 - `Cmd+W`:多选 tabs 时按窗口顺序关闭选中的 PDFs;否则关闭当前 tab / window
 - `Cmd+Shift+W`:关闭当前窗口,沿用 dirty 批注保存确认
 - `Cmd+Shift+C`:复制当前 PDF 路径到剪贴板
+- `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights
+- `File > Export Clean Copy…`:导出移除可见用户批注、保留链接与表单控件的 PDF 副本
 - `Cmd+Ctrl+\`:左侧保持当前 PDF,右侧进入候选态;首项为同一个 PDF,后续为当前窗口其他 PDF
 - 分屏 pair:普通 tab 点击恢复 pair 或离开 pair;`Option` 激活才替换当前焦点 pane,未分屏时建立当前 PDF + 目标 PDF pair
 - 同 PDF comparison session:内部 session,独立页码 / 缩放,不显示普通 tab、不进最近 / 重开 / 持久化 / All Open 搜索
@@ -81,6 +83,7 @@
 | M10.13 浏览器式分屏 | ✅ 开发完成,待手测 |
 | M10.12.1 Return 焦点收口 | ✅ |
 | M11 扩展生态(预研) | 未开始 |
+| M12 Backlog 体验分流 | 进行中 |
 
 ## 4. 下一步执行顺序
 
@@ -94,7 +97,7 @@
 - Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
 - Wave 7.5 M10.12.1 手测：确认 `Cmd+Option+G` 打开 Go to Page 后输入框自动聚焦，输入页码按 Return 跳页且不触发 tab 重命名。
 - Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
-
+- Wave 9 M12 体验分流：继续做 `M12-001` → `M12-002` → `M12-005`，暂缓项只在出现明确样本或需求边界后启动。
 
 ## 5. Milestone 7:搜索强化与对比阅读
 
@@ -256,7 +259,26 @@
 - [ ] `M11-003` Serein Extension API 草稿:面向未来扩展开发者。
 - [ ] `M11-004` 若推迟,在 RFC 写清"为什么现在不做"(安全、上架、维护成本)。
 
-## 18. 手测清单(尚未覆盖)
+## 18. Milestone 12:Backlog 体验分流
+
+### 18.1 值得做
+
+- [ ] `M12-001` 侧边栏宽度收口:取消 per-PDF sidebar width 记忆,改为窗口运行期宽度 + 配置默认宽度;切 PDF 不应导致左右侧栏宽度跳变。
+- [ ] `M12-002` 批注双向定位:右栏 Annotations 点击高亮仍跳到 PDF;新增从 PDF 高亮点击/选择反向定位右栏对应评论,并保持当前 comment 编辑状态稳定。
+- [x] `M12-003` 高亮导出模板优化:Markdown 默认模板按页输出 snippet + comment,适合笔记粘贴;Plain / JSON 保留颜色等元信息。
+- [x] `M12-004` 系统 Share 与干净副本分享:接入 macOS `NSSharingServicePicker`,支持 `Cmd+K` → `Cmd+E`;提供导出/分享移除可见用户批注、保留链接与表单控件的 PDF 副本。
+- [ ] `M12-005` 高亮颜色主题化:按 `normal` / `rose_pine_dawn` / `rose_pine_moon` 优化 pink / yellow / green,保持低饱和、清晰、打印与暗色下不过刺眼。
+- [ ] `M12-006` macOS 原生最近项目与窗口集成:评估并接入 `NSDocumentController` recent documents、窗口 `representedURL` / `representedFilename`,改善系统 Open Recent、App Expose 与窗口标题关联。
+
+### 18.2 暂缓
+
+- [ ] `M12-D001` 侧边栏空白区域拖动窗口:暂缓。价值偏低,且容易和 tab 选择、侧栏 divider 拖拽、滚动区域产生冲突;仅在标题栏拖动仍明显不够用时重评。
+- [ ] `M12-D002` Pages 缩略图滑动渲染优化:暂缓。当前依赖 `PDFThumbnailView`;只有在真实大 PDF 出现可复现卡顿、白屏或错序渲染样本后,再考虑自定义缓存/预热。
+- [ ] `M12-D003` Zed / VS Code / LaTeX / Typst PDF sync:暂缓。热重载已覆盖基础编译预览;SyncTeX / 编辑器反向定位属于更大集成,先写 RFC 再决定。
+- [ ] `M12-D004` 双屏同步滚动对照阅读:暂缓。需要跨窗口或跨 pane 阅读位置同步模型;等同窗分屏和同 PDF comparison 手测稳定后再启动。
+- [ ] `M12-D005` 外部 rename 自动更新打开文档名称:暂缓。App 内重命名已更新文件、session、recent;Finder 外部 rename 需先定义如何从旧路径可靠发现新路径。
+
+## 19. 手测清单(尚未覆盖)
 
 - [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
@@ -264,7 +286,7 @@
 - [x] `UAT-27` `Cmd+Ctrl+\` 进入同窗分屏,两侧独立切换 session 不污染
 - [x] `UAT-28` `Cmd+Shift+N` 新建窗口,两窗口独立且关闭互不影响,重启后恢复
 - [x] `UAT-29` 右栏 Annotations 能列出所有高亮,点击跳转,并可编辑 / 清空评论
-- [ ] `UAT-30` 导出 Markdown / Plain / JSON 输出正确,且评论字段随导出带出
+- [x] `UAT-30` 导出 Markdown / Plain / JSON 输出正确,Markdown 按页输出 snippet + comment,Plain / JSON 保留完整字段
 - [ ] `UAT-31` Shortcuts 面板改绑定后新会话生效,冲突被拒,清除后写回 `none`
 - [ ] `UAT-32` 最近文件启动器可搜索最近文件,支持 `Space` 多选与 `Enter` 打开
 - [ ] `UAT-33` 最近文件启动器底部常驻显示操作提示,无查询和有查询时都可直接 `↓` 浏览结果
@@ -288,5 +310,6 @@
 - [ ] `UAT-48` `Cmd+Ctrl+\` 后右侧出现候选,选"同一个 PDF"后两个 pane 独立页码 / 缩放且都 fit width
 - [ ] `UAT-49` 建立 A/B pair 后普通点击 C 显示单屏 C,再点击 A 或 B 恢复 A/B 分屏
 - [ ] `UAT-50` 已分屏时 `Option+Click` / `Option+Enter` 替换当前焦点 pane,垂直 tabs 与标题栏 tabs 行为一致
+- [x] `UAT-51` `File > Share…` 可分享 Original / Clean Copy / Highlights,`File > Export Clean Copy…` 可导出保留链接与表单控件的干净副本,`Cmd+K` → `Cmd+E` 可触发 Share
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

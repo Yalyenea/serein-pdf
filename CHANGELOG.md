@@ -24,6 +24,11 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Recent Files
 - Route Return and keypad Enter at the recent-files panel level so the highlighted or selected recent PDFs open reliably
 
+### Sharing
+- Add `File > Share…` with Original PDF, Clean PDF Copy, and Highlights Markdown payloads, plus a `cmd+k`, then `cmd+e` chord.
+- Add `File > Export Clean Copy…` and a PDFKit clean-copy path that removes visible/user annotations while preserving links and form widgets.
+- Make Markdown highlights export page-grouped and note-friendly, keeping snippets and comments without color metadata.
+
 ## [0.4.0] - 2026-05-19
 
 ### Windows

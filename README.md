@@ -37,11 +37,12 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - `cmd+k`, then `cmd+t` switches the current light or dark theme, VS Code-style
-- `cmd+k` chords also refresh the PDF Library index, jump to Library / Shortcuts settings, merge windows, and move the current PDF to a new window
+- `cmd+k` chords also refresh the PDF Library index, jump to Library / Shortcuts settings, share the current PDF, merge windows, and move the current PDF to a new window
 - Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
 - Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
-- Highlights can carry comments in the right sidebar, and exports include those comments
+- `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets
+- Highlights can carry comments in the right sidebar, and Markdown export is page-grouped as snippet + comment for note-taking
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs), Esc clears search and exits
@@ -133,6 +134,8 @@ open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
 refresh_library_index = "none"  # cmd+k, cmd+r is a built-in chord
 open_library_settings = "none"  # cmd+k, cmd+l is a built-in chord
 open_shortcut_settings = "none" # cmd+k, cmd+s is a built-in chord
+share_document = "none"         # cmd+k, cmd+e is a built-in chord
+export_clean_copy = "none"
 new_blank_tab = "command+t"
 copy_current_pdf_path = "command+shift+c"
 toggle_continuous_reading = "none"
@@ -176,6 +179,8 @@ Defined in `[shortcuts]` above. Highlights:
 | Open Library settings | `cmd+k`, then `cmd+l` |
 | Open Shortcuts settings | `cmd+k`, then `cmd+s` |
 | Save annotations | `cmd+s` |
+| Share current PDF | `cmd+k`, then `cmd+e` |
+| Export clean copy | configurable, default none |
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Copy current PDF path | `cmd+shift+c` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |

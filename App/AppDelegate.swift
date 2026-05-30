@@ -1,6 +1,37 @@
 import AppKit
 import UniformTypeIdentifiers
 
+private enum SharePayloadKind: Int, CaseIterable {
+    case originalPDF
+    case cleanPDFCopy
+    case highlightsMarkdown
+
+    var title: String {
+        switch self {
+        case .originalPDF:
+            "Original PDF"
+        case .cleanPDFCopy:
+            "Clean PDF Copy"
+        case .highlightsMarkdown:
+            "Highlights Markdown"
+        }
+    }
+}
+
+private enum ShareDocumentError: Error, LocalizedError {
+    case noHighlights
+    case missingShareAnchor
+
+    var errorDescription: String? {
+        switch self {
+        case .noHighlights:
+            "The current PDF has no highlights to share."
+        case .missingShareAnchor:
+            "Unable to find a window for the share picker."
+        }
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     private static let recentFilesCleanupInterval: TimeInterval = 60 * 60 * 24
@@ -16,6 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var libraryPaletteController: PDFLibraryPaletteController?
     private var openTabsPaletteController: OpenTabsPaletteController?
     private var openTabsPaletteWindowID: UUID?
+    private var sharingServicePicker: NSSharingServicePicker?
+    private var temporaryShareDirectories: [URL] = []
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private let windowMenu = NSMenu(title: "Window")
     private var autoSaveTimer: Timer?
@@ -146,6 +179,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         closeOpenTabsPalette()
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        cleanupTemporaryShareDirectories()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         (currentWindowController() ?? mainWindowControllers.values.first)?.prepareForApplicationTermination() == false
             ? .terminateCancel
@@ -261,6 +298,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .openLibrarySettings: { [weak self] in self?.openLibrarySettings(nil) },
             .openShortcutSettings: { [weak self] in self?.openShortcutSettings(nil) },
             .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
+            .shareDocument: { [weak self] in self?.shareDocument(nil) },
+            .exportCleanCopy: { [weak self] in self?.exportCleanCopy(nil) },
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
             .copyCurrentPDFPath: { [weak self] in self?.copyCurrentPDFPath(nil) },
             .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
@@ -555,6 +594,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .saveAnnotations,
             action: #selector(saveAnnotations(_:))
         )
+        let shareDocumentItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.shareDocument.menuTitle,
+            command: .shareDocument,
+            action: #selector(shareDocument(_:))
+        )
+        let exportCleanCopyItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.exportCleanCopy.menuTitle,
+            command: .exportCleanCopy,
+            action: #selector(exportCleanCopy(_:))
+        )
         let exportHighlightsItem = NSMenuItem(
             title: "Export Highlights…",
             action: #selector(exportHighlights(_:)),
@@ -598,6 +647,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             findNextItem,
             findPreviousItem,
             saveAnnotationsItem,
+            shareDocumentItem,
+            exportCleanCopyItem,
             exportHighlightsItem,
             copyHighlightsMarkdownItem,
             .separator(),
@@ -1400,6 +1451,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
+    private func shareDocument(_ sender: Any?) {
+        guard let context = currentPDFShareContext() else { return }
+        guard saveBeforeSharingIfNeeded(context.session) else { return }
+        guard let refreshedContext = currentPDFShareContext() else { return }
+        guard let payload = promptForSharePayload(
+            hasHighlights: documentStore.hasHighlights(for: refreshedContext.session.id)
+        ) else { return }
+
+        do {
+            let items = try shareItems(for: payload, session: refreshedContext.session)
+            try presentSharingPicker(items: items, from: refreshedContext.controller)
+        } catch {
+            presentShareError(error)
+        }
+    }
+
+    @objc
+    private func exportCleanCopy(_ sender: Any?) {
+        guard let context = currentPDFShareContext() else { return }
+        guard saveBeforeSharingIfNeeded(context.session) else { return }
+        guard let refreshedContext = currentPDFShareContext() else { return }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = cleanCopyFilename(for: refreshedContext.session)
+        panel.allowedContentTypes = [.pdf]
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try documentStore.writeCleanCopy(for: refreshedContext.session.id, to: url)
+        } catch {
+            presentShareError(error)
+        }
+    }
+
+    @objc
     private func exportHighlights(_ sender: Any?) {
         guard let context = currentHighlightExportContext() else { return }
         guard let format = promptForHighlightExportFormat() else { return }
@@ -1446,6 +1534,115 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(activeSession.url.path, forType: .string)
+    }
+
+    private func currentPDFShareContext() -> (controller: MainWindowController, session: DocumentSession)? {
+        guard let controller = mainWindowController,
+              let session = documentStore.activeSession(in: controller.windowID),
+              session.isBlank == false else { return nil }
+        return (controller, session)
+    }
+
+    private func saveBeforeSharingIfNeeded(_ session: DocumentSession) -> Bool {
+        guard session.isDirty else { return true }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Save Before Sharing"
+        alert.informativeText = "This PDF has unsaved annotations. Save them before sharing or exporting a clean copy."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+
+        do {
+            try documentStore.saveAnnotations(for: session.id)
+            return true
+        } catch {
+            presentSaveError(error)
+            return false
+        }
+    }
+
+    private func promptForSharePayload(hasHighlights: Bool) -> SharePayloadKind? {
+        let alert = NSAlert()
+        alert.messageText = "Share"
+        alert.informativeText = "Choose what to share."
+        alert.addButton(withTitle: "Share")
+        alert.addButton(withTitle: "Cancel")
+
+        let popUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 240, height: 26), pullsDown: false)
+        for payload in SharePayloadKind.allCases {
+            popUp.addItem(withTitle: payload.title)
+            guard let item = popUp.itemArray.last else { continue }
+            item.tag = payload.rawValue
+            if payload == .highlightsMarkdown && hasHighlights == false {
+                item.isEnabled = false
+            }
+        }
+        popUp.selectItem(at: 0)
+        alert.accessoryView = popUp
+
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let selectedItem = popUp.selectedItem else { return nil }
+        return SharePayloadKind(rawValue: selectedItem.tag)
+    }
+
+    private func shareItems(for payload: SharePayloadKind, session: DocumentSession) throws -> [Any] {
+        switch payload {
+        case .originalPDF:
+            return [session.url]
+        case .cleanPDFCopy:
+            let url = try temporaryCleanCopyURL(for: session)
+            try documentStore.writeCleanCopy(for: session.id, to: url)
+            return [url]
+        case .highlightsMarkdown:
+            let groups = documentStore.annotationGroups(for: session.id)
+            guard groups.isEmpty == false else { throw ShareDocumentError.noHighlights }
+            let data = try HighlightExporter.export(groups, format: .markdown)
+            guard let markdown = String(data: data, encoding: .utf8) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return [markdown]
+        }
+    }
+
+    private func temporaryCleanCopyURL(for session: DocumentSession) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SereinShare-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        temporaryShareDirectories.append(directory)
+        return directory.appendingPathComponent(cleanCopyFilename(for: session))
+    }
+
+    private func cleanCopyFilename(for session: DocumentSession) -> String {
+        let baseName = session.url.deletingPathExtension().lastPathComponent
+        let sanitized = baseName.map { character in
+            character == "/" || character == ":" ? "-" : character
+        }
+        let cleanBaseName = String(sanitized).isEmpty ? "Clean Copy" : String(sanitized)
+        return "\(cleanBaseName)-clean.pdf"
+    }
+
+    private func presentSharingPicker(items: [Any], from controller: MainWindowController) throws {
+        guard let view = controller.window?.contentView else {
+            throw ShareDocumentError.missingShareAnchor
+        }
+
+        let picker = NSSharingServicePicker(items: items)
+        sharingServicePicker = picker
+        picker.show(
+            relativeTo: NSRect(x: view.bounds.midX, y: view.bounds.maxY, width: 1, height: 1),
+            of: view,
+            preferredEdge: .maxY
+        )
+    }
+
+    private func cleanupTemporaryShareDirectories() {
+        for url in temporaryShareDirectories {
+            try? FileManager.default.removeItem(at: url)
+        }
+        temporaryShareDirectories.removeAll()
     }
 
     private func setActiveReaderDisplayMode(_ mode: ReaderDisplayMode) {
@@ -1721,6 +1918,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
     }
 
+    private func presentShareError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Failed to share or export document"
+        if let window = mainWindowController?.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
     private func currentHighlightExportContext() -> (documentTitle: String, groups: [DocumentHighlightGroup])? {
         guard let windowID = mainWindowController?.windowID,
               let session = documentStore.activeSession(in: windowID) else { return nil }
@@ -1825,6 +2032,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(saveAnnotations(_:)):
             return activePDFSession?.isDirty == true
+        case #selector(shareDocument(_:)), #selector(exportCleanCopy(_:)):
+            return activePDFSession != nil
         case #selector(exportHighlights(_:)), #selector(copyHighlightsMarkdown(_:)):
             return activePDFSession.map { documentStore.hasHighlights(for: $0.id) } == true
         case #selector(removeHighlightUnderCursorAction(_:)):

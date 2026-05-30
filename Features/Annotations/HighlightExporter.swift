@@ -46,9 +46,8 @@ enum HighlightExporter {
             }
 
             lines.append("- \(group.snippet)")
-            lines.append("  Color: \(group.color.menuTitle)")
             if group.normalizedComment.isEmpty == false {
-                lines.append("  Comment: \(group.comment)")
+                lines.append("  - \(group.comment)")
             }
         }
 

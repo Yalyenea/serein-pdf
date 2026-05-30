@@ -59,6 +59,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case openLibrarySettings = "open_library_settings"
     case openShortcutSettings = "open_shortcut_settings"
     case saveAnnotations = "save_annotations"
+    case shareDocument = "share_document"
+    case exportCleanCopy = "export_clean_copy"
     case copyHighlightsMarkdown = "copy_highlights_markdown"
     case copyCurrentPDFPath = "copy_current_pdf_path"
     case removeHighlight = "remove_highlight"
@@ -131,6 +133,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Open Shortcuts Settings"
         case .saveAnnotations:
             "Save Annotations"
+        case .shareDocument:
+            "Share…"
+        case .exportCleanCopy:
+            "Export Clean Copy…"
         case .copyHighlightsMarkdown:
             "Copy Highlights as Markdown"
         case .copyCurrentPDFPath:

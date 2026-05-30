@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -129,6 +129,8 @@ flowchart LR
 - `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
 - `D`:删除鼠标所在高亮(多行整组删除)
 - `Cmd+S`:写回源 PDF
+- `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights
+- `File > Export Clean Copy…`:导出移除可见用户批注、保留链接与表单控件的 PDF 副本
 - `Cmd+Z`:撤销最近一次高亮新增或删除(上限 50,无 redo)
 
 **阅读**
@@ -273,6 +275,7 @@ Core/                                     # 文档 / 窗口 / 配置 / 持久化
   AppConfiguration.swift                  # config.toml schema、默认值与 AppConfigurationStore 读写
   SecurityScopedAccessController.swift    # `/Users` 等访问 root 的 security-scoped bookmark 持久访问
   PDFLibrary.swift                        # PDF 库扫描、root / folder / item catalog
+  CleanPDFService.swift                   # 生成保留 Link / Widget、移除可见用户批注的 PDF 副本
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
   DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 非运行期窗口状态
   DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等
@@ -349,6 +352,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   FindBarViewTests.swift                  # find bar 输入 / scope / 导航
   AnnotationsViewControllerTests.swift    # 批注列表 / comment 编辑
   AnnotationSaveTests.swift               # 手动 / 自动批注保存策略
+  CleanPDFServiceTests.swift              # Clean Copy 保留 Link / Widget 且不污染源文档
   HighlightServiceTests.swift             # 高亮 apply / remove / 分组
   HighlightExporterTests.swift            # 三种导出格式
   HighlightUndoTests.swift                # 撤销栈上限与 added/removed 还原
@@ -385,13 +389,13 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 
 **交付物**
 1. 右栏 Annotations 模式,按页列所有高亮并支持点击跳转与评论编辑
-2. Markdown / Plain / JSON 三种高亮导出,评论随导出带出
+2. Markdown / Plain / JSON 三种高亮导出;Markdown 面向笔记粘贴按页输出 snippet + comment,Plain / JSON 保留颜色等元信息
 3. Shortcuts 面板与快捷键冲突检测、清除、恢复默认
 4. 配置改动即时写回 `config.toml` 并刷新菜单
 
 **验收要点**
 - Annotations 面板按页分组并支持跳转,comment 可编辑
-- 三种导出格式均包含 snippet / 页码 / 颜色 / comment
+- Markdown 导出按页分组并只保留 snippet / comment;Plain / JSON 继续包含颜色与 comment
 - Shortcuts UI 写回配置文件并实时生效,冲突绑定被拒,清除后写回 `none`
 
 **当前状态**

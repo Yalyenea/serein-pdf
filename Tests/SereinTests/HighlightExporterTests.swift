@@ -13,8 +13,10 @@ final class HighlightExporterTests: XCTestCase {
 
         XCTAssertTrue(markdown.contains("# Highlights"))
         XCTAssertTrue(markdown.contains("## Page 1"))
-        XCTAssertTrue(markdown.contains("Color: Pink"))
-        XCTAssertTrue(markdown.contains("Comment: Key idea"))
+        XCTAssertTrue(markdown.contains("- alpha beta"))
+        XCTAssertTrue(markdown.contains("  - Key idea"))
+        XCTAssertFalse(markdown.contains("Color:"))
+        XCTAssertFalse(markdown.contains("Comment:"))
     }
 
     func testPlainTextExportIncludesSnippetAndComment() throws {
@@ -65,7 +67,9 @@ final class HighlightExporterTests: XCTestCase {
         )
 
         XCTAssertTrue(markdown.contains("- 中文高亮"))
-        XCTAssertTrue(markdown.contains("Comment: 关键想法"))
+        XCTAssertTrue(markdown.contains("  - 关键想法"))
+        XCTAssertFalse(markdown.contains("Color:"))
+        XCTAssertFalse(markdown.contains("Comment:"))
     }
 
     private func sampleGroups() -> [DocumentHighlightGroup] {

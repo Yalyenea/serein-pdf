@@ -11,6 +11,7 @@ final class ReaderShortcutsController {
         (KeyboardShortcut(key: "r", modifiers: [.command]), .refreshLibraryIndex),
         (KeyboardShortcut(key: "l", modifiers: [.command]), .openLibrarySettings),
         (KeyboardShortcut(key: "s", modifiers: [.command]), .openShortcutSettings),
+        (KeyboardShortcut(key: "e", modifiers: [.command]), .shareDocument),
         (KeyboardShortcut(key: "m", modifiers: [.command]), .mergeAllWindows),
         (KeyboardShortcut(key: "n", modifiers: [.command]), .moveCurrentPDFToNewWindow),
     ]

@@ -439,6 +439,9 @@ open_library_settings = "none"
 # Cmd+K, Cmd+S is a built-in chord.
 open_shortcut_settings = "none"
 save_annotations = "command+s"
+# Cmd+K, Cmd+E is a built-in chord.
+share_document = "none"
+export_clean_copy = "none"
 copy_highlights_markdown = "command+shift+e"
 copy_current_pdf_path = "command+shift+c"
 remove_highlight = "d"
@@ -538,6 +541,8 @@ refresh_library_index = "\(serializedShortcut(.refreshLibraryIndex, configuratio
 open_library_settings = "\(serializedShortcut(.openLibrarySettings, configuration: configuration))"
 open_shortcut_settings = "\(serializedShortcut(.openShortcutSettings, configuration: configuration))"
 save_annotations = "\(serializedShortcut(.saveAnnotations, configuration: configuration))"
+share_document = "\(serializedShortcut(.shareDocument, configuration: configuration))"
+export_clean_copy = "\(serializedShortcut(.exportCleanCopy, configuration: configuration))"
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
 copy_current_pdf_path = "\(serializedShortcut(.copyCurrentPDFPath, configuration: configuration))"
 remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
@@ -707,6 +712,10 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .openShortcutSettings, to: &configuration)
         case ("shortcuts", "save_annotations"):
             try applyShortcut(rawValue, command: .saveAnnotations, to: &configuration)
+        case ("shortcuts", "share_document"):
+            try applyShortcut(rawValue, command: .shareDocument, to: &configuration)
+        case ("shortcuts", "export_clean_copy"):
+            try applyShortcut(rawValue, command: .exportCleanCopy, to: &configuration)
         case ("shortcuts", "copy_highlights_markdown"):
             try applyShortcut(rawValue, command: .copyHighlightsMarkdown, to: &configuration)
         case ("shortcuts", "copy_current_pdf_path"):
@@ -975,6 +984,8 @@ struct AppConfigurationStore {
             "open_library_settings",
             "open_shortcut_settings",
             "save_annotations",
+            "share_document",
+            "export_clean_copy",
             "copy_highlights_markdown",
             "copy_current_pdf_path",
             "remove_highlight",

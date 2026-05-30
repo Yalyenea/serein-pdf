@@ -1150,6 +1150,16 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func cleanCopyData(for sessionID: UUID) throws -> Data {
+        let document = try pdfDocument(for: sessionID)
+        return try CleanPDFService.cleanCopyData(from: document)
+    }
+
+    func writeCleanCopy(for sessionID: UUID, to url: URL) throws {
+        let document = try pdfDocument(for: sessionID)
+        try CleanPDFService.writeCleanCopy(from: document, to: url)
+    }
+
     @discardableResult
     func autoSaveDirtySessions(now: Date = Date()) -> [URL: Error] {
         var errors: [URL: Error] = [:]
