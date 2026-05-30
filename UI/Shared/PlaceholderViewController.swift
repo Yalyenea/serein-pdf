@@ -2,6 +2,11 @@ import AppKit
 
 class PlaceholderViewController: NSViewController {
     static let paneBackgroundColor: NSColor = NightModeStyle.paneBackgroundColor
+
+    static func paneBackgroundColor(opacity: CGFloat) -> NSColor {
+        paneBackgroundColor.withAlphaComponent(opacity)
+    }
+
     private let titleText: String
     private let detailText: String
 

@@ -70,6 +70,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.layout.leftSidebarMinWidth, 36)
         XCTAssertFalse(configuration.layout.sidebarsSwapped)
         XCTAssertTrue(configuration.layout.showRecentFilesInSidebar)
+        XCTAssertEqual(configuration.layout.sidebarOpacity, 0.48, accuracy: 0.001)
     }
 
     func testKeyboardShortcutRejectsRawControlCharacters() {
@@ -128,6 +129,7 @@ move_current_pdf_to_new_window = "command+option+n"
 
 [layout]
 show_recent_files_in_sidebar = false
+sidebar_opacity = 0.42
 
 [library]
 folders = ["/tmp/Books", "/tmp/Papers"]
@@ -177,10 +179,28 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.mergeAllWindows], KeyboardShortcut(key: "m", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.moveCurrentPDFToNewWindow], KeyboardShortcut(key: "n", modifiers: [.command, .option]))
         XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
+        XCTAssertEqual(configuration.layout.sidebarOpacity, 0.42, accuracy: 0.001)
         XCTAssertEqual(
             configuration.library.folderURLs.map(\.path),
             ["/tmp/Books", "/tmp/Papers"]
         )
+    }
+
+    func testParserRejectsOutOfRangeSidebarOpacity() {
+        let parser = AppConfigurationParser()
+
+        XCTAssertThrowsError(try parser.parse("[layout]\nsidebar_opacity = 1.2")) { error in
+            guard case AppConfigurationError.invalidOpacity = error else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+        XCTAssertThrowsError(try parser.parse("[layout]\nsidebar_opacity = -0.1")) { error in
+            guard case AppConfigurationError.invalidOpacity = error else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
     }
 
     func testExistingConfigGetsMissingShortcutKeysBackfilled() throws {
@@ -249,6 +269,7 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("toggle_demo_mode = \"command+l\""))
         XCTAssertTrue(content.contains("toggle_immersive_mode = \"command+control+l\""))
         XCTAssertTrue(content.contains("show_recent_files_in_sidebar = true"))
+        XCTAssertTrue(content.contains("sidebar_opacity = 0.48"))
         XCTAssertTrue(content.contains("[library]"))
         XCTAssertTrue(content.contains("folders = []"))
         XCTAssertTrue(content.contains("[access]"))
@@ -461,14 +482,18 @@ root_bookmarks = ["\(entry)"]
 
         var configuration = try store.load()
         XCTAssertFalse(configuration.layout.sidebarsSwapped)
+        XCTAssertEqual(configuration.layout.sidebarOpacity, 0.48, accuracy: 0.001)
         configuration.layout.sidebarsSwapped = true
+        configuration.layout.sidebarOpacity = 0.48
 
         try store.save(configuration)
         let reloadedConfiguration = try store.load()
         let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
 
         XCTAssertTrue(reloadedConfiguration.layout.sidebarsSwapped)
+        XCTAssertEqual(reloadedConfiguration.layout.sidebarOpacity, 0.48, accuracy: 0.001)
         XCTAssertTrue(persistedContent.contains("sidebars_swapped = true"))
+        XCTAssertTrue(persistedContent.contains("sidebar_opacity = 0.48"))
     }
 
     func testClearedShortcutPersistsAsNone() throws {

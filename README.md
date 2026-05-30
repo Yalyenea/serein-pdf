@@ -34,7 +34,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Opened PDFs are also noted to macOS native recent documents, and the active PDF URL is exposed to the window for system window/document integration
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
-- Settings General can edit the default left and right sidebar widths
+- Settings General can edit the default left and right sidebar widths and native material sidebar opacity
 - Theme controls now split into `Mode`, `Light Theme`, and `Dark Theme`
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
@@ -51,7 +51,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs), Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
-- Immersive mode (`cmd+ctrl+l`) hides sidebars and tab chrome while keeping the current window size
+- Immersive mode (`cmd+ctrl+l`) opens both sidebars only when none are visible; otherwise it hides both sidebars and tab chrome while keeping the current window size
 - Per-PDF memory: scale and page persist across launches; sidebar widths are window-level runtime state seeded from layout defaults
 - Switching PDFs briefly shows the current file name at the top of the reader, so fast tab changes stay oriented without adding permanent chrome
 - Config-driven defaults via `~/Library/Application Support/Serein/config.toml`
@@ -123,6 +123,7 @@ right_sidebar_min_width = 120
 right_sidebar_max_width = 720
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
+sidebar_opacity = 0.48
 
 [library]
 folders = ["/Users/your-name/Documents/Papers"]

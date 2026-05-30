@@ -1,7 +1,7 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 560, height: 440)
+    static let generalContentSize = NSSize(width: 560, height: 480)
     static let libraryContentSize = NSSize(width: 680, height: 460)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
 }
@@ -227,13 +227,21 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
     private let leftSidebarWidthStepper = NSStepper()
     private let rightSidebarWidthField = NSTextField()
     private let rightSidebarWidthStepper = NSStepper()
+    private let sidebarOpacitySlider = NSSlider(
+        value: Double(AppConfiguration.default.layout.sidebarOpacity),
+        minValue: 0.05,
+        maxValue: 0.9,
+        target: nil,
+        action: nil
+    )
+    private let sidebarOpacityValueLabel = NSTextField(labelWithString: "48%")
     private let showRecentInSidebarCheckbox = NSButton(
         checkboxWithTitle: "Show recent PDFs in left sidebar footer",
         target: nil,
         action: nil
     )
     private let footnoteLabel = NSTextField(
-        wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Sidebar width defaults and auto-save apply immediately."
+        wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Sidebar width, opacity, and auto-save apply immediately."
     )
 
     private var shortcutButtons: [ShortcutCommand: ShortcutCaptureButton] = [:]
@@ -349,6 +357,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
         applySidebarWidthControls(configuration.layout)
+        applySidebarOpacityControls(configuration.layout)
         showRecentInSidebarCheckbox.state = configuration.layout.showRecentFilesInSidebar ? .on : .off
         shortcutsErrorLabel.stringValue = ""
         rebuildLibraryFolderRows()
@@ -408,6 +417,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             minWidth: updatedConfiguration.layout.rightSidebarMinWidth,
             maxWidth: updatedConfiguration.layout.rightSidebarMaxWidth
         )
+        updatedConfiguration.layout.sidebarOpacity = normalizedSidebarOpacity(from: sidebarOpacitySlider)
         updatedConfiguration.layout.showRecentFilesInSidebar = showRecentInSidebarCheckbox.state == .on
         publishConfigurationIfChanged(updatedConfiguration)
     }
@@ -423,6 +433,15 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         default:
             return
         }
+        handleGeneralControlChanged(sender)
+    }
+
+    @objc
+    private func handleSidebarOpacitySliderChanged(_ sender: NSSlider) {
+        guard isApplyingConfiguration == false else { return }
+        sidebarOpacityValueLabel.stringValue = sidebarOpacityDisplayString(
+            normalizedSidebarOpacity(from: sender)
+        )
         handleGeneralControlChanged(sender)
     }
 
@@ -493,6 +512,19 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             maxWidth: configuration.layout.rightSidebarMaxWidth
         )
 
+        sidebarOpacitySlider.translatesAutoresizingMaskIntoConstraints = false
+        sidebarOpacitySlider.identifier = NSUserInterfaceItemIdentifier("sidebarOpacitySlider")
+        sidebarOpacitySlider.controlSize = .small
+        sidebarOpacitySlider.isContinuous = true
+        sidebarOpacitySlider.target = self
+        sidebarOpacitySlider.action = #selector(handleSidebarOpacitySliderChanged(_:))
+
+        sidebarOpacityValueLabel.translatesAutoresizingMaskIntoConstraints = false
+        sidebarOpacityValueLabel.identifier = NSUserInterfaceItemIdentifier("sidebarOpacityValueLabel")
+        sidebarOpacityValueLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        sidebarOpacityValueLabel.textColor = .secondaryLabelColor
+        sidebarOpacityValueLabel.alignment = .right
+
         showRecentInSidebarCheckbox.translatesAutoresizingMaskIntoConstraints = false
         showRecentInSidebarCheckbox.controlSize = .small
         showRecentInSidebarCheckbox.target = self
@@ -510,6 +542,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         layoutOptionsStack.translatesAutoresizingMaskIntoConstraints = false
 
         let sidebarDefaultsStack = makeSidebarDefaultsStack()
+        let sidebarOpacityStack = makeSidebarOpacityStack()
 
         let grid = NSGridView(views: [
             [makeRowLabel("Mode"), modePopUp],
@@ -519,6 +552,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
             [makeRowLabel("Sidebar Widths"), sidebarDefaultsStack],
+            [makeRowLabel("Sidebar Opacity"), sidebarOpacityStack],
             [makeRowLabel("Layout"), layoutOptionsStack],
         ])
         grid.translatesAutoresizingMaskIntoConstraints = false
@@ -603,6 +637,21 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         return row
     }
 
+    private func makeSidebarOpacityStack() -> NSStackView {
+        let stack = NSStackView(views: [sidebarOpacitySlider, sidebarOpacityValueLabel])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            sidebarOpacitySlider.widthAnchor.constraint(equalToConstant: 180),
+            sidebarOpacityValueLabel.widthAnchor.constraint(equalToConstant: 44),
+        ])
+
+        return stack
+    }
+
     private func applySidebarWidthControls(_ layout: AppConfiguration.Layout) {
         leftSidebarWidthField.integerValue = Int(layout.leftSidebarWidth.rounded())
         leftSidebarWidthStepper.minValue = Double(layout.leftSidebarMinWidth)
@@ -615,8 +664,21 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         rightSidebarWidthStepper.doubleValue = Double(layout.rightSidebarWidth)
     }
 
+    private func applySidebarOpacityControls(_ layout: AppConfiguration.Layout) {
+        sidebarOpacitySlider.doubleValue = Double(layout.sidebarOpacity)
+        sidebarOpacityValueLabel.stringValue = sidebarOpacityDisplayString(layout.sidebarOpacity)
+    }
+
     private func normalizedSidebarWidth(from field: NSTextField, minWidth: CGFloat, maxWidth: CGFloat) -> CGFloat {
         min(max(CGFloat(field.doubleValue.rounded()), minWidth), maxWidth)
+    }
+
+    private func normalizedSidebarOpacity(from slider: NSSlider) -> CGFloat {
+        min(max(CGFloat(slider.doubleValue), CGFloat(slider.minValue)), CGFloat(slider.maxValue))
+    }
+
+    private func sidebarOpacityDisplayString(_ value: CGFloat) -> String {
+        "\(Int((value * 100).rounded()))%"
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {

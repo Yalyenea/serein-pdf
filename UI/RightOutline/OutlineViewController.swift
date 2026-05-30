@@ -55,7 +55,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
-        container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+        container.layer?.backgroundColor = NSColor.clear.cgColor
 
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         titleLabel.textColor = NightModeStyle.primaryTextColor
@@ -79,7 +79,7 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
         outlineView.indentationPerLevel = 12
         outlineView.floatsGroupRows = false
         outlineView.selectionHighlightStyle = .regular
-        outlineView.backgroundColor = PlaceholderViewController.paneBackgroundColor
+        outlineView.backgroundColor = .clear
         outlineView.focusRingType = .none
         outlineView.delegate = self
         outlineView.dataSource = self
@@ -120,8 +120,8 @@ final class OutlineViewController: NSViewController, NSOutlineViewDataSource, NS
 
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
-            outlineView.backgroundColor = PlaceholderViewController.paneBackgroundColor
+            view.layer?.backgroundColor = NSColor.clear.cgColor
+            outlineView.backgroundColor = .clear
             titleLabel.textColor = NightModeStyle.primaryTextColor
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
             pageCounterLabel.textColor = NightModeStyle.secondaryTextColor

@@ -117,6 +117,7 @@ struct AppConfiguration: Equatable, Sendable {
         var rightSidebarMaxWidth: CGFloat
         var sidebarsSwapped: Bool
         var showRecentFilesInSidebar: Bool = true
+        var sidebarOpacity: CGFloat = 0.48
 
         static let `default` = Layout(
             leftSidebarWidth: 220,
@@ -126,7 +127,8 @@ struct AppConfiguration: Equatable, Sendable {
             rightSidebarMinWidth: 120,
             rightSidebarMaxWidth: 720,
             sidebarsSwapped: false,
-            showRecentFilesInSidebar: true
+            showRecentFilesInSidebar: true,
+            sidebarOpacity: 0.48
         )
     }
 
@@ -363,6 +365,7 @@ enum AppConfigurationError: LocalizedError {
     case invalidStringArray(String)
     case invalidAnnotationSavePolicy(String)
     case invalidWidth(String)
+    case invalidOpacity(String)
 
     var errorDescription: String? {
         switch self {
@@ -386,6 +389,8 @@ enum AppConfigurationError: LocalizedError {
             "Invalid annotation auto-save policy in config: \(value)"
         case let .invalidWidth(value):
             "Invalid sidebar width in config: \(value)"
+        case let .invalidOpacity(value):
+            "Invalid sidebar opacity in config: \(value)"
         }
     }
 }
@@ -416,6 +421,7 @@ right_sidebar_min_width = 120
 right_sidebar_max_width = 720
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
+sidebar_opacity = 0.48
 
 [library]
 folders = []
@@ -523,6 +529,7 @@ right_sidebar_min_width = \(Int(configuration.layout.rightSidebarMinWidth.rounde
 right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounded()))
 sidebars_swapped = \(configuration.layout.sidebarsSwapped ? "true" : "false")
 show_recent_files_in_sidebar = \(configuration.layout.showRecentFilesInSidebar ? "true" : "false")
+sidebar_opacity = \(serializedOpacity(configuration.layout.sidebarOpacity))
 
 [library]
 folders = \(serializedPathArray(configuration.library.folderURLs))
@@ -602,6 +609,10 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         configuration: AppConfiguration
     ) -> String {
         configuration.shortcuts.bindings[command]?.serializedValue ?? "none"
+    }
+
+    private static func serializedOpacity(_ value: CGFloat) -> String {
+        String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), Double(value))
     }
 
     private static func serializedPathArray(_ urls: [URL]) -> String {
@@ -750,6 +761,8 @@ struct AppConfigurationParser {
             configuration.layout.sidebarsSwapped = try parseBool(rawValue)
         case ("layout", "show_recent_files_in_sidebar"):
             configuration.layout.showRecentFilesInSidebar = try parseBool(rawValue)
+        case ("layout", "sidebar_opacity"):
+            configuration.layout.sidebarOpacity = try parseOpacity(rawValue)
         case ("library", "folders"):
             configuration.library.folderURLs = try parseStringArray(rawValue)
                 .map { URL(fileURLWithPath: $0).standardizedFileURL }
@@ -920,6 +933,14 @@ struct AppConfigurationParser {
         }
         return CGFloat(value)
     }
+
+    private func parseOpacity(_ rawValue: String) throws -> CGFloat {
+        let trimmed = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        guard let value = Double(trimmed), value.isFinite, (0...1).contains(value) else {
+            throw AppConfigurationError.invalidOpacity(rawValue)
+        }
+        return CGFloat(value)
+    }
 }
 
 struct AppConfigurationStore {
@@ -970,6 +991,7 @@ struct AppConfigurationStore {
             "right_sidebar_max_width",
             "sidebars_swapped",
             "show_recent_files_in_sidebar",
+            "sidebar_opacity",
             "[library]",
             "folders",
             "[access]",

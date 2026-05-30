@@ -717,38 +717,39 @@ struct WindowChromeTests {
     }
 
     @Test
-    func immersiveModeHidesChromeAndRestoresHorizontalTitlebarLayout() throws {
+    func immersiveShortcutClosesAnyVisibleSidebarAndOpensBothWhenNoneVisible() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
         let controller = MainWindowController(documentStore: store)
         let windowID = controller.windowID
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "demo-mode"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "immersive-toggle"))
 
         store.setTabPresentationMode(.horizontalTitlebar, in: windowID)
-        store.setLeftSidebarVisible(false, in: windowID)
-        store.setRightSidebarVisible(true, in: windowID)
-        flushLayout(controller.window)
+        let visibleStates = [(true, true), (true, false), (false, true)]
+        for state in visibleStates {
+            store.setLeftSidebarVisible(state.0, in: windowID)
+            store.setRightSidebarVisible(state.1, in: windowID)
+            flushLayout(controller.window)
 
-        #expect(controller.window?.toolbar != nil)
-        #expect(controller.isImmersiveModeEnabled == false)
+            #expect(controller.isImmersiveModeEnabled == false)
+
+            controller.toggleImmersiveMode()
+            flushLayout(controller.window)
+
+            #expect(controller.isImmersiveModeEnabled)
+            #expect(controller.window?.toolbar == nil)
+            #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
+            #expect(store.isLeftSidebarVisible(in: windowID) == false)
+            #expect(store.isRightSidebarVisible(in: windowID) == false)
+        }
 
         controller.toggleImmersiveMode()
         flushLayout(controller.window)
 
-        #expect(controller.isImmersiveModeEnabled)
+        #expect(controller.isImmersiveModeEnabled == false)
         #expect(controller.window?.toolbar == nil)
-        #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
-        #expect(store.isLeftSidebarVisible(in: windowID) == false)
-        #expect(store.isRightSidebarVisible(in: windowID) == false)
-
-        controller.toggleImmersiveMode()
-        flushLayout(controller.window)
-
-        #expect(controller.isImmersiveModeEnabled == false)
-        #expect(controller.window?.toolbar != nil)
-        #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
-        #expect(store.isLeftSidebarVisible(in: windowID) == false)
-        #expect(store.isRightSidebarVisible(in: windowID) == true)
+        #expect(store.isLeftSidebarVisible(in: windowID))
+        #expect(store.isRightSidebarVisible(in: windowID))
     }
 
     @Test
@@ -1152,7 +1153,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 560, height: 440))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 560, height: 480))
     }
 
     @Test
@@ -1174,7 +1175,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 560, height: 440))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 560, height: 480))
     }
 
     @Test
@@ -1199,6 +1200,68 @@ struct WindowChromeTests {
         let updatedConfiguration = try #require(publishedConfigurations.last)
         #expect(updatedConfiguration.layout.leftSidebarWidth == 260)
         #expect(updatedConfiguration.layout.rightSidebarWidth == 360)
+    }
+
+    @Test
+    func settingsWindowCanEditSidebarOpacity() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) { configuration in
+            publishedConfigurations.append(configuration)
+        }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let opacitySlider = try #require(slider(identifier: "sidebarOpacitySlider", in: contentView))
+        opacitySlider.doubleValue = 0.55
+
+        let action = try #require(opacitySlider.action)
+        let target = try #require(opacitySlider.target)
+        NSApp.sendAction(action, to: target, from: opacitySlider)
+
+        let updatedConfiguration = try #require(publishedConfigurations.last)
+        #expect(abs(updatedConfiguration.layout.sidebarOpacity - 0.55) < 0.001)
+        #expect(textField(identifier: "sidebarOpacityValueLabel", in: contentView)?.stringValue == "55%")
+    }
+
+    @Test
+    func sidebarOpacityAppliesToLoadedSidebarSurfacesAndRefreshes() throws {
+        _ = NSApplication.shared
+        var configuration = AppConfiguration.default
+        configuration.layout.sidebarOpacity = 0.44
+        let store = DocumentStore(appConfiguration: configuration)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-opacity"))
+        flushLayout(controller.window)
+
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        let leftMaterial = try #require(splitController.verticalTabsViewController.view as? SidebarMaterialView)
+        let rightMaterial = try #require(splitController.rightSidebarViewController.view as? SidebarMaterialView)
+        #expect(leftMaterial.material == .sidebar)
+        #expect(leftMaterial.blendingMode == .behindWindow)
+        #expect(abs(leftMaterial.tintAlpha - 0.44) < 0.01)
+        #expect(rightMaterial.material == .sidebar)
+        #expect(rightMaterial.blendingMode == .behindWindow)
+        #expect(abs(rightMaterial.tintAlpha - 0.44) < 0.01)
+
+        store.setRightSidebarMode(.search, in: controller.windowID)
+        store.setRightSidebarMode(.annotations, in: controller.windowID)
+        flushLayout(controller.window)
+        let tableAlphas = tableViews(in: splitController.rightSidebarViewController.view)
+            .map(\.backgroundColor.alphaComponent)
+        #expect(tableAlphas.isEmpty == false)
+        #expect(tableAlphas.allSatisfy { abs($0) < 0.01 })
+
+        configuration.layout.sidebarOpacity = 0.72
+        store.updateAppConfiguration(configuration)
+        flushLayout(controller.window)
+
+        #expect(abs(leftMaterial.tintAlpha - 0.72) < 0.01)
+        #expect(abs(rightMaterial.tintAlpha - 0.72) < 0.01)
+        let refreshedTableAlphas = tableViews(in: splitController.rightSidebarViewController.view)
+            .map(\.backgroundColor.alphaComponent)
+        #expect(refreshedTableAlphas.allSatisfy { abs($0) < 0.01 })
     }
 
     @Test
@@ -1921,6 +1984,37 @@ private func textFields(in root: NSView) -> [NSTextField] {
 @MainActor
 private func textField(identifier: String, in root: NSView) -> NSTextField? {
     textFields(in: root).first { $0.identifier?.rawValue == identifier }
+}
+
+@MainActor
+private func sliders(in root: NSView) -> [NSSlider] {
+    var matches: [NSSlider] = []
+    var pending = [root]
+    while let view = pending.popLast() {
+        if let slider = view as? NSSlider {
+            matches.append(slider)
+        }
+        pending.append(contentsOf: view.subviews)
+    }
+    return matches
+}
+
+@MainActor
+private func slider(identifier: String, in root: NSView) -> NSSlider? {
+    sliders(in: root).first { $0.identifier?.rawValue == identifier }
+}
+
+@MainActor
+private func tableViews(in root: NSView) -> [NSTableView] {
+    var matches: [NSTableView] = []
+    var pending = [root]
+    while let view = pending.popLast() {
+        if let tableView = view as? NSTableView {
+            matches.append(tableView)
+        }
+        pending.append(contentsOf: view.subviews)
+    }
+    return matches
 }
 
 @MainActor

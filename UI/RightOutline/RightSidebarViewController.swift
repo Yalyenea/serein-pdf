@@ -1,7 +1,7 @@
 import AppKit
 import PDFKit
 
-private final class CollapsibleContainerView: NSView {
+private final class CollapsibleContainerView: SidebarMaterialView {
     override var fittingSize: NSSize {
         NSSize(width: 1, height: super.fittingSize.height)
     }
@@ -27,7 +27,6 @@ final class RightSidebarViewController: NSViewController {
     private var annotationsModeConstraints: [NSLayoutConstraint] = []
     private var thumbnailContentWidth: NSLayoutConstraint?
     private var appliedMode: RightSidebarMode?
-
     private static let thumbnailCellSpacing: CGFloat = 4
 
     init(documentStore: DocumentStore, windowID: UUID) {
@@ -78,8 +77,7 @@ final class RightSidebarViewController: NSViewController {
 
     override func loadView() {
         let container = CollapsibleContainerView()
-        container.wantsLayer = true
-        container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+        container.applyTint(opacity: documentStore.appConfiguration.layout.sidebarOpacity)
         container.layer?.masksToBounds = true
 
         modeSegmented.segmentCount = 4
@@ -230,7 +228,9 @@ final class RightSidebarViewController: NSViewController {
 
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+            (view as? SidebarMaterialView)?.applyTint(
+                opacity: documentStore.appConfiguration.layout.sidebarOpacity
+            )
         }
         outlineViewController.refreshChromeColors()
         searchResultsViewController.refreshChromeColors()

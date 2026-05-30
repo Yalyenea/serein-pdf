@@ -92,6 +92,7 @@ flowchart LR
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
+| 侧栏外观 | 左右侧栏使用 native `NSVisualEffectView.sidebar` material;`layout.sidebarOpacity` 控制 tint 强度,设置页即时生效,不影响中栏 PDF 背景 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
 
@@ -176,7 +177,7 @@ flowchart LR
 - `Cmd+Ctrl+\`:切换同窗分屏;左侧保持当前 PDF,右侧显示紧凑候选,首项为同一个 PDF;选中目标后两个 pane 自动适应宽度(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
 - `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
-- `Cmd+Ctrl+L`:进入 / 退出沉浸模式(隐藏侧栏与 tab chrome,只保留 PDF 页面)
+- `Cmd+Ctrl+L`:双侧栏都关闭时打开两个侧栏;否则关闭两个侧栏与 tab chrome
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
 
 **系统**

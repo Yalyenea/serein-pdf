@@ -100,7 +100,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
-        container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+        container.layer?.backgroundColor = NSColor.clear.cgColor
 
         column.isEditable = false
         column.resizingMask = .autoresizingMask
@@ -110,7 +110,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         tableView.rowSizeStyle = .small
         tableView.rowHeight = 42
         tableView.intercellSpacing = NSSize(width: 0, height: 2)
-        tableView.backgroundColor = PlaceholderViewController.paneBackgroundColor
+        tableView.backgroundColor = .clear
         tableView.focusRingType = .none
         tableView.selectionHighlightStyle = .regular
         tableView.delegate = self
@@ -148,8 +148,8 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
-            tableView.backgroundColor = PlaceholderViewController.paneBackgroundColor
+            view.layer?.backgroundColor = NSColor.clear.cgColor
+            tableView.backgroundColor = .clear
         }
     }
 

@@ -1,6 +1,6 @@
 import AppKit
 
-private final class CollapsibleContainerView: NSView {
+private final class CollapsibleContainerView: SidebarMaterialView {
     override var fittingSize: NSSize {
         NSSize(width: 1, height: super.fittingSize.height)
     }
@@ -23,7 +23,6 @@ final class VerticalTabsViewController: NSViewController {
     private var recentButtonURLs: [URL] = []
     private static let recentDisplayLimit = 5
     nonisolated(unsafe) private var eventMonitors: [Any] = []
-
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
         self.windowID = windowID
@@ -57,8 +56,7 @@ final class VerticalTabsViewController: NSViewController {
 
     override func loadView() {
         let container = CollapsibleContainerView()
-        container.wantsLayer = true
-        container.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+        container.applyTint(opacity: documentStore.appConfiguration.layout.sidebarOpacity)
         container.layer?.masksToBounds = true
 
         countLabel.font = .systemFont(ofSize: 11, weight: .medium)
@@ -138,7 +136,9 @@ final class VerticalTabsViewController: NSViewController {
 
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor.cgColor
+            (view as? SidebarMaterialView)?.applyTint(
+                opacity: documentStore.appConfiguration.layout.sidebarOpacity
+            )
         }
     }
 

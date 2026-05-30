@@ -276,7 +276,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     var isImmersiveModeEnabled: Bool {
-        immersiveModeSnapshot != nil
+        documentStore.isLeftSidebarVisible(in: windowID) == false &&
+            documentStore.isRightSidebarVisible(in: windowID) == false
     }
 
     func toggleDemoMode() {
@@ -294,13 +295,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     func toggleImmersiveMode() {
         guard documentStore.activeSession(in: windowID) != nil else { return }
 
-        if let snapshot = immersiveModeSnapshot {
-            immersiveModeSnapshot = nil
-            restoreImmersiveMode(from: snapshot)
-            return
-        }
-
-        enterImmersiveMode()
+        immersiveModeSnapshot = nil
+        let shouldOpenBothSidebars =
+            documentStore.isLeftSidebarVisible(in: windowID) == false &&
+            documentStore.isRightSidebarVisible(in: windowID) == false
+        documentStore.setLeftSidebarVisible(shouldOpenBothSidebars, in: windowID)
+        documentStore.setRightSidebarVisible(shouldOpenBothSidebars, in: windowID)
+        applyWindowChromeState()
     }
 
     private func enterDemoMode() {

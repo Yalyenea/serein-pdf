@@ -35,7 +35,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Settings and Windows
 - Make sidebar widths window-level runtime state seeded from layout defaults, so switching PDFs no longer resizes sidebars.
-- Let Settings General edit default left and right sidebar widths.
+- Let Settings General edit default left and right sidebar widths plus native material sidebar opacity.
+- Change `cmd+ctrl+l` so it opens both sidebars only when both are closed; any visible sidebar state closes both sidebars.
 - Keep main window represented URL and filename synchronized with the active PDF for native macOS window/document integration.
 
 ## [0.4.0] - 2026-05-19

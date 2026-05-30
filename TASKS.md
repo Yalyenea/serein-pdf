@@ -51,8 +51,9 @@
 - 水平 tab 复用标题栏,不单独开行
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换
 - `Cmd+L` 进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
-- `Cmd+Ctrl+L` 进入 / 退出沉浸模式(隐藏侧栏与 tab chrome,只保留 PDF 页面)
+- `Cmd+Ctrl+L`:仅当左右侧栏都关闭时打开两个侧栏;其他任一状态关闭两个侧栏与 tab chrome
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
+- 侧栏透明度:左右侧栏使用 native material,`layout.sidebar_opacity` 控制 tint 强度,设置窗口可调
 - PDF 切换:从一个已显示 PDF 切到另一个 PDF 后,阅读区顶部短暂显示当前文件名
 - 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
 - 主窗口适配 macOS 原生绿灯菜单:Full Screen、Move & Resize、Fill、Center、Fill & Arrange;默认尺寸不变,最小尺寸需允许系统半屏 / 四分屏
@@ -97,7 +98,7 @@
 - Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
 - Wave 7.5 M10.12.1 手测：确认 `Cmd+Option+G` 打开 Go to Page 后输入框自动聚焦，输入页码按 Return 跳页且不触发 tab 重命名。
 - Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
-- Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-006` 已完成，`M12-002` 先暂缓；下一步从暂缓项中挑边界最清晰的任务重评。
+- Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-007` 已完成，`M12-002` 先暂缓；下一步从暂缓项中挑边界最清晰的任务重评。
 
 ## 5. Milestone 7:搜索强化与对比阅读
 
@@ -268,6 +269,7 @@
 - [x] `M12-004` 系统 Share 与干净副本分享:接入 macOS `NSSharingServicePicker`,支持 `Cmd+K` → `Cmd+E`;提供导出/分享移除可见用户批注、保留链接与表单控件的 PDF 副本。
 - [x] `M12-005` 高亮颜色主题化:按 `normal` / `rose_pine_dawn` / `rose_pine_moon` 优化 pink / yellow / green,保持低饱和、清晰、打印与暗色下不过刺眼。
 - [x] `M12-006` macOS 原生最近项目与窗口集成:接入 `NSDocumentController` recent documents、窗口 `representedURL` / `representedFilename`,改善系统 Open Recent、App Expose 与窗口标题关联。
+- [x] `M12-007` 侧栏透明度与沉浸切换收口:左右侧栏使用 native material,Settings General 可调 tint 强度;`Cmd+Ctrl+L` 仅在双侧栏都关闭时打开两个侧栏,否则关闭两个侧栏。
 
 ### 18.2 暂缓
 

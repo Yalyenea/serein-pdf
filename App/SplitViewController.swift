@@ -160,6 +160,7 @@ final class SplitViewController: NSSplitViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        refreshChromeColors()
         rebuildSplitItemsIfSwapChanged()
         applyStoreState()
         applySidebarWidthsForWindow()
