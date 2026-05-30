@@ -16,6 +16,52 @@ struct WindowChromeTests {
     }
 
     @Test
+    func mainWindowRepresentsActivePDFURL() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "represented-url"))
+
+        #expect(controller.window?.title == session.title)
+        #expect(controller.window?.representedURL == session.url)
+        #expect(controller.window?.representedFilename == session.url.path)
+    }
+
+    @Test
+    func mainWindowClearsRepresentedURLForBlankTab() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "represented-blank-anchor"))
+
+        _ = store.newBlankTab()
+
+        #expect(controller.window?.title == "Serein")
+        #expect(controller.window?.representedURL == nil)
+        #expect(controller.window?.representedFilename == "")
+    }
+
+    @Test
+    func mainWindowUpdatesRepresentedURLWhenTabsSwitch() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "represented-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "represented-second"))
+
+        #expect(controller.window?.representedURL == second.url)
+
+        store.activate(sessionID: first.id, in: store.defaultWindowID)
+
+        #expect(controller.window?.title == first.title)
+        #expect(controller.window?.representedURL == first.url)
+        #expect(controller.window?.representedFilename == first.url.path)
+    }
+
+    @Test
     func verticalTabsDetachToolbarStrip() {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)

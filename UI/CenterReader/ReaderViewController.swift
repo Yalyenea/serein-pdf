@@ -1459,7 +1459,10 @@ final class ReaderViewController: NSViewController {
 
         let appliedRecords = HighlightService.applyHighlight(
             to: selection,
-            color: themeManager.readerState.highlightColor.nsColor
+            color: NightModeStyle.highlightColor(
+                for: themeManager.readerState.highlightColor,
+                appearance: NSApp.effectiveAppearance
+            )
         )
         guard appliedRecords.isEmpty == false else { return false }
 
@@ -1537,7 +1540,10 @@ final class ReaderViewController: NSViewController {
         highlightModeIndicator.isHidden = !isEnabled
         let color = themeManager.readerState.highlightColor
         highlightModeLabel.stringValue = "Highlight · Esc"
-        highlightModeColorDot.layer?.backgroundColor = color.nsColor.withAlphaComponent(0.85).cgColor
+        highlightModeColorDot.layer?.backgroundColor = NightModeStyle.highlightColor(
+            for: color,
+            appearance: NSApp.effectiveAppearance
+        ).withAlphaComponent(0.85).cgColor
     }
 
     private func applyThemeFilter() {

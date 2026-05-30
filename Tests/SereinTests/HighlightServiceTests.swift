@@ -29,6 +29,102 @@ final class HighlightServiceTests: XCTestCase {
         )
     }
 
+    func testHighlightPalettesMatchApprovedThemeDefaults() {
+        assertColor(
+            HighlightColor.pink.nsColor(in: .normal),
+            red: 241.0 / 255.0,
+            green: 171.0 / 255.0,
+            blue: 192.0 / 255.0,
+            alpha: 0.70
+        )
+        assertColor(
+            HighlightColor.yellow.nsColor(in: .normal),
+            red: 239.0 / 255.0,
+            green: 213.0 / 255.0,
+            blue: 110.0 / 255.0,
+            alpha: 0.63
+        )
+        assertColor(
+            HighlightColor.green.nsColor(in: .normal),
+            red: 169.0 / 255.0,
+            green: 217.0 / 255.0,
+            blue: 180.0 / 255.0,
+            alpha: 0.66
+        )
+        assertColor(
+            HighlightColor.pink.nsColor(in: .rosePineDawn),
+            red: 233.0 / 255.0,
+            green: 168.0 / 255.0,
+            blue: 186.0 / 255.0,
+            alpha: 0.68
+        )
+        assertColor(
+            HighlightColor.yellow.nsColor(in: .rosePineDawn),
+            red: 228.0 / 255.0,
+            green: 201.0 / 255.0,
+            blue: 103.0 / 255.0,
+            alpha: 0.62
+        )
+        assertColor(
+            HighlightColor.green.nsColor(in: .rosePineDawn),
+            red: 159.0 / 255.0,
+            green: 204.0 / 255.0,
+            blue: 167.0 / 255.0,
+            alpha: 0.64
+        )
+        assertColor(
+            HighlightColor.pink.nsColor(in: .rosePineMoon),
+            red: 232.0 / 255.0,
+            green: 140.0 / 255.0,
+            blue: 171.0 / 255.0,
+            alpha: 0.48
+        )
+        assertColor(
+            HighlightColor.yellow.nsColor(in: .rosePineMoon),
+            red: 232.0 / 255.0,
+            green: 196.0 / 255.0,
+            blue: 110.0 / 255.0,
+            alpha: 0.42
+        )
+        assertColor(
+            HighlightColor.green.nsColor(in: .rosePineMoon),
+            red: 143.0 / 255.0,
+            green: 207.0 / 255.0,
+            blue: 167.0 / 255.0,
+            alpha: 0.44
+        )
+    }
+
+    func testClosestHighlightColorRecognizesThemePalettes() {
+        for palette in HighlightPalette.allCases {
+            XCTAssertEqual(HighlightColor.closest(to: HighlightColor.pink.nsColor(in: palette)), .pink)
+            XCTAssertEqual(HighlightColor.closest(to: HighlightColor.yellow.nsColor(in: palette)), .yellow)
+            XCTAssertEqual(HighlightColor.closest(to: HighlightColor.green.nsColor(in: palette)), .green)
+        }
+    }
+
+    func testNightModeStyleResolvesHighlightColorFromActiveTheme() {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
+        defer {
+            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            app.appearance = previousAppearance
+        }
+
+        app.appearance = NSAppearance(named: .aqua)
+        assertColor(
+            NightModeStyle.highlightColor(for: .pink, appearance: app.effectiveAppearance),
+            matches: HighlightColor.pink.nsColor(in: .rosePineDawn)
+        )
+
+        app.appearance = NSAppearance(named: .darkAqua)
+        assertColor(
+            NightModeStyle.highlightColor(for: .pink, appearance: app.effectiveAppearance),
+            matches: HighlightColor.pink.nsColor(in: .rosePineMoon)
+        )
+    }
+
     func testHighlightAnnotationAtPointReturnsCoveringHighlight() throws {
         let document = try makeSearchableDocument(text: "alpha beta")
         let page = try XCTUnwrap(document.page(at: 0))
@@ -118,4 +214,34 @@ final class HighlightServiceTests: XCTestCase {
 
         return try XCTUnwrap(PDFDocument(url: url))
     }
+}
+
+private func assertColor(
+    _ color: NSColor,
+    red: CGFloat,
+    green: CGFloat,
+    blue: CGFloat,
+    alpha: CGFloat,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    let srgb = color.usingColorSpace(.sRGB) ?? color
+    XCTAssertEqual(srgb.redComponent, red, accuracy: 0.001, file: file, line: line)
+    XCTAssertEqual(srgb.greenComponent, green, accuracy: 0.001, file: file, line: line)
+    XCTAssertEqual(srgb.blueComponent, blue, accuracy: 0.001, file: file, line: line)
+    XCTAssertEqual(srgb.alphaComponent, alpha, accuracy: 0.001, file: file, line: line)
+}
+
+private func assertColor(
+    _ color: NSColor,
+    matches expected: NSColor,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    let srgb = color.usingColorSpace(.sRGB) ?? color
+    let expectedSRGB = expected.usingColorSpace(.sRGB) ?? expected
+    XCTAssertEqual(srgb.redComponent, expectedSRGB.redComponent, accuracy: 0.001, file: file, line: line)
+    XCTAssertEqual(srgb.greenComponent, expectedSRGB.greenComponent, accuracy: 0.001, file: file, line: line)
+    XCTAssertEqual(srgb.blueComponent, expectedSRGB.blueComponent, accuracy: 0.001, file: file, line: line)
+    XCTAssertEqual(srgb.alphaComponent, expectedSRGB.alphaComponent, accuracy: 0.001, file: file, line: line)
 }

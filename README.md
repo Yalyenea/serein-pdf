@@ -31,6 +31,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
+- Opened PDFs are also noted to macOS native recent documents, and the active PDF URL is exposed to the window for system window/document integration
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Settings General can edit the default left and right sidebar widths
@@ -42,6 +43,7 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 - Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
 - Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
+- Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets
 - Highlights can carry comments in the right sidebar, and Markdown export is page-grouped as snippet + comment for note-taking
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection

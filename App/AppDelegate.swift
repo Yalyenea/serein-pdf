@@ -81,6 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         applyApplicationAppearance()
         documentStore = DocumentStore(appConfiguration: appConfiguration)
+        documentStore.noteRecentDocumentURL = { url in
+            NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        }
         try? documentStore.restorePersistedState()
         installMainMenu()
         appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in

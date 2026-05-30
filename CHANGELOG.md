@@ -21,8 +21,12 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Right Sidebar
 - Let Outline titles wrap with larger text, tighter internal line spacing, compact dynamic row heights, and no visible scrollbars or horizontal sliding
 
+### Visual
+- Use theme-specific sRGB palettes for pink, yellow, and green highlights across Normal, Rose Pine Dawn, and Rose Pine Moon.
+
 ### Recent Files
 - Route Return and keypad Enter at the recent-files panel level so the highlighted or selected recent PDFs open reliably
+- Note successfully opened PDFs to macOS native recent documents.
 
 ### Sharing
 - Add `File > Share…` with Original PDF, Clean PDF Copy, and Highlights Markdown payloads, plus a `cmd+k`, then `cmd+e` chord.
@@ -32,6 +36,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Settings and Windows
 - Make sidebar widths window-level runtime state seeded from layout defaults, so switching PDFs no longer resizes sidebars.
 - Let Settings General edit default left and right sidebar widths.
+- Keep main window represented URL and filename synchronized with the active PDF for native macOS window/document integration.
 
 ## [0.4.0] - 2026-05-19
 

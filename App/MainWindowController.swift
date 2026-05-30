@@ -152,7 +152,18 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func refreshWindowTitle() {
-        window?.title = documentStore.activeSession(in: windowID)?.title ?? "Serein"
+        guard let window else { return }
+        guard let session = documentStore.activeSession(in: windowID),
+              session.isBlank == false else {
+            window.title = "Serein"
+            window.representedURL = nil
+            window.representedFilename = ""
+            return
+        }
+
+        window.title = session.title
+        window.representedURL = session.url
+        window.representedFilename = session.url.path
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {

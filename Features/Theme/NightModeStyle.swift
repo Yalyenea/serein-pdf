@@ -56,6 +56,7 @@ enum NightModeStyle {
         let chromeDivider: NSColor
         let selectedChromeBackground: NSColor
         let chromeStroke: NSColor
+        let highlightPalette: HighlightPalette
         let pdfStyle: PDFStyle
     }
 
@@ -120,6 +121,10 @@ enum NightModeStyle {
     }
     static let chromeStrokeColor = dynamicColor { appearance in
         activeDescriptor(for: appearance).chromeStroke
+    }
+
+    static func highlightColor(for color: HighlightColor, appearance: NSAppearance? = nil) -> NSColor {
+        color.nsColor(in: activeDescriptor(for: appearance).highlightPalette)
     }
 
     static func makePDFContentFilters(for appearance: NSAppearance? = nil) -> [CIFilter] {
@@ -215,6 +220,7 @@ enum NightModeStyle {
                 chromeDivider: NSColor(calibratedWhite: 0.88, alpha: 1.0),
                 selectedChromeBackground: NSColor(calibratedWhite: 0.915, alpha: 1.0),
                 chromeStroke: NSColor(calibratedWhite: 0.82, alpha: 1.0),
+                highlightPalette: .normal,
                 pdfStyle: .none
             )
         case .rosePineDawn:
@@ -229,6 +235,7 @@ enum NightModeStyle {
                 chromeDivider: color(from: dawnOverlay),
                 selectedChromeBackground: color(from: dawnOverlay),
                 chromeStroke: color(from: dawnMuted),
+                highlightPalette: .rosePineDawn,
                 pdfStyle: .remap(
                     background: dawnBase, foreground: dawnText, accentPreservation: 0.06,
                     backgroundLuminance: 1.0)
@@ -252,6 +259,7 @@ enum NightModeStyle {
                 chromeDivider: NSColor(calibratedWhite: 0.12, alpha: 1.0),
                 selectedChromeBackground: NSColor(calibratedWhite: 0.19, alpha: 1.0),
                 chromeStroke: NSColor(calibratedWhite: 0.28, alpha: 1.0),
+                highlightPalette: .normal,
                 pdfStyle: .remap(
                     background: pageBackground, foreground: pageForeground,
                     accentPreservation: 0.08, backgroundLuminance: 0.84)
@@ -268,6 +276,7 @@ enum NightModeStyle {
                 chromeDivider: color(from: moonOverlay),
                 selectedChromeBackground: color(from: moonOverlay),
                 chromeStroke: color(from: moonMuted),
+                highlightPalette: .rosePineMoon,
                 pdfStyle: .remap(
                     background: moonOverlay, foreground: moonText, accentPreservation: 0.14,
                     backgroundLuminance: 0.84)

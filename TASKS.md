@@ -97,7 +97,7 @@
 - Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
 - Wave 7.5 M10.12.1 手测：确认 `Cmd+Option+G` 打开 Go to Page 后输入框自动聚焦，输入页码按 Return 跳页且不触发 tab 重命名。
 - Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
-- Wave 9 M12 体验分流：`M12-001` 已完成，`M12-002` 先暂缓；下一步继续做 `M12-005`，暂缓项只在出现明确样本或需求边界后启动。
+- Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-006` 已完成，`M12-002` 先暂缓；下一步从暂缓项中挑边界最清晰的任务重评。
 
 ## 5. Milestone 7:搜索强化与对比阅读
 
@@ -266,8 +266,8 @@
 - [x] `M12-001` 侧边栏宽度收口:取消 per-PDF sidebar width 记忆,改为窗口运行期宽度 + 配置默认宽度;Settings General 可编辑左右默认宽度;切 PDF 不应导致左右侧栏宽度跳变。
 - [x] `M12-003` 高亮导出模板优化:Markdown 默认模板按页输出 snippet + comment,适合笔记粘贴;Plain / JSON 保留颜色等元信息。
 - [x] `M12-004` 系统 Share 与干净副本分享:接入 macOS `NSSharingServicePicker`,支持 `Cmd+K` → `Cmd+E`;提供导出/分享移除可见用户批注、保留链接与表单控件的 PDF 副本。
-- [ ] `M12-005` 高亮颜色主题化:按 `normal` / `rose_pine_dawn` / `rose_pine_moon` 优化 pink / yellow / green,保持低饱和、清晰、打印与暗色下不过刺眼。
-- [ ] `M12-006` macOS 原生最近项目与窗口集成:评估并接入 `NSDocumentController` recent documents、窗口 `representedURL` / `representedFilename`,改善系统 Open Recent、App Expose 与窗口标题关联。
+- [x] `M12-005` 高亮颜色主题化:按 `normal` / `rose_pine_dawn` / `rose_pine_moon` 优化 pink / yellow / green,保持低饱和、清晰、打印与暗色下不过刺眼。
+- [x] `M12-006` macOS 原生最近项目与窗口集成:接入 `NSDocumentController` recent documents、窗口 `representedURL` / `representedFilename`,改善系统 Open Recent、App Expose 与窗口标题关联。
 
 ### 18.2 暂缓
 

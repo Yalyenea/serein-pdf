@@ -84,6 +84,8 @@ flowchart LR
 | PDF 热重载 | `DocumentStore` 监听已打开 PDF 文件及其父目录;原地写入或原子替换导致文件快照变化后只重载 clean sessions,dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
+| 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
+| 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
 | 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
@@ -253,6 +255,7 @@ flowchart LR
 | `TabPresentationMode` | `verticalSidebar` / `horizontalTitlebar` |
 | `ReaderSplitPair` | 浏览器式分屏绑定,把"显示分屏"与"绑定哪两个 PDF"分开 |
 | `AnnotationSavePolicy` | `after10Minutes` / `never` |
+| `HighlightPalette` | Normal / Rose Pine Dawn / Rose Pine Moon 的高亮色预设 |
 | `HighlightUndoOperation` | undo 栈元素 |
 
 ## 6. 项目结构

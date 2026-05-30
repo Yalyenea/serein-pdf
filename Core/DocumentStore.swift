@@ -27,6 +27,7 @@ final class DocumentStore {
     private static let recentlyClosedLimit = 10
     private static let livePDFDocumentLimit = 4
     static let undoStackLimit = 50
+    var noteRecentDocumentURL: ((URL) -> Void)?
 
     init(
         persistence: DocumentStorePersistence = UserDefaultsDocumentStorePersistence(),
@@ -322,6 +323,7 @@ final class DocumentStore {
         sessions.append(contentsOf: newSessions)
         for session in newSessions {
             recentDocumentURLs = (try? recentFilesStore.recordOpen(for: session.url)) ?? recentDocumentURLs
+            noteRecentDocumentURL?(session.url)
             attach(sessionID: session.id, to: windowID)
         }
         selectSessions(newSessions.map(\.id), in: windowID, notify: false)
@@ -1876,6 +1878,7 @@ final class DocumentStore {
         }
 
         recentDocumentURLs = (try? recentFilesStore.replaceURL(oldURL, with: newURL)) ?? recentDocumentURLs
+        noteRecentDocumentURL?(newURL)
 
         for workspaceIndex in windowWorkspaces.indices {
             for closedIndex in windowWorkspaces[workspaceIndex].recentlyClosedURLs.indices

@@ -141,6 +141,35 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSession?.url, thirdURL)
     }
 
+    func testOpenDocumentsNotesSystemRecentURLs() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let urls = try (0..<3).map { try makeTemporaryPDF(named: "system-recent-\($0)") }
+        var notedURLs: [URL] = []
+        store.noteRecentDocumentURL = { notedURLs.append($0) }
+
+        _ = try store.open(documentsAt: urls, in: store.defaultWindowID)
+
+        XCTAssertEqual(notedURLs, urls)
+    }
+
+    func testBlankTabDoesNotNoteSystemRecentURL() {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        var notedURLs: [URL] = []
+        store.noteRecentDocumentURL = { notedURLs.append($0) }
+
+        _ = store.newBlankTab()
+
+        XCTAssertTrue(notedURLs.isEmpty)
+    }
+
     func testBatchOpenCreatesLightweightSessionsWithoutLoadingPDFDocuments() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),
@@ -747,6 +776,29 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.tabPresentationMode, .horizontalTitlebar)
         XCTAssertFalse(store.isLeftSidebarVisible)
         XCTAssertTrue(store.isRightSidebarVisible)
+    }
+
+    func testRestorePersistedStateDoesNotNoteSystemRecentURLs() throws {
+        let url = try makeTemporaryPDF(named: "restore-system-recent")
+        let persistence = InMemoryDocumentStorePersistence()
+        persistence.state = PersistedDocumentStoreState(
+            sessions: [.init(url: url)],
+            activeSessionURL: url,
+            tabPresentationMode: .verticalSidebar,
+            isLeftSidebarVisible: true,
+            isRightSidebarVisible: true
+        )
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        var notedURLs: [URL] = []
+        store.noteRecentDocumentURL = { notedURLs.append($0) }
+
+        try store.restorePersistedState()
+
+        XCTAssertTrue(notedURLs.isEmpty)
     }
 
     func testRestorePersistedVerticalModeForcesLeftSidebarVisible() throws {
@@ -1515,6 +1567,8 @@ final class DocumentStoreTests: XCTestCase {
         )
         let session = try store.open(documentAt: makeTemporaryPDF(named: "split-internal-comparison"))
         let windowID = store.defaultWindowID
+        var notedURLs: [URL] = []
+        store.noteRecentDocumentURL = { notedURLs.append($0) }
 
         store.setSplitEnabled(true, in: windowID)
         store.activate(sessionID: session.id, in: windowID, targetPane: .secondary)
@@ -1526,6 +1580,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(persistence.state?.sessions.map(\.id), [session.id])
         XCTAssertEqual(persistence.state?.windows.first?.sessionIDs, [session.id])
         XCTAssertNil(persistence.state?.windows.first?.splitState.secondarySessionID)
+        XCTAssertTrue(notedURLs.isEmpty)
     }
 
     func testActivatingSameSessionIntoOtherPaneReusesExistingComparisonSession() throws {
@@ -2019,6 +2074,8 @@ final class DocumentStoreTests: XCTestCase {
         let windowID = store.defaultWindowID
         let session = try store.open(documentAt: originalURL, in: windowID)
         let oldURL = session.url
+        var notedURLs: [URL] = []
+        store.noteRecentDocumentURL = { notedURLs.append($0) }
 
         readingStateStore.states[oldURL] = PersistedReadingState(
             url: oldURL,
@@ -2044,6 +2101,7 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertTrue(recentFilesStore.recentFiles.contains(updatedSession!.url))
         XCTAssertFalse(recentFilesStore.recentFiles.contains(oldURL))
+        XCTAssertEqual(notedURLs, [updatedSession!.url])
     }
 
     private func makeSearchableTemporaryPDF(named name: String, pages: [String]) throws -> URL {
