@@ -58,6 +58,7 @@
 - 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
 - 主窗口适配 macOS 原生绿灯菜单:Full Screen、Move & Resize、Fill、Center、Fill & Arrange;默认尺寸不变,最小尺寸需允许系统半屏 / 四分屏
 - 透明标题栏顶部条带只负责窗口拖动,不得把拖拽事件传给 PDF 阅读区
+- 重复打开已打开 PDF:系统 `open`、Open Recent、PDF Library 与 `Cmd+O` 都应激活已有 window/session,不创建重复普通 tab
 
 ## 3. 当前进度
 
@@ -271,6 +272,7 @@
 - [x] `M12-005` 高亮颜色主题化:按 `normal` / `rose_pine_dawn` / `rose_pine_moon` 优化 pink / yellow / green,保持低饱和、清晰、打印与暗色下不过刺眼。
 - [x] `M12-006` macOS 原生最近项目与窗口集成:接入 `NSDocumentController` recent documents、窗口 `representedURL` / `representedFilename`,改善系统 Open Recent、App Expose 与窗口标题关联。
 - [x] `M12-007` 侧栏透明度与沉浸切换收口:左右侧栏使用 native material,Settings General 可调 tint 强度;`Cmd+Ctrl+L` 仅在双侧栏都关闭时打开两个侧栏,否则关闭两个侧栏。
+- [x] `M12-008` 重复打开收口:系统 `open`、Open Recent、PDF Library 与 `Cmd+O` 遇到已打开 PDF 时切回已有 window/session,不创建重复普通 tab。
 
 ### 18.2 暂缓
 

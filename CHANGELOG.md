@@ -30,6 +30,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Recent Files
 - Route Return and keypad Enter at the recent-files panel level so the highlighted or selected recent PDFs open reliably
 - Note successfully opened PDFs to macOS native recent documents.
+- Focus the existing tab/window when an already-open PDF is opened again via system open, Open Recent, PDF Library, or `cmd+o`.
 
 ### Sharing
 - Add `File > Share…` with Original PDF, Clean PDF Copy, and Highlights Markdown payloads, plus a `cmd+k`, then `cmd+e` chord.

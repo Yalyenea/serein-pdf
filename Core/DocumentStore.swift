@@ -11,6 +11,11 @@ extension Notification.Name {
     static let documentStoreDidChange = Notification.Name("DocumentStore.didChange")
 }
 
+struct DocumentOpenLocation: Equatable, Sendable {
+    var windowID: UUID
+    var sessionID: UUID
+}
+
 @MainActor
 final class DocumentStore {
     private let persistence: DocumentStorePersistence
@@ -299,6 +304,33 @@ final class DocumentStore {
 
     func searchScope(in windowID: UUID) -> SearchScope {
         windowWorkspace(for: windowID)?.searchScope ?? .currentDocument
+    }
+
+    static func normalizedDocumentURL(_ url: URL) -> URL {
+        url.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    func openLocation(for url: URL) -> DocumentOpenLocation? {
+        let normalizedURL = Self.normalizedDocumentURL(url)
+        for workspace in windowWorkspaces {
+            for sessionID in workspace.sessionIDs {
+                guard splitComparisonSessionIDs.contains(sessionID) == false,
+                      let session = session(for: sessionID),
+                      session.isBlank == false,
+                      Self.normalizedDocumentURL(session.url) == normalizedURL else { continue }
+                return DocumentOpenLocation(windowID: workspace.id, sessionID: sessionID)
+            }
+        }
+        return nil
+    }
+
+    @discardableResult
+    func activateOpenDocument(at url: URL) -> DocumentOpenLocation? {
+        guard let location = openLocation(for: url) else { return nil }
+        selectSessions([location.sessionID], in: location.windowID, notify: false)
+        activateSession(sessionID: location.sessionID, in: location.windowID, targetPane: nil, notify: false)
+        notifyChange()
+        return location
     }
 
     @discardableResult

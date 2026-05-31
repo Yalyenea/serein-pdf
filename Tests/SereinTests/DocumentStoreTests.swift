@@ -141,6 +141,28 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSession?.url, thirdURL)
     }
 
+    func testActivateOpenDocumentFocusesExistingSessionWithoutDuplicating() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let firstURL = try makeTemporaryPDF(named: "reuse-open-first")
+        let secondURL = try makeTemporaryPDF(named: "reuse-open-second")
+        let firstSession = try store.open(documentAt: firstURL)
+        let defaultWindowID = store.defaultWindowID
+        let secondWindowID = store.createWindow(copyingFrom: defaultWindowID)
+        let secondSession = try store.open(documentAt: secondURL, in: secondWindowID)
+
+        let location = store.activateOpenDocument(at: firstURL)
+
+        XCTAssertEqual(location, DocumentOpenLocation(windowID: defaultWindowID, sessionID: firstSession.id))
+        XCTAssertEqual(store.sessions.map(\.id), [firstSession.id, secondSession.id])
+        XCTAssertEqual(store.activeSessionID(in: defaultWindowID), firstSession.id)
+        XCTAssertEqual(store.activeSessionID(in: secondWindowID), secondSession.id)
+        XCTAssertEqual(store.selectedSessionIDs(in: defaultWindowID), Set([firstSession.id]))
+    }
+
     func testOpenDocumentsNotesSystemRecentURLs() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

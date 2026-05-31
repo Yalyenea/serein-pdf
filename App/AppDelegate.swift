@@ -215,7 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         mainWindowController?.hideFindBar()
         let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
         do {
-            try openResolvedDocumentURLs(urls, in: targetWindowID)
+            let frontWindowID = try openResolvedDocumentURLs(urls, in: targetWindowID)
+            bringWindowToFront(frontWindowID)
         } catch {
             presentOpenError(error)
         }
@@ -419,6 +420,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         mainWindowControllers.removeValue(forKey: controller.windowID)
     }
 
+    private func bringWindowToFront(_ windowID: UUID?) {
+        guard let windowID else { return }
+        let controller = makeWindowController(windowID: windowID)
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
     @objc
     func openDocument(_ sender: Any?) {
         mainWindowController?.hideFindBar()
@@ -434,7 +442,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         guard panel.runModal() == .OK else { return }
 
         do {
-            try openResolvedDocumentURLs(panel.urls, in: targetWindowID)
+            let frontWindowID = try openResolvedDocumentURLs(panel.urls, in: targetWindowID)
+            bringWindowToFront(frontWindowID)
         } catch {
             presentOpenError(error)
         }
@@ -1716,9 +1725,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         NSWorkspace.shared.activateFileViewerSelecting([activeURL])
     }
 
-    private func openResolvedDocumentURLs(_ urls: [URL], in targetWindowID: UUID) throws {
+    @discardableResult
+    private func openResolvedDocumentURLs(_ urls: [URL], in targetWindowID: UUID) throws -> UUID? {
         let resolvedURLs = try openDocumentSelectionResolver.resolve(urls)
-        _ = try documentStore.open(documentsAt: resolvedURLs, in: targetWindowID)
+        return try openOrActivateDocumentURLs(resolvedURLs, in: targetWindowID)
+    }
+
+    @discardableResult
+    private func openOrActivateDocumentURLs(_ urls: [URL], in targetWindowID: UUID) throws -> UUID? {
+        var pendingOpenURLs: [URL] = []
+        var seenPendingURLs: Set<URL> = []
+        var frontWindowID: UUID?
+
+        for url in urls {
+            if let location = documentStore.activateOpenDocument(at: url) {
+                frontWindowID = location.windowID
+                continue
+            }
+
+            let normalizedURL = DocumentStore.normalizedDocumentURL(url)
+            if seenPendingURLs.insert(normalizedURL).inserted {
+                pendingOpenURLs.append(url)
+            }
+        }
+
+        if pendingOpenURLs.isEmpty == false {
+            _ = try documentStore.open(documentsAt: pendingOpenURLs, in: targetWindowID)
+            frontWindowID = targetWindowID
+        }
+
+        return frontWindowID
     }
 
     private func openRecentDocuments(_ urls: [URL], preferredWindowID: UUID? = nil) {
@@ -1730,7 +1766,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             ?? documentStore.defaultWindowID
 
         do {
-            _ = try documentStore.open(documentsAt: urls, in: targetWindowID)
+            let frontWindowID = try openOrActivateDocumentURLs(urls, in: targetWindowID)
+            bringWindowToFront(frontWindowID)
         } catch {
             presentOpenError(error)
         }
@@ -1742,7 +1779,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
               let url = documentStore.popRecentlyClosed(in: controller.windowID) else { return }
         controller.hideFindBar()
         do {
-            _ = try documentStore.open(documentAt: url, in: controller.windowID)
+            let frontWindowID = try openOrActivateDocumentURLs([url], in: controller.windowID)
+            bringWindowToFront(frontWindowID)
         } catch {
             presentOpenError(error)
         }

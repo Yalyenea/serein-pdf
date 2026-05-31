@@ -29,6 +29,7 @@ let package = Package(
                 "README.md",
                 "Resources",
                 "Scripts",
+                "Website",
                 "build",
             ],
             sources: [
