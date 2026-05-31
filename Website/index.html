@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Serein is a native macOS PDF reader built with Swift, AppKit, and PDFKit. Minimal, keyboard-driven, and made for focused reading."
+    >
+    <title>Serein - Native macOS PDF Reader</title>
+    <link rel="icon" href="assets/app-icon.png">
+    <link rel="apple-touch-icon" href="assets/app-icon.png">
+    <link rel="stylesheet" href="assets/styles.css">
+  </head>
+  <body>
+    <header class="topbar" data-nav>
+      <a class="brand" href="#top" aria-label="Serein home">
+        <img src="assets/app-icon.png" width="28" height="28" alt="">
+        <span>Serein</span>
+      </a>
+      <nav class="nav" aria-label="Primary navigation">
+        <a href="#reader">Reader</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#download">Download</a>
+        <a href="#docs">Docs</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-image" aria-hidden="true"></div>
+        <div class="hero-shade" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <p class="eyebrow">Swift + AppKit + PDFKit</p>
+          <h1 id="hero-title">Serein</h1>
+          <p class="lede">
+            A compact native macOS PDF reader for focused research, keyboard reading,
+            split comparison, clean highlights, and fast outline navigation.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/Yalyenea/serein-pdf/releases/latest">Download latest</a>
+            <a class="button quiet" href="#docs">Read docs</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="reader" class="band intro-grid" aria-labelledby="reader-title">
+        <div>
+          <p class="eyebrow">Reader Surface</p>
+          <h2 id="reader-title">Three panes, one job each.</h2>
+        </div>
+        <p>
+          Left tabs keep track of open documents, the center stays reserved for reading,
+          and the right sidebar handles structure, pages, search, and annotations. The
+          layout stays quiet even when the workflow gets dense.
+        </p>
+      </section>
+
+      <section class="band feature-grid" aria-label="Serein feature highlights">
+        <article class="feature">
+          <span class="feature-kicker">Tabs</span>
+          <h3>Vertical or titlebar tabs</h3>
+          <p>Switch between a left tab rail and titlebar tabs without changing the document model.</p>
+        </article>
+        <article class="feature">
+          <span class="feature-kicker">Search</span>
+          <h3>Right-side search results</h3>
+          <p>Search this document or every open PDF while previews stay out of the reading pane.</p>
+        </article>
+        <article class="feature">
+          <span class="feature-kicker">Outline</span>
+          <h3>Compact document structure</h3>
+          <p>Long outline titles wrap in a tight right pane instead of stretching the window.</p>
+        </article>
+        <article class="feature">
+          <span class="feature-kicker">Highlights</span>
+          <h3>Pink-first annotations</h3>
+          <p>Highlight, comment, save, and export Markdown grouped by page for note-taking.</p>
+        </article>
+      </section>
+
+      <section id="workflow" class="band split-section" aria-labelledby="workflow-title">
+        <div class="section-copy">
+          <p class="eyebrow">Research Flow</p>
+          <h2 id="workflow-title">Built for papers, slides, and recompiling PDFs.</h2>
+          <p>
+            Serein keeps common reading moves close to the keyboard: Vim-style navigation,
+            all-open search, multi-PDF continuous reading, a Spotlight-style recent launcher,
+            and compare split for reading two views side by side.
+          </p>
+        </div>
+        <div class="workflow-list">
+          <div class="workflow-item">
+            <span>01</span>
+            <p>Open files or folders; Serein scans PDFs and creates lightweight tabs first.</p>
+          </div>
+          <div class="workflow-item">
+            <span>02</span>
+            <p>Compare the current PDF with another tab, or with a second state of itself.</p>
+          </div>
+          <div class="workflow-item">
+            <span>03</span>
+            <p>Hot-reload clean PDFs after LaTeX or Typst rewrites them on disk.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="download" class="download band" aria-labelledby="download-title">
+        <div>
+          <p class="eyebrow">Local Release</p>
+          <h2 id="download-title">Download the latest DMG from GitHub Releases.</h2>
+          <p>
+            Serein currently targets macOS 14+ and is distributed from the project release page.
+            The app is locally signed for this project, so first launch may require the standard
+            macOS right-click Open flow.
+          </p>
+        </div>
+        <div class="download-actions">
+          <a class="button primary" href="https://github.com/Yalyenea/serein-pdf/releases/latest">Open latest release</a>
+          <a class="button quiet" href="https://github.com/Yalyenea/serein-pdf">View source</a>
+        </div>
+      </section>
+
+      <section id="docs" class="band docs" aria-labelledby="docs-title">
+        <div class="docs-head">
+          <p class="eyebrow">Compact Docs</p>
+          <h2 id="docs-title">The essentials.</h2>
+        </div>
+        <div class="docs-grid">
+          <article class="doc-panel">
+            <h3>Requirements</h3>
+            <ul>
+              <li>macOS 14 or newer</li>
+              <li>Swift 6.1 toolchain for development builds</li>
+              <li><code>just</code> for the local task runner</li>
+            </ul>
+          </article>
+          <article class="doc-panel">
+            <h3>Core shortcuts</h3>
+            <dl class="shortcuts">
+              <div><dt><kbd>a</kbd></dt><dd>Highlight selection or enter highlight mode</dd></div>
+              <div><dt><kbd>c</kbd></dt><dd>Toggle single-page continuous reading</dd></div>
+              <div><dt><kbd>cmd</kbd><kbd>f</kbd></dt><dd>Find in current document</dd></div>
+              <div><dt><kbd>cmd</kbd><kbd>ctrl</kbd><kbd>\</kbd></dt><dd>Toggle compare split</dd></div>
+            </dl>
+          </article>
+          <article class="doc-panel">
+            <h3>Configuration</h3>
+            <p>Runtime settings live in:</p>
+            <button class="path-copy" type="button" data-copy="~/Library/Application Support/Serein/config.toml">
+              <code>~/Library/Application Support/Serein/config.toml</code>
+            </button>
+          </article>
+          <article class="doc-panel">
+            <h3>License</h3>
+            <p>
+              Personal, non-commercial use. Redistribution, commercial use, sublicensing,
+              and third-party distribution remain restricted without written permission.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Serein</span>
+      <span>Native macOS PDF reader</span>
+    </footer>
+
+    <script src="assets/main.js" defer></script>
+  </body>
+</html>

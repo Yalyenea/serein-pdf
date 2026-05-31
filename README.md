@@ -6,6 +6,9 @@
 
 Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
+Local website preview lives in [Website](Website/). It is a static product
+site for showcase, download notes, and compact docs.
+
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
@@ -69,6 +72,8 @@ Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 just            # list targets
 just test       # run Swift tests
 just run        # run dev build via SwiftPM
+just website    # preview the local static website
+just website-check
 ```
 
 ## Ship to your Mac
@@ -233,6 +238,7 @@ UI/          CenterReader, LeftTabs, RightOutline, TitlebarTabs
 Tests/       Swift Testing + XCTest suites
 Resources/   Info.plist, AppIcon.png/.icns
 Scripts/     make-app.sh, make-icon.sh
+Website/     Local static product website
 Justfile     Task runner entrypoints
 ```
 

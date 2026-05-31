@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Website
+- Add a local static Serein product website with showcase, download notes, compact docs, and a real app screenshot captured from a synthetic PDF.
+
 ### Packaging
 - Sign local app builds with a stable `Serein Local Code Signing` identity instead of ad-hoc cdhash-only signatures, so reinstalling the app keeps a consistent macOS identity for persisted file access.
 
