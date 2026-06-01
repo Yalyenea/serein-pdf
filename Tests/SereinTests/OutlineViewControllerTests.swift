@@ -6,8 +6,9 @@ import Testing
 @MainActor
 struct OutlineViewControllerTests {
     @Test
-    func outlineColumnTracksSidebarWidth() {
+    func outlineContentTracksSidebarWidth() throws {
         let store = DocumentStore(appConfiguration: .default)
+        _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "width-outline"))
         let controller = OutlineViewController(
             documentStore: store,
             windowID: store.defaultWindowID
@@ -16,18 +17,18 @@ struct OutlineViewControllerTests {
         controller.view.frame = NSRect(x: 0, y: 0, width: 320, height: 540)
         controller.view.layoutSubtreeIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
-              let outlineView = scrollView.documentView as? NSOutlineView,
-              let column = outlineView.tableColumns.first else {
+        guard let scrollView = outlineScrollView(in: controller.view),
+              let documentView = scrollView.documentView else {
             Issue.record("Failed to locate outline sidebar views")
             return
         }
 
-        #expect(abs(column.width - scrollView.contentSize.width) < 0.5)
+        #expect(documentView is NSOutlineView == false)
+        #expect(abs(documentView.frame.width - scrollView.contentSize.width) < 0.5)
     }
 
     @Test
-    func outlineColumnShrinksWithSidebarAndLocksHorizontalPanning() throws {
+    func outlineContentShrinksWithSidebarAndLocksHorizontalPanning() throws {
         let store = DocumentStore(appConfiguration: .default)
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "narrow-outline"))
         let controller = OutlineViewController(
@@ -40,9 +41,8 @@ struct OutlineViewControllerTests {
         controller.view.frame = NSRect(x: 0, y: 0, width: 140, height: 540)
         controller.view.layoutSubtreeIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
-              let outlineView = scrollView.documentView as? NSOutlineView,
-              let column = outlineView.tableColumns.first else {
+        guard let scrollView = outlineScrollView(in: controller.view),
+              let documentView = scrollView.documentView else {
             Issue.record("Failed to locate outline sidebar views")
             return
         }
@@ -50,8 +50,8 @@ struct OutlineViewControllerTests {
         scrollView.contentView.scroll(to: NSPoint(x: 80, y: 0))
         scrollView.reflectScrolledClipView(scrollView.contentView)
 
-        #expect(abs(column.width - scrollView.contentSize.width) < 0.5)
-        #expect(column.width <= scrollView.contentSize.width + 0.5)
+        #expect(abs(documentView.frame.width - scrollView.contentSize.width) < 0.5)
+        #expect(documentView.frame.width <= scrollView.contentSize.width + 0.5)
         #expect(scrollView.contentView.bounds.origin.x == 0)
         #expect(hasPinnedEdgeConstraint(for: scrollView, in: controller.view, attribute: .leading))
         #expect(hasPinnedEdgeConstraint(for: scrollView, in: controller.view, attribute: .trailing))
@@ -76,22 +76,17 @@ struct OutlineViewControllerTests {
         controller.view.frame = NSRect(x: 0, y: 0, width: 180, height: 540)
         controller.view.layoutSubtreeIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
-              let outlineView = scrollView.documentView as? NSOutlineView,
-              let column = outlineView.tableColumns.first,
-              let item = outlineView.item(atRow: 0) as? OutlineNode,
-              let cell = controller.outlineView(outlineView, viewFor: column, item: item) as? NSTableCellView,
-              let textField = cell.textField else {
+        guard let row = outlineRows(in: controller.view).first else {
             Issue.record("Failed to locate outline row views")
             return
         }
 
-        #expect(controller.outlineView(outlineView, heightOfRowByItem: item) > 40)
-        #expect(textField.lineBreakMode == .byCharWrapping)
-        #expect(textField.maximumNumberOfLines == 0)
-        #expect(textField.font?.pointSize == 13)
-        #expect(textField.preferredMaxLayoutWidth <= column.width)
-        let paragraphStyle = textField.attributedStringValue.attribute(
+        #expect(row.fittingSize.height > 40)
+        #expect(row.textField.lineBreakMode == .byCharWrapping)
+        #expect(row.textField.maximumNumberOfLines == 0)
+        #expect(row.textField.font?.pointSize == 13)
+        #expect(row.textField.preferredMaxLayoutWidth <= row.frame.width)
+        let paragraphStyle = row.textField.attributedStringValue.attribute(
             .paragraphStyle,
             at: 0,
             effectiveRange: nil
@@ -113,14 +108,12 @@ struct OutlineViewControllerTests {
         controller.view.frame = NSRect(x: 0, y: 0, width: 260, height: 540)
         controller.view.layoutSubtreeIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
-              let outlineView = scrollView.documentView as? NSOutlineView,
-              let item = outlineView.item(atRow: 0) as? OutlineNode else {
+        guard let row = outlineRows(in: controller.view).first else {
             Issue.record("Failed to locate outline row")
             return
         }
 
-        #expect(controller.outlineView(outlineView, heightOfRowByItem: item) <= 25)
+        #expect(row.fittingSize.height <= 25)
     }
 
     @Test
@@ -132,7 +125,7 @@ struct OutlineViewControllerTests {
         )
         controller.loadViewIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first else {
+        guard let scrollView = outlineScrollView(in: controller.view) else {
             Issue.record("Failed to locate outline scroll view")
             return
         }
@@ -151,23 +144,17 @@ struct OutlineViewControllerTests {
         )
         controller.loadViewIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
-              let outlineView = scrollView.documentView as? NSOutlineView else {
+        guard let scrollView = outlineScrollView(in: controller.view),
+              let documentView = scrollView.documentView else {
             Issue.record("Failed to locate outline scroll view")
             return
         }
 
-        let rowView = controller.outlineView(
-            outlineView,
-            rowViewForItem: OutlineNode(title: "Row", pageIndex: 0, children: [])
-        )
-
         #expect(scrollView.drawsBackground == false)
         #expect(scrollView.contentView.drawsBackground == false)
         #expect(scrollView.contentView.backgroundColor == .clear)
-        #expect(outlineView.backgroundColor == .clear)
-        #expect(outlineView.usesAlternatingRowBackgroundColors == false)
-        #expect(rowView != nil)
+        #expect(documentView.layer?.backgroundColor == NSColor.clear.cgColor)
+        #expect(documentView is NSOutlineView == false)
     }
 
     @Test
@@ -180,24 +167,22 @@ struct OutlineViewControllerTests {
         )
         controller.loadViewIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
-              let outlineView = scrollView.documentView as? NSOutlineView,
-              let toggleButton = findView(
-                identifier: "outlineExpansionToggleButton",
-                in: controller.view
-              ) as? NSButton else {
+        guard let toggleButton = findView(
+            identifier: "outlineExpansionToggleButton",
+            in: controller.view
+        ) as? NSButton else {
             Issue.record("Failed to locate outline tree views")
             return
         }
 
-        #expect(outlineView.numberOfRows == 3)
+        #expect(outlineRows(in: controller.view).count == 3)
 
         toggleButton.performClick(nil)
-        #expect(outlineView.numberOfRows == 2)
+        #expect(outlineRows(in: controller.view).count == 2)
         #expect(toggleButton.toolTip == "Expand outline")
 
         toggleButton.performClick(nil)
-        #expect(outlineView.numberOfRows == 3)
+        #expect(outlineRows(in: controller.view).count == 3)
         #expect(toggleButton.toolTip == "Collapse outline")
     }
 
@@ -219,19 +204,17 @@ struct OutlineViewControllerTests {
         )
         controller.loadViewIfNeeded()
 
-        guard let scrollView = controller.view.subviews.compactMap({ $0 as? NSScrollView }).first,
-              let outlineView = scrollView.documentView as? NSOutlineView,
-              let firstRoot = outlineView.item(atRow: 0) as? OutlineNode,
-              let secondRoot = outlineView.item(atRow: 3) as? OutlineNode else {
+        let rows = outlineRows(in: controller.view)
+        guard rows.count >= 6 else {
             Issue.record("Failed to locate continuous outline roots")
             return
         }
 
-        #expect(outlineView.numberOfRows == 6)
-        #expect(firstRoot.isDocumentRoot)
-        #expect(firstRoot.sourceSessionID == sessions[0].id)
-        #expect(secondRoot.isDocumentRoot)
-        #expect(secondRoot.sourceSessionID == sessions[1].id)
+        #expect(rows.count == 6)
+        #expect(rows[0].node.isDocumentRoot)
+        #expect(rows[0].node.sourceSessionID == sessions[0].id)
+        #expect(rows[3].node.isDocumentRoot)
+        #expect(rows[3].node.sourceSessionID == sessions[1].id)
     }
 }
 
@@ -278,6 +261,19 @@ private func makeTemporaryPDFWithOutline(
         throw CocoaError(.fileWriteUnknown)
     }
     return url
+}
+
+@MainActor
+private func outlineScrollView(in root: NSView) -> NSScrollView? {
+    findView(identifier: "outlineScrollView", in: root) as? NSScrollView
+}
+
+@MainActor
+private func outlineRows(in root: NSView) -> [OutlineRowView] {
+    guard let stack = findView(identifier: "outlineRowsStack", in: root) as? NSStackView else {
+        return []
+    }
+    return stack.arrangedSubviews.compactMap { $0 as? OutlineRowView }
 }
 
 @MainActor

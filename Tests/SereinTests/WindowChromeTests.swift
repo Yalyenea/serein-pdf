@@ -979,16 +979,16 @@ struct WindowChromeTests {
         flushLayout(controller.window)
 
         guard let splitController = controller.window?.contentViewController as? SplitViewController,
-              let outlineScrollView = splitController.rightSidebarViewController.outlineViewController.view.subviews
-                .compactMap({ $0 as? NSScrollView })
-                .first,
-              let outlineView = outlineScrollView.documentView as? NSOutlineView,
+              let outlineRow = findView(
+                identifier: OutlineRowView.identifier(for: [1]),
+                in: splitController.rightSidebarViewController.outlineViewController.view
+              ) as? OutlineRowView,
               let document = splitController.readerViewController.pdfView.document else {
             Issue.record("Failed to locate outline UI")
             return
         }
 
-        outlineView.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        outlineRow.performPrimaryAction()
         flushLayout(controller.window)
 
         let currentPageIndex = splitController.readerViewController.pdfView.currentPage.map { document.index(for: $0) }
@@ -1984,6 +1984,19 @@ private func textFields(in root: NSView) -> [NSTextField] {
 @MainActor
 private func textField(identifier: String, in root: NSView) -> NSTextField? {
     textFields(in: root).first { $0.identifier?.rawValue == identifier }
+}
+
+@MainActor
+private func findView(identifier: String, in root: NSView) -> NSView? {
+    if root.identifier?.rawValue == identifier {
+        return root
+    }
+    for subview in root.subviews {
+        if let match = findView(identifier: identifier, in: subview) {
+            return match
+        }
+    }
+    return nil
 }
 
 @MainActor
