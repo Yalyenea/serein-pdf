@@ -14,7 +14,7 @@ site for showcase, download notes, and compact docs.
 - Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
-- Right pane hosts **Outline + Pages + Search + Annotations**; Outline wraps long titles with tight line spacing in a compact scrollbar-free pane, and all search / annotation previews stay on the right
+- Right pane hosts **Outline + Pages + Search + Annotations**; Outline wraps long titles with tight line spacing, no horizontal panning, and one-click tree expand/collapse, while all search / annotation previews stay on the right
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges

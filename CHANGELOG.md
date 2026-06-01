@@ -23,6 +23,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Right Sidebar
 - Let Outline titles wrap with larger text, tighter internal line spacing, compact dynamic row heights, and no visible scrollbars or horizontal sliding
+- Keep Outline rows pinned to the current sidebar width when the pane narrows, and add one-click expand/collapse for the outline tree
 
 ### Visual
 - Use theme-specific sRGB palettes for pink, yellow, and green highlights across Normal, Rose Pine Dawn, and Rose Pine Moon.

@@ -106,7 +106,7 @@ flowchart LR
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
 | 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏 |
-| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无可见滚动条;所有预览类内容都在右栏,不回流到中栏 |
+| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持一键折叠 / 展开;所有预览类内容都在右栏,不回流到中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
