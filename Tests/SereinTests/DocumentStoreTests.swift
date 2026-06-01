@@ -57,6 +57,10 @@ private final class NotificationCounterObserver: NSObject {
     }
 }
 
+private final class DocumentStoreChangeRecorder: @unchecked Sendable {
+    var observedChange: DocumentStoreChange?
+}
+
 @MainActor
 final class DocumentStoreTests: XCTestCase {
     func testOpenDocumentCreatesActiveSession() throws {
@@ -768,6 +772,48 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(persistence.state?.isLeftSidebarVisible, false)
         XCTAssertEqual(persistence.state?.isRightSidebarVisible, false)
+    }
+
+    func testSidebarVisibilityChangePostsLightweightNotification() {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let recorder = DocumentStoreChangeRecorder()
+        let observer = NotificationCenter.default.addObserver(
+            forName: .documentStoreDidChange,
+            object: store,
+            queue: nil
+        ) { notification in
+            recorder.observedChange = notification.documentStoreChange
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        store.setLeftSidebarVisible(false)
+
+        XCTAssertEqual(recorder.observedChange, .sidebarVisibility)
+    }
+
+    func testRightSidebarModeChangePostsLightweightNotification() {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let recorder = DocumentStoreChangeRecorder()
+        let observer = NotificationCenter.default.addObserver(
+            forName: .documentStoreDidChange,
+            object: store,
+            queue: nil
+        ) { notification in
+            recorder.observedChange = notification.documentStoreChange
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        store.setRightSidebarMode(.pages, in: store.defaultWindowID)
+
+        XCTAssertEqual(recorder.observedChange, .rightSidebarMode)
     }
 
     func testRestorePersistedStateReopensSessionsAndMode() throws {

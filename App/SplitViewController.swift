@@ -160,6 +160,15 @@ final class SplitViewController: NSSplitViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        if notification.isOnlySidebarVisibilityChange {
+            applyStoreState(syncRightSidebarMode: false)
+            applySidebarWidthsForWindow()
+            return
+        }
+        if notification.isOnlyRightSidebarModeChange {
+            return
+        }
+
         refreshChromeColors()
         rebuildSplitItemsIfSwapChanged()
         applyStoreState()
@@ -196,21 +205,27 @@ final class SplitViewController: NSSplitViewController {
         hasAppliedSidebarWidths = false
     }
 
-    private func applyStoreState() {
+    private func applyStoreState(syncRightSidebarMode: Bool = true) {
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
         let physicalLeft: NSSplitViewItem = swapped ? outlineSidebarItem : tabsSidebarItem
         let physicalRight: NSSplitViewItem = swapped ? tabsSidebarItem : outlineSidebarItem
 
         let leftShouldCollapse = !documentStore.isLeftSidebarVisible(in: windowID)
-        if physicalLeft.isCollapsed != leftShouldCollapse {
-            physicalLeft.isCollapsed = leftShouldCollapse
-        }
         let rightShouldCollapse = !documentStore.isRightSidebarVisible(in: windowID)
-        if physicalRight.isCollapsed != rightShouldCollapse {
-            physicalRight.isCollapsed = rightShouldCollapse
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            if physicalLeft.isCollapsed != leftShouldCollapse {
+                physicalLeft.isCollapsed = leftShouldCollapse
+            }
+            if physicalRight.isCollapsed != rightShouldCollapse {
+                physicalRight.isCollapsed = rightShouldCollapse
+            }
         }
 
-        rightSidebarViewController.applyStateFromStore()
+        if syncRightSidebarMode {
+            rightSidebarViewController.applyStateFromStore()
+        }
     }
 
     private func scheduleSidebarWidthApply() {

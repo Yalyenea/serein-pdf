@@ -11,6 +11,46 @@ extension Notification.Name {
     static let documentStoreDidChange = Notification.Name("DocumentStore.didChange")
 }
 
+struct DocumentStoreChange: OptionSet, Sendable {
+    let rawValue: Int
+
+    static let sidebarVisibility = DocumentStoreChange(rawValue: 1 << 0)
+    static let rightSidebarMode = DocumentStoreChange(rawValue: 1 << 1)
+    static let content = DocumentStoreChange(rawValue: 1 << 2)
+    static let all: DocumentStoreChange = [.sidebarVisibility, .rightSidebarMode, .content]
+
+    static let notificationUserInfoKey = "DocumentStore.change"
+
+    init(rawValue: Int) {
+        self.rawValue = rawValue
+    }
+
+    func containsOnly(_ changes: DocumentStoreChange) -> Bool {
+        rawValue != 0 && (rawValue & ~changes.rawValue) == 0
+    }
+}
+
+extension Notification {
+    var documentStoreChange: DocumentStoreChange {
+        guard let rawValue = userInfo?[DocumentStoreChange.notificationUserInfoKey] as? Int else {
+            return .all
+        }
+        return DocumentStoreChange(rawValue: rawValue)
+    }
+
+    var isOnlySidebarVisibilityChange: Bool {
+        documentStoreChange.containsOnly(.sidebarVisibility)
+    }
+
+    var isOnlyRightSidebarModeChange: Bool {
+        documentStoreChange.containsOnly(.rightSidebarMode)
+    }
+
+    var isOnlySidebarChromeChange: Bool {
+        documentStoreChange.containsOnly([.sidebarVisibility, .rightSidebarMode])
+    }
+}
+
 struct DocumentOpenLocation: Equatable, Sendable {
     var windowID: UUID
     var sessionID: UUID
@@ -864,7 +904,7 @@ final class DocumentStore {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         guard windowWorkspaces[index].isLeftSidebarVisible != isVisible else { return }
         windowWorkspaces[index].isLeftSidebarVisible = isVisible
-        notifyChange()
+        notifyChange(.sidebarVisibility)
     }
 
     func setRightSidebarVisible(_ isVisible: Bool) {
@@ -875,14 +915,14 @@ final class DocumentStore {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         guard windowWorkspaces[index].isRightSidebarVisible != isVisible else { return }
         windowWorkspaces[index].isRightSidebarVisible = isVisible
-        notifyChange()
+        notifyChange(.sidebarVisibility)
     }
 
     func setRightSidebarMode(_ mode: RightSidebarMode, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         guard windowWorkspaces[index].rightSidebarMode != mode else { return }
         windowWorkspaces[index].rightSidebarMode = mode
-        notifyChange()
+        notifyChange(.rightSidebarMode)
     }
 
     func toggleRightSidebarMode(in windowID: UUID) {
@@ -1741,7 +1781,7 @@ final class DocumentStore {
         }
     }
 
-    private func notifyChange() {
+    private func notifyChange(_ change: DocumentStoreChange = .all) {
         let persistedSessions = sessions.filter {
             $0.isBlank == false && splitComparisonSessionIDs.contains($0.id) == false
         }
@@ -1786,7 +1826,11 @@ final class DocumentStore {
                 }
             )
         )
-        NotificationCenter.default.post(name: .documentStoreDidChange, object: self)
+        NotificationCenter.default.post(
+            name: .documentStoreDidChange,
+            object: self,
+            userInfo: [DocumentStoreChange.notificationUserInfoKey: change.rawValue]
+        )
     }
 
     private var defaultScaleMode: ReaderScaleMode {

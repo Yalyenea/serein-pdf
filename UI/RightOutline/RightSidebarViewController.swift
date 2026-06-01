@@ -182,7 +182,9 @@ final class RightSidebarViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.isOnlySidebarVisibilityChange == false else { return }
         applyStateFromStore()
+        guard notification.isOnlyRightSidebarModeChange == false else { return }
         let summary = searchResultsViewController.selectionSummary()
         onSearchSelectionDidChange?(summary.selectedIndex, summary.totalMatches)
     }

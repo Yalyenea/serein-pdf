@@ -281,6 +281,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.isOnlySidebarChromeChange == false else {
+            refreshManagedMenuState()
+            return
+        }
         let dirtyURLs = Set(documentStore.sessions.filter(\.isDirty).map(\.url))
         reportedAutoSaveFailureURLs.formIntersection(dirtyURLs)
         updateRecentFilesMenu()

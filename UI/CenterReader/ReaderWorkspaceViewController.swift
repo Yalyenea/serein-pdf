@@ -281,6 +281,7 @@ final class ReaderWorkspaceViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.isOnlySidebarChromeChange == false else { return }
         syncFromStore()
     }
 

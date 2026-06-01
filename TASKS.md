@@ -50,6 +50,7 @@
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换;Outline 随侧栏宽度收缩且无水平滑动,目录树可一键折叠 / 展开
+- 左右侧栏可见性切换只触发 chrome 布局更新,不得重建 reader / tabs / outline / search / annotations 数据
 - `Cmd+L` 进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
 - `Cmd+Ctrl+L`:仅当左右侧栏都关闭时打开两个侧栏;其他任一状态关闭两个侧栏与 tab chrome
 - 左右可互换:`Cmd+Shift+X` 或设置窗口

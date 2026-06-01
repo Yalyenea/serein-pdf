@@ -91,6 +91,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.isOnlySidebarChromeChange == false else {
+            applyWindowChromeState()
+            return
+        }
         refreshThemeAppearance()
         applyWindowChromeState()
         refreshWindowTitle()

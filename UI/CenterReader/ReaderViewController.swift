@@ -773,6 +773,8 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.isOnlySidebarChromeChange == false else { return }
+
         if syncDisplayedStateWithoutRefreshIfPossible() == false {
             refreshDisplayedDocument()
         }

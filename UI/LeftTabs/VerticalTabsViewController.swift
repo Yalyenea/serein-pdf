@@ -144,6 +144,7 @@ final class VerticalTabsViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.isOnlySidebarChromeChange == false else { return }
         rebuildList()
         applyEmptyState()
     }
