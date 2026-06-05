@@ -15,15 +15,27 @@ private final class OutlineClipView: NSClipView {
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
         var bounds = super.constrainBoundsRect(proposedBounds)
         bounds.origin.x = 0
+        if let documentView {
+            let maximumY = max(documentView.frame.height - bounds.height, 0)
+            bounds.origin.y = min(max(bounds.origin.y, 0), maximumY)
+        }
         return bounds
     }
 
     override func scroll(to newOrigin: NSPoint) {
-        super.scroll(to: NSPoint(x: 0, y: newOrigin.y))
+        super.scroll(to: clampedOrigin(for: newOrigin))
     }
 
     override func setBoundsOrigin(_ newOrigin: NSPoint) {
-        super.setBoundsOrigin(NSPoint(x: 0, y: newOrigin.y))
+        super.setBoundsOrigin(clampedOrigin(for: newOrigin))
+    }
+
+    private func clampedOrigin(for origin: NSPoint) -> NSPoint {
+        guard let documentView else {
+            return NSPoint(x: 0, y: max(origin.y, 0))
+        }
+        let maximumY = max(documentView.frame.height - bounds.height, 0)
+        return NSPoint(x: 0, y: min(max(origin.y, 0), maximumY))
     }
 }
 
@@ -51,6 +63,10 @@ private final class OutlineDocumentView: NSView {
     override var isFlipped: Bool { true }
 }
 
+private final class OutlineRowsContainerView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 private final class OutlineRowTextField: NSTextField {
     override func mouseDown(with event: NSEvent) {
         if let rowView = enclosingOutlineRowView {
@@ -75,20 +91,23 @@ private final class OutlineRowTextField: NSTextField {
 final class OutlineRowView: NSControl {
     static let rowIdentifierPrefix = "outlineRow"
 
-    private static let minimumHeight: CGFloat = 22
-    private static let horizontalPadding: CGFloat = 6
-    private static let verticalPadding: CGFloat = 3
-    private static let indentationPerLevel: CGFloat = 13
-    private static let disclosureSize: CGFloat = 14
-    private static let disclosureTextSpacing: CGFloat = 3
+    fileprivate static let minimumHeight: CGFloat = 22
+    fileprivate static let horizontalPadding: CGFloat = 6
+    fileprivate static let verticalPadding: CGFloat = 3
+    fileprivate static let indentationPerLevel: CGFloat = 13
+    fileprivate static let disclosureSize: CGFloat = 14
+    fileprivate static let disclosureTextSpacing: CGFloat = 3
 
     let node: OutlineNode
     let path: [Int]
     let textField: NSTextField = OutlineRowTextField(labelWithString: "")
+    private let level: Int
     private let disclosureButton = NSButton()
     private let onActivate: (OutlineNode) -> Void
     private let onToggleExpansion: () -> Void
+    private let isExpandable: Bool
     private var isRowSelected: Bool
+    private var isRowExpanded: Bool
 
     init(
         node: OutlineNode,
@@ -103,9 +122,12 @@ final class OutlineRowView: NSControl {
     ) {
         self.node = node
         self.path = path
+        self.level = level
         self.onActivate = onActivate
         self.onToggleExpansion = onToggleExpansion
+        self.isExpandable = isExpandable
         self.isRowSelected = isSelected
+        self.isRowExpanded = isExpanded
         super.init(frame: .zero)
 
         identifier = NSUserInterfaceItemIdentifier(Self.identifier(for: path))
@@ -128,14 +150,8 @@ final class OutlineRowView: NSControl {
         disclosureButton.setButtonType(.momentaryChange)
         disclosureButton.isEnabled = isExpandable
         disclosureButton.alphaValue = isExpandable ? 1 : 0
-        disclosureButton.image = isExpandable
-            ? NSImage(
-                systemSymbolName: isExpanded ? "chevron.down" : "chevron.right",
-                accessibilityDescription: isExpanded ? "Collapse section" : "Expand section"
-            )
-            : nil
+        updateDisclosureAppearance()
         disclosureButton.contentTintColor = NightModeStyle.secondaryTextColor
-        disclosureButton.toolTip = isExpanded ? "Collapse section" : "Expand section"
 
         textField.maximumNumberOfLines = 0
         textField.lineBreakMode = .byCharWrapping
@@ -192,10 +208,44 @@ final class OutlineRowView: NSControl {
         path.map(String.init).joined(separator: "-")
     }
 
+    static func fittingHeight(for attributedTitle: NSAttributedString, level: Int, rowWidth: CGFloat) -> CGFloat {
+        let textWidth = textWidth(for: rowWidth, level: level)
+        let boundingRect = attributedTitle.boundingRect(
+            with: NSSize(width: textWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        return max(minimumHeight, ceil(boundingRect.height) + verticalPadding * 2)
+    }
+
+    static func textWidth(for rowWidth: CGFloat, level: Int) -> CGFloat {
+        max(
+            rowWidth -
+                horizontalPadding * 2 -
+                CGFloat(level) * indentationPerLevel -
+                disclosureSize -
+                disclosureTextSpacing,
+            1
+        )
+    }
+
     func setSelected(_ selected: Bool) {
         guard isRowSelected != selected else { return }
         isRowSelected = selected
         updateSelectionAppearance()
+    }
+
+    func updateAppearance(attributedTitle: NSAttributedString, isExpanded: Bool, isSelected: Bool) {
+        textField.attributedStringValue = attributedTitle
+        isRowExpanded = isExpanded
+        disclosureButton.contentTintColor = NightModeStyle.secondaryTextColor
+        updateDisclosureAppearance()
+        setSelected(isSelected)
+    }
+
+    func applyManualFrame(_ frame: NSRect) {
+        self.frame = frame
+        textField.preferredMaxLayoutWidth = Self.textWidth(for: frame.width, level: level)
+        needsLayout = true
     }
 
     func performPrimaryAction() {
@@ -209,7 +259,7 @@ final class OutlineRowView: NSControl {
 
     override func layout() {
         super.layout()
-        textField.preferredMaxLayoutWidth = textField.bounds.width
+        textField.preferredMaxLayoutWidth = Self.textWidth(for: bounds.width, level: level)
     }
 
     private func activate() {
@@ -226,6 +276,21 @@ final class OutlineRowView: NSControl {
             ? NightModeStyle.selectedChromeBackgroundColor.cgColor
             : NSColor.clear.cgColor
     }
+
+    private func updateDisclosureAppearance() {
+        guard isExpandable else {
+            disclosureButton.image = nil
+            disclosureButton.toolTip = nil
+            return
+        }
+
+        let accessibilityDescription = isRowExpanded ? "Collapse section" : "Expand section"
+        disclosureButton.image = NSImage(
+            systemSymbolName: isRowExpanded ? "chevron.down" : "chevron.right",
+            accessibilityDescription: accessibilityDescription
+        )
+        disclosureButton.toolTip = accessibilityDescription
+    }
 }
 
 final class OutlineViewController: NSViewController {
@@ -237,6 +302,7 @@ final class OutlineViewController: NSViewController {
 
     private static let outlineFontSize: CGFloat = 13
     private static let wrappedLineHeight: CGFloat = 14
+    private static let rowSpacing: CGFloat = 1
 
     let documentStore: DocumentStore
     let windowID: UUID
@@ -245,12 +311,17 @@ final class OutlineViewController: NSViewController {
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF with a table of contents to see it here.")
     private let scrollView = OutlineScrollView()
     private let outlineDocumentView = OutlineDocumentView()
-    private let rowsStackView = NSStackView()
+    private let rowsContainerView = OutlineRowsContainerView()
     private let pageCounterLabel = NSTextField(labelWithString: "")
     private var nodes: [OutlineNode] = []
     private var displayedSessionID: UUID?
     private var collapsedPaths = Set<[Int]>()
+    private var expandablePaths = Set<[Int]>()
     private var selectedPath: [Int]?
+    private var rowViewCache: [String: OutlineRowView] = [:]
+    private var renderedRows: [VisibleRow] = []
+    private var renderedRowHeights: [String: CGFloat] = [:]
+    private var renderedContentHeight: CGFloat = 1
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -313,26 +384,12 @@ final class OutlineViewController: NSViewController {
         pageCounterLabel.textColor = NightModeStyle.secondaryTextColor
         pageCounterLabel.alignment = .right
 
-        rowsStackView.identifier = NSUserInterfaceItemIdentifier("outlineRowsStack")
-        rowsStackView.orientation = .vertical
-        rowsStackView.alignment = .leading
-        rowsStackView.distribution = .fill
-        rowsStackView.spacing = 1
-        rowsStackView.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-        rowsStackView.translatesAutoresizingMaskIntoConstraints = false
-        rowsStackView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
+        rowsContainerView.identifier = NSUserInterfaceItemIdentifier("outlineRowsStack")
+        rowsContainerView.autoresizesSubviews = false
         outlineDocumentView.identifier = NSUserInterfaceItemIdentifier("outlineDocumentView")
         outlineDocumentView.wantsLayer = true
         outlineDocumentView.layer?.backgroundColor = NSColor.clear.cgColor
-        outlineDocumentView.addSubview(rowsStackView)
-
-        NSLayoutConstraint.activate([
-            rowsStackView.leadingAnchor.constraint(equalTo: outlineDocumentView.leadingAnchor),
-            rowsStackView.trailingAnchor.constraint(equalTo: outlineDocumentView.trailingAnchor),
-            rowsStackView.topAnchor.constraint(equalTo: outlineDocumentView.topAnchor),
-            rowsStackView.bottomAnchor.constraint(equalTo: outlineDocumentView.bottomAnchor),
-        ])
+        outlineDocumentView.addSubview(rowsContainerView)
 
         scrollView.identifier = NSUserInterfaceItemIdentifier("outlineScrollView")
         scrollView.drawsBackground = false
@@ -430,8 +487,13 @@ final class OutlineViewController: NSViewController {
         let session = documentStore.activeSession(in: windowID)
         displayedSessionID = session?.id
         nodes = documentStore.outlineTreeForSidebar(in: windowID)
-        collapsedPaths = collapsedPaths.intersection(allExpandablePaths())
+        expandablePaths = Self.expandablePaths(in: nodes)
+        collapsedPaths = collapsedPaths.intersection(expandablePaths)
         selectedPath = nil
+        rowViewCache.removeAll()
+        renderedRows.removeAll()
+        renderedRowHeights.removeAll()
+        rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         renderOutlineRows()
 
         let isEmpty = nodes.isEmpty
@@ -448,55 +510,107 @@ final class OutlineViewController: NSViewController {
     }
 
     private func renderOutlineRows() {
-        rowsStackView.arrangedSubviews.forEach { subview in
-            rowsStackView.removeArrangedSubview(subview)
-            subview.removeFromSuperview()
-        }
-
-        for row in visibleRows() {
-            let rowView = OutlineRowView(
-                node: row.node,
-                path: row.path,
-                level: row.level,
-                attributedTitle: attributedTitle(for: row.node),
-                isExpandable: row.node.children.isEmpty == false,
-                isExpanded: collapsedPaths.contains(row.path) == false,
-                isSelected: selectedPath == row.path,
-                onActivate: { [weak self] node in
-                    self?.activate(node: node, at: row.path)
-                },
-                onToggleExpansion: { [weak self] in
-                    self?.toggleNodeExpansion(at: row.path)
-                }
-            )
-            rowView.translatesAutoresizingMaskIntoConstraints = false
-            rowsStackView.addArrangedSubview(rowView)
-            rowView.widthAnchor.constraint(equalTo: rowsStackView.widthAnchor).isActive = true
+        renderedRows = visibleRows()
+        if nodes.isEmpty {
+            rowViewCache.removeAll()
+            renderedRowHeights.removeAll()
+            rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         }
 
         updateExpansionToggleButton()
-        view.needsLayout = true
-        syncOutlineContentFrame()
+        layoutOutlineRows()
     }
 
     private func syncOutlineContentFrame() {
         guard isViewLoaded else { return }
+        layoutOutlineRows()
+    }
 
+    private func layoutOutlineRows() {
+        guard isViewLoaded else { return }
         let visibleWidth = max(scrollView.contentSize.width, scrollView.bounds.width, 1)
-        let currentHeight = max(outlineDocumentView.frame.height, scrollView.contentSize.height)
-        if abs(outlineDocumentView.frame.width - visibleWidth) > 0.5 {
-            outlineDocumentView.setFrameSize(NSSize(width: visibleWidth, height: currentHeight))
+        let rows = renderedRows
+        let visibleKeys = Set(rows.map { OutlineRowView.pathKey($0.path) })
+
+        for case let rowView as OutlineRowView in rowsContainerView.subviews where
+            visibleKeys.contains(OutlineRowView.pathKey(rowView.path)) == false {
+            rowView.removeFromSuperview()
         }
 
-        outlineDocumentView.layoutSubtreeIfNeeded()
-        let fittingHeight = max(ceil(rowsStackView.fittingSize.height), scrollView.contentSize.height)
-        if abs(outlineDocumentView.frame.height - fittingHeight) > 0.5 ||
-            abs(outlineDocumentView.frame.width - visibleWidth) > 0.5 {
-            outlineDocumentView.setFrameSize(NSSize(width: visibleWidth, height: fittingHeight))
-            outlineDocumentView.layoutSubtreeIfNeeded()
+        var nextY: CGFloat = 0
+        renderedRowHeights.removeAll(keepingCapacity: true)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+
+            for row in rows {
+                let rowKey = OutlineRowView.pathKey(row.path)
+                let title = attributedTitle(for: row.node)
+                let isExpanded = collapsedPaths.contains(row.path) == false
+                let rowHeight = OutlineRowView.fittingHeight(
+                    for: title,
+                    level: row.level,
+                    rowWidth: visibleWidth
+                )
+                let rowView = existingOrNewRowView(for: row, attributedTitle: title, isExpanded: isExpanded)
+                rowView.updateAppearance(
+                    attributedTitle: title,
+                    isExpanded: isExpanded,
+                    isSelected: selectedPath == row.path
+                )
+                if rowView.superview == nil {
+                    rowsContainerView.addSubview(rowView)
+                }
+                rowView.applyManualFrame(NSRect(x: 0, y: nextY, width: visibleWidth, height: rowHeight))
+                renderedRowHeights[rowKey] = rowHeight
+                nextY += rowHeight + Self.rowSpacing
+            }
         }
 
+        renderedContentHeight = max(nextY > 0 ? nextY - Self.rowSpacing : 1, 1)
+        rowsContainerView.frame = NSRect(x: 0, y: 0, width: visibleWidth, height: renderedContentHeight)
+        if abs(outlineDocumentView.frame.width - visibleWidth) > 0.5 ||
+            abs(outlineDocumentView.frame.height - renderedContentHeight) > 0.5 {
+            outlineDocumentView.setFrameSize(NSSize(width: visibleWidth, height: renderedContentHeight))
+        }
+
+        let maximumY = max(outlineDocumentView.frame.height - scrollView.contentSize.height, 0)
+        let currentY = scrollView.contentView.bounds.origin.y
+        if currentY > maximumY || currentY < 0 {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(max(currentY, 0), maximumY)))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
         scrollView.lockHorizontalPosition()
+    }
+
+    private func existingOrNewRowView(
+        for row: VisibleRow,
+        attributedTitle: NSAttributedString,
+        isExpanded: Bool
+    ) -> OutlineRowView {
+        let rowKey = OutlineRowView.pathKey(row.path)
+        if let cachedRowView = rowViewCache[rowKey] {
+            return cachedRowView
+        }
+
+        let rowView = OutlineRowView(
+            node: row.node,
+            path: row.path,
+            level: row.level,
+            attributedTitle: attributedTitle,
+            isExpandable: row.node.children.isEmpty == false,
+            isExpanded: isExpanded,
+            isSelected: selectedPath == row.path,
+            onActivate: { [weak self] node in
+                self?.activate(node: node, at: row.path)
+            },
+            onToggleExpansion: { [weak self] in
+                self?.toggleNodeExpansion(at: row.path)
+            }
+        )
+        rowView.translatesAutoresizingMaskIntoConstraints = true
+        rowViewCache[rowKey] = rowView
+        return rowView
     }
 
     private func activate(node: OutlineNode, at path: [Int]) {
@@ -513,7 +627,7 @@ final class OutlineViewController: NSViewController {
     }
 
     private func updateSelectionHighlights() {
-        for case let rowView as OutlineRowView in rowsStackView.arrangedSubviews {
+        for case let rowView as OutlineRowView in rowsContainerView.subviews {
             rowView.setSelected(rowView.path == selectedPath)
         }
     }
@@ -529,7 +643,6 @@ final class OutlineViewController: NSViewController {
 
     @objc
     private func toggleOutlineExpansion(_ sender: NSButton) {
-        let expandablePaths = allExpandablePaths()
         guard expandablePaths.isEmpty == false else { return }
 
         if collapsedPaths.isEmpty {
@@ -541,7 +654,6 @@ final class OutlineViewController: NSViewController {
     }
 
     private func updateExpansionToggleButton() {
-        let expandablePaths = allExpandablePaths()
         expansionToggleButton.isEnabled = expandablePaths.isEmpty == false
         let hasCollapsedRows = collapsedPaths.isEmpty == false
         let symbolName = hasCollapsedRows ? "chevron.right" : "chevron.down"
@@ -571,7 +683,7 @@ final class OutlineViewController: NSViewController {
         return rows
     }
 
-    private func allExpandablePaths() -> Set<[Int]> {
+    private static func expandablePaths(in nodes: [OutlineNode]) -> Set<[Int]> {
         var paths = Set<[Int]>()
 
         func collect(nodes: [OutlineNode], prefix: [Int]) {

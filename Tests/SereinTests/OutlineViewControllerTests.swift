@@ -81,7 +81,7 @@ struct OutlineViewControllerTests {
             return
         }
 
-        #expect(row.fittingSize.height > 40)
+        #expect(row.frame.height > 40)
         #expect(row.textField.lineBreakMode == .byCharWrapping)
         #expect(row.textField.maximumNumberOfLines == 0)
         #expect(row.textField.font?.pointSize == 13)
@@ -113,7 +113,7 @@ struct OutlineViewControllerTests {
             return
         }
 
-        #expect(row.fittingSize.height <= 25)
+        #expect(row.frame.height <= 25)
     }
 
     @Test
@@ -175,15 +175,96 @@ struct OutlineViewControllerTests {
             return
         }
 
-        #expect(outlineRows(in: controller.view).count == 3)
+        let initialRows = outlineRows(in: controller.view)
+        #expect(initialRows.count == 3)
+        let firstRow = initialRows[0]
 
         toggleButton.performClick(nil)
-        #expect(outlineRows(in: controller.view).count == 2)
+        let collapsedRows = outlineRows(in: controller.view)
+        #expect(collapsedRows.count == 2)
+        #expect(collapsedRows[0] === firstRow)
         #expect(toggleButton.toolTip == "Expand outline")
 
         toggleButton.performClick(nil)
-        #expect(outlineRows(in: controller.view).count == 3)
+        let expandedRows = outlineRows(in: controller.view)
+        #expect(expandedRows.count == 3)
+        #expect(expandedRows[0] === firstRow)
         #expect(toggleButton.toolTip == "Collapse outline")
+    }
+
+    @Test
+    func collapsedOutlineStaysTopAnchoredWhenContentShrinks() throws {
+        let store = DocumentStore(appConfiguration: .default)
+        _ = try store.open(
+            documentAt: makeTemporaryPDFWithOutline(
+                named: "top-anchored-outline",
+                topLevelCount: 6,
+                childrenPerTopLevel: 8
+            )
+        )
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 220, height: 360)
+        controller.view.layoutSubtreeIfNeeded()
+
+        guard let scrollView = outlineScrollView(in: controller.view),
+              let documentView = scrollView.documentView,
+              let toggleButton = findView(
+                  identifier: "outlineExpansionToggleButton",
+                  in: controller.view
+              ) as? NSButton else {
+            Issue.record("Failed to locate outline scroll views")
+            return
+        }
+
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 180))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        toggleButton.performClick(nil)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let rows = outlineRows(in: controller.view)
+        #expect(rows.count == 6)
+        #expect(documentView.frame.height < scrollView.contentSize.height)
+        #expect(abs(scrollView.contentView.bounds.origin.y) < 0.5)
+        #expect(abs(rows[0].frame.minY) < 0.5)
+    }
+
+    @Test
+    func switchingPDFClearsOldRowsWithMatchingPaths() throws {
+        let store = DocumentStore(appConfiguration: .default)
+        let first = try store.open(
+            documentAt: makeTemporaryPDFWithOutline(
+                named: "switch-first",
+                outlineTitles: ["First root", "First other"]
+            )
+        )
+        let second = try store.open(
+            documentAt: makeTemporaryPDFWithOutline(
+                named: "switch-second",
+                outlineTitles: ["Second root", "Second other"]
+            )
+        )
+        store.activate(sessionID: first.id)
+
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 220, height: 360)
+        controller.view.layoutSubtreeIfNeeded()
+
+        #expect(outlineRows(in: controller.view).map(\.node.title) == ["First root", "First other"])
+
+        store.activate(sessionID: second.id)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let rows = outlineRows(in: controller.view)
+        #expect(rows.map(\.node.title) == ["Second root", "Second other"])
+        #expect(Set(rows.map { NSValue(rect: $0.frame) }).count == rows.count)
     }
 
     @Test
@@ -222,6 +303,8 @@ struct OutlineViewControllerTests {
 private func makeTemporaryPDFWithOutline(
     named name: String,
     outlineTitles: [String] = [],
+    topLevelCount: Int = 2,
+    childrenPerTopLevel: Int = 0,
     includeChild: Bool = false
 ) throws -> URL {
     let url = FileManager.default.temporaryDirectory
@@ -229,7 +312,7 @@ private func makeTemporaryPDFWithOutline(
         .appendingPathExtension("pdf")
     let document = PDFDocument()
 
-    let pageCount = includeChild ? 3 : 2
+    let pageCount = max(topLevelCount + childrenPerTopLevel * topLevelCount + (includeChild ? 1 : 0), 1)
     for index in 0..<pageCount {
         let image = NSImage(size: NSSize(width: 240, height: 320))
         image.lockFocus()
@@ -243,15 +326,24 @@ private func makeTemporaryPDFWithOutline(
     }
 
     let root = PDFOutline()
-    for index in 0..<2 {
+    var childPageIndex = topLevelCount
+    for index in 0..<topLevelCount {
         let item = PDFOutline()
         item.label = index < outlineTitles.count ? outlineTitles[index] : "\(name) \(index + 1)"
-        item.destination = PDFDestination(page: document.page(at: index)!, at: .zero)
+        item.destination = PDFDestination(page: document.page(at: min(index, pageCount - 1))!, at: .zero)
         if includeChild, index == 0 {
             let child = PDFOutline()
             child.label = "\(name) child"
-            child.destination = PDFDestination(page: document.page(at: 2)!, at: .zero)
+            child.destination = PDFDestination(page: document.page(at: min(childPageIndex, pageCount - 1))!, at: .zero)
             item.insertChild(child, at: 0)
+            childPageIndex += 1
+        }
+        for childIndex in 0..<childrenPerTopLevel {
+            let child = PDFOutline()
+            child.label = "\(name) \(index + 1).\(childIndex + 1)"
+            child.destination = PDFDestination(page: document.page(at: min(childPageIndex, pageCount - 1))!, at: .zero)
+            item.insertChild(child, at: item.numberOfChildren)
+            childPageIndex += 1
         }
         root.insertChild(item, at: index)
     }
@@ -270,10 +362,12 @@ private func outlineScrollView(in root: NSView) -> NSScrollView? {
 
 @MainActor
 private func outlineRows(in root: NSView) -> [OutlineRowView] {
-    guard let stack = findView(identifier: "outlineRowsStack", in: root) as? NSStackView else {
+    guard let rowsContainer = findView(identifier: "outlineRowsStack", in: root) else {
         return []
     }
-    return stack.arrangedSubviews.compactMap { $0 as? OutlineRowView }
+    return rowsContainer.subviews
+        .compactMap { $0 as? OutlineRowView }
+        .sorted { $0.frame.minY < $1.frame.minY }
 }
 
 @MainActor

@@ -24,6 +24,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Right Sidebar
 - Let Outline titles wrap with larger text, tighter internal line spacing, compact dynamic row heights, and no visible scrollbars or horizontal sliding
 - Keep Outline rows pinned to the current sidebar width when the pane narrows, and add one-click expand/collapse for the outline tree
+- Keep collapsed Outline rows top-anchored, clear stale rows when switching PDFs, and lay out Outline rows with direct frames instead of stack-view constraints to reduce expand/collapse lag.
 
 ### Performance
 - Make left/right sidebar toggles use lightweight store notifications and zero-duration split-view collapse, so pure chrome changes no longer rebuild reader, tabs, outline, search, or annotations state.
