@@ -374,6 +374,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
     }
 
+    func installReaderOpenURLsHandler(_ handler: @escaping ([URL], UUID) -> Void) {
+        let readers = [
+            splitViewController.readerWorkspaceViewController.primaryReaderViewController,
+            splitViewController.readerWorkspaceViewController.secondaryReaderViewController,
+        ]
+        for reader in readers {
+            reader.onOpenURLsRequested = { [weak self] urls in
+                guard let self else { return }
+                handler(urls, self.windowID)
+            }
+        }
+    }
+
     func requestCloseActiveSession() {
         let selectedSessionIDs = documentStore.selectedSessionIDsInWindowOrder(in: windowID)
         if selectedSessionIDs.count > 1 {

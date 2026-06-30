@@ -102,7 +102,7 @@
 - Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
 - Wave 7.5 M10.12.1 手测：确认 `Cmd+Option+G` 打开 Go to Page 后输入框自动聚焦，输入页码按 Return 跳页且不触发 tab 重命名。
 - Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
-- Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-007` 已完成，`M12-002` 先暂缓；下一步从暂缓项中挑边界最清晰的任务重评。
+- Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-008` 已完成，`M12-002` 先暂缓；当前执行 `M12-009` 中栏空窗引导,其余空窗项按优先级继续。
 
 ## 5. Milestone 7:搜索强化与对比阅读
 
@@ -275,6 +275,12 @@
 - [x] `M12-006` macOS 原生最近项目与窗口集成:接入 `NSDocumentController` recent documents、窗口 `representedURL` / `representedFilename`,改善系统 Open Recent、App Expose 与窗口标题关联。
 - [x] `M12-007` 侧栏透明度与沉浸切换收口:左右侧栏使用 native material,Settings General 可调 tint 强度;`Cmd+Ctrl+L` 仅在双侧栏都关闭时打开两个侧栏,否则关闭两个侧栏。
 - [x] `M12-008` 重复打开收口:系统 `open`、Open Recent、PDF Library 与 `Cmd+O` 遇到已打开 PDF 时切回已有 window/session,不创建重复普通 tab。
+- [x] `M12-009` 中栏空窗统一引导:无 PDF / 空白 tab 时,中栏显示主文案 + `⌘O` / 最近文件快捷键提示 + 拖放 PDF 打开;错误态只显示错误信息。
+- [ ] `M12-010` 空窗侧栏占比收口:无 session 时自动折叠侧栏或采用更窄默认宽度,把引导集中到中栏。
+- [ ] `M12-011` 右栏空窗 chrome 弱化:无文档时隐藏 / disable segmented 与 Outline 操作控件,避免「已就绪但未加载」噪音。
+- [ ] `M12-012` 左栏空态层次增强:补 `Documents` section 标题;空态时上移 Recent 列表或在中栏同步展示快捷入口。
+- [ ] `M12-013` 空态视觉语言统一:抽共享 empty state 组件,统一三栏与右栏各 mode 的字号 / 颜色 / 对齐。
+- [ ] `M12-014` 侧栏顶部留白校准:空态时将侧栏内容垂直居中或收紧 titlebar 留白,减少顶部死区。
 
 ### 18.2 暂缓
 

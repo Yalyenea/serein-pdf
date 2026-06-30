@@ -20,6 +20,88 @@ private struct PDFViewportAnchor {
     let pagePoint: NSPoint
 }
 
+private final class ReaderSurfaceView: NSView {
+    var onOpenURLs: (([URL]) -> Void)?
+
+    private let dropHighlightView = NSView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([.fileURL])
+        configureDropHighlight()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        dropHighlightView.frame = bounds.insetBy(dx: 12, dy: 12)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard draggingContainsOpenableURLs(sender) else { return [] }
+        setDropHighlightVisible(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        draggingContainsOpenableURLs(sender) ? .copy : []
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        setDropHighlightVisible(false)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        draggingContainsOpenableURLs(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { setDropHighlightVisible(false) }
+        let urls = draggedFileURLs(from: sender)
+        guard urls.isEmpty == false else { return false }
+        onOpenURLs?(urls)
+        return true
+    }
+
+    private func configureDropHighlight() {
+        dropHighlightView.wantsLayer = true
+        dropHighlightView.isHidden = true
+        dropHighlightView.layer?.cornerRadius = 10
+        dropHighlightView.layer?.backgroundColor = NSColor.clear.cgColor
+        dropHighlightView.layer?.borderWidth = 1.5
+        addSubview(dropHighlightView)
+    }
+
+    private func setDropHighlightVisible(_ visible: Bool) {
+        guard dropHighlightView.isHidden == visible else { return }
+        dropHighlightView.isHidden = !visible
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            dropHighlightView.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.45).cgColor
+        }
+    }
+
+    private func draggingContainsOpenableURLs(_ sender: NSDraggingInfo) -> Bool {
+        draggedFileURLs(from: sender).isEmpty == false
+    }
+
+    private func draggedFileURLs(from sender: NSDraggingInfo) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [
+            .urlReadingFileURLsOnly: true,
+        ]
+        guard let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: options
+        ) as? [URL] else {
+            return []
+        }
+        return urls
+    }
+}
+
 final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
 
@@ -57,8 +139,11 @@ final class ReaderViewController: NSViewController {
     let pdfView = ReaderPDFView()
     var onFocusRequested: (() -> Void)?
     var onFindActionRequested: ((FindNavigationAction) -> Void)?
+    var onOpenURLsRequested: (([URL]) -> Void)?
     private let pdfContainerView = PDFContainerView()
-    private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
+    private let emptyStateContainer = NSStackView()
+    private let emptyStateTitleLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
+    private let emptyStateHintLabel = NSTextField(labelWithString: "")
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
     private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
@@ -227,7 +312,10 @@ final class ReaderViewController: NSViewController {
     }
 
     override func loadView() {
-        let container = NSView()
+        let container = ReaderSurfaceView()
+        container.onOpenURLs = { [weak self] urls in
+            self?.onOpenURLsRequested?(urls)
+        }
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.white.cgColor
 
@@ -243,9 +331,25 @@ final class ReaderViewController: NSViewController {
         pdfView.displaysPageBreaks = true
         pdfView.pageShadowsEnabled = false
 
-        emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateLabel.font = .systemFont(ofSize: 18, weight: .medium)
-        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateTitleLabel.font = .systemFont(ofSize: 18, weight: .medium)
+        emptyStateTitleLabel.textColor = .secondaryLabelColor
+        emptyStateTitleLabel.alignment = .center
+        emptyStateTitleLabel.maximumNumberOfLines = 0
+        emptyStateTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        emptyStateHintLabel.font = .systemFont(ofSize: 12)
+        emptyStateHintLabel.textColor = .tertiaryLabelColor
+        emptyStateHintLabel.alignment = .center
+        emptyStateHintLabel.maximumNumberOfLines = 0
+        emptyStateHintLabel.stringValue = emptyStateHintText()
+        emptyStateHintLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        emptyStateContainer.orientation = .vertical
+        emptyStateContainer.alignment = .centerX
+        emptyStateContainer.spacing = 8
+        emptyStateContainer.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateContainer.addArrangedSubview(emptyStateTitleLabel)
+        emptyStateContainer.addArrangedSubview(emptyStateHintLabel)
 
         highlightModeIndicator.translatesAutoresizingMaskIntoConstraints = false
         highlightModeIndicator.orientation = .horizontal
@@ -297,7 +401,7 @@ final class ReaderViewController: NSViewController {
 
         pdfContainerView.embedPDFView(pdfView)
         container.addSubview(pdfContainerView)
-        container.addSubview(emptyStateLabel)
+        container.addSubview(emptyStateContainer)
         container.addSubview(highlightModeIndicator)
         container.addSubview(switchTitleToastView)
         container.addSubview(overviewThumbnailView)
@@ -326,8 +430,10 @@ final class ReaderViewController: NSViewController {
             pdfView.trailingAnchor.constraint(equalTo: pdfContainerView.trailingAnchor),
             pdfView.topAnchor.constraint(equalTo: pdfContainerView.topAnchor),
             pdfView.bottomAnchor.constraint(equalTo: pdfContainerView.bottomAnchor),
-            emptyStateLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            emptyStateContainer.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            emptyStateContainer.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            emptyStateContainer.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 24),
+            emptyStateContainer.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -24),
             highlightModeIndicator.topAnchor.constraint(equalTo: pdfContainerView.topAnchor, constant: 8),
             highlightModeIndicator.leadingAnchor.constraint(equalTo: pdfContainerView.leadingAnchor, constant: 12),
             highlightModeColorDot.widthAnchor.constraint(equalToConstant: 7),
@@ -544,11 +650,15 @@ final class ReaderViewController: NSViewController {
             configureOverviewGrid()
             overviewThumbnailView.isHidden = false
             pdfContainerView.isHidden = true
-            emptyStateLabel.isHidden = true
+            setEmptyStateVisible(false)
         } else {
             overviewThumbnailView.isHidden = true
             pdfContainerView.isHidden = false
-            emptyStateLabel.isHidden = targetSession()?.isBlank == false
+            if targetSession()?.isBlank == false {
+                setEmptyStateVisible(false)
+            } else {
+                showDefaultEmptyState()
+            }
             if let left = overviewSavedLeftSidebar {
                 documentStore.setLeftSidebarVisible(left, in: windowID)
             }
@@ -841,14 +951,36 @@ final class ReaderViewController: NSViewController {
         onFocusRequested?()
     }
 
+    private func emptyStateHintText() -> String {
+        let recentShortcut = documentStore.appConfiguration.shortcuts.bindings[.showRecentFilesPalette]?.displayString
+            ?? "⌘⇧Space"
+        return "⌘O to open · \(recentShortcut) for recent · drop PDF here"
+    }
+
+    private func showDefaultEmptyState() {
+        emptyStateTitleLabel.stringValue = "Open a PDF to start reading."
+        emptyStateHintLabel.stringValue = emptyStateHintText()
+        emptyStateHintLabel.isHidden = false
+        setEmptyStateVisible(true)
+    }
+
+    private func showErrorEmptyState(_ message: String) {
+        emptyStateTitleLabel.stringValue = message
+        emptyStateHintLabel.isHidden = true
+        setEmptyStateVisible(true)
+    }
+
+    private func setEmptyStateVisible(_ visible: Bool) {
+        emptyStateContainer.isHidden = !visible
+    }
+
     private func refreshDisplayedDocument() {
         guard isViewLoaded else { return }
 
         guard let session = targetSession() else {
             pdfView.document = nil
             pdfView.isHidden = true
-            emptyStateLabel.stringValue = "Open a PDF to start reading."
-            emptyStateLabel.isHidden = false
+            showDefaultEmptyState()
             displayedSessionID = nil
             displayedReadingPosition = nil
             displayedDisplayMode = nil
@@ -862,8 +994,7 @@ final class ReaderViewController: NSViewController {
         if session.isBlank {
             pdfView.document = nil
             pdfView.isHidden = true
-            emptyStateLabel.stringValue = "Open a PDF to start reading."
-            emptyStateLabel.isHidden = false
+            showDefaultEmptyState()
             displayedSessionID = session.id
             displayedReadingPosition = nil
             displayedDisplayMode = nil
@@ -882,8 +1013,7 @@ final class ReaderViewController: NSViewController {
         } catch {
             pdfView.document = nil
             pdfView.isHidden = true
-            emptyStateLabel.stringValue = error.localizedDescription
-            emptyStateLabel.isHidden = false
+            showErrorEmptyState(error.localizedDescription)
             displayedSessionID = session.id
             return
         }
@@ -907,7 +1037,7 @@ final class ReaderViewController: NSViewController {
         applyReaderAppearance()
 
         pdfView.isHidden = false
-        emptyStateLabel.isHidden = true
+        setEmptyStateVisible(false)
         if isNewSession, previousSessionID != nil {
             showSwitchTitleToast(refreshedSession.title)
         }
@@ -1495,9 +1625,12 @@ final class ReaderViewController: NSViewController {
             pdfView.backgroundColor = .clear
             pdfView.layer?.backgroundColor = NSColor.clear.cgColor
             overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
-            emptyStateLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
+            emptyStateTitleLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
+            emptyStateHintLabel.textColor = .tertiaryLabelColor
         }
-        pdfView.isHidden = false
+        if emptyStateContainer.isHidden {
+            pdfView.isHidden = false
+        }
         pdfContainerView.setNightModeEnabled(isNightModeEnabled)
         findBarView.refreshChromeColors()
         updateSwitchTitleToastAppearance()
@@ -1578,6 +1711,22 @@ extension ReaderViewController {
 
     var testingSwitchTitleToastIsVisible: Bool {
         switchTitleToastView.isHidden == false && switchTitleToastView.alphaValue > 0
+    }
+
+    var testingEmptyStateIsVisible: Bool {
+        emptyStateContainer.isHidden == false
+    }
+
+    var testingEmptyStateTitle: String {
+        emptyStateTitleLabel.stringValue
+    }
+
+    var testingEmptyStateHint: String {
+        emptyStateHintLabel.stringValue
+    }
+
+    var testingEmptyStateHintIsVisible: Bool {
+        emptyStateHintLabel.isHidden == false
     }
 }
 

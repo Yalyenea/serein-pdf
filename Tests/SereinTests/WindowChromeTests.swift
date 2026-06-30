@@ -1922,6 +1922,64 @@ struct WindowChromeTests {
         flushLayout(controller.window)
         #expect(reader.shouldApplyFitWidth(targetScale, for: session) == true)
     }
+
+    @Test
+    func emptyReaderShowsOnboardingHintWhenNoDocumentIsOpen() {
+        _ = NSApplication.shared
+        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        defer { controller.close() }
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        #expect(reader.testingEmptyStateIsVisible)
+        #expect(reader.testingEmptyStateTitle == "Open a PDF to start reading.")
+        #expect(reader.testingEmptyStateHintIsVisible)
+        #expect(reader.testingEmptyStateHint.contains("⌘O to open"))
+        #expect(reader.testingEmptyStateHint.contains("drop PDF here"))
+    }
+
+    @Test
+    func emptyReaderHidesOnboardingWhenDocumentOpens() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-state-onboarding"))
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        #expect(reader.testingEmptyStateIsVisible == false)
+    }
+
+    @Test
+    func blankTabShowsOnboardingHintWithoutErrorDetails() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        _ = store.newBlankTab()
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        #expect(reader.testingEmptyStateIsVisible)
+        #expect(reader.testingEmptyStateHintIsVisible)
+        #expect(reader.testingEmptyStateHint.contains("for recent"))
+    }
 }
 
 @MainActor

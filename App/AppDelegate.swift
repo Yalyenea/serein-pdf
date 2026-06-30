@@ -389,6 +389,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         controller.installSidebarRecentOpenHandler { [weak self] url, windowID in
             self?.openRecentDocuments([url], preferredWindowID: windowID)
         }
+        controller.installReaderOpenURLsHandler { [weak self] urls, windowID in
+            self?.openDroppedDocuments(urls, preferredWindowID: windowID)
+        }
         mainWindowControllers[windowID] = controller
         return controller
     }
@@ -1771,6 +1774,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         do {
             let frontWindowID = try openOrActivateDocumentURLs(urls, in: targetWindowID)
+            bringWindowToFront(frontWindowID)
+        } catch {
+            presentOpenError(error)
+        }
+    }
+
+    private func openDroppedDocuments(_ urls: [URL], preferredWindowID: UUID? = nil) {
+        guard urls.isEmpty == false else { return }
+        mainWindowController?.hideFindBar()
+        let targetWindowID = preferredWindowID
+            .flatMap { documentStore.windowWorkspace(for: $0)?.id }
+            ?? mainWindowController?.windowID
+            ?? documentStore.defaultWindowID
+
+        do {
+            let frontWindowID = try openResolvedDocumentURLs(urls, in: targetWindowID)
             bringWindowToFront(frontWindowID)
         } catch {
             presentOpenError(error)

@@ -1036,35 +1036,3 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         }
     }
 }
-
-private extension KeyboardShortcut {
-    var displayString: String {
-        let modifierPrefix = KeyboardShortcutModifier.allCases.compactMap { modifier -> String? in
-            guard modifiers.contains(modifier) else { return nil }
-            switch modifier {
-            case .command:
-                return "⌘"
-            case .shift:
-                return "⇧"
-            case .option:
-                return "⌥"
-            case .control:
-                return "⌃"
-            }
-        }.joined()
-
-        let keyDisplay: String
-        switch key {
-        case "escape":
-            keyDisplay = "Esc"
-        case "space":
-            keyDisplay = "Space"
-        case "tab":
-            keyDisplay = "Tab"
-        default:
-            keyDisplay = key.uppercased()
-        }
-
-        return modifierPrefix + keyDisplay
-    }
-}

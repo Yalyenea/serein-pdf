@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### UX
+- Empty reader state now shows a single onboarding panel with `⌘O`, recent-files shortcut, and drag-and-drop PDF open hints.
+
 ### Docs
 - Add REVIEW.md: full-code project review covering product highlights, implementation highlights, ranked weaknesses, and an improvement roadmap.
 
