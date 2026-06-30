@@ -1,7 +1,10 @@
 import AppKit
 
 final class TitlebarTabsController: NSViewController {
-    static let visibleStripSize = NSSize(width: 760, height: 28)
+    static let maximumVisibleStripSize = NSSize(width: 760, height: 28)
+    private static let hiddenStripSize = NSSize(width: 1, height: 1)
+    private static let contentHorizontalPadding: CGFloat = 16
+    private static let stripCornerRadius: CGFloat = 3
     let documentStore: DocumentStore
     let windowID: UUID
     var onCloseSessionRequested: ((UUID) -> Void)?
@@ -11,13 +14,14 @@ final class TitlebarTabsController: NSViewController {
     private let documentContainerView = NSView()
     private let bottomBorderView = NSView()
     private var isTabsStripVisible = true
+    private var stripWidthConstraint: NSLayoutConstraint?
     nonisolated(unsafe) private var eventMonitors: [Any] = []
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
         self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
-        preferredContentSize = Self.visibleStripSize
+        preferredContentSize = Self.maximumVisibleStripSize
     }
 
     convenience init(documentStore: DocumentStore) {
@@ -49,8 +53,10 @@ final class TitlebarTabsController: NSViewController {
 
     override func loadView() {
         let container = NSView()
-        container.frame = NSRect(origin: .zero, size: Self.visibleStripSize)
+        container.frame = NSRect(origin: .zero, size: Self.maximumVisibleStripSize)
         container.wantsLayer = true
+        container.layer?.cornerRadius = Self.stripCornerRadius
+        container.layer?.masksToBounds = true
 
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
@@ -76,6 +82,9 @@ final class TitlebarTabsController: NSViewController {
         container.addSubview(scrollView)
         container.addSubview(bottomBorderView)
 
+        let stripWidthConstraint = container.widthAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.width)
+        self.stripWidthConstraint = stripWidthConstraint
+
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -85,8 +94,8 @@ final class TitlebarTabsController: NSViewController {
             bottomBorderView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             bottomBorderView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             bottomBorderView.heightAnchor.constraint(equalToConstant: 1),
-            container.widthAnchor.constraint(equalToConstant: Self.visibleStripSize.width),
-            container.heightAnchor.constraint(equalToConstant: Self.visibleStripSize.height),
+            stripWidthConstraint,
+            container.heightAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.height),
             stackView.leadingAnchor.constraint(equalTo: documentContainerView.leadingAnchor, constant: 6),
             stackView.trailingAnchor.constraint(equalTo: documentContainerView.trailingAnchor, constant: -6),
             stackView.topAnchor.constraint(equalTo: documentContainerView.topAnchor),
@@ -106,8 +115,10 @@ final class TitlebarTabsController: NSViewController {
 
     private func applyChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
-            bottomBorderView.layer?.backgroundColor = SplitViewController.dividerBackgroundColor.cgColor
+            view.layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
+                .withAlphaComponent(0.18)
+                .cgColor
+            bottomBorderView.layer?.backgroundColor = NSColor.clear.cgColor
         }
     }
 
@@ -174,6 +185,7 @@ final class TitlebarTabsController: NSViewController {
         }
 
         updateDocumentContainerFrame()
+        refreshPreferredStripSize()
     }
 
     private func handleSessionSelection(_ sessionID: UUID, modifierFlags: NSEvent.ModifierFlags) {
@@ -196,22 +208,38 @@ final class TitlebarTabsController: NSViewController {
     }
 
     private func updateDocumentContainerFrame() {
-        let fittingWidth = stackView.fittingSize.width + 16
+        let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
         let contentWidth = max(scrollView.contentSize.width, fittingWidth)
-        documentContainerView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: 28)
+        documentContainerView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: Self.maximumVisibleStripSize.height)
+    }
+
+    private func refreshPreferredStripSize() {
+        guard isTabsStripVisible else {
+            preferredContentSize = Self.hiddenStripSize
+            stripWidthConstraint?.constant = Self.hiddenStripSize.width
+            view.frame.size = preferredContentSize
+            return
+        }
+
+        let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
+        let width = min(max(fittingWidth, Self.hiddenStripSize.width), Self.maximumVisibleStripSize.width)
+        preferredContentSize = NSSize(width: width, height: Self.maximumVisibleStripSize.height)
+        stripWidthConstraint?.constant = width
+        view.frame.size = preferredContentSize
     }
 
     func setTabsStripVisible(_ isVisible: Bool) {
         isTabsStripVisible = isVisible
-        preferredContentSize = isVisible ? Self.visibleStripSize : NSSize(width: 1, height: 1)
+        preferredContentSize = isVisible ? preferredContentSize : Self.hiddenStripSize
         guard isViewLoaded else { return }
+        refreshPreferredStripSize()
         applyVisibilityState()
     }
 
     private func applyVisibilityState() {
         view.isHidden = !isTabsStripVisible
         scrollView.isHidden = !isTabsStripVisible
-        bottomBorderView.isHidden = !isTabsStripVisible
+        bottomBorderView.isHidden = true
         view.frame.size = preferredContentSize
     }
 

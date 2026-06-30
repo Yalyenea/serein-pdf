@@ -1,6 +1,7 @@
 import AppKit
 
 final class TitlebarTabItemView: NSView {
+    private static let cornerRadius: CGFloat = 3
     private let sessionID: UUID
     private let selectButton = NSButton(title: "", target: nil, action: nil)
     private let dirtyIndicator = NSView()
@@ -68,7 +69,7 @@ final class TitlebarTabItemView: NSView {
         super.init(frame: .zero)
 
         wantsLayer = true
-        layer?.cornerRadius = 7
+        layer?.cornerRadius = Self.cornerRadius
         layer?.borderWidth = 0
 
         selectButton.isBordered = false
@@ -263,8 +264,8 @@ final class TitlebarTabItemView: NSView {
             } else {
                 layer?.backgroundColor = NSColor.clear.cgColor
             }
-            layer?.borderColor = isSelected ? SplitViewController.chromeStrokeColor.cgColor : NSColor.clear.cgColor
-            layer?.borderWidth = isSelected ? 1 : 0
+            layer?.borderColor = NSColor.clear.cgColor
+            layer?.borderWidth = 0
             dividerView.layer?.backgroundColor = SplitViewController.dividerBackgroundColor.cgColor
             dirtyIndicator.layer?.backgroundColor = HighlightColor.pink.nsColor.cgColor
             groupIndicator.layer?.backgroundColor = isContinuousReadingLeader

@@ -114,7 +114,7 @@ flowchart LR
 - 紧凑布局,轻量圆角,无厚重阴影
 - 侧栏平铺嵌入,最多保留一条淡分割线(禁悬浮 / 液态玻璃 / 漂浮面板感)
 - 按钮 / tab 视觉重量轻,突出选中态
-- 水平 tab 与系统标题栏融为一体
+- 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
 - 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
 - `rose_pine_dawn` 不只改阅读区外围,也把 PDF 白底映射成暖纸色
@@ -146,7 +146,7 @@ flowchart LR
 - `G` / `g`:跳到文末 / 文首
 - `Cmd+Option+G`:跳转到页 N(越界给轻量提示)
 - `Cmd+[` / `Cmd+]`:历史后退 / 前进
-- `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar / 下一 / 上一 匹配
+- `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar(有 PDF 选中文本时立即带入搜索)/ 下一 / 上一 匹配
 - Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
 - `I`:切换 light / dark mode,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme(亮色切 `normal` / `rose_pine_dawn`,暗色切 `normal` / `rose_pine_moon`)

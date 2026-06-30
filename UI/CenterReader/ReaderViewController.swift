@@ -712,11 +712,16 @@ final class ReaderViewController: NSViewController {
     func showFindBar(scope: SearchScope? = nil) {
         guard let container = view as NSView? else { return }
         let targetScope = scope ?? documentStore.searchScope(in: windowID)
+        let selectedQuery = selectedSearchQuery()
+        let query = selectedQuery ?? documentStore.searchQuery(in: windowID)
         documentStore.updateSearch(
-            query: documentStore.searchQuery(in: windowID),
+            query: query,
             scope: targetScope,
             in: windowID
         )
+        if let selectedQuery {
+            lastSubmittedSearchKey = SubmittedSearchKey(query: selectedQuery, scope: targetScope)
+        }
         onFocusRequested?()
         if findBarView.isHidden {
             findBarView.isHidden = false
@@ -729,6 +734,12 @@ final class ReaderViewController: NSViewController {
         findBarView.setQuery(documentStore.searchQuery(in: windowID))
         syncFindBarStatus()
         findBarView.focusQueryField()
+    }
+
+    private func selectedSearchQuery() -> String? {
+        guard let text = pdfView.currentSelection?.string.map(PDFTextSanitizer.sanitize),
+              text.isEmpty == false else { return nil }
+        return text
     }
 
     func hideFindBar() {

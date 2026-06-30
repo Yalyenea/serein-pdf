@@ -11,12 +11,12 @@ site for showcase, download notes, and compact docs.
 
 ## Features
 
-- Tabbed documents with switchable layouts: left vertical sidebar or titlebar tabs
+- Tabbed documents with switchable layouts: left vertical sidebar or adaptive titlebar tabs
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
 - Right pane hosts **Outline + Pages + Search + Annotations**; Outline wraps long titles with tight line spacing, no horizontal panning, and one-click tree expand/collapse, while all search / annotation previews stay on the right
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
-- Find bar supports `This Document` / `All Open`; `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
+- Find bar supports `This Document` / `All Open`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
 - Compare split in the center reader (`cmd+ctrl+\`) opens the current PDF beside a compact candidate chooser; the first candidate is the same PDF, with independent page and zoom state
 - Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
@@ -52,7 +52,7 @@ site for showcase, download notes, and compact docs.
 - Highlights can carry comments in the right sidebar, and Markdown export is page-grouped as snippet + comment for note-taking
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
-- Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs), Esc clears search and exits
+- Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
 - Immersive mode (`cmd+ctrl+l`) opens both sidebars only when none are visible; otherwise it hides both sidebars and tab chrome while keeping the current window size

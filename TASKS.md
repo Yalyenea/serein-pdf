@@ -28,6 +28,7 @@
 - `Cmd+K` → `Cmd+L` / `Cmd+K` → `Cmd+S`:打开 Settings 的 Library / Shortcuts 页
 - `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
 - `Cmd+K` → `Cmd+N`:把当前 PDF 移到新窗口
+- `Cmd+F` / `Cmd+Shift+F`:打开 Find bar 时若当前 PDF 有选中文本,立即用选中文本搜索当前文档 / 所有已打开 PDF
 - `Ctrl+D` / `Ctrl+U`:半页下滚 / 上滚
 - `g` / `G`:跳到文首 / 文末
 - `Cmd+S`:写回源 PDF
@@ -48,7 +49,7 @@
 - PDF 热重载:LaTeX / Typst 等外部工具原地写入或原子替换已打开 PDF 后自动刷新 clean session;dirty 批注会话不自动刷新
 - 自动保存默认 `10 min`,至少支持 `10 min` / `never`
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
-- 水平 tab 复用标题栏,不单独开行
+- 水平 tab 复用标题栏,不单独开行,可见宽度随标题内容自适应
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换;Outline 随侧栏宽度收缩且无水平滑动,目录树可一键折叠 / 展开
 - 左右侧栏可见性切换只触发 chrome 布局更新,不得重建 reader / tabs / outline / search / annotations 数据
 - `Cmd+L` 进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
@@ -295,7 +296,7 @@
 
 ## 20. 手测清单(尚未覆盖)
 
-- [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码
+- [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码;有 PDF 选中文本时会自动带入并立即搜索
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
 - [x] `UAT-26` `This Document` / `All Open` 切换正确,跨文档命中会先切 session 再跳转
 - [x] `UAT-27` `Cmd+Ctrl+\` 进入同窗分屏,两侧独立切换 session 不污染

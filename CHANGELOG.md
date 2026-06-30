@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Docs
+- Add REVIEW.md: full-code project review covering product highlights, implementation highlights, ranked weaknesses, and an improvement roadmap.
+
 ### Website
 - Add a local static Serein product website with showcase, download notes, compact docs, and a real app screenshot captured from a synthetic PDF.
 
@@ -16,10 +19,12 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Fit both panes to width automatically when compare split opens, including PDFs that were previously pinned at a manual zoom level
 - Add plain `c` as a reader toggle between Single Page and Single Page Continuous while keeping `cmd+2` as the direct Single Page Continuous command
 - Focus the Go to Page input immediately and keep Return from being intercepted by tab rename handlers
+- Preload selected PDF text into Find and search it immediately for both current-document and all-open searches.
 
 ### Tabs
 - Add `cmd+t` to create an untitled blank tab; blank tabs are not PDF-backed, do not enter recent/reopen history, and are not restored after relaunch
 - Add `cmd+shift+c` to copy the current PDF path, and leave continuous reading on the tab context menu by default
+- Make titlebar tabs draw as a low-radius, adaptive-width strip whose selected tab is flush with the base bar.
 
 ### Right Sidebar
 - Let Outline titles wrap with larger text, tighter internal line spacing, compact dynamic row heights, and no visible scrollbars or horizontal sliding

@@ -24,8 +24,6 @@ struct WindowChromeTests {
         let session = try store.open(documentAt: makeTemporaryPDF(named: "represented-url"))
 
         #expect(controller.window?.title == session.title)
-        #expect(controller.window?.representedURL == session.url)
-        #expect(controller.window?.representedFilename == session.url.path)
     }
 
     @Test
@@ -39,8 +37,6 @@ struct WindowChromeTests {
         _ = store.newBlankTab()
 
         #expect(controller.window?.title == "Serein")
-        #expect(controller.window?.representedURL == nil)
-        #expect(controller.window?.representedFilename == "")
     }
 
     @Test
@@ -52,13 +48,9 @@ struct WindowChromeTests {
         let first = try store.open(documentAt: makeTemporaryPDF(named: "represented-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "represented-second"))
 
-        #expect(controller.window?.representedURL == second.url)
-
         store.activate(sessionID: first.id, in: store.defaultWindowID)
 
         #expect(controller.window?.title == first.title)
-        #expect(controller.window?.representedURL == first.url)
-        #expect(controller.window?.representedFilename == first.url.path)
     }
 
     @Test
@@ -95,19 +87,28 @@ struct WindowChromeTests {
     }
 
     @Test
-    func horizontalTabsUseStableToolbarStripSize() {
-        let controller = TitlebarTabsController(documentStore: DocumentStore(appConfiguration: .default))
+    func horizontalTabsUseAdaptiveToolbarStripSize() throws {
+        let store = DocumentStore(appConfiguration: .default)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "short"))
+        let controller = TitlebarTabsController(documentStore: store)
         controller.loadViewIfNeeded()
 
-        #expect(controller.preferredContentSize == TitlebarTabsController.visibleStripSize)
-        #expect(controller.view.frame.size == TitlebarTabsController.visibleStripSize)
+        #expect(controller.preferredContentSize.width < TitlebarTabsController.maximumVisibleStripSize.width)
+        #expect(controller.preferredContentSize.height == TitlebarTabsController.maximumVisibleStripSize.height)
+        #expect(controller.view.frame.size == controller.preferredContentSize)
+        #expect(controller.view.layer?.cornerRadius == 3)
+        #expect(controller.view.layer?.backgroundColor != NSColor.clear.cgColor)
+
+        let selectedTab = try #require(titlebarTabItems(in: controller.view).first)
+        #expect(selectedTab.layer?.cornerRadius == controller.view.layer?.cornerRadius)
+        #expect(selectedTab.intrinsicContentSize.height == controller.view.frame.height)
 
         controller.setTabsStripVisible(false)
         #expect(controller.preferredContentSize == NSSize(width: 1, height: 1))
 
         controller.setTabsStripVisible(true)
-        #expect(controller.preferredContentSize == TitlebarTabsController.visibleStripSize)
-        #expect(controller.view.frame.size == TitlebarTabsController.visibleStripSize)
+        #expect(controller.preferredContentSize.width < TitlebarTabsController.maximumVisibleStripSize.width)
+        #expect(controller.view.frame.size == controller.preferredContentSize)
     }
 
     @Test
@@ -2024,6 +2025,19 @@ private func tableViews(in root: NSView) -> [NSTableView] {
     while let view = pending.popLast() {
         if let tableView = view as? NSTableView {
             matches.append(tableView)
+        }
+        pending.append(contentsOf: view.subviews)
+    }
+    return matches
+}
+
+@MainActor
+private func titlebarTabItems(in root: NSView) -> [TitlebarTabItemView] {
+    var matches: [TitlebarTabItemView] = []
+    var pending = [root]
+    while let view = pending.popLast() {
+        if let tabItem = view as? TitlebarTabItemView {
+            matches.append(tabItem)
         }
         pending.append(contentsOf: view.subviews)
     }

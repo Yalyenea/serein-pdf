@@ -133,6 +133,56 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
     }
 
+    func testShowFindBarPrefillsSearchFromCurrentPDFSelection() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "selection-prefill-current",
+            pages: ["alpha selected phrase beta selected phrase"]
+        )
+        let session = try store.open(documentAt: url)
+        let reader = ReaderViewController(documentStore: store, windowID: store.defaultWindowID)
+        reader.targetSessionID = session.id
+        reader.loadViewIfNeeded()
+        reader.pdfView.currentSelection = try XCTUnwrap(
+            reader.pdfView.document?.findString("selected phrase", withOptions: []).first
+        )
+
+        reader.showFindBar(scope: .currentDocument)
+
+        XCTAssertTrue(reader.isFindBarVisible)
+        XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .currentDocument)
+        XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "selected phrase")
+        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
+    }
+
+    func testShowFindBarPrefillsSelectionForAllOpenSearch() throws {
+        let store = makeStore()
+        let first = try makeSearchableTemporaryPDF(
+            named: "selection-prefill-all-open-first",
+            pages: ["alpha shared needle beta"]
+        )
+        let second = try makeSearchableTemporaryPDF(
+            named: "selection-prefill-all-open-second",
+            pages: ["gamma shared needle delta"]
+        )
+        let session = try store.open(documentAt: first)
+        _ = try store.open(documentAt: second)
+
+        let reader = ReaderViewController(documentStore: store, windowID: store.defaultWindowID)
+        reader.targetSessionID = session.id
+        reader.loadViewIfNeeded()
+        reader.pdfView.currentSelection = try XCTUnwrap(
+            reader.pdfView.document?.findString("shared needle", withOptions: []).first
+        )
+
+        reader.showFindBar(scope: .allOpen)
+
+        XCTAssertTrue(reader.isFindBarVisible)
+        XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .allOpen)
+        XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "shared needle")
+        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
+    }
+
     private func makeStore() -> DocumentStore {
         DocumentStore(
             persistence: SearchNavInMemoryDocumentStorePersistence(),
