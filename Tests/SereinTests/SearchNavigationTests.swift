@@ -155,6 +155,52 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
     }
 
+    func testEmptyStateUsesSameContentBandAsResultsList() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "empty-state-inset",
+            pages: ["needle alpha beta"]
+        )
+        _ = try store.open(documentAt: url)
+
+        let controller = SearchResultsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 320, height: 540)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let scrollView = try XCTUnwrap(findDescendant(of: NSScrollView.self, in: controller.view))
+        let emptyLabel = try XCTUnwrap(
+            controller.view.subviews.first { $0.identifier?.rawValue == "searchEmptyStateLabel" } as? NSTextField
+        )
+
+        XCTAssertFalse(emptyLabel.isHidden)
+        XCTAssertFalse(scrollView.isHidden)
+        let layoutConstraints = controller.view.constraints + emptyLabel.constraints + scrollView.constraints
+        XCTAssertTrue(
+            layoutConstraints.contains {
+                ($0.firstItem as? NSView) === emptyLabel &&
+                    $0.firstAttribute == .leading &&
+                    ($0.secondItem as? NSView) === scrollView &&
+                    $0.secondAttribute == .leading
+            }
+        )
+        XCTAssertTrue(
+            layoutConstraints.contains {
+                ($0.firstItem as? NSView) === emptyLabel &&
+                    $0.firstAttribute == .trailing &&
+                    ($0.secondItem as? NSView) === scrollView &&
+                    $0.secondAttribute == .trailing
+            }
+        )
+
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        controller.view.layoutSubtreeIfNeeded()
+
+        XCTAssertTrue(emptyLabel.isHidden)
+        XCTAssertFalse(scrollView.isHidden)
+        XCTAssertGreaterThan(controller.selectionSummary().totalMatches, 0)
+    }
+
     func testShowFindBarPrefillsSelectionForAllOpenSearch() throws {
         let store = makeStore()
         let first = try makeSearchableTemporaryPDF(
@@ -181,6 +227,18 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .allOpen)
         XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "shared needle")
         XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
+    }
+
+    private func findDescendant<T: NSView>(of type: T.Type, in root: NSView) -> T? {
+        if let match = root as? T {
+            return match
+        }
+        for subview in root.subviews {
+            if let match = findDescendant(of: type, in: subview) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func makeStore() -> DocumentStore {

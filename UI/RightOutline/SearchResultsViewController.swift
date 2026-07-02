@@ -51,8 +51,7 @@ private final class SearchResultCellView: NSTableCellView {
 }
 
 final class SearchResultsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
-    private static let horizontalInset: CGFloat = 8
-    private static let textInset: CGFloat = 12
+    private static let contentInset: CGFloat = 8
 
     let documentStore: DocumentStore
     let windowID: UUID
@@ -123,23 +122,28 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         scrollView.autohidesScrollers = true
         scrollView.documentView = tableView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        scrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
         emptyStateLabel.textColor = .secondaryLabelColor
         emptyStateLabel.maximumNumberOfLines = 0
         emptyStateLabel.alignment = .center
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        emptyStateLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        emptyStateLabel.identifier = NSUserInterfaceItemIdentifier("searchEmptyStateLabel")
 
         container.addSubview(scrollView)
         container.addSubview(emptyStateLabel)
 
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.horizontalInset),
-            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.horizontalInset),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.contentInset),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.contentInset),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.textInset),
-            emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.textInset),
+            emptyStateLabel.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            emptyStateLabel.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
 
@@ -207,7 +211,6 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         }
         tableView.reloadData()
         emptyStateLabel.isHidden = rows.isEmpty == false
-        scrollView.isHidden = rows.isEmpty
 
         if let previousSelection,
            let row = rowIndex(for: previousSelection) {
