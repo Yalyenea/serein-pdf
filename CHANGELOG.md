@@ -21,6 +21,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a compact secondary-pane candidate chooser for compare split, including a same-PDF comparison session with independent reading state and no regular tab/history/persistence footprint
 - Fit both panes to width automatically when compare split opens, including PDFs that were previously pinned at a manual zoom level
 - Add plain `c` as a reader toggle between Single Page and Single Page Continuous while keeping `cmd+2` as the direct Single Page Continuous command
+- Keep fully visible Single Page slides centered on both axes and clamp blank-area scrolling, while preserving panning for zoomed-in pages
 - Focus the Go to Page input immediately and keep Return from being intercepted by tab rename handlers
 - Preload selected PDF text into Find and search it immediately for both current-document and all-open searches.
 
@@ -53,6 +54,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Settings and Windows
 - Make sidebar widths window-level runtime state seeded from layout defaults, so switching PDFs no longer resizes sidebars.
 - Let Settings General edit default left and right sidebar widths plus native material sidebar opacity.
+- Keep the Settings General / Library / Shortcuts page tabs at equal widths for a steadier header.
 - Change `cmd+ctrl+l` so it opens both sidebars only when both are closed; any visible sidebar state closes both sidebars.
 - Keep main window represented URL and filename synchronized with the active PDF for native macOS window/document integration.
 

@@ -172,6 +172,8 @@ final class ReaderViewController: NSViewController {
     private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
     private var lastAppliedFitBoundsHeight: CGFloat = 0
+    private weak var observedPDFClipView: NSClipView?
+    private var isApplyingScrollClamp = false
     private var lastSubmittedSearchKey: SubmittedSearchKey?
     private var pendingAnnotationFocusToken: Int = 0
     private var switchTitleToastHideWorkItem: DispatchWorkItem?
@@ -261,7 +263,8 @@ final class ReaderViewController: NSViewController {
 
         guard let session = targetSession(),
               displayedSessionID == session.id,
-              pdfView.bounds.width > 0 else { return }
+              pdfView.bounds.width > 0,
+              pdfView.bounds.height > 0 else { return }
 
         guard session.scaleMode == .fitWidth || session.scaleMode == .fitHeight else {
             recenterDocumentViewIfNeeded()
@@ -1176,6 +1179,9 @@ final class ReaderViewController: NSViewController {
         pdfView.displayMode = session.displayMode.pdfDisplayMode
         pdfView.displaysAsBook = false
         displayedDisplayMode = session.displayMode
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+        recenterDocumentViewIfNeeded()
     }
 
     private func applyScaleIfNeeded(_ session: DocumentSession) {
@@ -1228,6 +1234,9 @@ final class ReaderViewController: NSViewController {
         pdfView.go(to: destination)
         isApplyingStoreState = false
         displayedReadingPosition = session.lastReadPosition
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+        recenterDocumentViewIfNeeded()
     }
 
     private func applyFitWidth(for session: DocumentSession) {
@@ -1281,6 +1290,7 @@ final class ReaderViewController: NSViewController {
             syncPDFMarginBackgroundAfterPDFKitLayout()
             recenterDocumentViewIfNeeded()
             restoreViewportAnchor(viewportAnchor)
+            recenterDocumentViewIfNeeded()
         }
     }
 
@@ -1438,7 +1448,31 @@ final class ReaderViewController: NSViewController {
         scrollView.verticalScrollElasticity = .none
         scrollView.horizontalScrollElasticity = .none
         scrollView.usesPredominantAxisScrolling = true
+        let clipView = scrollView.contentView
+        clipView.postsBoundsChangedNotifications = true
+        if observedPDFClipView !== clipView {
+            if let observedPDFClipView {
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: NSView.boundsDidChangeNotification,
+                    object: observedPDFClipView
+                )
+            }
+            observedPDFClipView = clipView
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handlePDFClipViewBoundsDidChange),
+                name: NSView.boundsDidChangeNotification,
+                object: clipView
+            )
+        }
         syncPDFMarginBackgroundAfterPDFKitLayout()
+    }
+
+    @objc
+    private func handlePDFClipViewBoundsDidChange(_ notification: Notification) {
+        guard isApplyingScrollClamp == false else { return }
+        recenterDocumentViewIfNeeded()
     }
 
     private func pdfClipView() -> NSClipView? {
@@ -1507,26 +1541,48 @@ final class ReaderViewController: NSViewController {
               let clipView = pdfClipView(),
               let documentView = pdfDocumentView() else { return }
 
+        let isSinglePage = displayedDisplayMode == .singlePage
+        let fitsHorizontally = isSinglePage && documentView.frame.width <= clipView.bounds.width + 0.5
+        let fitsVertically = isSinglePage && documentView.frame.height <= clipView.bounds.height + 0.5
         let targetMinX: CGFloat
-        if displayedDisplayMode == .singlePage {
+        if isSinglePage {
             targetMinX = max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
         } else {
             targetMinX = 0
         }
+        let targetMinY = isSinglePage
+            ? max((clipView.bounds.height - documentView.frame.height) * 0.5, 0)
+            : documentView.frame.minY
 
-        if abs(documentView.frame.minX - targetMinX) > 0.5 {
-            var frame = documentView.frame
+        var frame = documentView.frame
+        var shouldUpdateFrame = false
+        if abs(frame.minX - targetMinX) > 0.5 {
             frame.origin.x = targetMinX
+            shouldUpdateFrame = true
+        }
+        if isSinglePage, abs(frame.minY - targetMinY) > 0.5 {
+            frame.origin.y = targetMinY
+            shouldUpdateFrame = true
+        }
+        if shouldUpdateFrame {
             documentView.frame = frame
         }
 
-        if targetMinX > 0, abs(clipView.bounds.origin.x) > 0.5 {
-            let targetBounds = clipView.constrainBoundsRect(
-                NSRect(origin: NSPoint(x: 0, y: clipView.bounds.origin.y), size: clipView.bounds.size)
-            )
-            clipView.scroll(to: targetBounds.origin)
-            scrollView.reflectScrolledClipView(clipView)
+        var targetOrigin = clipView.bounds.origin
+        if fitsHorizontally {
+            targetOrigin.x = 0
         }
+        if fitsVertically {
+            targetOrigin.y = 0
+        }
+        let targetBounds = clipView.constrainBoundsRect(NSRect(origin: targetOrigin, size: clipView.bounds.size))
+        guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > 0.5 ||
+                abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
+
+        isApplyingScrollClamp = true
+        clipView.scroll(to: targetBounds.origin)
+        scrollView.reflectScrolledClipView(clipView)
+        isApplyingScrollClamp = false
     }
 
     private func stabilizePDFScrollPosition() {

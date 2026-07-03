@@ -54,7 +54,8 @@ site for showcase, download notes, and compact docs.
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) with pinch-style zoom
-- Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page, hides reader chrome, and restores the prior layout on exit
+- Single Page mode keeps fully visible pages centered on both axes and clamps blank-area scrolling, while zoomed-in pages can still pan normally
+- Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page with stable single-page framing, hides reader chrome, and restores the prior layout on exit
 - Immersive mode (`cmd+ctrl+l`) opens both sidebars only when none are visible; otherwise it hides both sidebars and tab chrome while keeping the current window size
 - Per-PDF memory: scale and page persist across launches; sidebar widths are window-level runtime state seeded from layout defaults
 - Switching PDFs briefly shows the current file name at the top of the reader, so fast tab changes stay oriented without adding permanent chrome

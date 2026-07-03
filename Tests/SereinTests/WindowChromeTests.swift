@@ -155,14 +155,16 @@ struct WindowChromeTests {
     }
 
     @Test
-    func nightModeKeepsLivePDFViewAvailableForSnapshots() {
+    func nightModeKeepsLivePDFViewAvailableForSnapshots() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
         app.appearance = NSAppearance(named: .darkAqua)
         defer { app.appearance = previousAppearance }
 
         let store = DocumentStore(appConfiguration: .default)
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "night-mode-live-pdf"))
         let controller = ReaderViewController(documentStore: store)
+        controller.targetSessionID = session.id
         controller.loadViewIfNeeded()
 
         #expect(controller.isNightModeEnabled)
@@ -809,6 +811,10 @@ struct WindowChromeTests {
 
         controller.toggleDemoMode()
         flushLayout(controller.window)
+        controller.windowDidEnterFullScreen(
+            Notification(name: NSWindow.didEnterFullScreenNotification, object: controller.window)
+        )
+        flushLayout(controller.window)
 
         guard let expectedScale = fitPageScaleExpected(for: splitController.readerViewController.pdfView) else {
             Issue.record("Failed to compute fit-page scale")
@@ -818,6 +824,7 @@ struct WindowChromeTests {
         #expect(store.session(for: session.id)?.displayMode == .singlePage)
         #expect(store.session(for: session.id)?.scaleMode == .manual)
         #expect(abs(splitController.readerViewController.pdfView.scaleFactor - expectedScale) < 0.05)
+        assertSinglePageDocumentCentered(in: splitController.readerViewController.pdfView)
 
         controller.toggleDemoMode()
         flushLayout(controller.window)
@@ -1158,6 +1165,21 @@ struct WindowChromeTests {
     }
 
     @Test
+    func settingsWindowPageTabsUseEqualWidths() throws {
+        let controller = SettingsWindowController(configuration: .default) { _ in }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let pageControl = try #require(
+            findView(identifier: "settingsPageControl", in: contentView) as? NSSegmentedControl
+        )
+        let segmentWidths = (0..<pageControl.segmentCount).map { pageControl.width(forSegment: $0) }
+
+        #expect(segmentWidths.count == 3)
+        #expect(segmentWidths.allSatisfy { abs($0 - segmentWidths[0]) < 0.01 })
+    }
+
+    @Test
     func settingsWindowSwitchesBetweenPageSizes() throws {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
@@ -1339,7 +1361,101 @@ struct WindowChromeTests {
         }
 
         let expectedMinX = max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
+        let expectedMinY = max((clipView.bounds.height - documentView.frame.height) * 0.5, 0)
         #expect(abs(documentView.frame.minX - expectedMinX) < 1.0)
+        #expect(abs(documentView.frame.minY - expectedMinY) < 1.0)
+    }
+
+    @Test
+    func singlePageFitPageCentersWideSlideOnBothAxes() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "single-page-fit-slide-centered",
+                pageSizes: [NSSize(width: 1280, height: 720)]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToPage()
+        flushLayout(controller.window)
+
+        assertSinglePageDocumentCentered(in: reader.pdfView)
+    }
+
+    @Test
+    func singlePageFullyVisibleSlideRejectsBlankAreaScroll() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "single-page-slide-scroll-clamp",
+                pageSizes: [NSSize(width: 1280, height: 720)]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let clipView = pdfClipView(in: splitController.readerViewController.pdfView),
+              let scrollView = splitController.readerViewController.pdfView.subviews
+                .compactMap({ $0 as? NSScrollView })
+                .first else {
+            Issue.record("Failed to locate PDF clip/scroll views")
+            return
+        }
+
+        splitController.readerViewController.fitToPage()
+        flushLayout(controller.window)
+        let stableOrigin = clipView.bounds.origin
+
+        clipView.setBoundsOrigin(NSPoint(x: 45, y: 60))
+        scrollView.reflectScrolledClipView(clipView)
+        flushLayout(controller.window)
+
+        #expect(abs(clipView.bounds.origin.x - stableOrigin.x) < 1.0)
+        #expect(abs(clipView.bounds.origin.y - stableOrigin.y) < 1.0)
+        assertSinglePageDocumentCentered(in: splitController.readerViewController.pdfView)
+    }
+
+    @Test
+    func singlePageOversizedPageStillAllowsViewportScroll() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "single-page-large-page-scroll",
+                pageSizes: [NSSize(width: 720, height: 2400)]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let clipView = pdfClipView(in: splitController.readerViewController.pdfView) else {
+            Issue.record("Failed to locate PDF clip view")
+            return
+        }
+
+        splitController.readerViewController.fitToWidth()
+        flushLayout(controller.window)
+        let beforeOrigin = clipView.bounds.origin.y
+
+        controller.scrollHalfPageDown()
+        flushLayout(controller.window)
+
+        #expect(abs(clipView.bounds.origin.y - beforeOrigin) > 20)
     }
 
     @Test
@@ -1997,6 +2113,20 @@ private func pdfClipView(in pdfView: PDFView) -> NSClipView? {
 @MainActor
 private func pdfDocumentView(in pdfView: PDFView) -> NSView? {
     pdfClipView(in: pdfView)?.documentView
+}
+
+@MainActor
+private func assertSinglePageDocumentCentered(in pdfView: PDFView) {
+    guard let clipView = pdfClipView(in: pdfView),
+          let documentView = pdfDocumentView(in: pdfView) else {
+        Issue.record("Failed to locate PDF clip/document views")
+        return
+    }
+
+    let expectedMinX = max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
+    let expectedMinY = max((clipView.bounds.height - documentView.frame.height) * 0.5, 0)
+    #expect(abs(documentView.frame.minX - expectedMinX) < 1.0)
+    #expect(abs(documentView.frame.minY - expectedMinY) < 1.0)
 }
 
 @MainActor

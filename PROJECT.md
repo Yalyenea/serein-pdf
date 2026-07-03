@@ -142,6 +142,7 @@ flowchart LR
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`:`singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`;`C` 在 `singlePage` 与 `singlePageContinuous` 间切换
+- `singlePage` 完整放下当前页时双轴居中并钳制空白区域滑动;放大到超出视口后仍允许页内平移
 - `J` / `K`:下一页 / 上一页(文本输入上下文让路)
 - `Ctrl+D` / `Ctrl+U`:下滚 / 上滚半页
 - `G` / `g`:跳到文末 / 文首
@@ -178,7 +179,7 @@ flowchart LR
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
 - `Cmd+Ctrl+\`:切换同窗分屏;左侧保持当前 PDF,右侧显示紧凑候选,首项为同一个 PDF;选中目标后两个 pane 自动适应宽度(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
-- `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
+- `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
 - `Cmd+Ctrl+L`:双侧栏都关闭时打开两个侧栏;否则关闭两个侧栏与 tab chrome
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
 

@@ -686,7 +686,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private func scheduleDemoFitToPage() {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.demoModeSnapshot != nil else { return }
+            self.window?.layoutIfNeeded()
             self.fitReaderToPage()
+            self.window?.layoutIfNeeded()
         }
     }
 

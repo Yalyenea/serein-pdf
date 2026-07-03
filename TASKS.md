@@ -35,6 +35,7 @@
 - `Cmd+R`:在 Finder 中显示当前 PDF 所在位置
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `C`:在单页连续 / 单页不连续间切换;`Cmd+2`:直接切换到单页连续阅读模式
+- `singlePage`:当前页完整放下时双轴居中并钳制空白区域滑动;放大到超出视口后仍允许页内平移
 - `Cmd+T`:新建空白 tab;空白 tab 不绑定 PDF、不进入最近 / 重开历史、不跨启动恢复
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览,点击或 Enter 普通切换;`Option+Click` / `Option+Enter` 进入 split-edit
 - `Cmd+W`:多选 tabs 时按窗口顺序关闭选中的 PDFs;否则关闭当前 tab / window
@@ -52,10 +53,11 @@
 - 水平 tab 复用标题栏,不单独开行,可见宽度随标题内容自适应
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换;Outline 随侧栏宽度收缩且无水平滑动,目录树可一键折叠 / 展开
 - 左右侧栏可见性切换只触发 chrome 布局更新,不得重建 reader / tabs / outline / search / annotations 数据
-- `Cmd+L` 进入 / 退出演示模式(直接全屏播放,页面完整适配,退出后恢复进入前布局)
+- `Cmd+L` 进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
 - `Cmd+Ctrl+L`:仅当左右侧栏都关闭时打开两个侧栏;其他任一状态关闭两个侧栏与 tab chrome
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
 - 侧栏透明度:左右侧栏使用 native material,`layout.sidebar_opacity` 控制 tint 强度,设置窗口可调
+- 设置窗口 General / Library / Shortcuts 页签保持等宽,维持紧凑稳定的页头视觉
 - PDF 切换:从一个已显示 PDF 切到另一个 PDF 后,阅读区顶部短暂显示当前文件名
 - 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
 - 主窗口适配 macOS 原生绿灯菜单:Full Screen、Move & Resize、Fill、Center、Fill & Arrange;默认尺寸不变,最小尺寸需允许系统半屏 / 四分屏
@@ -178,7 +180,7 @@
 ### 8.1 单页居中与主窗口显示
 
 - [x] `M10-001` 主窗口默认 framing:重新评估 `MainWindowController` 默认窗口尺寸与最小尺寸,兼顾纵向论文与横向 slide,避免首次打开时阅读区过矮或过窄。
-- [x] `M10-002` 单页非连续居中:`singlePage` 模式下,当页面缩小后小于阅读区可视宽度时,页面应保持在中栏内水平居中,不贴左侧漂移。
+- [x] `M10-002` 单页非连续居中:`singlePage` 模式下,当页面完整放下时,页面应保持在中栏内双轴居中并钳制空白区域滑动。
 - [x] `M10-003` 单页缩放体验:在 `singlePage` 模式连续缩小 / 放大时,页面中心与阅读焦点保持稳定,避免缩放后突然跳边或滚动偏移过大。
 
 ### 8.2 Fit Width / Fit Page 语义收口
@@ -189,7 +191,7 @@
 
 ### 8.3 测试与验收
 
-- [x] `M10-020` 测试:补充 `ReaderViewController` / `WindowChromeTests`,覆盖单页居中、fit width scale 计算与主窗口默认 framing。
+- [x] `M10-020` 测试:补充 `ReaderViewController` / `WindowChromeTests`,覆盖单页双轴居中、fit width scale 计算、演示模式 fit page 与主窗口默认 framing。
 - [ ] `M10-021` 手测:使用 `~/Downloads` 里的真实 slide PDF 和常规论文 PDF 各验证一次,记录视觉差异与最终默认值。
 
 ## 9. Milestone 10.5:多 PDF 连续阅读

@@ -4,6 +4,7 @@ private enum SettingsWindowMetrics {
     static let generalContentSize = NSSize(width: 560, height: 480)
     static let libraryContentSize = NSSize(width: 680, height: 460)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
+    static let pageSegmentWidth: CGFloat = 96
 }
 
 private final class FlippedContentView: NSView {
@@ -264,10 +265,14 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         let contentView = NSView()
 
         pageControl.translatesAutoresizingMaskIntoConstraints = false
+        pageControl.identifier = NSUserInterfaceItemIdentifier("settingsPageControl")
         pageControl.selectedSegment = SettingsPage.general.rawValue
         pageControl.controlSize = .small
         pageControl.target = self
         pageControl.action = #selector(handlePageChanged(_:))
+        for segment in 0..<pageControl.segmentCount {
+            pageControl.setWidth(SettingsWindowMetrics.pageSegmentWidth, forSegment: segment)
+        }
 
         buildGeneralPage()
         buildLibraryPage()
