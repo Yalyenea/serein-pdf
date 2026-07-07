@@ -856,6 +856,35 @@ struct WindowChromeTests {
     }
 
     @Test
+    func escapeExitsDemoModeAndRestoresPreviousChromeState() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        let windowID = controller.windowID
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "escape-demo-mode"))
+
+        store.setTabPresentationMode(.horizontalTitlebar, in: windowID)
+        store.setLeftSidebarVisible(false, in: windowID)
+        store.setRightSidebarVisible(true, in: windowID)
+        flushLayout(controller.window)
+
+        controller.toggleDemoMode()
+        flushLayout(controller.window)
+
+        #expect(controller.isDemoModeEnabled)
+        #expect(controller.isImmersiveModeEnabled)
+
+        #expect(controller.exitTransientReaderState())
+        flushLayout(controller.window)
+
+        #expect(controller.isDemoModeEnabled == false)
+        #expect(controller.isImmersiveModeEnabled == false)
+        #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
+        #expect(store.isLeftSidebarVisible(in: windowID) == false)
+        #expect(store.isRightSidebarVisible(in: windowID) == true)
+    }
+
+    @Test
     func closeFocusedPaneInSplitCollapsesToSinglePane() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)

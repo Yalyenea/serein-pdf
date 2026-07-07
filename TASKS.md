@@ -19,7 +19,7 @@
 - PDF 库配置:`library.folders` 保存一个或多个文件夹,打开库时递归扫描 PDF,建立轻量索引并缓存,按库 root / 子文件夹 / PDF 列表二级浏览
 - 默认高亮色:偏轻、低饱和、清晰的粉色
 - `a`:有选区 → 立即高亮;无选区 → 进入高亮模式
-- `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
+- `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览 / 退出演示模式
 - `d`:删除鼠标所在高亮;多行整组删除
 - `i`:在 light / dark mode 间切换,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme,不改变 light / dark mode

@@ -22,6 +22,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Fit both panes to width automatically when compare split opens, including PDFs that were previously pinned at a manual zoom level
 - Add plain `c` as a reader toggle between Single Page and Single Page Continuous while keeping `cmd+2` as the direct Single Page Continuous command
 - Keep fully visible Single Page slides centered on both axes and clamp blank-area scrolling, while preserving panning for zoomed-in pages
+- Let Esc exit `cmd+l` Demo mode and restore the prior reader chrome.
 - Focus the Go to Page input immediately and keep Return from being intercepted by tab rename handlers
 - Preload selected PDF text into Find and search it immediately for both current-document and all-open searches.
 

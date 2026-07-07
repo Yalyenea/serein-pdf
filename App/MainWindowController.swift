@@ -550,6 +550,27 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.triggerHighlightShortcut()
     }
 
+    @discardableResult
+    func exitTransientReaderState() -> Bool {
+        if isFindBarVisible {
+            hideFindBar()
+            return true
+        }
+        if isAllPagesOverviewActive {
+            setAllPagesOverviewActive(false)
+            return true
+        }
+        if isDemoModeEnabled {
+            toggleDemoMode()
+            return true
+        }
+        if isHighlightModeEnabled {
+            exitHighlightMode()
+            return true
+        }
+        return false
+    }
+
     func exitHighlightMode() {
         splitViewController.exitHighlightMode()
     }

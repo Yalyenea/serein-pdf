@@ -131,7 +131,7 @@ flowchart LR
 
 **批注**
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
-- `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览
+- `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览 / 退出演示模式
 - `D`:删除鼠标所在高亮(多行整组删除)
 - `Cmd+S`:写回源 PDF
 - `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights

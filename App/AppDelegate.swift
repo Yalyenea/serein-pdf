@@ -1230,15 +1230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func exitHighlightMode(_ sender: Any?) {
-        if mainWindowController?.isFindBarVisible == true {
-            mainWindowController?.hideFindBar()
-            return
-        }
-        if mainWindowController?.isAllPagesOverviewActive == true {
-            mainWindowController?.setAllPagesOverviewActive(false)
-            return
-        }
-        mainWindowController?.exitHighlightMode()
+        _ = mainWindowController?.exitTransientReaderState()
     }
 
     @objc
