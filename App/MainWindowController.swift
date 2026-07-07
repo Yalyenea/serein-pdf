@@ -13,9 +13,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private let splitViewController: SplitViewController
     private let toolbar = NSToolbar(identifier: "MainToolbar")
     private let titlebarTabsItem = NSToolbarItem(itemIdentifier: .titlebarTabs)
-    private let titlebarTabsOverlayView = NSView()
-    private let titlebarTabsToolbarPlaceholderView = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
-    private static let titlebarTabsHorizontalPadding: CGFloat = 16
     private var allowsTerminationWithoutPrompt = false
     private var demoModeSnapshot: DemoModeSnapshot?
     private var immersiveModeSnapshot: ImmersiveModeSnapshot?
@@ -61,12 +58,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.titlebarTabsController.onCloseSessionRequested = { [weak self] sessionID in
             self?.requestCloseSession(sessionID)
         }
-        splitViewController.onReaderColumnLayoutDidChange = { [weak self] in
-            self?.updateTitlebarTabsLayout()
-        }
-        splitViewController.titlebarTabsController.onPreferredSizeDidChange = { [weak self] in
-            self?.updateTitlebarTabsLayout()
-        }
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDocumentStoreDidChange),
@@ -110,10 +101,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func configureTitlebarTabsItemIfNeeded() {
-        titlebarTabsToolbarPlaceholderView.isHidden = true
+        let tabsView = splitViewController.titlebarTabsController.view
         titlebarTabsItem.label = ""
         titlebarTabsItem.paletteLabel = ""
-        titlebarTabsItem.view = titlebarTabsToolbarPlaceholderView
+        titlebarTabsItem.view = tabsView
         titlebarTabsItem.visibilityPriority = .high
     }
 
@@ -147,72 +138,21 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func synchronizeTitlebarTabsItem(isVisible: Bool) {
-        toolbar.centeredItemIdentifier = nil
         let itemIndex = toolbar.items.firstIndex(where: { $0.itemIdentifier == .titlebarTabs })
 
         if isVisible {
             configureTitlebarTabsItemIfNeeded()
-            attachTitlebarTabsOverlay()
             if itemIndex == nil {
                 toolbar.insertItem(withItemIdentifier: .titlebarTabs, at: 0)
             }
-            updateTitlebarTabsLayout()
+            toolbar.centeredItemIdentifier = .titlebarTabs
             return
         }
 
-        detachTitlebarTabsOverlay()
+        toolbar.centeredItemIdentifier = nil
         if let itemIndex {
             toolbar.removeItem(at: itemIndex)
         }
-    }
-
-    private func attachTitlebarTabsOverlay() {
-        guard let contentView = window?.contentView else { return }
-        if titlebarTabsOverlayView.superview == nil {
-            contentView.addSubview(titlebarTabsOverlayView, positioned: .above, relativeTo: nil)
-        }
-        let tabsView = splitViewController.titlebarTabsController.view
-        if tabsView.superview !== titlebarTabsOverlayView {
-            tabsView.removeFromSuperview()
-            titlebarTabsOverlayView.addSubview(tabsView)
-        }
-        titlebarTabsOverlayView.isHidden = false
-    }
-
-    private func detachTitlebarTabsOverlay() {
-        splitViewController.titlebarTabsController.view.removeFromSuperview()
-        titlebarTabsOverlayView.removeFromSuperview()
-    }
-
-    private func updateTitlebarTabsLayout() {
-        guard let window,
-              splitViewController.titlebarTabsController.view.isHidden == false,
-              titlebarTabsOverlayView.superview != nil else { return }
-        guard let contentView = window.contentView,
-              let centerRect = splitViewController.readerColumnRectInContentViewCoordinates() else { return }
-
-        let availableWidth = max(1, centerRect.width - Self.titlebarTabsHorizontalPadding)
-        splitViewController.titlebarTabsController.setAvailableMaxWidth(availableWidth)
-
-        let tabsWidth = splitViewController.titlebarTabsController.preferredContentSize.width
-        let titlebarHeight = TitlebarTabsController.maximumVisibleStripSize.height
-        let tabsStartX = min(
-            max(centerRect.midX - tabsWidth / 2, centerRect.minX),
-            max(centerRect.minX, centerRect.maxX - tabsWidth)
-        )
-        titlebarTabsOverlayView.frame = NSRect(
-            x: tabsStartX,
-            y: contentView.bounds.maxY - titlebarHeight,
-            width: tabsWidth,
-            height: titlebarHeight
-        )
-        splitViewController.titlebarTabsController.view.frame = titlebarTabsOverlayView.bounds
-
-        window.layoutIfNeeded()
-    }
-
-    func windowDidResize(_ notification: Notification) {
-        updateTitlebarTabsLayout()
     }
 
     private func refreshWindowTitle() {

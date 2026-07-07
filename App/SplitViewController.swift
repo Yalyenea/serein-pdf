@@ -19,7 +19,6 @@ final class SplitViewController: NSSplitViewController {
     private var hasAppliedSidebarWidths = false
     private var isApplyingSidebarWidths = false
     private var pendingSidebarWidthApply = false
-    var onReaderColumnLayoutDidChange: (() -> Void)?
 
     var readerViewController: ReaderViewController {
         readerWorkspaceViewController.activeReaderViewController()
@@ -106,16 +105,8 @@ final class SplitViewController: NSSplitViewController {
         scheduleSidebarWidthApply()
     }
 
-    func readerColumnRectInContentViewCoordinates() -> CGRect? {
-        guard splitView.arrangedSubviews.count >= 3,
-              let contentView = view.window?.contentView else { return nil }
-        let centerView = splitView.arrangedSubviews[1]
-        return centerView.convert(centerView.bounds, to: contentView)
-    }
-
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
-        onReaderColumnLayoutDidChange?()
         syncSidebarVisibilityFromSplitView()
         guard isApplyingSidebarWidths == false,
               hasAppliedSidebarWidths else { return }

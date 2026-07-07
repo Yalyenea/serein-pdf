@@ -87,74 +87,6 @@ struct WindowChromeTests {
     }
 
     @Test
-    func horizontalTabsStayWithinReaderColumnWithWideRightSidebar() throws {
-        _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
-        let controller = MainWindowController(documentStore: store)
-        defer { controller.close() }
-        let windowID = controller.windowID
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-wide-right-sidebar"))
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-wide-right-sidebar-2"))
-
-        store.setTabPresentationMode(.horizontalTitlebar, in: windowID)
-        store.setLeftSidebarVisible(false, in: windowID)
-        store.setRightSidebarVisible(true, in: windowID)
-        flushLayout(controller.window)
-
-        guard let window = controller.window,
-              let contentView = window.contentView,
-              let splitController = window.contentViewController as? SplitViewController else {
-            Issue.record("Failed to locate split view controller")
-            return
-        }
-
-        splitController.splitView.setPosition(720, ofDividerAt: 1)
-        splitController.splitView.adjustSubviews()
-        flushLayout(window)
-
-        assertTitlebarTabsAreCenteredInReaderColumn(
-            splitController: splitController,
-            contentView: contentView,
-            label: "wide right sidebar"
-        )
-    }
-
-    @Test
-    func horizontalTabsStayWithinReaderColumnWhenSidebarsAreSwapped() throws {
-        var configuration = AppConfiguration.default
-        configuration.layout.sidebarsSwapped = true
-        _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: configuration)
-        let controller = MainWindowController(documentStore: store)
-        defer { controller.close() }
-        let windowID = controller.windowID
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-swapped-left-sidebar"))
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-swapped-left-sidebar-2"))
-
-        store.setTabPresentationMode(.horizontalTitlebar, in: windowID)
-        store.setLeftSidebarVisible(true, in: windowID)
-        store.setRightSidebarVisible(false, in: windowID)
-        flushLayout(controller.window)
-
-        guard let window = controller.window,
-              let contentView = window.contentView,
-              let splitController = window.contentViewController as? SplitViewController else {
-            Issue.record("Failed to locate split view controller")
-            return
-        }
-
-        splitController.splitView.setPosition(480, ofDividerAt: 0)
-        splitController.splitView.adjustSubviews()
-        flushLayout(window)
-
-        assertTitlebarTabsAreCenteredInReaderColumn(
-            splitController: splitController,
-            contentView: contentView,
-            label: "swapped left sidebar"
-        )
-    }
-
-    @Test
     func horizontalTabsUseAdaptiveToolbarStripSize() throws {
         let store = DocumentStore(appConfiguration: .default)
         _ = try store.open(documentAt: makeTemporaryPDF(named: "short"))
@@ -2193,35 +2125,6 @@ struct WindowChromeTests {
         #expect(reader.testingEmptyStateHintIsVisible)
         #expect(reader.testingEmptyStateHint.contains("for recent"))
     }
-}
-
-@MainActor
-private func assertTitlebarTabsAreCenteredInReaderColumn(
-    splitController: SplitViewController,
-    contentView: NSView,
-    label: String,
-    tolerance: CGFloat = 2
-) {
-    guard let centerRect = splitController.readerColumnRectInContentViewCoordinates() else {
-        Issue.record("\(label): failed to resolve reader column rect")
-        return
-    }
-
-    let tabsView = splitController.titlebarTabsController.view
-    let tabsFrame = tabsView.convert(tabsView.bounds, to: contentView)
-
-    #expect(
-        abs(tabsFrame.midX - centerRect.midX) <= tolerance,
-        "\(label): titlebar tabs midX \(tabsFrame.midX) diverged from reader midX \(centerRect.midX)"
-    )
-    #expect(
-        tabsFrame.minX >= centerRect.minX - tolerance,
-        "\(label): titlebar tabs minX \(tabsFrame.minX) is left of reader minX \(centerRect.minX)"
-    )
-    #expect(
-        tabsFrame.maxX <= centerRect.maxX + tolerance,
-        "\(label): titlebar tabs maxX \(tabsFrame.maxX) is right of reader maxX \(centerRect.maxX)"
-    )
 }
 
 @MainActor

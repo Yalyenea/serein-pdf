@@ -14,9 +14,7 @@ final class TitlebarTabsController: NSViewController {
     private let documentContainerView = NSView()
     private let bottomBorderView = NSView()
     private var isTabsStripVisible = true
-    private var availableMaxWidth = TitlebarTabsController.maximumVisibleStripSize.width
     private var stripWidthConstraint: NSLayoutConstraint?
-    var onPreferredSizeDidChange: (() -> Void)?
     nonisolated(unsafe) private var eventMonitors: [Any] = []
 
     init(documentStore: DocumentStore, windowID: UUID) {
@@ -113,14 +111,6 @@ final class TitlebarTabsController: NSViewController {
     func refreshChromeColors() {
         guard isViewLoaded else { return }
         applyChromeColors()
-    }
-
-    func setAvailableMaxWidth(_ width: CGFloat) {
-        let clampedWidth = max(width, Self.hiddenStripSize.width)
-        guard abs(availableMaxWidth - clampedWidth) > 0.5 else { return }
-        availableMaxWidth = clampedWidth
-        guard isViewLoaded else { return }
-        refreshPreferredStripSize()
     }
 
     private func applyChromeColors() {
@@ -232,15 +222,10 @@ final class TitlebarTabsController: NSViewController {
         }
 
         let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
-        let width = min(max(fittingWidth, Self.hiddenStripSize.width), availableMaxWidth)
-        let newSize = NSSize(width: width, height: Self.maximumVisibleStripSize.height)
-        let sizeChanged = preferredContentSize != newSize
-        preferredContentSize = newSize
+        let width = min(max(fittingWidth, Self.hiddenStripSize.width), Self.maximumVisibleStripSize.width)
+        preferredContentSize = NSSize(width: width, height: Self.maximumVisibleStripSize.height)
         stripWidthConstraint?.constant = width
         view.frame.size = preferredContentSize
-        if sizeChanged {
-            onPreferredSizeDidChange?()
-        }
     }
 
     func setTabsStripVisible(_ isVisible: Bool) {

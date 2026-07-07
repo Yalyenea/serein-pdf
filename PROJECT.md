@@ -114,7 +114,7 @@ flowchart LR
 - 紧凑布局,轻量圆角,无厚重阴影
 - 侧栏平铺嵌入,最多保留一条淡分割线(禁悬浮 / 液态玻璃 / 漂浮面板感)
 - 按钮 / tab 视觉重量轻,突出选中态
-- 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应;水平标签条在中栏阅读区范围内居中,不覆盖侧栏
+- 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
 - 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
 - `rose_pine_dawn` 不只改阅读区外围,也把 PDF 白底映射成暖纸色
