@@ -397,36 +397,23 @@ fit_width = "command+9"
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
     }
 
-    func testRequiredKeysCoverDefaultContentsAndRenderAssignments() throws {
+    func testConfigKeyListsStayInSyncAndMissingKeysSelfHeal() throws {
         let defaultKeys = assignmentKeys(in: AppConfigurationFile.defaultContents)
         let renderKeys = assignmentKeys(in: AppConfigurationFile.render(.default))
         let required = Set(AppConfigurationFile.requiredKeys)
 
-        XCTAssertTrue(required.contains("new_blank_tab"))
         XCTAssertEqual(defaultKeys, renderKeys, "defaultContents and render() must declare the same assignment keys")
-
-        // requiredKeys is the self-heal fingerprint; every required entry must appear in the templates.
-        let missingFromTemplates = required.subtracting(defaultKeys)
+        XCTAssertTrue(required.isSubset(of: defaultKeys), "requiredKeys must be a subset of templates")
         XCTAssertTrue(
-            missingFromTemplates.isEmpty,
-            "requiredKeys lists keys absent from defaultContents/render: \(missingFromTemplates.sorted())"
+            assignmentKeys(in: AppConfigurationFile.defaultContents, section: "shortcuts").isSubset(of: required),
+            "every shortcut key must be self-healable via requiredKeys"
         )
+        XCTAssertTrue(required.contains("new_blank_tab"))
 
-        // Shortcut assignment keys in templates must all be self-healable.
-        let shortcutKeys = assignmentKeys(in: AppConfigurationFile.defaultContents, section: "shortcuts")
-        let missingShortcuts = shortcutKeys.subtracting(required)
-        XCTAssertTrue(
-            missingShortcuts.isEmpty,
-            "shortcut keys missing from requiredKeys: \(missingShortcuts.sorted())"
-        )
-    }
-
-    func testMissingNewBlankTabKeyTriggersBootstrapRewrite() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
         let fileURL = rootURL.appendingPathComponent("config.toml")
-
         try AppConfigurationFile.defaultContents
             .replacingOccurrences(of: "new_blank_tab = \"command+t\"\n", with: "")
             .write(to: fileURL, atomically: true, encoding: .utf8)

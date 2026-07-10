@@ -14,4 +14,22 @@ struct TabsFingerprint: Equatable {
     var items: [Item]
     var recentURLs: [URL]
     var showRecentSection: Bool
+
+    @MainActor
+    static func capture(
+        from store: DocumentStore,
+        windowID: UUID,
+        recentURLs: [URL] = [],
+        showRecentSection: Bool = false
+    ) -> TabsFingerprint {
+        let sessions = store.sessions(in: windowID)
+        return TabsFingerprint(
+            activeSessionID: store.activeSessionID(in: windowID),
+            selectedSessionIDs: store.selectedSessionIDs(in: windowID),
+            continuousSessionIDs: store.continuousReadingSessionIDs(in: windowID),
+            items: sessions.map { Item(id: $0.id, title: $0.title, isDirty: $0.isDirty) },
+            recentURLs: recentURLs,
+            showRecentSection: showRecentSection
+        )
+    }
 }

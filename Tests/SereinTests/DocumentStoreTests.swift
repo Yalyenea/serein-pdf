@@ -59,13 +59,10 @@ private final class NotificationCounterObserver: NSObject {
 
 private final class DocumentStoreChangeRecorder: @unchecked Sendable {
     var observedChange: DocumentStoreChange?
-    var observedChanges: [DocumentStoreChange] = []
 
     @objc
     func handleDocumentStoreDidChange(_ notification: Notification) {
-        let change = notification.documentStoreChange
-        observedChange = change
-        observedChanges.append(change)
+        observedChange = notification.documentStoreChange
     }
 }
 
@@ -1133,8 +1130,7 @@ final class DocumentStoreTests: XCTestCase {
 
         store.updateCurrentPage(index: 1, for: session.id)
 
-        XCTAssertEqual(recorder.observedChanges.last, .readingPosition)
-        XCTAssertTrue(recorder.observedChanges.last?.containsOnly(.readingPosition) == true)
+        XCTAssertEqual(recorder.observedChange, .readingPosition)
         XCTAssertEqual(persistence.state?.windows.first?.searchQuery, "should-not-be-clobbered")
         XCTAssertEqual(persistence.state?.sessions.map(\.id), snapshotAfterOpen.sessions.map(\.id))
         XCTAssertEqual(readingStateStore.states[session.url]?.readingPosition.pageIndex, 1)

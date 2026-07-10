@@ -137,25 +137,7 @@ final class TitlebarTabsController: NSViewController {
     private func rebuildTabs() {
         guard isViewLoaded else { return }
 
-        let sessions = documentStore.sessions(in: windowID)
-        let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
-        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
-        let continuousSessionSet = Set(continuousSessionIDs)
-        let continuousLeaderID = continuousSessionIDs.first
-        let fingerprint = TabsFingerprint(
-            activeSessionID: documentStore.activeSessionID(in: windowID),
-            selectedSessionIDs: selectedSessionIDs,
-            continuousSessionIDs: continuousSessionIDs,
-            items: sessions.map {
-                TabsFingerprint.Item(
-                    id: $0.id,
-                    title: $0.title,
-                    isDirty: $0.isDirty
-                )
-            },
-            recentURLs: [],
-            showRecentSection: false
-        )
+        let fingerprint = TabsFingerprint.capture(from: documentStore, windowID: windowID)
         guard fingerprint != displayedTabsFingerprint else { return }
         displayedTabsFingerprint = fingerprint
 
@@ -164,11 +146,18 @@ final class TitlebarTabsController: NSViewController {
             subview.removeFromSuperview()
         }
 
+        let sessions = documentStore.sessions(in: windowID)
+        let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
+        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
+        let continuousSessionSet = Set(continuousSessionIDs)
+        let continuousLeaderID = continuousSessionIDs.first
+        let activeSessionID = documentStore.activeSessionID(in: windowID)
+
         for session in sessions {
             let itemView = TitlebarTabItemView(
                 sessionID: session.id,
                 title: session.title,
-                isSelected: documentStore.activeSessionID(in: windowID) == session.id,
+                isSelected: activeSessionID == session.id,
                 isTabSelected: selectedSessionIDs.contains(session.id),
                 isDirty: session.isDirty,
                 isContinuousReadingMember: continuousSessionSet.contains(session.id),

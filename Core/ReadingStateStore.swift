@@ -25,8 +25,8 @@ extension ReadingStateStore {
 final class UserDefaultsReadingStateStore: ReadingStateStore {
     static let maxEntries = 500
     static let debounceInterval: TimeInterval = 0.75
+    static let stateKey = "Serein.ReadingState"
 
-    private static let stateKey = "Serein.ReadingState"
     private static let logger = Logger(subsystem: "local.yfff.Serein", category: "ReadingStateStore")
 
     private let userDefaults: UserDefaults
@@ -52,11 +52,7 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
     deinit {
         flushWorkItem?.cancel()
         if isDirty {
-            do {
-                try writeCacheToUserDefaults()
-            } catch {
-                Self.logger.error("Failed to flush reading state on deinit: \(error.localizedDescription, privacy: .public)")
-            }
+            try? writeCacheToUserDefaults()
         }
     }
 
@@ -81,9 +77,7 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
     func flush() throws {
         flushWorkItem?.cancel()
         flushWorkItem = nil
-        guard isDirty else { return }
-        try writeCacheToUserDefaults()
-        isDirty = false
+        try persistIfDirty()
     }
 
     private func ensureCacheLoaded() throws {
@@ -91,11 +85,9 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
         if let data = userDefaults.data(forKey: Self.stateKey) {
             let decoded = try JSONDecoder().decode([String: PersistedReadingState].self, from: data)
             cache = decoded
-            // Stable but arbitrary initial LRU order; subsequent saves/loads reorder.
             lruOrder = Array(decoded.keys)
             if lruOrder.count > maxEntries {
                 pruneIfNeeded()
-                isDirty = true
                 try writeCacheToUserDefaults()
                 isDirty = false
             }
@@ -118,28 +110,29 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
 
     private func scheduleFlush() {
         flushWorkItem?.cancel()
-        guard debounceInterval > 0 else {
-            do {
-                try writeCacheToUserDefaults()
-                isDirty = false
-            } catch {
-                Self.logger.error("Failed to persist reading state: \(error.localizedDescription, privacy: .public)")
-            }
+        if debounceInterval <= 0 {
+            flushIgnoringErrors()
             return
         }
-
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            guard self.isDirty else { return }
-            do {
-                try self.writeCacheToUserDefaults()
-                self.isDirty = false
-            } catch {
-                Self.logger.error("Failed to persist reading state: \(error.localizedDescription, privacy: .public)")
-            }
+            self?.flushIgnoringErrors()
         }
         flushWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+    }
+
+    private func flushIgnoringErrors() {
+        do {
+            try persistIfDirty()
+        } catch {
+            Self.logger.error("Failed to persist reading state: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func persistIfDirty() throws {
+        guard isDirty else { return }
+        try writeCacheToUserDefaults()
+        isDirty = false
     }
 
     private func writeCacheToUserDefaults() throws {

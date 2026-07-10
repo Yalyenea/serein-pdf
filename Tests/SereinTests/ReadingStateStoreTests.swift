@@ -60,12 +60,10 @@ final class ReadingStateStoreTests: XCTestCase {
 
         // In-memory load works before disk flush.
         XCTAssertEqual(try store.loadState(for: url)?.readingPosition.pageIndex, 3)
-        XCTAssertNil(userDefaults.data(forKey: "Serein.ReadingState"))
+        XCTAssertNil(userDefaults.data(forKey: UserDefaultsReadingStateStore.stateKey))
 
         try store.flush()
-        XCTAssertNotNil(userDefaults.data(forKey: "Serein.ReadingState"))
 
-        // Fresh instance reads flushed disk state.
         let peer = UserDefaultsReadingStateStore(userDefaults: userDefaults, debounceInterval: 0)
         XCTAssertEqual(try peer.loadState(for: url)?.readingPosition.pageIndex, 3)
 

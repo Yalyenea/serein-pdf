@@ -1737,18 +1737,9 @@ final class DocumentStore {
             return
         }
         guard let document = try? pdfDocument(for: sessionID) else { return }
-        let matches = DocumentSearchService.buildMatches(for: query, in: document)
         sessions[index].searchCache = DocumentSearchCache(
             query: query,
-            matches: matches.enumerated().map { offset, match in
-                DocumentSearchMatch(
-                    matchIndex: offset,
-                    pageIndex: match.pageIndex,
-                    matchedText: match.matchedText,
-                    previewText: match.previewText,
-                    selection: match.selection
-                )
-            }
+            matches: DocumentSearchService.buildMatches(for: query, in: document)
         )
     }
 
