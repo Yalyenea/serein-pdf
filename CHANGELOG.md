@@ -24,6 +24,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Docs
 - Add REVIEW.md: full-code project review covering product highlights, implementation highlights, ranked weaknesses, and an improvement roadmap.
 - Sync REVIEW / TASKS / PROJECT status for the near-term engineering pass: completed 5.1 items marked done, open 5.2–5.4 items kept as checklists.
+- Mark M8–M10 (including M10.5–M10.13 hand-test waves) fully complete across TASKS / REVIEW / PROJECT.
 
 ### Website
 - Add a local static Serein product website with showcase, download notes, compact docs, and a real app screenshot captured from a synthetic PDF.

@@ -75,18 +75,18 @@
 | M5 设置与收口 | ✅ |
 | M6 体验打磨 | ✅ |
 | M7 搜索 + 对比 | ✅ |
-| M8 批注深度化 | ✅ 开发完成,待手测 |
-| M9 最近文件启动器 | ✅ 开发完成,待手测 |
-| M10 阅读区 Framing 打磨 | ✅ 开发完成,待手测 |
-| M10.5 多 PDF 连续阅读 | ✅ 开发完成,待手测 |
-| M10.6 PDF 库 | ✅ 开发完成,待手测 |
-| M10.7 PDF 热重载 | ✅ 开发完成,待手测 |
-| M10.8 PDF 切换定位提示 | ✅ 开发完成,待手测 |
-| M10.9 macOS 绿灯窗口管理 | ✅ 开发完成,待手测 |
-| M10.10 阅读交互打磨 | ✅ 开发完成,待手测 |
-| M10.11 空白标签页 | ✅ 开发完成,待手测 |
-| M10.12 当前 PDF 路径复制 | ✅ 开发完成,待手测 |
-| M10.13 浏览器式分屏 | ✅ 开发完成,待手测 |
+| M8 批注深度化 | ✅ |
+| M9 最近文件启动器 | ✅ |
+| M10 阅读区 Framing 打磨 | ✅ |
+| M10.5 多 PDF 连续阅读 | ✅ |
+| M10.6 PDF 库 | ✅ |
+| M10.7 PDF 热重载 | ✅ |
+| M10.8 PDF 切换定位提示 | ✅ |
+| M10.9 macOS 绿灯窗口管理 | ✅ |
+| M10.10 阅读交互打磨 | ✅ |
+| M10.11 空白标签页 | ✅ |
+| M10.12 当前 PDF 路径复制 | ✅ |
+| M10.13 浏览器式分屏 | ✅ |
 | M10.12.1 Return 焦点收口 | ✅ |
 | M11 扩展生态(预研) | 未开始 |
 | M12 Backlog 体验分流 | 进行中 |
@@ -132,23 +132,22 @@
 #### 5.4 承接里程碑
 
 - [x] find bar 选区预填（已合入）
-- [x] M8 / M9 开发与自动化测试
-- [ ] M8 / M9 真实 PDF 手测
-- [ ] M10 系列手测（Wave 1–7.5）
+- [x] M8 / M9 开发、自动化测试与真实 PDF 手测
+- [x] M10 系列（含 M10.5–M10.13 / M10.12.1）开发、自动化测试与手测
 - [ ] M11 扩展生态预研
 - [ ] M12 空窗收尾 `M12-010`–`014`
 
 ### 4.1 手测与里程碑波次
 
-- Wave 0 M8 / M9 手测：完成 `UAT-29` ~ `UAT-33`，确认批注、快捷键页、最近文件启动器都符合预期。
-- Wave 1 M10 手测：完成 `M10-021`，用真实 slide / paper PDF 验证居中与 fit width framing。
-- Wave 2 M10.5 手测：完成 `UAT-37`，用多个 slide PDF 验证连续阅读、跨 PDF 翻页与连续 Outline。
-- Wave 3 M10.6 手测：完成 `UAT-38`，配置 Book 文件夹后用 `Cmd+K` → `Cmd+O` 打开库浏览面板并打开库内 PDF。
-- Wave 4 M10.7 手测：完成 `UAT-39`，用 Typst / LaTeX 连续编译覆盖当前 PDF，确认阅读器自动刷新且页码/缩放保持。
-- Wave 5 M10.11 手测：完成 `UAT-46`，确认 `Cmd+T` 空白 tab 在两种 tab 模式下表现一致。
-- Wave 6 M10.12 手测：完成 `UAT-47`，确认 `Cmd+Shift+C` 复制当前 PDF 路径。
-- Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
-- Wave 7.5 M10.12.1 手测：确认 `Cmd+Option+G` 打开 Go to Page 后输入框自动聚焦，输入页码按 Return 跳页且不触发 tab 重命名。
+- [x] Wave 0 M8 / M9 手测：`UAT-29` ~ `UAT-33` 等通过。
+- [x] Wave 1 M10 手测：`M10-021` framing 通过。
+- [x] Wave 2 M10.5 手测：`UAT-37` 连续阅读通过。
+- [x] Wave 3 M10.6 手测：`UAT-38` PDF 库通过。
+- [x] Wave 4 M10.7 手测：`UAT-39` 热重载通过。
+- [x] Wave 5 M10.11 手测：`UAT-46` 空白 tab 通过。
+- [x] Wave 6 M10.12 手测：`UAT-47` 路径复制通过。
+- [x] Wave 7 M10.13 手测：`UAT-48` ~ `UAT-50` 浏览器式分屏通过。
+- [x] Wave 7.5 M10.12.1 手测：Go to Page 焦点与 Return 通过。
 - Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
 - Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-009` 已完成，`M12-002` 先暂缓；继续 `M12-010`–`014`。
 
@@ -206,7 +205,7 @@
 ### 6.4 文档与验收
 
 - [x] `M8-030` 同步 `PROJECT.md` / `TASKS.md` / `config.toml` 默认内容。
-- [ ] `M8-031` M8 验收:`AC-M8-1` ~ `AC-M8-4` 通过。
+- [x] `M8-031` M8 验收:`AC-M8-1` ~ `AC-M8-4` 通过。
 
 ## 7. Milestone 9:最近文件启动器
 
@@ -238,7 +237,7 @@
 ### 8.3 测试与验收
 
 - [x] `M10-020` 测试:补充 `ReaderViewController` / `WindowChromeTests`,覆盖单页双轴居中、fit width scale 计算、演示模式 fit page 与主窗口默认 framing。
-- [ ] `M10-021` 手测:使用 `~/Downloads` 里的真实 slide PDF 和常规论文 PDF 各验证一次,记录视觉差异与最终默认值。
+- [x] `M10-021` 手测:使用 `~/Downloads` 里的真实 slide PDF 和常规论文 PDF 各验证一次,记录视觉差异与最终默认值。
 
 ## 9. Milestone 10.5:多 PDF 连续阅读
 
@@ -273,7 +272,7 @@
 
 - [x] `M10.8-001` 阅读区提示:从一个 PDF 切到另一个 PDF 后,顶部短暂显示当前文件名;首次打开空窗口不显示。
 - [x] `M10.8-002` 测试:覆盖切换 PDF 后提示使用当前 session title。
-- [ ] `M10.8-003` 手测:快速切换多个真实 PDF,确认提示短暂、轻量、不遮挡常驻 chrome。
+- [x] `M10.8-003` 手测:快速切换多个真实 PDF,确认提示短暂、轻量、不遮挡常驻 chrome。
 
 ## 13. Milestone 10.10:阅读交互打磨
 
@@ -357,29 +356,29 @@
 - [x] `UAT-28` `Cmd+Shift+N` 新建窗口,两窗口独立且关闭互不影响,重启后恢复
 - [x] `UAT-29` 右栏 Annotations 能列出所有高亮,点击跳转,并可编辑 / 清空评论
 - [x] `UAT-30` 导出 Markdown / Plain / JSON 输出正确,Markdown 按页输出 snippet + comment,Plain / JSON 保留完整字段
-- [ ] `UAT-31` Shortcuts 面板改绑定后新会话生效,冲突被拒,清除后写回 `none`
-- [ ] `UAT-32` 最近文件启动器可搜索最近文件,支持 `Space` 多选与 `Enter` 打开
-- [ ] `UAT-33` 最近文件启动器底部常驻显示操作提示,无查询和有查询时都可直接 `↓` 浏览结果
-- [ ] `UAT-33A` Show All Tabs 可在大量已打开 PDF 中通过轻量文本总览切换 tab,且单选与分屏打开语义正确
-- [ ] `UAT-33B` 批量打开大量 PDF 时先出现 tabs,只加载当前 reader / 分屏 reader,后台干净 PDF 可被 LRU 释放
-- [ ] `UAT-34` 单页非连续模式缩小后页面保持居中,slide PDF 不贴边
-- [ ] `UAT-35` `Cmd+0` 或默认 fit width 后,页面刚好完整显示内容,无横向裁切
+- [x] `UAT-31` Shortcuts 面板改绑定后新会话生效,冲突被拒,清除后写回 `none`
+- [x] `UAT-32` 最近文件启动器可搜索最近文件,支持 `Space` 多选与 `Enter` 打开
+- [x] `UAT-33` 最近文件启动器底部常驻显示操作提示,无查询和有查询时都可直接 `↓` 浏览结果
+- [x] `UAT-33A` Show All Tabs 可在大量已打开 PDF 中通过轻量文本总览切换 tab,且单选与分屏打开语义正确
+- [x] `UAT-33B` 批量打开大量 PDF 时先出现 tabs,只加载当前 reader / 分屏 reader,后台干净 PDF 可被 LRU 释放
+- [x] `UAT-34` 单页非连续模式缩小后页面保持居中,slide PDF 不贴边
+- [x] `UAT-35` `Cmd+0` 或默认 fit width 后,页面刚好完整显示内容,无横向裁切
 - [ ] `UAT-36` 扩展机制 RFC 存在并评审(M11 证据)
-- [ ] `UAT-37` 多选多个 slide PDF 后通过右键开启连续阅读,`J/K` 或半页滚动能跨 PDF 边界,右侧 Outline 按 PDF 连续分组显示
-- [ ] `UAT-37A` 多选多个 tabs 后按 `Cmd+W`,选中的 PDFs 同时关闭,未选中的 tab 保留并成为活动 tab
-- [ ] `UAT-38` Settings > Library 添加 Book 文件夹后,`Cmd+K` → `Cmd+O` 可搜索并打开库内 PDF
-- [ ] `UAT-39` 外部编译器连续覆盖当前 PDF 后,Serein 自动刷新内容并保持当前页 / 缩放;dirty 批注会话不自动刷新
-- [ ] `UAT-40` 快速切换多个 PDF 后,阅读区顶部短暂显示当前文件名,随后自动淡出
+- [x] `UAT-37` 多选多个 slide PDF 后通过右键开启连续阅读,`J/K` 或半页滚动能跨 PDF 边界,右侧 Outline 按 PDF 连续分组显示
+- [x] `UAT-37A` 多选多个 tabs 后按 `Cmd+W`,选中的 PDFs 同时关闭,未选中的 tab 保留并成为活动 tab
+- [x] `UAT-38` Settings > Library 添加 Book 文件夹后,`Cmd+K` → `Cmd+O` 可搜索并打开库内 PDF
+- [x] `UAT-39` 外部编译器连续覆盖当前 PDF 后,Serein 自动刷新内容并保持当前页 / 缩放;dirty 批注会话不自动刷新
+- [x] `UAT-40` 快速切换多个 PDF 后,阅读区顶部短暂显示当前文件名,随后自动淡出
 - [x] `UAT-41` 从透明标题栏顶部拖动窗口时只移动窗口,不会滑动 PDF;红黄绿按钮与水平 titlebar tabs 仍可正常点击
-- [ ] `UAT-42` 打开带长目录标题的 PDF,确认右栏 Outline 自动换行、行距紧凑、无可见滚动条且不会横向滑动
-- [ ] `UAT-43` 从手动缩放状态进入同窗分屏,确认两个 pane 都自动适应宽度
-- [ ] `UAT-44` 最近文件启动器中方向键选中文件后按 Enter / keypad Enter 都能打开
-- [ ] `UAT-45` 阅读区按 `C` 可在单页连续 / 单页不连续间切换,`Cmd+2` 仍直接进入单页连续模式
-- [ ] `UAT-46` 按 `Cmd+T` 新建空白 tab,确认左侧 / 标题栏 tabs 都显示 Untitled,关闭后不会出现在重开历史或最近文件
-- [ ] `UAT-47` 打开真实 PDF 后按 `Cmd+Shift+C`,确认系统剪贴板内容等于当前 PDF 绝对路径;空白 tab 下菜单项不可用
-- [ ] `UAT-48` `Cmd+Ctrl+\` 后右侧出现候选,选"同一个 PDF"后两个 pane 独立页码 / 缩放且都 fit width
-- [ ] `UAT-49` 建立 A/B pair 后普通点击 C 显示单屏 C,再点击 A 或 B 恢复 A/B 分屏
-- [ ] `UAT-50` 已分屏时 `Option+Click` / `Option+Enter` 替换当前焦点 pane,垂直 tabs 与标题栏 tabs 行为一致
+- [x] `UAT-42` 打开带长目录标题的 PDF,确认右栏 Outline 自动换行、行距紧凑、无可见滚动条且不会横向滑动
+- [x] `UAT-43` 从手动缩放状态进入同窗分屏,确认两个 pane 都自动适应宽度
+- [x] `UAT-44` 最近文件启动器中方向键选中文件后按 Enter / keypad Enter 都能打开
+- [x] `UAT-45` 阅读区按 `C` 可在单页连续 / 单页不连续间切换,`Cmd+2` 仍直接进入单页连续模式
+- [x] `UAT-46` 按 `Cmd+T` 新建空白 tab,确认左侧 / 标题栏 tabs 都显示 Untitled,关闭后不会出现在重开历史或最近文件
+- [x] `UAT-47` 打开真实 PDF 后按 `Cmd+Shift+C`,确认系统剪贴板内容等于当前 PDF 绝对路径;空白 tab 下菜单项不可用
+- [x] `UAT-48` `Cmd+Ctrl+\` 后右侧出现候选,选"同一个 PDF"后两个 pane 独立页码 / 缩放且都 fit width
+- [x] `UAT-49` 建立 A/B pair 后普通点击 C 显示单屏 C,再点击 A 或 B 恢复 A/B 分屏
+- [x] `UAT-50` 已分屏时 `Option+Click` / `Option+Enter` 替换当前焦点 pane,垂直 tabs 与标题栏 tabs 行为一致
 - [x] `UAT-51` `File > Share…` 可分享 Original / Clean Copy / Highlights,`File > Export Clean Copy…` 可导出保留链接与表单控件的干净副本,`Cmd+K` → `Cmd+E` 可触发 Share
 - [x] `UAT-52` 拖动左右侧栏后切换 PDF 宽度不跳变;Settings General 修改左右默认宽度后会写入配置并更新窗口运行期宽度
 

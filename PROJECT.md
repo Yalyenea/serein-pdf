@@ -385,58 +385,17 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 | M5 设置与收口 | ✅ | 设置窗口(默认阅读模式 / fit-width / 自动保存策略);综合验收通过 |
 | M6 体验打磨 | ✅ | plain 快捷键菜单可见、全览 grid、find bar、历史栈、Vim 翻页、缩放、页跳转、左右互换、高亮 undo;真实 PDF 手测与 200+ 页缩略图验证通过 |
 | M7 搜索强化与对比阅读 | ✅ | 右栏 Search 面板、This Document / All Open、同窗分屏、多窗口、窗口级持久化、搜索与分屏状态测试补齐 |
-| M8 批注深度化 | ✅ 开发完成,待手测 | 右栏 Annotations、评论编辑、Markdown / Plain / JSON 导出、Shortcuts 页、`none` 清空绑定、批注测试补齐 |
-| M9 最近文件启动器 | ✅ 开发完成,待手测 | Spotlight 风格 recent-files palette,支持搜索、空格多选、回车打开、底部常驻操作提示 |
+| M8 批注深度化 | ✅ | 右栏 Annotations、评论编辑、Markdown / Plain / JSON 导出、Shortcuts 页、`none` 清空绑定;开发 + 手测通过 |
+| M9 最近文件启动器 | ✅ | Spotlight 风格 recent-files palette,搜索 / 空格多选 / 回车打开 / 底部操作提示;开发 + 手测通过 |
+| M10–M10.13 体验扩展 | ✅ | Framing、连续阅读、PDF 库、热重载、切换提示、绿灯窗口、空白 tab、路径复制、浏览器式分屏、Go to Page 焦点等;开发 + 手测通过 |
 
-已完成细项以 commit 历史为准,不在本文件展开。
+已完成细项以 commit 历史与 [TASKS.md](TASKS.md) 为准,不在本文件展开。
 
 ## 8. 待开发里程碑
 
-### 8.1 Milestone 8:批注深度化
+### 8.1 Milestone 11(长期预研):扩展生态
 
-目标:把当前高亮从"能做"升级为"能管理、能评论、能导出、能配置"。当前代码已完成,仅余手测验收。
-
-**交付物**
-1. 右栏 Annotations 模式,按页列所有高亮并支持点击跳转与评论编辑
-2. Markdown / Plain / JSON 三种高亮导出;Markdown 面向笔记粘贴按页输出 snippet + comment,Plain / JSON 保留颜色等元信息
-3. Shortcuts 面板与快捷键冲突检测、清除、恢复默认
-4. 配置改动即时写回 `config.toml` 并刷新菜单
-
-**验收要点**
-- Annotations 面板按页分组并支持跳转,comment 可编辑
-- Markdown 导出按页分组并只保留 snippet / comment;Plain / JSON 继续包含颜色与 comment
-- Shortcuts UI 写回配置文件并实时生效,冲突绑定被拒,清除后写回 `none`
-
-**当前状态**
-1. 开发与自动化测试已完成
-2. 下一步只剩手测 `Annotations / Export / Shortcuts`
-
-### 8.2 Milestone 9:最近文件启动器
-
-目标:补一个像 Spotlight 的最近文件启动器,把“打开最近文件”从菜单提升为键盘主路径。
-
-**交付物**
-1. `Cmd+Shift+Space` 拉起最近文件面板
-2. 面板基于最近打开列表支持文件名 / 路径搜索
-3. `Space` 多选,`Enter` 打开选中项,底部常驻操作提示
-
-**验收要点**
-- 空窗口也能直接拉起并打开最近文件
-- 最近文件结果保持最近优先,搜索后仍可纯键盘完成
-- 无查询时默认选中第一条最近历史,可直接 `↓` 浏览
-- 查询变化后默认回到第一条结果,继续 `↓` 浏览
-- 操作提示固定显示在底部,不再依赖额外帮助切换
-
-**当前状态**
-1. `Cmd+Shift+Space` 面板、文件名 / 路径搜索、`Space` 多选、`Enter` 打开与底部常驻操作提示已完成
-2. 面板已改为更窄更长的紧凑窗口,隐藏红绿灯,并调整为搜索框编辑态下也能直接用方向键驱动候选
-3. 状态模型与快捷键配置测试已补齐
-4. 最近文件历史上限扩到 200,并增加每 24h 定期清理失效链接
-5. 下一步只剩真实 PDF 手测
-
-### 8.3 Milestone 10(长期预研):扩展生态
-
-只产出**设计决策 + 最小 PoC**,不承诺全量实现。
+只产出**设计决策 + 最小 PoC**,不承诺全量实现。(编号与 TASKS 对齐;旧稿曾写 M10。)
 
 - 扩展机制 RFC:进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳 的候选比较
 - PoC:若决策继续,把"导出高亮"重写为首个插件

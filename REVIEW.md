@@ -201,8 +201,7 @@
 ### 5.4 已规划事项(承接 PROJECT.md / TASKS.md)
 
 - [x] **find bar 选区预填**:已合入主线(CHANGELOG: Preload selected PDF text into Find);旧分支名 `feature/find-prefill-selection` 作废。
-- [x] **M8 / M9 开发与自动化测试**:完成。
-- [ ] **M8 / M9 真实 PDF 手测验收**(TASKS Wave 0:`UAT-29` ~ `UAT-33` 等)。
-- [ ] **M10 系列手测**(framing / 连续阅读 / 库 / 热重载 / 空白 tab / 路径复制 / 分屏等,见 TASKS Wave 1–7.5)。
+- [x] **M8 / M9**:开发、自动化测试与真实 PDF 手测验收均完成。
+- [x] **M10 系列**(含 M10.5–M10.13 / M10.12.1):开发、自动化测试与手测均完成。
 - [ ] **M11 扩展生态预研**:设计决策 + 最小 PoC(见 §5.3 第 6 条);TASKS 中为 M11(REVIEW 原文曾写 M10,已按 TASKS 更正)。
 - [ ] **M12 空窗体验收尾**:`M12-010` ~ `M12-014`(TASKS)。
