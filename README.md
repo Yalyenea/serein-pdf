@@ -230,6 +230,15 @@ Defined in `[shortcuts]` above. Highlights:
 Standard macOS app/window shortcuts are available too, including `cmd+h`,
 `cmd+option+h`, `cmd+m`, and native macOS green-button tiling shortcuts.
 
+## Docs (source of truth)
+
+| File | Role |
+|---|---|
+| [PROJECT.md](PROJECT.md) | Product scope, architecture, milestones |
+| [TASKS.md](TASKS.md) | Execution checklist (including REVIEW 5.1–5.4) |
+| [REVIEW.md](REVIEW.md) | Engineering review: highlights, debt, roadmap (`✅` / `[ ]`) |
+| [CHANGELOG.md](CHANGELOG.md) | User-facing and engineering change log |
+
 ## Repo layout
 
 ```

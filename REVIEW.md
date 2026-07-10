@@ -2,6 +2,8 @@
 
 > 评审日期:2026-06-10。方法:5 个子系统全量代码阅读(Core / PDF 服务 / Annotations+Theme / App 窗口层 / Reader+Sidebar UI)。
 > 本文回答三个问题:作为 PDF 阅读器它有什么产品亮点;代码层有什么实现亮点;短板在哪、接下来改什么。
+>
+> **进度同步:** 2026-07-10。`fix/review-near-term-A-20260710` 落地 §5.1 全项。状态约定:`✅` 已实现 · `[ ]` 未实现 · `◐` 部分缓解。
 
 ## 1. 规模概览
 
@@ -120,80 +122,87 @@
 
 ## 4. 短板(按严重度)
 
+> 状态列跟踪到 2026-07-10。`✅` 已按 §5.1 缓解/修复;`◐` 部分缓解;`[ ]` 仍待处理(多在 §5.2)。
+
 ### 4.1 结构性债务
 
-| # | 问题 | 位置 | 影响 |
-|---|---|---|---|
-| S1 | `AppDelegate` 2,197 行 god object:菜单构建、share/export 管线、open-URL 解析、palette 所有权、config 持久化、~140 case 的 `validateMenuItem` 集中一处 | `App/AppDelegate.swift` | 任何全局行为改动都要进同一文件;menu / 打开 / 分享相互纠缠,回归面大 |
-| S2 | `DocumentStore` 1,999 行:tab / split / search / annotation / undo / persistence 全在一个类型;所有 accessor 对 sessions/workspaces 做 O(n) 线性扫描 | `Core/DocumentStore.swift` | tab 数量级下性能无虞,但单类型承载七种职责,演进成本持续上升 |
-| S3 | `ReaderViewController` 1,639 行,缩放管理由 ~8 个交互标志位构成隐式状态机(`pendingFitWidth/HeightSessionID`、`lastAppliedFitBoundsWidth/Height`、`displayedScaleMode`、`isApplyingStoreState`、`isApplyingProgrammaticScale` 等),正确性依赖微妙时序(如三次 layout+restore 循环 `:1453`) | `UI/CenterReader/ReaderViewController.swift` | 极易回归、难以单测;新缩放/布局需求都在加标志位 |
-| S4 | 三个 palette 的 NSPanel/NSTableView 子类与面板配置近乎复制粘贴,无共享基类 | `App/RecentFilesPaletteController.swift` / `PDFLibraryPaletteController.swift` / `OpenTabsPaletteController.swift` | 改一处键处理要同步三处 |
-| S5 | `ThemeManager` 仅 22 行贫血包装,真正主题引擎是 `NightModeStyle` 的静态层 | `Features/Theme/` | 职责名实不符,主题状态散落静态变量(另见 C4) |
+| # | 状态 | 问题 | 位置 | 影响 |
+|---|---|---|---|---|
+| S1 | [ ] | `AppDelegate` god object:菜单构建、share/export 管线、open-URL 解析、palette 所有权、config 持久化、~140 case 的 `validateMenuItem` 集中一处 | `App/AppDelegate.swift` | 任何全局行为改动都要进同一文件;menu / 打开 / 分享相互纠缠,回归面大 |
+| S2 | [ ] | `DocumentStore`:tab / split / search / annotation / undo / persistence 全在一个类型;所有 accessor 对 sessions/workspaces 做 O(n) 线性扫描 | `Core/DocumentStore.swift` | tab 数量级下性能无虞,但单类型承载七种职责,演进成本持续上升 |
+| S3 | [ ] | `ReaderViewController` 缩放管理由 ~8 个交互标志位构成隐式状态机,正确性依赖微妙时序 | `UI/CenterReader/ReaderViewController.swift` | 极易回归、难以单测;新缩放/布局需求都在加标志位 |
+| S4 | [ ] | 三个 palette 的 NSPanel/NSTableView 子类与面板配置近乎复制粘贴,无共享基类 | `App/*PaletteController.swift` | 改一处键处理要同步三处 |
+| S5 | [ ] | `ThemeManager` 贫血包装,真正主题引擎是 `NightModeStyle` 的静态层 | `Features/Theme/` | 职责名实不符,主题状态散落静态变量(另见 C4) |
 
 ### 4.2 性能
 
-| # | 问题 | 位置 | 影响 |
-|---|---|---|---|
-| P1 | 持久化写放大:每次 `notifyChange` 全量 JSON 编码整个 store 写 UserDefaults;`ReadingStateStore` 每次翻页 load-all/mutate/encode-all 重写整个字典,且**无修剪、无限增长** | `Core/DocumentStore.swift:1784-1828`,`Core/ReadingStateStore.swift:30-40` | 主线程上的重复序列化;阅读历史越久写入越贵 |
-| P2 | 通知粒度只分 chrome/content:每次翻页/滚动写回都全量重建左右两套 tab 条并 reload 搜索列表;outline 有 diff guard,tab 条没有 | `UI/LeftTabs/VerticalTabsViewController.swift:158`,`UI/TitlebarTabs/TitlebarTabsController.swift:125` | 翻页这种最高频操作触发最贵的 UI 重建 |
-| P3 | OCR 成本:页面 6x 栅格化(US Letter ≈ 3700x4800px)、经 `tiffRepresentation` 往返、`.accurate` 同步跑在调用线程;缓存只活一次 `buildHighlightGroups`,扫描件每次侧栏重建全量重 OCR | `Features/Annotations/HighlightOCRService.swift:70-94` | 扫描书高亮多时侧栏刷新明显卡顿 |
-| P4 | `searchSections(in:)` 是带副作用的 getter:重建搜索缓存、可同步加载 PDFDocument;`totalSearchMatches` 又重复调用它 | `Core/DocumentStore.swift:957-1013` | 读路径隐藏 IO;同一帧内重复重建 |
-| P5 | `shortcutHandlerMap()` 60+ 项字典可能每次快捷键事件重建 | `App/AppDelegate.swift:298-363` | 单次开销小,但发生在每一次按键 |
+| # | 状态 | 问题 | 位置 | 影响 |
+|---|---|---|---|---|
+| P1 | ◐ | 持久化写放大:ReadingState 无修剪曾无限增长;workspace 全量 JSON 在每次 `notifyChange` 写入 | `ReadingStateStore` / `DocumentStore` | **已做:** 500 LRU + 0.75s debounce + quit flush;`.readingPosition` 跳过 workspace 全量写。**未做:** 一般 content 变更的 workspace 写合并节流 |
+| P2 | ✅ | 翻页/滚动写回曾全量重建左右 tab 条并 reload 搜索列表 | tabs / search / annotations observers | **已做:** `.readingPosition` 掩码 + `TabsFingerprint` + lightweight 短路(含 annotations) |
+| P3 | [ ] | OCR:6x 栅格、`tiffRepresentation` 往返、`.accurate` 同步;缓存只活一次 `buildHighlightGroups` | `HighlightOCRService` | 扫描书高亮多时侧栏刷新明显卡顿 |
+| P4 | [ ] | `searchSections(in:)` 是带副作用的 getter;`totalSearchMatches` 又重复调用它 | `DocumentStore` | 读路径隐藏 IO;同一帧内重复重建 |
+| P5 | ✅ | `shortcutHandlerMap()` 60+ 项字典可能每次快捷键事件重建 | `AppDelegate` | **已做:** 生命周期缓存 handler map(与 config 绑定解耦,无需 config 失效) |
 
 ### 4.3 正确性 / 健壮性风险
 
-| # | 问题 | 位置 | 影响 |
-|---|---|---|---|
-| C1 | config 有四份手工平行清单(parser ~60 case / `render` 模板 / `defaultContents` / `requiredKeys`),**已现实漂移**:`new_blank_tab` 在 `defaultContents`(:490)与 `render`(:592)存在,却缺席 `requiredKeys`(:1000-1060)——缺该 key 的旧配置不会被自愈 | `Core/AppConfiguration.swift` | schema 演进必踩坑;现有一个真实 bug |
-| C2 | `parseString` 只 trim 两端引号:值后行内注释(`mode = "system" # note`)或含引号的值会破坏解析;仅因 app 自身 render 往返才安全 | `Core/AppConfiguration.swift:877-879` | 用户按合法 TOML 手编配置可能直接坏 |
-| C3 | 夜间模式依赖 PDFKit 私有视图:按类名子串匹配 `"ContentBackgroundView"` / `"PDFPageView"`、`subviews.first { $0 is NSScrollView }` | `UI/CenterReader/ReaderViewController.swift:1290-1333` | 一次 macOS 更新即可静默失效,且无哨兵测试报警 |
-| C4 | `nonisolated(unsafe)` 主题全局变量被 AppKit 绘制期 dynamic color provider 读取,仅靠主线程约定保护 | `Features/Theme/NightModeStyle.swift:87-88` | 严格并发模式下是数据竞争豁免点 |
-| C5 | 持久化错误全部 `try?` 吞掉,无任何日志 | `Core/DocumentStore.swift:1789, 1907` | 状态丢失时完全不可诊断 |
-| C6 | 杂项:`DocumentSearchMatch.matchIndex` 硬编码 0 的死字段(`Core/DocumentSearch.swift:63`);`highlightAnnotation(at:)` 取 `first` 而非最上层命中(`Features/Annotations/HighlightService.swift:103-107`);`closest(to:)` 用非感知 sRGB 距离,靠调色板分离度才成立 | 见左 | 当前无症状,属暗雷 |
+| # | 状态 | 问题 | 位置 | 影响 |
+|---|---|---|---|---|
+| C1 | ◐ | config 四份手工平行清单曾漂移:`new_blank_tab` 缺 `requiredKeys` | `AppConfiguration` | **已做:** 补 key + default/render/required 一致性单测 + self-heal。**根治**仍见 §5.2 表驱动 |
+| C2 | ✅ | `parseString` 不处理引号外行内 `#` 注释 | `AppConfigurationParser` | **已做:** `stripInlineComment`;bool/width/array 路径仍不剥注释(范围外) |
+| C3 | ✅ | 夜间模式依赖 PDFKit 私有类名,曾无哨兵 | `ReaderViewController` | **已做:** `PDFKitPrivateViewSentinelTests` 探测 `ContentBackgroundView` / `PDFPageView` |
+| C4 | [ ] | `nonisolated(unsafe)` 主题全局变量被 dynamic color provider 读取 | `NightModeStyle` | 严格并发模式下是数据竞争豁免点 |
+| C5 | ✅ | 持久化错误曾全部 `try?` 吞掉 | `DocumentStore` / `ReadingStateStore` | **已做:** 主路径 `os.Logger`;迁移等次要路径仍有少量 `try?` |
+| C6 | ✅ | `matchIndex` 恒 0;高亮 hit 取 first;sRGB 欧氏距离 | Search / Highlight | **已做:** 递增 index;取 topmost(`last`);加权 sRGB |
 
 ### 4.4 工程卫生
 
-| # | 问题 | 位置 | 影响 |
-|---|---|---|---|
-| H1 | UI 字符串中英混杂且硬编码:中文关闭确认 alert(`App/MainWindowController.swift:505-509`)、中文 palette footer 提示,其余 UI 为英文;无本地化方案 | 多处 | 语言不一致,后续本地化需全量翻找 |
-| H2 | `controller(for:)` 与菜单状态刷新在每次 store 变更做线性扫描 / 全菜单树遍历 | `App/AppDelegate.swift` | 规模小尚可,属可见的模式问题 |
+| # | 状态 | 问题 | 位置 | 影响 |
+|---|---|---|---|---|
+| H1 | [ ] | UI 字符串中英混杂且硬编码;无本地化方案 | 多处 | 语言不一致,后续本地化需全量翻找 |
+| H2 | [ ] | `controller(for:)` 与菜单状态刷新在每次 store 变更做线性扫描 / 全菜单树遍历 | `AppDelegate` | 规模小尚可,属可见的模式问题 |
 
 ## 5. 改进路线
 
-### 5.1 近期(低成本高收益,可单独成 PR)
+### 5.1 近期(低成本高收益) — ✅ 已完成
 
-1. **修 C1**:`requiredKeys` 补 `new_blank_tab`;同时加一条一致性单测——从 `defaultContents` 解析全部 key,断言 parser/render/requiredKeys 三方覆盖,杜绝未来漂移。
-2. **修 C2**:`parseString` 剥离引号外的行内 `#` 注释。
-3. **修 C5**:持久化 `try?` 改为 `os.Logger` 显式记录失败。
-4. **P1 减写放大**:`ReadingStateStore` 加条目上限(如 500,LRU 淘汰)+ 翻页写入 0.5-1s debounce;store 全量持久化同样可合并节流。
-5. **P2 加 diff guard**:tab 条重建前比对 sessions 指纹(仿 outline 的 `displayedSessionID + nodes` 判等);或给 `DocumentStoreChange` 增加 `.readingPosition` 掩码位,翻页写回不再触发 tab/search 重建。
-6. **C3 加哨兵测试**:运行时探测 PDFKit 私有类名存在性的单测,macOS 升级后第一时间报警。
-7. 清理 C6 三处杂项;P5 的 handler map 建一次缓存,config 变更时失效。
+分支:`fix/review-near-term-A-20260710`(2026-07-10)。自动化测试全绿。
+
+- [x] **1. 修 C1**:`requiredKeys` 补 `new_blank_tab`;`AppConfigurationFile.requiredKeys` 上提为共享清单;一致性单测覆盖 defaultContents ≡ render、required ⊆ templates、全部 shortcut key ∈ required;缺 key 自愈回归测。
+- [x] **2. 修 C2**:`parseString` 剥离引号外的行内 `#` 注释(尊重转义)。
+- [x] **3. 修 C5**:document-store / reading-state 持久化主路径改为 `os.Logger` 记录失败;退出时 `flushPersistence()`。
+- [x] **4. P1 减写放大**:ReadingState 500 LRU + 0.75s debounce + 内存写即时、磁盘 debounced;纯 `.readingPosition` 跳过 workspace JSON 全量写。*(一般 content 的 workspace 写节流未做,见 P1 ◐)*
+- [x] **5. P2 加 diff guard**:`DocumentStoreChange.readingPosition` + tab `TabsFingerprint`;翻页不再重建 tab/search/annotations 列表;outline 仍更新页码。
+- [x] **6. C3 加哨兵测试**:`PDFKitPrivateViewSentinelTests` 运行时探测私有类名。
+- [x] **7. C6 + P5**:matchIndex / topmost highlight / 加权色距;shortcut handler map 生命周期缓存。
 
 ### 5.2 中期(结构重构,宜在功能冻结窗口做)
 
-1. **拆 `AppDelegate`**(S1):按既有职责切出 `MenuBuilder`、`ShareCoordinator`、`OpenURLCoordinator`、`PaletteCoordinator`;`validateMenuItem` 随菜单域走。
-2. **拆 `ReaderViewController`**(S3):缩放 fit 状态机独立成 `ReaderScaleController`(8 个标志位收编为显式状态);PDFKit 私有视图操作集中到 `PDFKitThemeApplier`;全览独立 `OverviewController`。
-3. **拆 `DocumentStore`**(S2):search 与 split 各自成 coordinator(持久化已有先例 `DocumentStorePersistence`);顺手把 `searchSections` 的副作用改为显式 `rebuildSearchIfNeeded()`。
-4. **config schema 表驱动**(C1 根治):单一 `[ShortcutSpec]` 声明源同时生成 parser case、render 模板、默认值与 requiredKeys——零依赖前提下消除四清单。
-5. **palette 共享基类**(S4):panel 样式、`sendEvent` 键处理、定位、footer 收进一个 `PaletteWindowController`。
-6. **OCR 异步化 + 持久缓存**(P3):识别移到后台队列,按 `(文档 URL, 页号, 文件 mtime)` 缓存跨 build 结果;栅格倍率按页面物理尺寸自适应(6x → 3-4x)。
-7. **主题状态并发收口**(C4/S5):静态变量收进 `@MainActor` 的 ThemeManager,dynamic provider 读快照。
-8. **本地化决策**(H1):短期统一英文文案;若要中文界面,趁规模小引入 String Catalog。
+- [ ] **1. 拆 `AppDelegate`**(S1):`MenuBuilder` / `ShareCoordinator` / `OpenURLCoordinator` / `PaletteCoordinator`;`validateMenuItem` 随菜单域走。
+- [ ] **2. 拆 `ReaderViewController`**(S3):`ReaderScaleController` + `PDFKitThemeApplier` + `OverviewController`。
+- [ ] **3. 拆 `DocumentStore`**(S2):search / split coordinator; `searchSections` 副作用改为显式 `rebuildSearchIfNeeded()`(兼治 P4)。
+- [ ] **4. config schema 表驱动**(C1 根治):单一 `[ShortcutSpec]` 生成 parser / render / defaults / requiredKeys。
+- [ ] **5. palette 共享基类**(S4):`PaletteWindowController` 收 panel 样式与键处理。
+- [ ] **6. OCR 异步化 + 持久缓存**(P3):后台队列 + `(URL, page, mtime)` 缓存;栅格 6x → 3–4x 自适应。
+- [ ] **7. 主题状态并发收口**(C4/S5):静态变量收进 `@MainActor` ThemeManager。
+- [ ] **8. 本地化决策**(H1):短期统一英文;或引入 String Catalog。
 
 ### 5.3 产品功能候选(尊重 PROJECT.md 的"不做"清单)
 
 按"复用现有管线、增量小"排序:
 
-1. **下划线 / 删除线批注**:复用现有 group / undo / export / userName 分组管线,只增注解类型与快捷键。
-2. **find 选项**:大小写敏感 / 全词匹配(`PDFDocument.findString` 原生 options,UI 上 find bar 加两个轻量 toggle)。
-3. **outline 过滤框**:手写树已有完整重建管线,过滤即按标题剪枝。
-4. **高亮色快捷切换**:高亮模式内数字键 1/2/3 切 pink/yellow/green。
-5. **跨文档批注汇总导出**:对所有打开 PDF 的高亮做一次 Markdown 汇总(All Open 语义已有先例)。
-6. **URL scheme**(`serein://open?file=…&page=N`):作为 M10 扩展生态的最小 PoC,与 PROJECT.md 8.3 对齐。
+- [ ] **1. 下划线 / 删除线批注**:复用 group / undo / export / userName 管线。
+- [ ] **2. find 选项**:大小写敏感 / 全词匹配(`PDFDocument.findString` options + find bar toggle)。
+- [ ] **3. outline 过滤框**:手写树按标题剪枝。
+- [ ] **4. 高亮色快捷切换**:高亮模式内数字键 1/2/3 → pink/yellow/green。
+- [ ] **5. 跨文档批注汇总导出**:所有打开 PDF 高亮一次 Markdown 汇总。
+- [ ] **6. URL scheme**(`serein://open?file=…&page=N`):扩展生态最小 PoC(对齐 TASKS **M11** / PROJECT 扩展预研)。
 
 ### 5.4 已规划事项(承接 PROJECT.md / TASKS.md)
 
-- M8 批注深度化、M9 最近文件启动器:开发与自动化测试已完成,**仅余真实 PDF 手测验收**。
-- M10 扩展生态:只产出设计决策 + 最小 PoC(见 5.3 第 6 条)。
-- 当前分支 `feature/find-prefill-selection`:find bar 选区预填,完成后按惯例同步 README / PROJECT / CHANGELOG。
+- [x] **find bar 选区预填**:已合入主线(CHANGELOG: Preload selected PDF text into Find);旧分支名 `feature/find-prefill-selection` 作废。
+- [x] **M8 / M9 开发与自动化测试**:完成。
+- [ ] **M8 / M9 真实 PDF 手测验收**(TASKS Wave 0:`UAT-29` ~ `UAT-33` 等)。
+- [ ] **M10 系列手测**(framing / 连续阅读 / 库 / 热重载 / 空白 tab / 路径复制 / 分屏等,见 TASKS Wave 1–7.5)。
+- [ ] **M11 扩展生态预研**:设计决策 + 最小 PoC(见 §5.3 第 6 条);TASKS 中为 M11(REVIEW 原文曾写 M10,已按 TASKS 更正)。
+- [ ] **M12 空窗体验收尾**:`M12-010` ~ `M12-014`(TASKS)。

@@ -59,6 +59,14 @@ private final class NotificationCounterObserver: NSObject {
 
 private final class DocumentStoreChangeRecorder: @unchecked Sendable {
     var observedChange: DocumentStoreChange?
+    var observedChanges: [DocumentStoreChange] = []
+
+    @objc
+    func handleDocumentStoreDidChange(_ notification: Notification) {
+        let change = notification.documentStoreChange
+        observedChange = change
+        observedChanges.append(change)
+    }
 }
 
 @MainActor
@@ -1099,6 +1107,37 @@ final class DocumentStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(counter.count, 1)
+    }
+
+    func testPageTurnNotifiesReadingPositionWithoutRewritingWorkspacePersistence() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let readingStateStore = InMemoryReadingStateStore()
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: readingStateStore
+        )
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-position-mask"))
+        let snapshotAfterOpen = try XCTUnwrap(persistence.state)
+
+        let recorder = DocumentStoreChangeRecorder()
+        NotificationCenter.default.addObserver(
+            recorder,
+            selector: #selector(DocumentStoreChangeRecorder.handleDocumentStoreDidChange(_:)),
+            name: .documentStoreDidChange,
+            object: store
+        )
+        defer { NotificationCenter.default.removeObserver(recorder) }
+
+        // Mutate a field that would be rewritten if notifyChange(.all) ran.
+        persistence.state?.windows[0].searchQuery = "should-not-be-clobbered"
+
+        store.updateCurrentPage(index: 1, for: session.id)
+
+        XCTAssertEqual(recorder.observedChanges.last, .readingPosition)
+        XCTAssertTrue(recorder.observedChanges.last?.containsOnly(.readingPosition) == true)
+        XCTAssertEqual(persistence.state?.windows.first?.searchQuery, "should-not-be-clobbered")
+        XCTAssertEqual(persistence.state?.sessions.map(\.id), snapshotAfterOpen.sessions.map(\.id))
+        XCTAssertEqual(readingStateStore.states[session.url]?.readingPosition.pageIndex, 1)
     }
 
     func testReadingStateRemainsIndependentAcrossSessions() throws {

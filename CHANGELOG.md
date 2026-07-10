@@ -4,11 +4,26 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reliability
+- Backfill missing `new_blank_tab` in config self-heal keys and add a defaultContents/render/requiredKeys consistency test.
+- Strip TOML inline `#` comments outside quoted strings when parsing config values.
+- Log document-store and reading-state persistence failures via `os.Logger` instead of swallowing them with `try?`.
+- Prefer the topmost overlapping highlight under the cursor when several annotations stack.
+- Add a PDFKit private-view sentinel test so night-mode chrome breaks loudly on macOS renames.
+
+### Performance
+- Cap reading-state history at 500 entries with LRU eviction and debounced UserDefaults writes; flush on quit.
+- Skip full workspace JSON rewrite on pure reading-position / zoom writeback.
+- Add `.readingPosition` store-change mask so page turns no longer rebuild tab strips, search result lists, or annotations lists.
+- Diff-guard vertical and titlebar tab rebuilds with a session fingerprint.
+- Cache the shortcut handler map for the app lifetime.
+
 ### UX
 - Empty reader state now shows a single onboarding panel with `⌘O`, recent-files shortcut, and drag-and-drop PDF open hints.
 
 ### Docs
 - Add REVIEW.md: full-code project review covering product highlights, implementation highlights, ranked weaknesses, and an improvement roadmap.
+- Sync REVIEW / TASKS / PROJECT status for the near-term engineering pass: completed 5.1 items marked done, open 5.2–5.4 items kept as checklists.
 
 ### Website
 - Add a local static Serein product website with showcase, download notes, compact docs, and a real app screenshot captured from a synthetic PDF.

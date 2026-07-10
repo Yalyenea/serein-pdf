@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import os
 import PDFKit
 
 enum TabPresentationMode: String, CaseIterable, Codable, Sendable {
@@ -17,7 +18,9 @@ struct DocumentStoreChange: OptionSet, Sendable {
     static let sidebarVisibility = DocumentStoreChange(rawValue: 1 << 0)
     static let rightSidebarMode = DocumentStoreChange(rawValue: 1 << 1)
     static let content = DocumentStoreChange(rawValue: 1 << 2)
-    static let all: DocumentStoreChange = [.sidebarVisibility, .rightSidebarMode, .content]
+    /// Page/zoom/reading-position writeback; does not reshape tabs or search results.
+    static let readingPosition = DocumentStoreChange(rawValue: 1 << 3)
+    static let all: DocumentStoreChange = [.sidebarVisibility, .rightSidebarMode, .content, .readingPosition]
 
     static let notificationUserInfoKey = "DocumentStore.change"
 
@@ -48,6 +51,15 @@ extension Notification {
 
     var isOnlySidebarChromeChange: Bool {
         documentStoreChange.containsOnly([.sidebarVisibility, .rightSidebarMode])
+    }
+
+    var isOnlyReadingPositionChange: Bool {
+        documentStoreChange.containsOnly(.readingPosition)
+    }
+
+    /// Chrome or reading-position only: tabs / search lists can skip full rebuild.
+    var isLightweightStoreChange: Bool {
+        documentStoreChange.containsOnly([.sidebarVisibility, .rightSidebarMode, .readingPosition])
     }
 }
 
@@ -845,7 +857,7 @@ final class DocumentStore {
             point: sessions[sessionIndex].lastReadPosition.point
         )
         persistReadingState(for: sessions[sessionIndex])
-        notifyChange()
+        notifyChange(.readingPosition)
     }
 
     func setDisplayMode(_ mode: ReaderDisplayMode, for sessionID: UUID) {
@@ -874,8 +886,10 @@ final class DocumentStore {
         sessions[sessionIndex].scaleMode = mode
         sessions[sessionIndex].zoomScale = scaleFactor
         persistReadingState(for: sessions[sessionIndex])
-        if modeChanged || mode == .manual {
+        if modeChanged {
             notifyChange()
+        } else if mode == .manual {
+            notifyChange(.readingPosition)
         }
     }
 
@@ -892,7 +906,7 @@ final class DocumentStore {
         sessions[sessionIndex].zoomScale = scaleFactor
         persistReadingState(for: sessions[sessionIndex])
         if pageChanged || scaleChanged {
-            notifyChange()
+            notifyChange(.readingPosition)
         }
     }
 
@@ -1781,56 +1795,78 @@ final class DocumentStore {
         }
     }
 
-    private func notifyChange(_ change: DocumentStoreChange = .all) {
-        let persistedSessions = sessions.filter {
-            $0.isBlank == false && splitComparisonSessionIDs.contains($0.id) == false
+    private static let logger = Logger(subsystem: "local.yfff.Serein", category: "DocumentStore")
+
+    /// Forces pending reading-state writes to disk. Call on app termination.
+    func flushPersistence() {
+        do {
+            try readingStateStore.flush()
+        } catch {
+            Self.logger.error("Failed to flush reading state: \(error.localizedDescription, privacy: .public)")
         }
-        let persistedSessionIDs = Set(persistedSessions.map(\.id))
-        try? persistence.saveState(
-            PersistedDocumentStoreState(
-                sessions: persistedSessions.map {
-                    PersistedDocumentStoreState.SessionReference(id: $0.id, url: $0.url, title: $0.title)
-                },
-                windows: windowWorkspaces.map { workspace in
-                    let sessionIDs = workspace.sessionIDs.filter { persistedSessionIDs.contains($0) }
-                    let continuousSessionIDs = workspace.continuousReadingState.orderedSessionIDs
-                        .filter { persistedSessionIDs.contains($0) }
-                    let primarySessionID = workspace.primarySessionID.flatMap {
-                        persistedSessionIDs.contains($0) ? $0 : nil
-                    } ?? sessionIDs.last
-                    let secondarySessionID = workspace.secondarySessionID.flatMap {
-                        persistedSessionIDs.contains($0) ? $0 : nil
-                    }
-                    let isSplitEnabled = workspace.isSplitEnabled && primarySessionID != nil && secondarySessionID != nil
-                    return PersistedDocumentStoreState.WindowRecord(
-                        id: workspace.id,
-                        sessionIDs: sessionIDs,
-                        sessionURLs: sessionIDs.compactMap { session(for: $0)?.url },
-                        continuousReadingSessionIDs: continuousSessionIDs,
-                        tabPresentationMode: workspace.tabPresentationMode,
-                        isLeftSidebarVisible: workspace.isLeftSidebarVisible,
-                        isRightSidebarVisible: workspace.isRightSidebarVisible,
-                        rightSidebarMode: workspace.rightSidebarMode,
-                        searchQuery: workspace.searchQuery,
-                        searchScope: workspace.searchScope,
-                        splitState: PersistedDocumentStoreState.SplitStateRecord(
-                            isEnabled: isSplitEnabled,
-                            primarySessionID: primarySessionID,
-                            secondarySessionID: secondarySessionID,
-                            primarySessionURL: primarySessionID.flatMap { session(for: $0)?.url },
-                            secondarySessionURL: secondarySessionID.flatMap { session(for: $0)?.url },
-                            focusedPane: workspace.focusedPane
-                        ),
-                        recentlyClosedURLs: workspace.recentlyClosedURLs
-                    )
-                }
-            )
-        )
+    }
+
+    private func notifyChange(_ change: DocumentStoreChange = .all) {
+        // Reading position lives in ReadingStateStore; skip rewriting the session/window snapshot.
+        if change.containsOnly(.readingPosition) == false {
+            persistDocumentStoreState()
+        }
         NotificationCenter.default.post(
             name: .documentStoreDidChange,
             object: self,
             userInfo: [DocumentStoreChange.notificationUserInfoKey: change.rawValue]
         )
+    }
+
+    private func persistDocumentStoreState() {
+        let persistedSessions = sessions.filter {
+            $0.isBlank == false && splitComparisonSessionIDs.contains($0.id) == false
+        }
+        let persistedSessionIDs = Set(persistedSessions.map(\.id))
+        do {
+            try persistence.saveState(
+                PersistedDocumentStoreState(
+                    sessions: persistedSessions.map {
+                        PersistedDocumentStoreState.SessionReference(id: $0.id, url: $0.url, title: $0.title)
+                    },
+                    windows: windowWorkspaces.map { workspace in
+                        let sessionIDs = workspace.sessionIDs.filter { persistedSessionIDs.contains($0) }
+                        let continuousSessionIDs = workspace.continuousReadingState.orderedSessionIDs
+                            .filter { persistedSessionIDs.contains($0) }
+                        let primarySessionID = workspace.primarySessionID.flatMap {
+                            persistedSessionIDs.contains($0) ? $0 : nil
+                        } ?? sessionIDs.last
+                        let secondarySessionID = workspace.secondarySessionID.flatMap {
+                            persistedSessionIDs.contains($0) ? $0 : nil
+                        }
+                        let isSplitEnabled = workspace.isSplitEnabled && primarySessionID != nil && secondarySessionID != nil
+                        return PersistedDocumentStoreState.WindowRecord(
+                            id: workspace.id,
+                            sessionIDs: sessionIDs,
+                            sessionURLs: sessionIDs.compactMap { session(for: $0)?.url },
+                            continuousReadingSessionIDs: continuousSessionIDs,
+                            tabPresentationMode: workspace.tabPresentationMode,
+                            isLeftSidebarVisible: workspace.isLeftSidebarVisible,
+                            isRightSidebarVisible: workspace.isRightSidebarVisible,
+                            rightSidebarMode: workspace.rightSidebarMode,
+                            searchQuery: workspace.searchQuery,
+                            searchScope: workspace.searchScope,
+                            splitState: PersistedDocumentStoreState.SplitStateRecord(
+                                isEnabled: isSplitEnabled,
+                                primarySessionID: primarySessionID,
+                                secondarySessionID: secondarySessionID,
+                                primarySessionURL: primarySessionID.flatMap { session(for: $0)?.url },
+                                secondarySessionURL: secondarySessionID.flatMap { session(for: $0)?.url },
+                                focusedPane: workspace.focusedPane
+                            ),
+                            recentlyClosedURLs: workspace.recentlyClosedURLs
+                        )
+                    }
+                )
+            )
+        } catch {
+            Self.logger.error("Failed to persist document store: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private var defaultScaleMode: ReaderScaleMode {
@@ -1904,17 +1940,21 @@ final class DocumentStore {
 
     private func persistReadingState(for session: DocumentSession) {
         guard session.isBlank == false else { return }
-        try? readingStateStore.saveState(
-            PersistedReadingState(
-                url: session.url,
-                displayMode: session.displayMode,
-                scaleMode: session.scaleMode,
-                scaleFactor: session.zoomScale,
-                readingPosition: session.lastReadPosition,
-                leftSidebarWidth: nil,
-                rightSidebarWidth: nil
+        do {
+            try readingStateStore.saveState(
+                PersistedReadingState(
+                    url: session.url,
+                    displayMode: session.displayMode,
+                    scaleMode: session.scaleMode,
+                    scaleFactor: session.zoomScale,
+                    readingPosition: session.lastReadPosition,
+                    leftSidebarWidth: nil,
+                    rightSidebarWidth: nil
+                )
             )
-        )
+        } catch {
+            Self.logger.error("Failed to persist reading state for \(session.url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func renameSession(_ title: String, for sessionID: UUID) {

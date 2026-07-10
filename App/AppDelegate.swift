@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var pendingOpenURLs: [URL] = []
     private let openDocumentSelectionResolver = OpenDocumentSelectionResolver()
     private let securityScopedAccessController = SecurityScopedAccessController()
+    private var cachedShortcutHandlerMap: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler]?
     private var mainWindowController: MainWindowController? {
         currentWindowController()
     }
@@ -183,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        documentStore?.flushPersistence()
         cleanupTemporaryShareDirectories()
     }
 
@@ -281,6 +283,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        if notification.isOnlyReadingPositionChange {
+            return
+        }
         guard notification.isOnlySidebarChromeChange == false else {
             refreshManagedMenuState()
             return
@@ -296,7 +301,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func shortcutHandlerMap() -> [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] {
-        [
+        if let cachedShortcutHandlerMap {
+            return cachedShortcutHandlerMap
+        }
+        let map: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] = [
             .highlightSelection: { [weak self] in self?.highlightSelection(nil) },
             .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
@@ -360,6 +368,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .undoLastHighlight: { [weak self] in self?.undoLastHighlightAction(nil) },
             .redoLastHighlight: { [weak self] in self?.redoLastHighlightAction(nil) },
         ]
+        cachedShortcutHandlerMap = map
+        return map
     }
 
     private func supplementalShortcutHandlerMap() -> [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] {

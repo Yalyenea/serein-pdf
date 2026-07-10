@@ -15,6 +15,7 @@ final class TitlebarTabsController: NSViewController {
     private let bottomBorderView = NSView()
     private var isTabsStripVisible = true
     private var stripWidthConstraint: NSLayoutConstraint?
+    private var displayedTabsFingerprint: TabsFingerprint?
     nonisolated(unsafe) private var eventMonitors: [Any] = []
 
     init(documentStore: DocumentStore, windowID: UUID) {
@@ -129,24 +130,41 @@ final class TitlebarTabsController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.isOnlySidebarChromeChange == false else { return }
+        guard notification.isLightweightStoreChange == false else { return }
         rebuildTabs()
     }
 
     private func rebuildTabs() {
         guard isViewLoaded else { return }
 
+        let sessions = documentStore.sessions(in: windowID)
+        let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
+        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
+        let continuousSessionSet = Set(continuousSessionIDs)
+        let continuousLeaderID = continuousSessionIDs.first
+        let fingerprint = TabsFingerprint(
+            activeSessionID: documentStore.activeSessionID(in: windowID),
+            selectedSessionIDs: selectedSessionIDs,
+            continuousSessionIDs: continuousSessionIDs,
+            items: sessions.map {
+                TabsFingerprint.Item(
+                    id: $0.id,
+                    title: $0.title,
+                    isDirty: $0.isDirty
+                )
+            },
+            recentURLs: [],
+            showRecentSection: false
+        )
+        guard fingerprint != displayedTabsFingerprint else { return }
+        displayedTabsFingerprint = fingerprint
+
         stackView.arrangedSubviews.forEach { subview in
             stackView.removeArrangedSubview(subview)
             subview.removeFromSuperview()
         }
 
-        let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
-        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
-        let continuousSessionSet = Set(continuousSessionIDs)
-        let continuousLeaderID = continuousSessionIDs.first
-
-        for session in documentStore.sessions(in: windowID) {
+        for session in sessions {
             let itemView = TitlebarTabItemView(
                 sessionID: session.id,
                 title: session.title,

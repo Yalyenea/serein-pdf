@@ -42,6 +42,7 @@ enum DocumentSearchService {
         let selections = document.findString(trimmed, withOptions: .caseInsensitive)
         var nextSearchStartByPage: [Int: String.Index] = [:]
 
+        var matchIndex = 0
         return selections.compactMap { selection in
             guard let page = selection.pages.first else { return nil }
             let pageIndex = document.index(for: page)
@@ -59,13 +60,15 @@ enum DocumentSearchService {
                 nextSearchStartByPage[pageIndex] = matchRange.upperBound
             }
 
-            return DocumentSearchMatch(
-                matchIndex: 0,
+            let match = DocumentSearchMatch(
+                matchIndex: matchIndex,
                 pageIndex: pageIndex,
                 matchedText: matchedText,
                 previewText: previewSnippet(in: pageText, around: matchRange, fallback: matchedText),
                 selection: selection
             )
+            matchIndex += 1
+            return match
         }
     }
 

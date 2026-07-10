@@ -94,6 +94,52 @@
 
 ## 4. 下一步执行顺序
 
+权威债项与路线见 [REVIEW.md](REVIEW.md)。本节只跟踪执行勾选。
+
+### 4.0 REVIEW 改进路线
+
+#### 5.1 近期债 — 分支 `fix/review-near-term-A-20260710`
+
+- [x] C1 `requiredKeys` + `new_blank_tab` + 一致性单测
+- [x] C2 TOML 行内 `#` 注释
+- [x] C5 持久化 `os.Logger`
+- [x] P1 ReadingState LRU 500 + debounce + 跳过 readingPosition 全量 workspace 写
+- [x] P2 `.readingPosition` 掩码 + tab fingerprint + lightweight 短路
+- [x] C3 PDFKit 私有类名哨兵测试
+- [x] C6 matchIndex / topmost highlight / 加权色距
+- [x] P5 shortcut handler map 缓存
+
+#### 5.2 中期重构
+
+- [ ] S1 拆 `AppDelegate`
+- [ ] S3 拆 `ReaderViewController`
+- [ ] S2 拆 `DocumentStore`（兼 P4 search 副作用）
+- [ ] C1 根治：config schema 表驱动
+- [ ] S4 palette 共享基类
+- [ ] P3 OCR 异步化 + 持久缓存
+- [ ] C4/S5 主题状态并发收口
+- [ ] H1 本地化决策
+
+#### 5.3 产品候选
+
+- [ ] 下划线 / 删除线批注
+- [ ] find 大小写 / 全词选项
+- [ ] outline 过滤框
+- [ ] 高亮色数字键 1/2/3
+- [ ] 跨文档批注汇总导出
+- [ ] URL scheme PoC（对齐 M11）
+
+#### 5.4 承接里程碑
+
+- [x] find bar 选区预填（已合入）
+- [x] M8 / M9 开发与自动化测试
+- [ ] M8 / M9 真实 PDF 手测
+- [ ] M10 系列手测（Wave 1–7.5）
+- [ ] M11 扩展生态预研
+- [ ] M12 空窗收尾 `M12-010`–`014`
+
+### 4.1 手测与里程碑波次
+
 - Wave 0 M8 / M9 手测：完成 `UAT-29` ~ `UAT-33`，确认批注、快捷键页、最近文件启动器都符合预期。
 - Wave 1 M10 手测：完成 `M10-021`，用真实 slide / paper PDF 验证居中与 fit width framing。
 - Wave 2 M10.5 手测：完成 `UAT-37`，用多个 slide PDF 验证连续阅读、跨 PDF 翻页与连续 Outline。
@@ -104,7 +150,7 @@
 - Wave 7 M10.13 手测：完成 `UAT-48` ~ `UAT-50`，确认普通 tab / Option / 同 PDF comparison 的浏览器式分屏语义。
 - Wave 7.5 M10.12.1 手测：确认 `Cmd+Option+G` 打开 Go to Page 后输入框自动聚焦，输入页码按 Return 跳页且不触发 tab 重命名。
 - Wave 8 M11 预研：做 `M11-001`，把扩展机制 RFC 先落出来。
-- Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-008` 已完成，`M12-002` 先暂缓；当前执行 `M12-009` 中栏空窗引导,其余空窗项按优先级继续。
+- Wave 9 M12 体验分流：`M12-001` / `M12-003` ~ `M12-009` 已完成，`M12-002` 先暂缓；继续 `M12-010`–`014`。
 
 ## 5. Milestone 7:搜索强化与对比阅读
 

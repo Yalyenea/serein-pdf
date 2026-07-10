@@ -641,6 +641,94 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         configuration.shortcuts.bindings[command]?.serializedValue ?? "none"
     }
 
+    /// Keys that must appear in an existing config.toml; missing any triggers a re-render self-heal.
+    /// Keep in sync with `defaultContents` and `render` — covered by AppConfigurationTests.
+    static let requiredKeys: [String] = [
+        "[appearance]",
+        "mode",
+        "light_theme",
+        "dark_theme",
+        "[annotations]",
+        "auto_save",
+        "[layout]",
+        "left_sidebar_width",
+        "left_sidebar_min_width",
+        "left_sidebar_max_width",
+        "right_sidebar_width",
+        "right_sidebar_min_width",
+        "right_sidebar_max_width",
+        "sidebars_swapped",
+        "show_recent_files_in_sidebar",
+        "sidebar_opacity",
+        "[library]",
+        "folders",
+        "[access]",
+        "roots",
+        "root_bookmarks",
+        "highlight_selection",
+        "exit_highlight_mode",
+        "toggle_night_mode",
+        "switch_current_theme",
+        "open_library_pdf",
+        "refresh_library_index",
+        "open_library_settings",
+        "open_shortcut_settings",
+        "save_annotations",
+        "share_document",
+        "export_clean_copy",
+        "copy_highlights_markdown",
+        "copy_current_pdf_path",
+        "remove_highlight",
+        "highlight_color_pink",
+        "highlight_color_yellow",
+        "highlight_color_green",
+        "toggle_left_sidebar",
+        "toggle_right_sidebar",
+        "use_sidebar_tabs",
+        "use_titlebar_tabs",
+        "close_current_tab",
+        "close_current_window",
+        "previous_tab",
+        "next_tab",
+        "show_all_tabs",
+        "toggle_continuous_reading",
+        "fit_height",
+        "fit_width",
+        "single_page",
+        "single_page_continuous",
+        "two_up",
+        "two_up_continuous",
+        "zoom_in",
+        "zoom_out",
+        "page_down",
+        "page_up",
+        "half_page_down",
+        "half_page_up",
+        "go_to_first_page",
+        "go_to_last_page",
+        "navigate_back",
+        "navigate_forward",
+        "find_all_open",
+        "find_next_match",
+        "find_previous_match",
+        "goto_page",
+        "show_recent_files_palette",
+        "open_containing_folder",
+        "reopen_last_closed",
+        "new_blank_tab",
+        "new_window",
+        "merge_all_windows",
+        "move_current_pdf_to_new_window",
+        "toggle_all_pages_overview",
+        "toggle_demo_mode",
+        "toggle_immersive_mode",
+        "toggle_reader_split",
+        "toggle_right_sidebar_mode",
+        "swap_sidebars",
+        "undo_last_highlight",
+        "redo_last_highlight",
+    ]
+
     private static func serializedOpacity(_ value: CGFloat) -> String {
         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), Double(value))
     }
@@ -905,7 +993,32 @@ struct AppConfigurationParser {
     }
 
     private func parseString(_ rawValue: String) -> String {
-        rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        let withoutInlineComment = stripInlineComment(from: rawValue)
+        return withoutInlineComment.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    }
+
+    /// Strips a trailing `# …` comment when it appears outside a double-quoted string.
+    private func stripInlineComment(from rawValue: String) -> String {
+        var inQuotes = false
+        var isEscaped = false
+        for (index, character) in rawValue.enumerated() {
+            if isEscaped {
+                isEscaped = false
+                continue
+            }
+            if character == "\\" {
+                isEscaped = true
+                continue
+            }
+            if character == "\"" {
+                inQuotes.toggle()
+                continue
+            }
+            if character == "#", inQuotes == false {
+                return String(rawValue.prefix(index)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return rawValue
     }
 
     private func parseStringArray(_ rawValue: String) throws -> [String] {
@@ -1005,90 +1118,7 @@ struct AppConfigurationStore {
         }
 
         let existingContent = try String(contentsOf: fileURL, encoding: .utf8)
-        let requiredKeys = [
-            "[appearance]",
-            "mode",
-            "light_theme",
-            "dark_theme",
-            "[annotations]",
-            "auto_save",
-            "[layout]",
-            "left_sidebar_width",
-            "left_sidebar_min_width",
-            "left_sidebar_max_width",
-            "right_sidebar_width",
-            "right_sidebar_min_width",
-            "right_sidebar_max_width",
-            "sidebars_swapped",
-            "show_recent_files_in_sidebar",
-            "sidebar_opacity",
-            "[library]",
-            "folders",
-            "[access]",
-            "roots",
-            "root_bookmarks",
-            "highlight_selection",
-            "exit_highlight_mode",
-            "toggle_night_mode",
-            "switch_current_theme",
-            "open_library_pdf",
-            "refresh_library_index",
-            "open_library_settings",
-            "open_shortcut_settings",
-            "save_annotations",
-            "share_document",
-            "export_clean_copy",
-            "copy_highlights_markdown",
-            "copy_current_pdf_path",
-            "remove_highlight",
-            "highlight_color_pink",
-            "highlight_color_yellow",
-            "highlight_color_green",
-            "toggle_left_sidebar",
-            "toggle_right_sidebar",
-            "use_sidebar_tabs",
-            "use_titlebar_tabs",
-            "close_current_tab",
-            "close_current_window",
-            "previous_tab",
-            "next_tab",
-            "show_all_tabs",
-            "toggle_continuous_reading",
-            "fit_height",
-            "fit_width",
-            "single_page",
-            "single_page_continuous",
-            "two_up",
-            "two_up_continuous",
-            "zoom_in",
-            "zoom_out",
-            "page_down",
-            "page_up",
-            "half_page_down",
-            "half_page_up",
-            "go_to_first_page",
-            "go_to_last_page",
-            "navigate_back",
-            "navigate_forward",
-            "find_all_open",
-            "find_next_match",
-            "find_previous_match",
-            "goto_page",
-            "show_recent_files_palette",
-            "open_containing_folder",
-            "reopen_last_closed",
-            "new_window",
-            "merge_all_windows",
-            "move_current_pdf_to_new_window",
-            "toggle_all_pages_overview",
-            "toggle_demo_mode",
-            "toggle_immersive_mode",
-            "toggle_reader_split",
-            "toggle_right_sidebar_mode",
-            "swap_sidebars",
-            "undo_last_highlight",
-            "redo_last_highlight",
-        ]
+        let requiredKeys = AppConfigurationFile.requiredKeys
 
         var configuration = try parser.parse(existingContent)
         let legacyRemoveHighlight = KeyboardShortcut(key: "d", modifiers: [.command, .shift])

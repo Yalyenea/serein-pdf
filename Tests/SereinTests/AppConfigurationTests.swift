@@ -381,6 +381,86 @@ fit_width = "command+9"
         XCTAssertFalse(persistedContent.contains("toggle_continuous_reading = \"command+shift+c\""))
     }
 
+    func testParseStringStripsInlineCommentsOutsideQuotes() throws {
+        let parser = AppConfigurationParser()
+        let configuration = try parser.parse("""
+        [appearance]
+        mode = "system" # follow macOS
+        light_theme = "normal"
+        dark_theme = "rose_pine_moon"
+
+        [shortcuts]
+        highlight_selection = "a" # one-shot highlight
+        """)
+
+        XCTAssertEqual(configuration.appearance.mode, .system)
+        XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
+    }
+
+    func testRequiredKeysCoverDefaultContentsAndRenderAssignments() throws {
+        let defaultKeys = assignmentKeys(in: AppConfigurationFile.defaultContents)
+        let renderKeys = assignmentKeys(in: AppConfigurationFile.render(.default))
+        let required = Set(AppConfigurationFile.requiredKeys)
+
+        XCTAssertTrue(required.contains("new_blank_tab"))
+        XCTAssertEqual(defaultKeys, renderKeys, "defaultContents and render() must declare the same assignment keys")
+
+        // requiredKeys is the self-heal fingerprint; every required entry must appear in the templates.
+        let missingFromTemplates = required.subtracting(defaultKeys)
+        XCTAssertTrue(
+            missingFromTemplates.isEmpty,
+            "requiredKeys lists keys absent from defaultContents/render: \(missingFromTemplates.sorted())"
+        )
+
+        // Shortcut assignment keys in templates must all be self-healable.
+        let shortcutKeys = assignmentKeys(in: AppConfigurationFile.defaultContents, section: "shortcuts")
+        let missingShortcuts = shortcutKeys.subtracting(required)
+        XCTAssertTrue(
+            missingShortcuts.isEmpty,
+            "shortcut keys missing from requiredKeys: \(missingShortcuts.sorted())"
+        )
+    }
+
+    func testMissingNewBlankTabKeyTriggersBootstrapRewrite() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(of: "new_blank_tab = \"command+t\"\n", with: "")
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        _ = try AppConfigurationStore(fileURL: fileURL)
+        let content = try String(contentsOf: fileURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("new_blank_tab = \"command+t\""))
+    }
+
+    private func assignmentKeys(in content: String, section filterSection: String? = nil) -> Set<String> {
+        var keys = Set<String>()
+        var section = ""
+        for rawLine in content.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") {
+                continue
+            }
+            if line.hasPrefix("["), line.hasSuffix("]") {
+                section = String(line.dropFirst().dropLast())
+                if filterSection == nil {
+                    keys.insert(line)
+                }
+                continue
+            }
+            if let filterSection, section != filterSection {
+                continue
+            }
+            let pair = line.split(separator: "=", maxSplits: 1).map(String.init)
+            guard pair.count == 2 else { continue }
+            keys.insert(pair[0].trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return keys
+    }
+
     func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

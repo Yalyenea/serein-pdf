@@ -898,6 +898,13 @@ final class ReaderViewController: NSViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.isOnlySidebarChromeChange == false else { return }
+        // Reading-position writeback originates from this reader; skip full refresh + search rebuild.
+        if notification.isOnlyReadingPositionChange {
+            if syncDisplayedStateWithoutRefreshIfPossible() == false {
+                refreshDisplayedDocument()
+            }
+            return
+        }
 
         if syncDisplayedStateWithoutRefreshIfPossible() == false {
             refreshDisplayedDocument()

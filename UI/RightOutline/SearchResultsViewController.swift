@@ -192,7 +192,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.isOnlySidebarChromeChange == false else { return }
+        guard notification.isLightweightStoreChange == false else { return }
         rebuildRows()
     }
 

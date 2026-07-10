@@ -22,6 +22,7 @@ final class VerticalTabsViewController: NSViewController {
     private var recentButtons: [NSButton] = []
     private var recentButtonURLs: [URL] = []
     private static let recentDisplayLimit = 5
+    private var displayedTabsFingerprint: TabsFingerprint?
     nonisolated(unsafe) private var eventMonitors: [Any] = []
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -144,7 +145,7 @@ final class VerticalTabsViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.isOnlySidebarChromeChange == false else { return }
+        guard notification.isLightweightStoreChange == false else { return }
         rebuildList()
         applyEmptyState()
     }
@@ -158,17 +159,34 @@ final class VerticalTabsViewController: NSViewController {
     private func rebuildList() {
         guard isViewLoaded else { return }
 
+        let sessions = documentStore.sessions(in: windowID)
+        let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
+        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
+        let continuousSessionSet = Set(continuousSessionIDs)
+        let continuousLeaderID = continuousSessionIDs.first
+        let fingerprint = TabsFingerprint(
+            activeSessionID: documentStore.activeSessionID(in: windowID),
+            selectedSessionIDs: selectedSessionIDs,
+            continuousSessionIDs: continuousSessionIDs,
+            items: sessions.map {
+                TabsFingerprint.Item(
+                    id: $0.id,
+                    title: $0.title,
+                    isDirty: $0.isDirty
+                )
+            },
+            recentURLs: recentFingerprintURLs(),
+            showRecentSection: documentStore.appConfiguration.layout.showRecentFilesInSidebar
+        )
+        guard fingerprint != displayedTabsFingerprint else { return }
+        displayedTabsFingerprint = fingerprint
+
         listStackView.arrangedSubviews.forEach { subview in
             listStackView.removeArrangedSubview(subview)
             subview.removeFromSuperview()
         }
 
-        let sessions = documentStore.sessions(in: windowID)
         countLabel.stringValue = "\(sessions.count) open"
-        let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
-        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
-        let continuousSessionSet = Set(continuousSessionIDs)
-        let continuousLeaderID = continuousSessionIDs.first
 
         for session in sessions {
             let itemView = VerticalTabItemView(
@@ -212,6 +230,15 @@ final class VerticalTabsViewController: NSViewController {
         }
 
         rebuildRecentList()
+    }
+
+    private func recentFingerprintURLs() -> [URL] {
+        guard documentStore.appConfiguration.layout.showRecentFilesInSidebar else { return [] }
+        let openURLs = Set(documentStore.sessions(in: windowID).map(\.url.standardizedFileURL))
+        return documentStore.recentDocumentURLs
+            .filter { openURLs.contains($0.standardizedFileURL) == false }
+            .prefix(Self.recentDisplayLimit)
+            .map(\.self)
     }
 
     private func handleSessionSelection(_ sessionID: UUID, modifierFlags: NSEvent.ModifierFlags) {

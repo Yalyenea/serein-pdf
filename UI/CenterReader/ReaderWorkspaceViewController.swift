@@ -282,6 +282,8 @@ final class ReaderWorkspaceViewController: NSViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.isOnlySidebarChromeChange == false else { return }
+        // Page/zoom writeback does not change pane layout or search highlight session targets.
+        guard notification.isOnlyReadingPositionChange == false else { return }
         syncFromStore()
     }
 

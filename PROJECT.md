@@ -229,6 +229,8 @@ flowchart LR
 - 按需创建 `PDFDocument`,用小容量 LRU 保留当前 pane / 分屏 pane / 最近文档;干净后台文档可释放
 - 监听已打开 PDF 的外部改写;clean session 清理 `PDFDocument` / Outline / Search / Annotations 缓存并触发 UI 重读,dirty session 不自动刷新
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
+- `DocumentStoreChange` 区分 chrome / content / `readingPosition`;翻页与缩放写回不触发 tab / search / annotations 列表全量重建,也不重写 workspace 快照
+- `ReadingStateStore` 每文档阅读位:上限 500(LRU)、磁盘写入 debounce、退出时 flush;失败走 `os.Logger`
 - 提供 tab 模式切换
 - 左右互换时对调 `WindowWorkspace` 的 window-level 宽度 / 可见状态
 
@@ -445,12 +447,14 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 
 | 风险 | 策略 |
 |---|---|
-| 夜间模式对 `PDFView` 内部视图层级的依赖 | 保持轻量反色方案,不自研渲染管线 |
+| 夜间模式对 `PDFView` 内部视图层级的依赖 | 保持轻量反色方案,不自研渲染管线;`PDFKitPrivateViewSentinelTests` 对 `ContentBackgroundView` / `PDFPageView` 做升级哨兵 |
 | 多文档状态污染 | 状态严格挂 `DocumentSession`,视图层无业务状态 |
 | 双 tab 模式分叉 | 共享同一套 `DocumentStore` 与切换命令 |
 | 批注写回失败 | 保留 dirty + 显式提示,不静默 |
 | 侧栏职责膨胀 | 严守"左栏只 tabs / 右栏只 outline+pages+search/annotations" |
 | UI 过早打磨 | 主路径优先于视觉;新功能进 M7+ |
+| config schema 四清单漂移 | `requiredKeys` 自愈 + default/render/required 一致性单测;根治见 [REVIEW.md](REVIEW.md) §5.2 表驱动 |
+| 工程债与路线 | 亮点 / 短板 / 改进清单以 [REVIEW.md](REVIEW.md) 为权威;执行勾选同步 [TASKS.md](TASKS.md) |
 
 ## 10. 开发约束
 

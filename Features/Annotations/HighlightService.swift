@@ -101,7 +101,8 @@ enum HighlightService {
     }
 
     static func highlightAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
-        page.annotations.first { annotation in
+        // PDFKit draws later annotations on top; prefer the topmost hit.
+        page.annotations.last { annotation in
             annotation.type == "Highlight" && annotation.bounds.contains(pointOnPage)
         }
     }

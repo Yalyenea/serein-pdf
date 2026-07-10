@@ -95,6 +95,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             applyWindowChromeState()
             return
         }
+        guard notification.isOnlyReadingPositionChange == false else { return }
         refreshThemeAppearance()
         applyWindowChromeState()
         refreshWindowTitle()

@@ -63,11 +63,12 @@ enum HighlightColor: String, CaseIterable, Codable, Sendable {
             HighlightPalette.allCases.map { palette in
                 let candidateColor = candidate.nsColor(in: palette)
                 let target = candidateColor.usingColorSpace(.sRGB) ?? candidateColor
+                // Weighted sRGB distance (approx. perceptual); alpha still participates.
                 let red = srgb.redComponent - target.redComponent
                 let green = srgb.greenComponent - target.greenComponent
                 let blue = srgb.blueComponent - target.blueComponent
                 let alpha = srgb.alphaComponent - target.alphaComponent
-                return red * red + green * green + blue * blue + alpha * alpha
+                return 2 * red * red + 4 * green * green + 3 * blue * blue + alpha * alpha
             }.min() ?? .greatestFiniteMagnitude
         }
 

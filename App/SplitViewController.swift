@@ -168,6 +168,9 @@ final class SplitViewController: NSSplitViewController {
         if notification.isOnlyRightSidebarModeChange {
             return
         }
+        if notification.isOnlyReadingPositionChange {
+            return
+        }
 
         refreshChromeColors()
         rebuildSplitItemsIfSwapChanged()

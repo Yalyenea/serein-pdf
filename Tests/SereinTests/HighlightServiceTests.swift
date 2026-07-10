@@ -142,6 +142,19 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertNil(HighlightService.highlightAnnotation(at: outside, on: page))
     }
 
+    func testHighlightAnnotationAtPointPrefersTopmostOverlappingHighlight() throws {
+        let document = try makeSearchableDocument(text: "overlap")
+        let page = try XCTUnwrap(document.page(at: 0))
+        let selection = try XCTUnwrap(document.findString("overlap", withOptions: []).first)
+        XCTAssertEqual(HighlightService.applyHighlight(to: selection, color: HighlightColor.pink.nsColor).count, 1)
+        XCTAssertEqual(HighlightService.applyHighlight(to: selection, color: HighlightColor.green.nsColor).count, 1)
+
+        let bounds = selection.bounds(for: page)
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        let hit = HighlightService.highlightAnnotation(at: center, on: page)
+        XCTAssertEqual(hit?.color.cgColor.components, HighlightColor.green.nsColor.cgColor.components)
+    }
+
     func testTextSanitizerPreservesChineseAndRemovesHiddenUnicodeArtifacts() {
         let sanitized = PDFTextSanitizer.sanitize("中\u{0000}\u{200B}文\u{FEFF} 高\u{2060}亮")
         XCTAssertEqual(sanitized, "中文 高亮")
