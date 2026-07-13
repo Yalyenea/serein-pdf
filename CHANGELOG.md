@@ -19,6 +19,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Cache the shortcut handler map for the app lifetime.
 
 ### UX
+- All-pages overview (`cmd+shift+o`) uses a seamless custom grid (no nested panel/chrome): viewport-fit tiling, same surface color as the reader, click page to jump and exit.
 - Empty reader state now shows a single onboarding panel with `⌘O`, recent-files shortcut, and drag-and-drop PDF open hints.
 
 ### Docs

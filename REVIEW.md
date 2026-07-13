@@ -117,7 +117,7 @@
 | 视口锚点保缩放 | `UI/CenterReader/ReaderViewController.swift:1421-1460` | 记录视口中心页+页内点,缩放后换算回滚;对抗 PDFKit 异步重排刻意循环三次 layout+restore |
 | 像素级阅读位置 | `UI/CenterReader/ReaderViewController.swift:1216-1251` | 位置=clipView 左上角换算页空间,不依赖粗糙的 `currentDestination` |
 | 回声环断路器 | `UI/CenterReader/ReaderViewController.swift:93-98, 916-990` | store→view 应用期间挂 `isApplyingStoreState` 抑制写回;三方 diff(显示/活视口/store)判断谁最新 |
-| 全览复用 PDFThumbnailView | `UI/CenterReader/ReaderViewController.swift:528-598` | 不写 collection view,绑同一 pdfView 点击天然导航,列数 `max(3, ceil(sqrt(pageCount)))` |
+| 全览自定义 seamless grid | `UI/CenterReader/OverviewGridView.swift` + `Core/OverviewGridLayout.swift` | 不用 PDFThumbnailView 外框;视口 fit-all 铺满,背景与 reader 一体,点击跳页并退出 |
 | find 重提交即跳转 | `UI/CenterReader/ReaderViewController.swift:712-743` | 选区预填并预登记为已提交 key,首个 Enter 直接跳;`SubmittedSearchKey(query, scope)` 判同 query 重提交转 `.activateNext` |
 
 ## 4. 短板(按严重度)

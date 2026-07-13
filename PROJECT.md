@@ -178,7 +178,7 @@ flowchart LR
 - `Cmd+Shift+1` / `Cmd+Shift+2`:垂直 sidebar tabs / 水平 titlebar tabs
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
 - `Cmd+Ctrl+\`:切换同窗分屏;左侧保持当前 PDF,右侧显示紧凑候选,首项为同一个 PDF;选中目标后两个 pane 自动适应宽度(新窗口与重启恢复默认单屏)
-- `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,`Esc` 退出)
+- `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,视口自适应铺满页网格,缩放后为手动尺寸,`Esc` 退出)
 - `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
 - `Cmd+Ctrl+L`:双侧栏都关闭时打开两个侧栏;否则关闭两个侧栏与 tab chrome
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)

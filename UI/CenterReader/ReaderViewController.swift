@@ -149,14 +149,10 @@ final class ReaderViewController: NSViewController {
     private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
     private let switchTitleToastView = NSView()
     private let switchTitleToastLabel = NSTextField(labelWithString: "")
-    private let overviewThumbnailView = PDFThumbnailView()
+    private let overviewGridView = OverviewGridView()
     private let findBarView = FindBarView()
     private var findBarTopConstraint: NSLayoutConstraint?
     private var pdfContainerTopConstraint: NSLayoutConstraint?
-    private var overviewLeadingConstraint: NSLayoutConstraint?
-    private var overviewTrailingConstraint: NSLayoutConstraint?
-    private var overviewTopConstraint: NSLayoutConstraint?
-    private var overviewBottomConstraint: NSLayoutConstraint?
     private let themeManager = ThemeManager()
     private(set) var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
@@ -258,7 +254,9 @@ final class ReaderViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        applyOverviewInsets()
+        if isAllPagesOverviewActive {
+            reflowOverviewGrid()
+        }
         syncPDFMarginBackgroundAfterPDFKitLayout()
 
         guard let session = targetSession(),
@@ -392,11 +390,11 @@ final class ReaderViewController: NSViewController {
         switchTitleToastLabel.drawsBackground = false
         switchTitleToastView.addSubview(switchTitleToastLabel)
 
-        overviewThumbnailView.translatesAutoresizingMaskIntoConstraints = false
-        overviewThumbnailView.thumbnailSize = NSSize(width: 140, height: 180)
-        overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
-        overviewThumbnailView.pdfView = pdfView
-        overviewThumbnailView.isHidden = true
+        overviewGridView.translatesAutoresizingMaskIntoConstraints = false
+        overviewGridView.isHidden = true
+        overviewGridView.onPageSelected = { [weak self] pageIndex in
+            self?.handleOverviewPageSelected(pageIndex)
+        }
 
         findBarView.translatesAutoresizingMaskIntoConstraints = false
         findBarView.delegate = self
@@ -407,22 +405,13 @@ final class ReaderViewController: NSViewController {
         container.addSubview(emptyStateContainer)
         container.addSubview(highlightModeIndicator)
         container.addSubview(switchTitleToastView)
-        container.addSubview(overviewThumbnailView)
+        container.addSubview(overviewGridView)
         container.addSubview(findBarView)
 
         let findBarTop = findBarView.topAnchor.constraint(equalTo: container.topAnchor)
         let pdfTop = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
         findBarTopConstraint = findBarTop
         pdfContainerTopConstraint = pdfTop
-
-        let overviewLeading = overviewThumbnailView.leadingAnchor.constraint(equalTo: container.leadingAnchor)
-        let overviewTrailing = overviewThumbnailView.trailingAnchor.constraint(equalTo: container.trailingAnchor)
-        let overviewTop = overviewThumbnailView.topAnchor.constraint(equalTo: container.topAnchor)
-        let overviewBottom = overviewThumbnailView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        overviewLeadingConstraint = overviewLeading
-        overviewTrailingConstraint = overviewTrailing
-        overviewTopConstraint = overviewTop
-        overviewBottomConstraint = overviewBottom
 
         NSLayoutConstraint.activate([
             pdfContainerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -448,10 +437,10 @@ final class ReaderViewController: NSViewController {
             switchTitleToastLabel.trailingAnchor.constraint(equalTo: switchTitleToastView.trailingAnchor, constant: -12),
             switchTitleToastLabel.topAnchor.constraint(equalTo: switchTitleToastView.topAnchor, constant: 5),
             switchTitleToastLabel.bottomAnchor.constraint(equalTo: switchTitleToastView.bottomAnchor, constant: -5),
-            overviewLeading,
-            overviewTrailing,
-            overviewTop,
-            overviewBottom,
+            overviewGridView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            overviewGridView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            overviewGridView.topAnchor.constraint(equalTo: container.topAnchor),
+            overviewGridView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             findBarView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             findBarView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             findBarTop,
@@ -635,12 +624,15 @@ final class ReaderViewController: NSViewController {
     var currentPageCount: Int { pdfView.document?.pageCount ?? 0 }
 
     var isAllPagesOverviewActive: Bool {
-        !overviewThumbnailView.isHidden
+        !overviewGridView.isHidden
     }
 
     private var overviewSavedLeftSidebar: Bool?
     private var overviewSavedRightSidebar: Bool?
-    private var overviewThumbnailWidth: CGFloat = 140
+    /// `nil` = auto fit-all; otherwise manual cell width from zoom.
+    private var overviewManualCellWidth: CGFloat?
+    private var lastOverviewAppliedCellWidth: CGFloat = 140
+    private var lastOverviewLayoutSignature: String = ""
 
     func setAllPagesOverviewActive(_ active: Bool) {
         guard active != isAllPagesOverviewActive else { return }
@@ -650,13 +642,19 @@ final class ReaderViewController: NSViewController {
             overviewSavedRightSidebar = documentStore.isRightSidebarVisible(in: windowID)
             documentStore.setLeftSidebarVisible(false, in: windowID)
             documentStore.setRightSidebarVisible(false, in: windowID)
-            configureOverviewGrid()
-            overviewThumbnailView.isHidden = false
+            overviewManualCellWidth = nil
+            lastOverviewLayoutSignature = ""
+            overviewGridView.configure(document: pdfView.document)
+            overviewGridView.isHidden = false
             pdfContainerView.isHidden = true
             setEmptyStateVisible(false)
+            applyOverviewSurfaceAppearance()
+            reflowOverviewGrid(force: true)
         } else {
-            overviewThumbnailView.isHidden = true
+            overviewGridView.isHidden = true
             pdfContainerView.isHidden = false
+            overviewManualCellWidth = nil
+            lastOverviewLayoutSignature = ""
             if targetSession()?.isBlank == false {
                 setEmptyStateVisible(false)
             } else {
@@ -681,33 +679,95 @@ final class ReaderViewController: NSViewController {
 
     func adjustOverviewZoom(scale: CGFloat) {
         guard isAllPagesOverviewActive else { return }
-        overviewThumbnailWidth = min(max(overviewThumbnailWidth * scale, 80), 360)
-        overviewThumbnailView.thumbnailSize = NSSize(
-            width: overviewThumbnailWidth,
-            height: overviewThumbnailWidth * 1.414
+        let currentWidth = overviewManualCellWidth ?? lastOverviewAppliedCellWidth
+        let nextWidth = min(
+            max(currentWidth * scale, OverviewGridLayout.defaultMinCellWidth),
+            OverviewGridLayout.defaultMaxCellWidth
         )
+        overviewManualCellWidth = nextWidth
+        lastOverviewLayoutSignature = ""
+        reflowOverviewGrid(force: true)
     }
 
-    private func configureOverviewGrid() {
+    private func reflowOverviewGrid(force: Bool = false) {
+        guard isAllPagesOverviewActive else { return }
+
+        let bounds = view.bounds
+        guard bounds.width > 1, bounds.height > 1 else { return }
+
+        let edge = OverviewGridLayout.defaultEdgeInset
+        let spacing = OverviewGridLayout.defaultCellSpacing
+        let available = CGSize(
+            width: max(bounds.width - edge * 2, 1),
+            height: max(bounds.height - edge * 2, 1)
+        )
         let pageCount = pdfView.document?.pageCount ?? 0
-        let columns = max(3, Int(ceil(sqrt(Double(max(pageCount, 1))))))
-        overviewThumbnailView.maximumNumberOfColumns = columns
-        overviewThumbnailView.thumbnailSize = NSSize(
-            width: overviewThumbnailWidth,
-            height: overviewThumbnailWidth * 1.414
+        let pageAspect = overviewPageAspect()
+
+        let columns: Int
+        let cellSize: CGSize
+
+        if let manualWidth = overviewManualCellWidth {
+            columns = OverviewGridLayout.columnsForManualWidth(
+                pageCount: pageCount,
+                availableWidth: available.width,
+                cellWidth: manualWidth,
+                cellSpacing: spacing
+            )
+            cellSize = CGSize(width: manualWidth, height: manualWidth * pageAspect)
+        } else {
+            let layout = OverviewGridLayout.computeFitAll(
+                .init(
+                    pageCount: pageCount,
+                    availableSize: available,
+                    pageAspect: pageAspect,
+                    cellSpacing: spacing,
+                    maxCellWidth: nil
+                )
+            )
+            columns = layout.columns
+            cellSize = layout.cellSize
+        }
+
+        let signature =
+            "\(pageCount)|\(columns)|\(cellSize.width.rounded())|\(cellSize.height.rounded())|\(available.width.rounded())|\(available.height.rounded())"
+        guard force || signature != lastOverviewLayoutSignature else { return }
+        lastOverviewLayoutSignature = signature
+        lastOverviewAppliedCellWidth = cellSize.width
+
+        overviewGridView.configure(document: pdfView.document)
+        overviewGridView.applyLayout(
+            columns: columns,
+            cellSize: cellSize,
+            spacing: spacing,
+            edgeInset: edge
         )
-        applyOverviewInsets()
     }
 
-    private func applyOverviewInsets() {
-        let width = view.bounds.width
-        let height = view.bounds.height
-        let horizontal = max(width * 0.02, 8)
-        let vertical = max(height * 0.02, 8)
-        overviewLeadingConstraint?.constant = horizontal
-        overviewTrailingConstraint?.constant = -horizontal
-        overviewTopConstraint?.constant = vertical
-        overviewBottomConstraint?.constant = -vertical
+    private func overviewPageAspect() -> CGFloat {
+        guard let page = pdfView.document?.page(at: 0) else {
+            return OverviewGridLayout.defaultPageAspect
+        }
+        let bounds = page.bounds(for: .mediaBox)
+        guard bounds.width > 1 else {
+            return OverviewGridLayout.defaultPageAspect
+        }
+        return max(bounds.height / bounds.width, 0.1)
+    }
+
+    private func applyOverviewSurfaceAppearance() {
+        let isNightModeEnabled = themeManager.readerState.isNightModeEnabled
+        let pageBackground = isNightModeEnabled
+            ? NightModeStyle.pageBackgroundColor
+            : NightModeStyle.readerBackdropColor
+        overviewGridView.applySurfaceBackground(pageBackground)
+    }
+
+    private func handleOverviewPageSelected(_ pageIndex: Int) {
+        guard let document = pdfView.document,
+              let page = document.page(at: pageIndex) else { return }
+        pdfView.go(to: page)
+        setAllPagesOverviewActive(false)
     }
 
     var isNightModeEnabled: Bool {
@@ -1041,8 +1101,15 @@ final class ReaderViewController: NSViewController {
         configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
 
-        pdfView.isHidden = false
-        setEmptyStateVisible(false)
+        if isAllPagesOverviewActive {
+            overviewGridView.configure(document: document)
+            reflowOverviewGrid(force: isNewSession)
+            pdfContainerView.isHidden = true
+            setEmptyStateVisible(false)
+        } else {
+            pdfView.isHidden = false
+            setEmptyStateVisible(false)
+        }
         if isNewSession, previousSessionID != nil {
             showSwitchTitleToast(refreshedSession.title)
         }
@@ -1682,10 +1749,10 @@ final class ReaderViewController: NSViewController {
             view.layer?.backgroundColor = pageBackground.cgColor
             pdfView.backgroundColor = .clear
             pdfView.layer?.backgroundColor = NSColor.clear.cgColor
-            overviewThumbnailView.backgroundColor = NightModeStyle.paneBackgroundColor
             emptyStateTitleLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
             emptyStateHintLabel.textColor = .tertiaryLabelColor
         }
+        applyOverviewSurfaceAppearance()
         if emptyStateContainer.isHidden {
             pdfView.isHidden = false
         }
