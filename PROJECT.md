@@ -127,7 +127,7 @@ flowchart LR
 
 ### 4.3 快捷键总表
 
-配置文件:`~/Library/Application Support/Serein/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`;`access.root_bookmarks` 由 Serein 管理,默认用于跨重装保留 `/Users` 访问授权。
+配置文件:`~/Library/Application Support/Serein/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`;`access.root_bookmarks` 由 Serein 管理,默认用于跨重装保留 `/Users` 访问授权。`[updates]` 控制 GitHub Releases 自动更新(`auto_check` / 私有仓库所需的 `github_token`)。
 
 **批注**
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
@@ -270,6 +270,7 @@ flowchart LR
 App/                                      # AppKit 入口、窗口与设置/启动器
   AppMain.swift                           # @main 入口,构造 NSApplication 与 AppDelegate 并 run
   AppDelegate.swift                       # 应用委托:菜单、窗口生命周期、配置加载、自动保存驱动
+  AppUpdateCoordinator.swift              # GitHub 更新:启动检查、菜单、下载进度、安装重启
   MainWindowController.swift              # 主窗口控制器:工具栏、titlebar tabs 宿主、demo/immersive 模式
   ReaderShortcutWindow.swift              # 自定义 NSWindow,拦截 keyDown 分发 reader 快捷键与 chord
   SplitViewController.swift               # 三栏 NSSplitViewController:左 tabs / 中 reader / 右 sidebar
@@ -282,6 +283,7 @@ App/                                      # AppKit 入口、窗口与设置/启�
 
 Core/                                     # 文档 / 窗口 / 配置 / 持久化 核心模型
   AppConfiguration.swift                  # config.toml schema、默认值与 AppConfigurationStore 读写
+  AppUpdateService.swift                  # GitHub Releases 检测 / 下载 DMG / 安装替换
   SecurityScopedAccessController.swift    # `/Users` 等访问 root 的 security-scoped bookmark 持久访问
   PDFLibrary.swift                        # PDF 库扫描、root / folder / item catalog
   CleanPDFService.swift                   # 生成保留 Link / Widget、移除可见用户批注的 PDF 副本

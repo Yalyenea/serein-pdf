@@ -54,6 +54,7 @@ site for showcase, download notes, and compact docs.
 - Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) seamless viewport-fit grid (no nested panel); zoom for manual size; click a page to jump
+- Auto-update from GitHub Releases (check on launch + **Serein → Check for Updates…**); private repos need `[updates] github_token` in config.toml
 - Single Page mode keeps fully visible pages centered on both axes and clamps blank-area scrolling, while zoomed-in pages can still pan normally
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page with stable single-page framing, hides reader chrome, and restores the prior layout on `cmd+l` or Esc
 - Immersive mode (`cmd+ctrl+l`) opens both sidebars only when none are visible; otherwise it hides both sidebars and tab chrome while keeping the current window size

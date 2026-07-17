@@ -1190,7 +1190,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 560, height: 480))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 560, height: 520))
     }
 
     @Test
@@ -1217,7 +1217,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(1)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 460))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 484))
 
         controller.selectPageForTesting(2)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
@@ -1227,7 +1227,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 560, height: 480))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 560, height: 520))
     }
 
     @Test
@@ -1328,7 +1328,7 @@ struct WindowChromeTests {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
         #expect(window.title == "Settings")
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 460))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 484))
     }
 
     @Test

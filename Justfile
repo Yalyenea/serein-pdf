@@ -17,6 +17,10 @@ default:
 test:
     swift test --disable-sandbox
 
+# Verify GitHub Releases download + DMG install path (needs gh auth or SEREIN_GITHUB_TOKEN).
+verify-update:
+    ./Scripts/verify-github-update.sh
+
 # Run Serein in dev mode via SwiftPM.
 run:
     swift run
@@ -36,7 +40,9 @@ website-check:
     rg -q 'assets/styles.css' Website/index.html
     rg -q 'assets/main.js' Website/index.html
     rg -q 'assets/app-icon.png' Website/index.html
-    rg -q 'serein-reader.png' Website/assets/styles.css
+    rg -q 'assets/serein-reader.png' Website/index.html
+    rg -q 'data-theme-toggle' Website/index.html
+    rg -q 'data-lang-toggle' Website/index.html
     rg -q 'https://github.com/Yalyenea/serein-pdf/releases/latest' Website/index.html
     @echo "website check passed."
 

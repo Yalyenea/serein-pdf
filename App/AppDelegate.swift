@@ -58,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private let openDocumentSelectionResolver = OpenDocumentSelectionResolver()
     private let securityScopedAccessController = SecurityScopedAccessController()
     private var cachedShortcutHandlerMap: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler]?
+    private var appUpdateCoordinator: AppUpdateCoordinator?
     private var mainWindowController: MainWindowController? {
         currentWindowController()
     }
@@ -127,6 +128,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             pendingOpenURLs.removeAll()
             openExternalURLs(urls)
         }
+
+        appUpdateCoordinator = AppUpdateCoordinator(
+            tokenProvider: { [weak self] in
+                guard let self else { return nil }
+                let configToken = self.appConfiguration.updates.githubToken
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if configToken.isEmpty == false {
+                    return configToken
+                }
+                if let env = ProcessInfo.processInfo.environment["SEREIN_GITHUB_TOKEN"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   env.isEmpty == false {
+                    return env
+                }
+                if let env = ProcessInfo.processInfo.environment["GITHUB_TOKEN"]?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   env.isEmpty == false {
+                    return env
+                }
+                return nil
+            },
+            autoCheckEnabledProvider: { [weak self] in
+                self?.appConfiguration.updates.autoCheck ?? true
+            }
+        )
+        appUpdateCoordinator?.scheduleLaunchCheck()
     }
 
     private func startAutoSaveTimer() {
@@ -503,6 +530,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         appMenu.addItem(settingsItem)
         appMenu.addItem(librarySettingsItem)
         appMenu.addItem(shortcutSettingsItem)
+        appMenu.addItem(.separator())
+        let checkUpdatesItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        checkUpdatesItem.target = self
+        appMenu.addItem(checkUpdatesItem)
         appMenu.addItem(.separator())
         let hideItem = NSMenuItem(
             title: "Hide Serein",
@@ -1814,6 +1849,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func openSettingsWindow(_ sender: Any?) {
         openSettingsWindow(sender, selecting: nil)
+    }
+
+    @objc
+    private func checkForUpdates(_ sender: Any?) {
+        appUpdateCoordinator?.checkForUpdatesFromMenu(sender)
     }
 
     @objc

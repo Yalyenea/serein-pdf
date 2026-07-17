@@ -19,6 +19,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Cache the shortcut handler map for the app lifetime.
 
 ### UX
+- GitHub Releases auto-update: launch check + **Serein → Check for Updates…** downloads the latest `Serein-*.dmg`, replaces the installed app, and relaunches (private repo needs `[updates] github_token`).
 - All-pages overview (`cmd+shift+o`) uses a seamless custom grid (no nested panel/chrome): viewport-fit tiling, same surface color as the reader, click page to jump and exit.
 - Empty reader state now shows a single onboarding panel with `⌘O`, recent-files shortcut, and drag-and-drop PDF open hints.
 
@@ -28,6 +29,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Mark M8–M10 (including M10.5–M10.13 hand-test waves) fully complete across TASKS / REVIEW / PROJECT.
 
 ### Website
+- Rebuild the product site in an editorial / archive layout (warm paper, serif display, hairline brand mark, grain, rise/reveal, light·dark, EN/中文), modeled after Jump-style knowledge-tool landings while keeping Serein-specific copy and assets.
+- Track follow-up website polish in `TASKS.md` M13.1 (real feature screenshots, deploy, copy pass).
 - Add a local static Serein product website with showcase, download notes, compact docs, and a real app screenshot captured from a synthetic PDF.
 
 ### Packaging

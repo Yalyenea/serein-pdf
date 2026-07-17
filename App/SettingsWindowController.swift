@@ -1,8 +1,8 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 560, height: 480)
-    static let libraryContentSize = NSSize(width: 680, height: 460)
+    static let generalContentSize = NSSize(width: 560, height: 520)
+    static let libraryContentSize = NSSize(width: 680, height: 484)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
     static let pageSegmentWidth: CGFloat = 96
 }
@@ -241,8 +241,13 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         target: nil,
         action: nil
     )
+    private let autoCheckUpdatesCheckbox = NSButton(
+        checkboxWithTitle: "Check for updates on launch (GitHub Releases)",
+        target: nil,
+        action: nil
+    )
     private let footnoteLabel = NSTextField(
-        wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Sidebar width, opacity, and auto-save apply immediately."
+        wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Sidebar width, opacity, and auto-save apply immediately. Private GitHub repos need [updates] github_token in config.toml."
     )
 
     private var shortcutButtons: [ShortcutCommand: ShortcutCaptureButton] = [:]
@@ -364,6 +369,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         applySidebarWidthControls(configuration.layout)
         applySidebarOpacityControls(configuration.layout)
         showRecentInSidebarCheckbox.state = configuration.layout.showRecentFilesInSidebar ? .on : .off
+        autoCheckUpdatesCheckbox.state = configuration.updates.autoCheck ? .on : .off
         shortcutsErrorLabel.stringValue = ""
         rebuildLibraryFolderRows()
 
@@ -424,6 +430,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         )
         updatedConfiguration.layout.sidebarOpacity = normalizedSidebarOpacity(from: sidebarOpacitySlider)
         updatedConfiguration.layout.showRecentFilesInSidebar = showRecentInSidebarCheckbox.state == .on
+        updatedConfiguration.updates.autoCheck = autoCheckUpdatesCheckbox.state == .on
         publishConfigurationIfChanged(updatedConfiguration)
     }
 
@@ -535,12 +542,21 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         showRecentInSidebarCheckbox.target = self
         showRecentInSidebarCheckbox.action = #selector(handleGeneralControlChanged(_:))
 
+        autoCheckUpdatesCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        autoCheckUpdatesCheckbox.controlSize = .small
+        autoCheckUpdatesCheckbox.target = self
+        autoCheckUpdatesCheckbox.action = #selector(handleGeneralControlChanged(_:))
+
         footnoteLabel.translatesAutoresizingMaskIntoConstraints = false
         footnoteLabel.font = .systemFont(ofSize: 11)
         footnoteLabel.textColor = .secondaryLabelColor
         footnoteLabel.maximumNumberOfLines = 0
 
-        let layoutOptionsStack = NSStackView(views: [swapSidebarsCheckbox, showRecentInSidebarCheckbox])
+        let layoutOptionsStack = NSStackView(views: [
+            swapSidebarsCheckbox,
+            showRecentInSidebarCheckbox,
+            autoCheckUpdatesCheckbox,
+        ])
         layoutOptionsStack.orientation = .vertical
         layoutOptionsStack.alignment = .leading
         layoutOptionsStack.spacing = 6

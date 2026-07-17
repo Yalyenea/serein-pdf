@@ -148,6 +148,18 @@ struct AppConfiguration: Equatable, Sendable {
         )
     }
 
+    struct Updates: Equatable, Sendable {
+        /// Check GitHub Releases shortly after launch.
+        var autoCheck: Bool
+        /// Classic/fine-grained PAT for private repos (repo Contents read + release assets).
+        var githubToken: String
+
+        static let `default` = Updates(
+            autoCheck: true,
+            githubToken: ""
+        )
+    }
+
     struct Shortcuts: Equatable, Sendable {
         var bindings: [ShortcutCommand: KeyboardShortcut]
 
@@ -214,6 +226,7 @@ struct AppConfiguration: Equatable, Sendable {
     var layout: Layout
     var library: Library
     var access: Access
+    var updates: Updates
 
     init(
         appearance: Appearance = .default,
@@ -222,7 +235,8 @@ struct AppConfiguration: Equatable, Sendable {
         shortcuts: Shortcuts = .default,
         layout: Layout = .default,
         library: Library = .default,
-        access: Access = .default
+        access: Access = .default,
+        updates: Updates = .default
     ) {
         self.appearance = appearance
         self.reader = reader
@@ -231,6 +245,7 @@ struct AppConfiguration: Equatable, Sendable {
         self.layout = layout
         self.library = library
         self.access = access
+        self.updates = updates
     }
 
     static let `default` = AppConfiguration(
@@ -240,7 +255,8 @@ struct AppConfiguration: Equatable, Sendable {
         shortcuts: .default,
         layout: .default,
         library: .default,
-        access: .default
+        access: .default,
+        updates: .default
     )
 }
 
@@ -460,6 +476,11 @@ folders = []
 roots = ["/Users"]
 root_bookmarks = []
 
+[updates]
+auto_check = true
+# Required for private GitHub repos. classic PAT with repo scope, or fine-grained: Contents read + metadata.
+github_token = ""
+
 [shortcuts]
 highlight_selection = "a"
 exit_highlight_mode = "escape"
@@ -568,6 +589,10 @@ folders = \(serializedPathArray(configuration.library.folderURLs))
 roots = \(serializedPathArray(configuration.access.rootURLs))
 root_bookmarks = \(serializedBookmarkArray(configuration.access.rootBookmarkData))
 
+[updates]
+auto_check = \(configuration.updates.autoCheck ? "true" : "false")
+github_token = "\(escapedTOMLString(configuration.updates.githubToken))"
+
 [shortcuts]
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
@@ -665,6 +690,9 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "[access]",
         "roots",
         "root_bookmarks",
+        "[updates]",
+        "auto_check",
+        "github_token",
         "highlight_selection",
         "exit_highlight_mode",
         "toggle_night_mode",
@@ -731,6 +759,12 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
 
     private static func serializedOpacity(_ value: CGFloat) -> String {
         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), Double(value))
+    }
+
+    private static func escapedTOMLString(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     private static func serializedPathArray(_ urls: [URL]) -> String {
@@ -889,6 +923,10 @@ struct AppConfigurationParser {
                 .map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL }
         case ("access", "root_bookmarks"):
             configuration.access.rootBookmarkData = try parseBookmarkArray(rawValue)
+        case ("updates", "auto_check"):
+            configuration.updates.autoCheck = try parseBool(rawValue)
+        case ("updates", "github_token"):
+            configuration.updates.githubToken = parseString(rawValue)
         case ("shortcuts", "remove_highlight"):
             try applyShortcut(rawValue, command: .removeHighlight, to: &configuration)
         case ("shortcuts", "highlight_color_pink"):

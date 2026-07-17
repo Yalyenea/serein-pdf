@@ -7,164 +7,363 @@
       name="description"
       content="Serein is a native macOS PDF reader built with Swift, AppKit, and PDFKit. Minimal, keyboard-driven, and made for focused reading."
     >
-    <title>Serein - Native macOS PDF Reader</title>
+    <title>Serein · Native macOS PDF Reader</title>
     <link rel="icon" href="assets/app-icon.png">
     <link rel="apple-touch-icon" href="assets/app-icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+      rel="stylesheet"
+    >
     <link rel="stylesheet" href="assets/styles.css">
   </head>
-  <body>
-    <header class="topbar" data-nav>
-      <a class="brand" href="#top" aria-label="Serein home">
-        <img src="assets/app-icon.png" width="28" height="28" alt="">
-        <span>Serein</span>
-      </a>
-      <nav class="nav" aria-label="Primary navigation">
-        <a href="#reader">Reader</a>
-        <a href="#workflow">Workflow</a>
-        <a href="#download">Download</a>
-        <a href="#docs">Docs</a>
-      </nav>
-    </header>
+  <body id="top">
+    <div class="controls">
+      <button class="link-btn" type="button" data-lang-toggle aria-label="Switch language">中文</button>
+      <span class="controls__sep" aria-hidden="true"></span>
+      <button class="link-btn" type="button" data-theme-toggle aria-label="Toggle theme">☾</button>
+    </div>
 
-    <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-image" aria-hidden="true"></div>
-        <div class="hero-shade" aria-hidden="true"></div>
-        <div class="hero-copy">
-          <p class="eyebrow">Swift + AppKit + PDFKit</p>
-          <h1 id="hero-title">Serein</h1>
-          <p class="lede">
-            A compact native macOS PDF reader for focused research, keyboard reading,
-            split comparison, clean highlights, and fast outline navigation.
+    <main>
+      <section class="hero">
+        <div class="hero__aura" aria-hidden="true"></div>
+        <div class="wrap">
+          <p class="kicker hero__eyebrow rise" style="--d:0.02s" data-i18n="hero.badge">
+            Serein · macOS PDF Reader
           </p>
-          <div class="hero-actions">
-            <a class="button primary" href="https://github.com/Yalyenea/serein-pdf/releases/latest">Download latest</a>
-            <a class="button quiet" href="#docs">Read docs</a>
+          <div class="hairline-brand rise" style="--d:0.08s" aria-hidden="true"></div>
+          <h1 class="rise" style="--d:0.14s" data-i18n-html="hero.title">
+            Read papers with<br>calm <em>focus</em>
+          </h1>
+          <p class="hero__sub rise" style="--d:0.22s" data-i18n="hero.sub">
+            A native PDF reader for research — tabs, outline, highlights, and a keyboard flow that stays out of the way.
+          </p>
+          <div class="hero__cta dl-row rise" style="--d:0.3s">
+            <a class="btn btn--primary dl-btn" href="https://github.com/Yalyenea/serein-pdf/releases/latest">
+              <span data-i18n="dl.mac">Download for macOS</span>
+              <span class="dl-btn__meta" data-i18n="dl.mac.meta">GitHub Releases</span>
+            </a>
+            <a class="btn btn--ghost" href="https://github.com/Yalyenea/serein-pdf">
+              <span data-i18n="dl.source">View source</span>
+            </a>
           </div>
-        </div>
-      </section>
-
-      <section id="reader" class="band intro-grid" aria-labelledby="reader-title">
-        <div>
-          <p class="eyebrow">Reader Surface</p>
-          <h2 id="reader-title">Three panes, one job each.</h2>
-        </div>
-        <p>
-          Left tabs keep track of open documents, the center stays reserved for reading,
-          and the right sidebar handles structure, pages, search, and annotations. The
-          layout stays quiet even when the workflow gets dense.
-        </p>
-      </section>
-
-      <section class="band feature-grid" aria-label="Serein feature highlights">
-        <article class="feature">
-          <span class="feature-kicker">Tabs</span>
-          <h3>Vertical or titlebar tabs</h3>
-          <p>Switch between a left tab rail and titlebar tabs without changing the document model.</p>
-        </article>
-        <article class="feature">
-          <span class="feature-kicker">Search</span>
-          <h3>Right-side search results</h3>
-          <p>Search this document or every open PDF while previews stay out of the reading pane.</p>
-        </article>
-        <article class="feature">
-          <span class="feature-kicker">Outline</span>
-          <h3>Compact document structure</h3>
-          <p>Long outline titles wrap in a tight right pane instead of stretching the window.</p>
-        </article>
-        <article class="feature">
-          <span class="feature-kicker">Highlights</span>
-          <h3>Pink-first annotations</h3>
-          <p>Highlight, comment, save, and export Markdown grouped by page for note-taking.</p>
-        </article>
-      </section>
-
-      <section id="workflow" class="band split-section" aria-labelledby="workflow-title">
-        <div class="section-copy">
-          <p class="eyebrow">Research Flow</p>
-          <h2 id="workflow-title">Built for papers, slides, and recompiling PDFs.</h2>
-          <p>
-            Serein keeps common reading moves close to the keyboard: Vim-style navigation,
-            all-open search, multi-PDF continuous reading, a Spotlight-style recent launcher,
-            and compare split for reading two views side by side.
+          <p class="hero__note rise" style="--d:0.38s" data-i18n="hero.note">
+            Swift · AppKit · PDFKit
           </p>
         </div>
-        <div class="workflow-list">
-          <div class="workflow-item">
-            <span>01</span>
-            <p>Open files or folders; Serein scans PDFs and creates lightweight tabs first.</p>
-          </div>
-          <div class="workflow-item">
-            <span>02</span>
-            <p>Compare the current PDF with another tab, or with a second state of itself.</p>
-          </div>
-          <div class="workflow-item">
-            <span>03</span>
-            <p>Hot-reload clean PDFs after LaTeX or Typst rewrites them on disk.</p>
-          </div>
+        <div class="wrap hero__shot rise" style="--d:0.46s">
+          <figure class="shot">
+            <img
+              src="assets/serein-reader.png"
+              width="1548"
+              height="1028"
+              alt="Serein reader window with vertical tabs, PDF pages, and right sidebar"
+              data-i18n-attr="alt:hero.shotAlt"
+            >
+          </figure>
         </div>
       </section>
 
-      <section id="download" class="download band" aria-labelledby="download-title">
-        <div>
-          <p class="eyebrow">Local Release</p>
-          <h2 id="download-title">Download the latest DMG from GitHub Releases.</h2>
-          <p>
-            Serein currently targets macOS 14+ and is distributed from the project release page.
-            The app is locally signed for this project, so first launch may require the standard
-            macOS right-click Open flow.
-          </p>
-        </div>
-        <div class="download-actions">
-          <a class="button primary" href="https://github.com/Yalyenea/serein-pdf/releases/latest">Open latest release</a>
-          <a class="button quiet" href="https://github.com/Yalyenea/serein-pdf">View source</a>
-        </div>
-      </section>
-
-      <section id="docs" class="band docs" aria-labelledby="docs-title">
-        <div class="docs-head">
-          <p class="eyebrow">Compact Docs</p>
-          <h2 id="docs-title">The essentials.</h2>
-        </div>
-        <div class="docs-grid">
-          <article class="doc-panel">
-            <h3>Requirements</h3>
-            <ul>
-              <li>macOS 14 or newer</li>
-              <li>Swift 6.1 toolchain for development builds</li>
-              <li><code>just</code> for the local task runner</li>
-            </ul>
-          </article>
-          <article class="doc-panel">
-            <h3>Core shortcuts</h3>
-            <dl class="shortcuts">
-              <div><dt><kbd>a</kbd></dt><dd>Highlight selection or enter highlight mode</dd></div>
-              <div><dt><kbd>c</kbd></dt><dd>Toggle single-page continuous reading</dd></div>
-              <div><dt><kbd>cmd</kbd><kbd>f</kbd></dt><dd>Find in current document</dd></div>
-              <div><dt><kbd>cmd</kbd><kbd>ctrl</kbd><kbd>\</kbd></dt><dd>Toggle compare split</dd></div>
-            </dl>
-          </article>
-          <article class="doc-panel">
-            <h3>Configuration</h3>
-            <p>Runtime settings live in:</p>
-            <button class="path-copy" type="button" data-copy="~/Library/Application Support/Serein/config.toml">
-              <code>~/Library/Application Support/Serein/config.toml</code>
-            </button>
-          </article>
-          <article class="doc-panel">
-            <h3>License</h3>
-            <p>
-              Personal, non-commercial use. Redistribution, commercial use, sublicensing,
-              and third-party distribution remain restricted without written permission.
+      <section id="features">
+        <div class="feature">
+          <div class="wrap">
+            <div class="feature__meta reveal">
+              <span class="kicker" data-i18n="layout.kicker">Three-pane layout</span>
+            </div>
+            <h2 class="reveal" data-i18n="layout.title">Three panes, one job each</h2>
+            <p class="feature__desc reveal" data-i18n="layout.desc">
+              Left tabs answer what is open. Center stays for reading. Right holds outline, pages, search, and annotations — quiet even when the workflow is dense.
             </p>
-          </article>
+            <figure class="shot reveal">
+              <img
+                src="assets/serein-reader.png"
+                width="1548"
+                height="1028"
+                alt=""
+                aria-hidden="true"
+              >
+            </figure>
+          </div>
+        </div>
+
+        <div class="feature feature--alt">
+          <div class="wrap">
+            <div class="feature__meta reveal">
+              <span class="kicker" data-i18n="tabs.kicker">Tabs that adapt</span>
+            </div>
+            <h2 class="reveal" data-i18n="tabs.title">Vertical rail or titlebar strip</h2>
+            <p class="feature__desc reveal" data-i18n="tabs.desc">
+              Switch between a left tab rail and macOS titlebar tabs without changing the document model. Same sessions, same shortcuts, different chrome.
+            </p>
+            <div class="shot shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__num">01</span>
+                <p class="shot-card__label" data-i18n="tabs.card">verticalSidebar · horizontalTitlebar</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature">
+          <div class="wrap">
+            <div class="feature__meta reveal">
+              <span class="kicker" data-i18n="note.kicker">Pink-first highlights</span>
+            </div>
+            <h2 class="reveal" data-i18n="note.title">Keep thinking on the page</h2>
+            <p class="feature__desc reveal" data-i18n="note.desc">
+              Press <span class="kbd-inline">A</span> to highlight a selection or enter highlight mode. Add comments in the right sidebar, undo up to 50 steps, export Markdown grouped by page.
+            </p>
+            <div class="shot shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__swatch"></span>
+                <p class="shot-card__label" data-i18n="note.card">pink · yellow · green · comments · Markdown</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature feature--alt">
+          <div class="wrap">
+            <div class="feature__meta reveal">
+              <span class="kicker" data-i18n="search.kicker">Search that stays aside</span>
+            </div>
+            <h2 class="reveal" data-i18n="search.title">Results never crowd the page</h2>
+            <p class="feature__desc reveal" data-i18n="search.desc">
+              Find in this document or across every open PDF. The find bar stays thin; previews and hit lists live in the right pane so reading space stays clean.
+            </p>
+            <div class="shot shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__num">⌘F</span>
+                <p class="shot-card__label" data-i18n="search.card">This Document · All Open</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="rows" aria-label="More capabilities">
+        <div class="row">
+          <div class="wrap row__grid">
+            <div class="row__text reveal">
+              <div class="feature__meta">
+                <span class="kicker" data-i18n="split.kicker">Compare split</span>
+              </div>
+              <h3 data-i18n="split.title">Two views, one screen</h3>
+              <p data-i18n="split.desc">
+                Open a second pane beside the current PDF — same file with independent page and zoom, or another open tab. Compare, cross-check, keep a source open while you work.
+              </p>
+              <span class="kbd">⌘⌃\</span>
+            </div>
+            <div class="shot row__media shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__num">∥</span>
+                <p class="shot-card__label" data-i18n="split.card">same PDF · other tab · Option edits pane</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row row--reverse">
+          <div class="wrap row__grid">
+            <div class="row__text reveal">
+              <div class="feature__meta">
+                <span class="kicker" data-i18n="flow.kicker">Continuous reading</span>
+              </div>
+              <h3 data-i18n="flow.title">Many PDFs, one ordered flow</h3>
+              <p data-i18n="flow.desc">
+                Group selected tabs into a continuous reading set. Page turns cross document boundaries; the outline lists every PDF together without stitching a fake file.
+              </p>
+            </div>
+            <div class="shot row__media shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__num">→</span>
+                <p class="shot-card__label" data-i18n="flow.card">tab context menu · ordered groups</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="wrap row__grid">
+            <div class="row__text reveal">
+              <div class="feature__meta">
+                <span class="kicker" data-i18n="reload.kicker">Hot reload</span>
+              </div>
+              <h3 data-i18n="reload.title">Recompile without reopening</h3>
+              <p data-i18n="reload.desc">
+                When LaTeX, Typst, or another toolchain rewrites an open clean PDF, Serein reloads it in place. Sessions with unsaved annotations stay untouched.
+              </p>
+            </div>
+            <div class="shot row__media shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__num">↻</span>
+                <p class="shot-card__label" data-i18n="reload.card">LaTeX · Typst · atomic replace</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row row--reverse">
+          <div class="wrap row__grid">
+            <div class="row__text reveal">
+              <div class="feature__meta">
+                <span class="kicker" data-i18n="keys.kicker">Keyboard-first</span>
+              </div>
+              <h3 data-i18n="keys.title">Built for hands on the home row</h3>
+              <p data-i18n="keys.desc">
+                Vim-style page turns, half-page scroll, jump to edges, find, overview, and immersive chrome — all configurable in Settings, none of them shouting for attention.
+              </p>
+              <span class="kbd">J K · C · G</span>
+            </div>
+            <div class="shot row__media shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__num">⌨</span>
+                <p class="shot-card__label" data-i18n="keys.card">config.toml · capture · conflict-aware</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="wrap row__grid">
+            <div class="row__text reveal">
+              <div class="feature__meta">
+                <span class="kicker" data-i18n="overview.kicker">Overview grid</span>
+              </div>
+              <h3 data-i18n="overview.title">Every page at a glance</h3>
+              <p data-i18n="overview.desc">
+                A seamless page grid that shares the reader surface — no nested panels. Zoom for denser tiles, click a page to jump and exit.
+              </p>
+              <span class="kbd">⌘⇧O</span>
+            </div>
+            <div class="shot row__media shot--card reveal" aria-hidden="true">
+              <div class="shot-card">
+                <span class="shot-card__num">▦</span>
+                <p class="shot-card__label" data-i18n="overview.card">viewport-fit · click to jump</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="details">
+        <div class="wrap">
+          <div class="details__head reveal">
+            <h2 data-i18n="details.title">And the quiet details</h2>
+          </div>
+          <div class="details__grid">
+            <div class="details__item reveal">
+              <h3 data-i18n="d.theme.title">Rose Pine themes</h3>
+              <p data-i18n="d.theme.desc">
+                Mode plus light and dark themes. Rose Pine Dawn warms the page itself; Rose Pine Moon keeps margins with the dark surface.
+              </p>
+            </div>
+            <div class="details__item reveal">
+              <h3 data-i18n="d.library.title">PDF Library</h3>
+              <p data-i18n="d.library.desc">
+                Point Settings at folder roots. Index, search, and open from a two-pane library browser without building a file tree in the sidebar.
+              </p>
+            </div>
+            <div class="details__item reveal">
+              <h3 data-i18n="d.export.title">Share and clean copy</h3>
+              <p data-i18n="d.export.desc">
+                Share the original, a clean PDF with user marks removed, or highlights as Markdown — page-grouped snippet and comment for note-taking.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="download" id="download">
+        <div class="wrap">
+          <h2 class="reveal" data-i18n-html="dl.title">Get <em>Serein</em></h2>
+          <p class="download__sub reveal" data-i18n="dl.sub">
+            Download the latest DMG from GitHub Releases. Locally signed for this project — first launch may need the macOS right-click Open flow.
+          </p>
+          <div class="dl-row reveal">
+            <a class="btn btn--primary dl-btn" href="https://github.com/Yalyenea/serein-pdf/releases/latest">
+              <span data-i18n="dl.mac">Download for macOS</span>
+              <span class="dl-btn__meta" data-i18n="dl.mac.meta">GitHub Releases</span>
+            </a>
+            <a class="btn btn--ghost" href="https://github.com/Yalyenea/serein-pdf">
+              <span data-i18n="dl.source">View source</span>
+            </a>
+          </div>
+          <p class="download__req reveal" data-i18n="dl.req">macOS 14+</p>
+        </div>
+      </section>
+
+      <section class="docs" id="docs">
+        <div class="wrap">
+          <div class="docs__head reveal">
+            <p class="kicker" data-i18n="docs.kicker">Essentials</p>
+            <h2 data-i18n="docs.title">Compact notes</h2>
+          </div>
+          <div class="docs__grid">
+            <article class="docs__item reveal">
+              <h3 data-i18n="docs.req.title">Requirements</h3>
+              <ul>
+                <li data-i18n="docs.req.1">macOS 14 or newer</li>
+                <li data-i18n="docs.req.2">Swift 6.1 toolchain for development builds</li>
+                <li data-i18n="docs.req.3"><code>just</code> for the local task runner</li>
+              </ul>
+            </article>
+            <article class="docs__item reveal">
+              <h3 data-i18n="docs.keys.title">Core shortcuts</h3>
+              <dl class="shortcuts">
+                <div>
+                  <dt><kbd>A</kbd></dt>
+                  <dd data-i18n="docs.keys.a">Highlight or enter highlight mode</dd>
+                </div>
+                <div>
+                  <dt><kbd>C</kbd></dt>
+                  <dd data-i18n="docs.keys.c">Toggle single-page continuous</dd>
+                </div>
+                <div>
+                  <dt><kbd>⌘</kbd><kbd>F</kbd></dt>
+                  <dd data-i18n="docs.keys.f">Find in current document</dd>
+                </div>
+                <div>
+                  <dt><kbd>⌘</kbd><kbd>⌃</kbd><kbd>\</kbd></dt>
+                  <dd data-i18n="docs.keys.split">Toggle compare split</dd>
+                </div>
+              </dl>
+            </article>
+            <article class="docs__item reveal">
+              <h3 data-i18n="docs.cfg.title">Configuration</h3>
+              <p data-i18n="docs.cfg.desc">Runtime settings live in:</p>
+              <button
+                class="path-copy"
+                type="button"
+                data-copy="~/Library/Application Support/Serein/config.toml"
+              >
+                <code>~/Library/Application Support/Serein/config.toml</code>
+              </button>
+            </article>
+          </div>
         </div>
       </section>
     </main>
 
-    <footer class="footer">
-      <span>Serein</span>
-      <span>Native macOS PDF reader</span>
+    <footer class="contact" id="contact">
+      <div class="wrap contact__inner">
+        <div class="hairline-brand reveal" aria-hidden="true"></div>
+        <h2 class="contact__title reveal" data-i18n="contact.title">Open source</h2>
+        <a
+          class="contact__email reveal"
+          href="https://github.com/Yalyenea/serein-pdf"
+        >github.com/Yalyenea/serein-pdf</a>
+        <p class="contact__note reveal" data-i18n="contact.note">
+          Personal, non-commercial use. Redistribution and commercial use remain restricted without written permission.
+        </p>
+      </div>
+      <div class="wrap contact__foot">
+        <div class="contact__brand">
+          <img src="assets/app-icon.png" width="22" height="22" alt="">
+          <p class="contact__rights" data-i18n="footer.rights">© Serein · Native macOS PDF reader</p>
+        </div>
+      </div>
     </footer>
 
     <script src="assets/main.js" defer></script>
