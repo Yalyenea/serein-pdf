@@ -267,6 +267,23 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.rightSidebarViewController.toggleMode()
     }
 
+    var isReadingFocusModeEnabled: Bool {
+        splitViewController.readerWorkspaceViewController.isReadingFocusModeEnabled
+    }
+
+    @discardableResult
+    func toggleReadingFocusMode() -> Bool {
+        guard documentStore.activeSession(in: windowID)?.isBlank == false else {
+            return isReadingFocusModeEnabled
+        }
+        return splitViewController.readerWorkspaceViewController.toggleReadingFocusMode()
+    }
+
+    func showReadingFocusControls() {
+        guard documentStore.activeSession(in: windowID)?.isBlank == false else { return }
+        splitViewController.readerWorkspaceViewController.showReadingFocusControls()
+    }
+
     func toggleReaderSplit() {
         splitViewController.readerWorkspaceViewController.toggleSplit()
     }

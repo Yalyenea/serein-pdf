@@ -1,6 +1,8 @@
 import AppKit
 
 final class PDFContainerView: NSView {
+    let readingFocusOverlay = ReadingFocusOverlayView()
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -14,6 +16,22 @@ final class PDFContainerView: NSView {
 
     func embedPDFView(_ view: NSView) {
         addSubview(view)
+        readingFocusOverlay.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(readingFocusOverlay)
+        NSLayoutConstraint.activate([
+            readingFocusOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            readingFocusOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            readingFocusOverlay.topAnchor.constraint(equalTo: topAnchor),
+            readingFocusOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    func setReadingFocusEnabled(_ isEnabled: Bool) {
+        readingFocusOverlay.setFocusEnabled(isEnabled)
+    }
+
+    func setReadingFocusSettings(_ settings: ReadingFocusSettings) {
+        readingFocusOverlay.setSettings(settings)
     }
 
     func setNightModeEnabled(_ isEnabled: Bool) {
@@ -21,5 +39,6 @@ final class PDFContainerView: NSView {
             let backgroundColor = isEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
             layer?.backgroundColor = backgroundColor.cgColor
         }
+        readingFocusOverlay.setNightModeEnabled(isEnabled)
     }
 }

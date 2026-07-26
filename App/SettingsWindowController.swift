@@ -1,7 +1,7 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 560, height: 520)
+    static let generalContentSize = NSSize(width: 600, height: 610)
     static let libraryContentSize = NSSize(width: 680, height: 484)
     static let shortcutsContentSize = NSSize(width: 920, height: 620)
     static let pageSegmentWidth: CGFloat = 96
@@ -213,6 +213,23 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
     private let lightThemePopUp = NSPopUpButton()
     private let darkThemePopUp = NSPopUpButton()
     private let displayModePopUp = NSPopUpButton()
+    private let readingFocusWidthPopUp = NSPopUpButton()
+    private let readingFocusCustomWidthSlider = NSSlider(
+        value: Double(ReadingFocusSettings.default.customWidthRatio),
+        minValue: Double(ReadingFocusSettings.minimumCustomWidthRatio),
+        maxValue: Double(ReadingFocusSettings.maximumCustomWidthRatio),
+        target: nil,
+        action: nil
+    )
+    private let readingFocusCustomWidthValueLabel = NSTextField(labelWithString: "72%")
+    private let readingFocusHeightSlider = NSSlider(
+        value: Double(ReadingFocusSettings.default.height),
+        minValue: Double(ReadingFocusSettings.minimumHeight),
+        maxValue: Double(ReadingFocusSettings.maximumHeight),
+        target: nil,
+        action: nil
+    )
+    private let readingFocusHeightValueLabel = NSTextField(labelWithString: "96 pt")
     private let fitWidthCheckbox = NSButton(
         checkboxWithTitle: "Fit width when opening a document",
         target: nil,
@@ -247,7 +264,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         action: nil
     )
     private let footnoteLabel = NSTextField(
-        wrappingLabelWithString: "Reader defaults apply to newly opened PDFs. Sidebar width, opacity, and auto-save apply immediately. Private GitHub repos need [updates] github_token in config.toml."
+        wrappingLabelWithString: "Reading focus defaults apply immediately unless a window has a temporary ⌥F adjustment. Other reader defaults apply to newly opened PDFs. Private GitHub repos need [updates] github_token in config.toml."
     )
 
     private var shortcutButtons: [ShortcutCommand: ShortcutCaptureButton] = [:]
@@ -323,6 +340,11 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             displayModePopUp.lastItem?.representedObject = mode.rawValue
         }
 
+        for mode in ReadingFocusWidthMode.allCases {
+            readingFocusWidthPopUp.addItem(withTitle: mode.menuTitle)
+            readingFocusWidthPopUp.lastItem?.representedObject = mode.rawValue
+        }
+
         for mode in AppearanceMode.allCases {
             modePopUp.addItem(withTitle: mode.menuTitle)
             modePopUp.lastItem?.representedObject = mode.rawValue
@@ -364,6 +386,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         selectItem(in: darkThemePopUp, matching: configuration.appearance.darkTheme.rawValue)
         selectItem(in: displayModePopUp, matching: configuration.reader.defaultDisplayMode.rawValue)
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
+        applyReadingFocusControls(configuration.reader.readingFocus)
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
         applySidebarWidthControls(configuration.layout)
@@ -405,6 +428,8 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
               let darkTheme = DarkTheme(rawValue: darkThemeRawValue),
               let displayModeRawValue = displayModePopUp.selectedItem?.representedObject as? String,
               let displayMode = ReaderDisplayMode(rawValue: displayModeRawValue),
+              let focusWidthRawValue = readingFocusWidthPopUp.selectedItem?.representedObject as? String,
+              let focusWidthMode = ReadingFocusWidthMode(rawValue: focusWidthRawValue),
               let autoSaveRawValue = autoSavePopUp.selectedItem?.representedObject as? String,
               let autoSavePolicy = AnnotationSavePolicy(rawValue: autoSaveRawValue) else {
             return
@@ -416,6 +441,11 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         updatedConfiguration.appearance.darkTheme = darkTheme
         updatedConfiguration.reader.defaultDisplayMode = displayMode
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
+        updatedConfiguration.reader.readingFocus = ReadingFocusSettings(
+            widthMode: focusWidthMode,
+            customWidthRatio: normalizedReadingFocusCustomWidth(),
+            height: normalizedReadingFocusHeight()
+        )
         updatedConfiguration.annotations.autoSavePolicy = autoSavePolicy
         updatedConfiguration.layout.sidebarsSwapped = swapSidebarsCheckbox.state == .on
         updatedConfiguration.layout.leftSidebarWidth = normalizedSidebarWidth(
@@ -457,6 +487,13 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         handleGeneralControlChanged(sender)
     }
 
+    @objc
+    private func handleReadingFocusControlChanged(_ sender: Any?) {
+        guard isApplyingConfiguration == false else { return }
+        refreshReadingFocusLabelsAndAvailability()
+        handleGeneralControlChanged(sender)
+    }
+
     private func applySelectedPage() {
         let page = SettingsPage(rawValue: pageControl.selectedSegment) ?? .general
         generalContainer.isHidden = page != .general
@@ -489,6 +526,33 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         displayModePopUp.controlSize = .small
         displayModePopUp.target = self
         displayModePopUp.action = #selector(handleGeneralControlChanged(_:))
+
+        readingFocusWidthPopUp.translatesAutoresizingMaskIntoConstraints = false
+        readingFocusWidthPopUp.identifier = NSUserInterfaceItemIdentifier("readingFocusWidthPopUp")
+        readingFocusWidthPopUp.controlSize = .small
+        readingFocusWidthPopUp.target = self
+        readingFocusWidthPopUp.action = #selector(handleReadingFocusControlChanged(_:))
+
+        configureReadingFocusSlider(
+            readingFocusCustomWidthSlider,
+            identifier: "readingFocusCustomWidthSlider"
+        )
+        configureReadingFocusSlider(
+            readingFocusHeightSlider,
+            identifier: "readingFocusHeightSlider"
+        )
+        readingFocusCustomWidthValueLabel.identifier = NSUserInterfaceItemIdentifier(
+            "readingFocusCustomWidthValueLabel"
+        )
+        readingFocusHeightValueLabel.identifier = NSUserInterfaceItemIdentifier(
+            "readingFocusHeightValueLabel"
+        )
+        for label in [readingFocusCustomWidthValueLabel, readingFocusHeightValueLabel] {
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            label.textColor = .secondaryLabelColor
+            label.alignment = .right
+        }
 
         fitWidthCheckbox.translatesAutoresizingMaskIntoConstraints = false
         fitWidthCheckbox.controlSize = .small
@@ -564,6 +628,16 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
 
         let sidebarDefaultsStack = makeSidebarDefaultsStack()
         let sidebarOpacityStack = makeSidebarOpacityStack()
+        let readingFocusWidthStack = makeReadingFocusSliderStack(
+            leadingControl: readingFocusWidthPopUp,
+            slider: readingFocusCustomWidthSlider,
+            valueLabel: readingFocusCustomWidthValueLabel
+        )
+        let readingFocusHeightStack = makeReadingFocusSliderStack(
+            leadingControl: nil,
+            slider: readingFocusHeightSlider,
+            valueLabel: readingFocusHeightValueLabel
+        )
 
         let grid = NSGridView(views: [
             [makeRowLabel("Mode"), modePopUp],
@@ -571,6 +645,8 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             [makeRowLabel("Dark Theme"), darkThemePopUp],
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
+            [makeRowLabel("Focus Width"), readingFocusWidthStack],
+            [makeRowLabel("Focus Height"), readingFocusHeightStack],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
             [makeRowLabel("Sidebar Widths"), sidebarDefaultsStack],
             [makeRowLabel("Sidebar Opacity"), sidebarOpacityStack],
@@ -585,6 +661,12 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         generalContainer.addSubview(grid)
         generalContainer.addSubview(footnoteLabel)
 
+        let footnoteBottomConstraint = footnoteLabel.bottomAnchor.constraint(
+            lessThanOrEqualTo: generalContainer.bottomAnchor,
+            constant: -20
+        )
+        footnoteBottomConstraint.priority = .defaultLow
+
         NSLayoutConstraint.activate([
             grid.leadingAnchor.constraint(equalTo: generalContainer.leadingAnchor, constant: 24),
             grid.trailingAnchor.constraint(lessThanOrEqualTo: generalContainer.trailingAnchor, constant: -24),
@@ -593,11 +675,12 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             lightThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
             darkThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
             displayModePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
+            readingFocusWidthPopUp.widthAnchor.constraint(equalToConstant: 138),
             autoSavePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
             footnoteLabel.leadingAnchor.constraint(equalTo: grid.leadingAnchor),
             footnoteLabel.trailingAnchor.constraint(equalTo: generalContainer.trailingAnchor, constant: -24),
             footnoteLabel.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 16),
-            footnoteLabel.bottomAnchor.constraint(lessThanOrEqualTo: generalContainer.bottomAnchor, constant: -20),
+            footnoteBottomConstraint,
         ])
     }
 
@@ -673,6 +756,33 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         return stack
     }
 
+    private func configureReadingFocusSlider(_ slider: NSSlider, identifier: String) {
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.identifier = NSUserInterfaceItemIdentifier(identifier)
+        slider.controlSize = .small
+        slider.isContinuous = true
+        slider.target = self
+        slider.action = #selector(handleReadingFocusControlChanged(_:))
+    }
+
+    private func makeReadingFocusSliderStack(
+        leadingControl: NSView?,
+        slider: NSSlider,
+        valueLabel: NSTextField
+    ) -> NSStackView {
+        let views = [leadingControl, slider, valueLabel].compactMap { $0 }
+        let stack = NSStackView(views: views)
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            slider.widthAnchor.constraint(equalToConstant: leadingControl == nil ? 190 : 120),
+            valueLabel.widthAnchor.constraint(equalToConstant: 48),
+        ])
+        return stack
+    }
+
     private func applySidebarWidthControls(_ layout: AppConfiguration.Layout) {
         leftSidebarWidthField.integerValue = Int(layout.leftSidebarWidth.rounded())
         leftSidebarWidthStepper.minValue = Double(layout.leftSidebarMinWidth)
@@ -690,6 +800,13 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         sidebarOpacityValueLabel.stringValue = sidebarOpacityDisplayString(layout.sidebarOpacity)
     }
 
+    private func applyReadingFocusControls(_ settings: ReadingFocusSettings) {
+        selectItem(in: readingFocusWidthPopUp, matching: settings.widthMode.rawValue)
+        readingFocusCustomWidthSlider.doubleValue = Double(settings.customWidthRatio)
+        readingFocusHeightSlider.doubleValue = Double(settings.height)
+        refreshReadingFocusLabelsAndAvailability()
+    }
+
     private func normalizedSidebarWidth(from field: NSTextField, minWidth: CGFloat, maxWidth: CGFloat) -> CGFloat {
         min(max(CGFloat(field.doubleValue.rounded()), minWidth), maxWidth)
     }
@@ -700,6 +817,41 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
 
     private func sidebarOpacityDisplayString(_ value: CGFloat) -> String {
         "\(Int((value * 100).rounded()))%"
+    }
+
+    private func normalizedReadingFocusCustomWidth() -> CGFloat {
+        min(
+            max(
+                CGFloat(readingFocusCustomWidthSlider.doubleValue),
+                ReadingFocusSettings.minimumCustomWidthRatio
+            ),
+            ReadingFocusSettings.maximumCustomWidthRatio
+        )
+    }
+
+    private func normalizedReadingFocusHeight() -> CGFloat {
+        min(
+            max(
+                CGFloat(readingFocusHeightSlider.doubleValue.rounded()),
+                ReadingFocusSettings.minimumHeight
+            ),
+            ReadingFocusSettings.maximumHeight
+        )
+    }
+
+    private func refreshReadingFocusLabelsAndAvailability() {
+        let widthMode = (readingFocusWidthPopUp.selectedItem?.representedObject as? String)
+            .flatMap(ReadingFocusWidthMode.init(rawValue:))
+            ?? .page
+        let usesCustomWidth = widthMode == .custom
+        readingFocusCustomWidthSlider.isEnabled = usesCustomWidth
+        readingFocusCustomWidthValueLabel.textColor = usesCustomWidth
+            ? .secondaryLabelColor
+            : .tertiaryLabelColor
+        readingFocusCustomWidthValueLabel.stringValue =
+            "\(Int((normalizedReadingFocusCustomWidth() * 100).rounded()))%"
+        readingFocusHeightValueLabel.stringValue =
+            "\(Int(normalizedReadingFocusHeight().rounded())) pt"
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {

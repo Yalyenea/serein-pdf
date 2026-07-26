@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -65,6 +65,8 @@ flowchart LR
     E2 --> L
     E1 --> M["ThemeManager"]
     E2 --> M
+    E1 --> P["ReadingFocusOverlayView"]
+    E2 --> P
     H --> N["ReadingStateStore"]
     H --> O["RecentFilesStore"]
 ```
@@ -93,6 +95,7 @@ flowchart LR
 | 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
+| 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
 | 侧栏外观 | 左右侧栏使用 native `NSVisualEffectView.sidebar` material;`layout.sidebarOpacity` 控制 tint 强度;文档侧栏空白背景可拖窗,不抢 tab / close / divider / scroll 事件 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
@@ -123,6 +126,7 @@ flowchart LR
 - `Settings` 按当前页内容自适应尺寸,`General` 页可编辑左右侧栏默认宽度,`Shortcuts` 页会自动放大到合适大小
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
+- 阅读聚焦使用单一圆角矩形镂空与统一外围压暗,禁止多方向渐变拼接;轻描边 / 阴影只强化焦点边界,不得污染框内文字
 - 空窗 / 空白 tab 时由中栏承担唯一打开引导:主文案 + `⌘O` / 最近文件快捷键提示 + 拖放 PDF;左右侧栏不重复铺陈
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
@@ -151,6 +155,8 @@ flowchart LR
 - `Cmd+[` / `Cmd+]`:历史后退 / 前进
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar(有 PDF 选中文本时立即带入搜索)/ 下一 / 上一 匹配
 - Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
+- `F`:开启 / 关闭鼠标跟随阅读聚焦;遮罩按真实 PDF 页宽定位且不阻断选择、链接、拖拽与滚动
+- `Option+F`:调整当前窗口聚焦宽度(Page / Column / Custom)与高度;默认值在 Settings General 或 `[reader]` 配置
 - `I`:切换 light / dark mode,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme(亮色切 `normal` / `rose_pine_dawn`,暗色切 `normal` / `rose_pine_moon`)
 - `Cmd+K` → `Cmd+O`:从配置的 PDF 库文件夹扫描并打开二级库浏览面板
@@ -318,7 +324,9 @@ UI/TitlebarTabs/                          # 标题栏水平 tabs
 UI/CenterReader/                          # 中栏阅读区
   ReaderWorkspaceViewController.swift     # 中栏 workspace:单 / 双 Reader 分屏 + 焦点 pane
   ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
-  PDFContainerView.swift                  # PDFView 宿主,切夜间模式时同步背景色
+  PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
+  ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何
+  ReadingFocusControlsViewController.swift # 当前窗口聚焦宽高紧凑调节面板
   ReaderShortcutsController.swift         # reader 快捷键(j/k/g/…)与 Cmd+K chord 分发
   FindBarView.swift                       # find bar:查询框 + scope 切换 + 匹配导航按钮
 
@@ -395,6 +403,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 | M9 最近文件启动器 | ✅ | Spotlight 风格 recent-files palette,搜索 / 空格多选 / 回车打开 / 底部操作提示;开发 + 手测通过 |
 | M10–M10.13 体验扩展 | ✅ | Framing、连续阅读、PDF 库、热重载、切换提示、绿灯窗口、空白 tab、路径复制、浏览器式分屏、Go to Page 焦点等;开发 + 手测通过 |
 | M14 窗口工作流交互 | ✅ | PDF 跨已有窗口菜单 / 拖拽移动、热重载实时页码、左右 / 上下分屏、侧栏空白拖窗、左右物理 Command 数字键 |
+| M15 阅读聚焦 | ✅ | `F` 鼠标跟随聚焦、`Option+F` 窗口调节、Settings 默认宽高、双栏半页模式、单路径圆角遮罩与暗色增强 |
 
 已完成细项以 commit 历史与 [TASKS.md](TASKS.md) 为准,不在本文件展开。
 

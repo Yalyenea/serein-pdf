@@ -173,6 +173,8 @@ final class ReaderViewController: NSViewController {
     private var lastSubmittedSearchKey: SubmittedSearchKey?
     private var pendingAnnotationFocusToken: Int = 0
     private var switchTitleToastHideWorkItem: DispatchWorkItem?
+    private(set) var isReadingFocusModeEnabled = false
+    private(set) var readingFocusSettings: ReadingFocusSettings = .default
     var targetSessionID: UUID? {
         didSet {
             guard oldValue != targetSessionID else { return }
@@ -183,6 +185,7 @@ final class ReaderViewController: NSViewController {
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
         self.windowID = windowID
+        self.readingFocusSettings = documentStore.appConfiguration.reader.readingFocus
         super.init(nibName: nil, bundle: nil)
         title = "Reader"
     }
@@ -202,7 +205,12 @@ final class ReaderViewController: NSViewController {
         pdfView.onLayoutCompleted = { [weak self] in
             self?.syncPDFMarginBackground()
             self?.applyThemeFilter()
+            self?.pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
         }
+        pdfContainerView.readingFocusOverlay.pageBoundsProvider = { [weak self] point in
+            self?.readingFocusPageBounds(at: point)
+        }
+        pdfContainerView.setReadingFocusSettings(readingFocusSettings)
 
         NotificationCenter.default.addObserver(
             self,
@@ -647,12 +655,14 @@ final class ReaderViewController: NSViewController {
             overviewGridView.configure(document: pdfView.document)
             overviewGridView.isHidden = false
             pdfContainerView.isHidden = true
+            syncReadingFocusAvailability()
             setEmptyStateVisible(false)
             applyOverviewSurfaceAppearance()
             reflowOverviewGrid(force: true)
         } else {
             overviewGridView.isHidden = true
             pdfContainerView.isHidden = false
+            syncReadingFocusAvailability()
             overviewManualCellWidth = nil
             lastOverviewLayoutSignature = ""
             if targetSession()?.isBlank == false {
@@ -801,6 +811,36 @@ final class ReaderViewController: NSViewController {
     func setHighlightColor(_ color: HighlightColor) {
         themeManager.setHighlightColor(color)
         updateHighlightModeIndicator()
+    }
+
+    func setReadingFocusModeEnabled(_ enabled: Bool) {
+        guard enabled != isReadingFocusModeEnabled else { return }
+        isReadingFocusModeEnabled = enabled
+        guard isViewLoaded else { return }
+        syncReadingFocusAvailability()
+    }
+
+    func setReadingFocusSettings(_ settings: ReadingFocusSettings) {
+        guard settings != readingFocusSettings else { return }
+        readingFocusSettings = settings
+        guard isViewLoaded else { return }
+        pdfContainerView.setReadingFocusSettings(settings)
+    }
+
+    func setReadingFocusControlsPresented(_ isPresented: Bool, anchorPointInView: NSPoint? = nil) {
+        let overlay = pdfContainerView.readingFocusOverlay
+        let preferredPoint = anchorPointInView.map {
+            pdfContainerView.readingFocusOverlay.convert($0, from: view)
+        }
+        let focusPoint: NSPoint?
+        if isPresented {
+            focusPoint = overlay.focusLocation
+                ?? preferredPoint.flatMap { readingFocusPageBounds(at: $0) == nil ? nil : $0 }
+                ?? visibleReadingFocusPageCenter()
+        } else {
+            focusPoint = nil
+        }
+        overlay.setFocusPinned(isPresented, at: focusPoint)
     }
 
     @discardableResult
@@ -1048,6 +1088,7 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession() else {
             pdfView.document = nil
             pdfView.isHidden = true
+            syncReadingFocusAvailability()
             showDefaultEmptyState()
             displayedSessionID = nil
             displayedReadingPosition = nil
@@ -1062,6 +1103,7 @@ final class ReaderViewController: NSViewController {
         if session.isBlank {
             pdfView.document = nil
             pdfView.isHidden = true
+            syncReadingFocusAvailability()
             showDefaultEmptyState()
             displayedSessionID = session.id
             displayedReadingPosition = nil
@@ -1082,6 +1124,7 @@ final class ReaderViewController: NSViewController {
         } catch {
             pdfView.document = nil
             pdfView.isHidden = true
+            syncReadingFocusAvailability()
             showErrorEmptyState(error.localizedDescription)
             displayedSessionID = session.id
             return
@@ -1122,9 +1165,11 @@ final class ReaderViewController: NSViewController {
             overviewGridView.configure(document: document)
             reflowOverviewGrid(force: isNewSession)
             pdfContainerView.isHidden = true
+            syncReadingFocusAvailability()
             setEmptyStateVisible(false)
         } else {
             pdfView.isHidden = false
+            syncReadingFocusAvailability()
             setEmptyStateVisible(false)
         }
         if isNewSession, previousSessionID != nil {
@@ -1586,6 +1631,7 @@ final class ReaderViewController: NSViewController {
     private func handlePDFClipViewBoundsDidChange(_ notification: Notification) {
         guard isApplyingScrollClamp == false else { return }
         recenterDocumentViewIfNeeded()
+        pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
     }
 
     private func pdfClipView() -> NSClipView? {
@@ -1810,6 +1856,41 @@ final class ReaderViewController: NSViewController {
         updateHighlightModeIndicator()
     }
 
+    private func syncReadingFocusAvailability() {
+        let isAvailable = isAllPagesOverviewActive == false
+            && isReadingFocusModeEnabled
+            && pdfContainerView.isHidden == false
+            && pdfView.isHidden == false
+            && pdfView.document != nil
+        pdfContainerView.setReadingFocusEnabled(isAvailable)
+    }
+
+    private func readingFocusPageBounds(at point: NSPoint) -> NSRect? {
+        let overlay = pdfContainerView.readingFocusOverlay
+        let pointInPDF = pdfView.convert(point, from: overlay)
+        guard pdfView.bounds.contains(pointInPDF),
+              let page = pdfView.page(for: pointInPDF, nearest: false) else { return nil }
+        let pageBoundsInPDF = pdfView.convert(page.bounds(for: pdfView.displayBox), from: page)
+        return overlay.convert(pageBoundsInPDF, from: pdfView)
+    }
+
+    private func visibleReadingFocusPageCenter() -> NSPoint? {
+        let overlay = pdfContainerView.readingFocusOverlay
+        let page = pdfView.currentPage
+            ?? pdfView.page(
+                for: NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY),
+                nearest: true
+            )
+        guard let page else { return nil }
+        let pageBoundsInPDF = pdfView.convert(page.bounds(for: pdfView.displayBox), from: page)
+        let pageBounds = overlay.convert(pageBoundsInPDF, from: pdfView)
+        let visibleBounds = pageBounds.intersection(overlay.bounds)
+        guard visibleBounds.isNull == false,
+              visibleBounds.width > 0,
+              visibleBounds.height > 0 else { return nil }
+        return NSPoint(x: visibleBounds.midX, y: visibleBounds.midY)
+    }
+
     private func showSwitchTitleToast(_ title: String) {
         switchTitleToastHideWorkItem?.cancel()
         switchTitleToastLabel.stringValue = title
@@ -1898,6 +1979,14 @@ extension ReaderViewController {
 
     var testingEmptyStateHintIsVisible: Bool {
         emptyStateHintLabel.isHidden == false
+    }
+
+    var testingReadingFocusIsEnabled: Bool {
+        pdfContainerView.readingFocusOverlay.isFocusEnabled
+    }
+
+    var testingReadingFocusModeIsEnabled: Bool {
+        isReadingFocusModeEnabled
     }
 }
 

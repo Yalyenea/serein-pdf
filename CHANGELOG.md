@@ -4,6 +4,13 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-27
+
+### Reading Focus
+- Add a cursor-following reading focus mode: press `f` to dim everything outside a compact rounded reading band without intercepting PDF selection, links, dragging, or scrolling.
+- Add `option+f` window-level controls for Page, Column (half-page), or Custom width plus adjustable height; Settings General configures the defaults.
+- Keep split readers synchronized, follow the actual PDF page geometry, and strengthen the surrounding shade in dark mode with a subtle edge shadow and no stitched gradients.
+
 ### Reliability
 - Backfill missing `new_blank_tab` in config self-heal keys and add a defaultContents/render/requiredKeys consistency test.
 - Strip TOML inline `#` comments outside quoted strings when parsing config values.

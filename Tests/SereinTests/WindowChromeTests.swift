@@ -266,6 +266,104 @@ struct WindowChromeTests {
     }
 
     @Test
+    func readingFocusOnlyRunsForLivePDFContent() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = ReaderViewController(documentStore: store)
+        controller.loadViewIfNeeded()
+
+        #expect(controller.testingReadingFocusIsEnabled == false)
+
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(named: "reading-focus-live-pdf")
+        )
+        controller.targetSessionID = session.id
+        #expect(controller.testingReadingFocusIsEnabled == false)
+
+        controller.setReadingFocusModeEnabled(true)
+        #expect(controller.testingReadingFocusIsEnabled)
+
+        controller.setAllPagesOverviewActive(true)
+        #expect(controller.testingReadingFocusIsEnabled == false)
+
+        controller.setAllPagesOverviewActive(false)
+        #expect(controller.testingReadingFocusIsEnabled)
+
+        controller.setReadingFocusModeEnabled(false)
+        #expect(controller.testingReadingFocusIsEnabled == false)
+    }
+
+    @Test
+    func readingFocusModeIsWindowLocalAndSynchronizesSplitReaders() {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let firstWorkspace = ReaderWorkspaceViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        firstWorkspace.loadViewIfNeeded()
+        let secondWindowID = store.createWindow()
+        let secondWorkspace = ReaderWorkspaceViewController(
+            documentStore: store,
+            windowID: secondWindowID
+        )
+        secondWorkspace.loadViewIfNeeded()
+
+        #expect(firstWorkspace.isReadingFocusModeEnabled == false)
+        #expect(secondWorkspace.isReadingFocusModeEnabled == false)
+
+        #expect(firstWorkspace.toggleReadingFocusMode())
+        #expect(firstWorkspace.primaryReaderViewController.testingReadingFocusModeIsEnabled)
+        #expect(firstWorkspace.secondaryReaderViewController.testingReadingFocusModeIsEnabled)
+        #expect(secondWorkspace.isReadingFocusModeEnabled == false)
+
+        #expect(firstWorkspace.toggleReadingFocusMode() == false)
+        #expect(firstWorkspace.primaryReaderViewController.testingReadingFocusModeIsEnabled == false)
+        #expect(firstWorkspace.secondaryReaderViewController.testingReadingFocusModeIsEnabled == false)
+    }
+
+    @Test
+    func readingFocusSizeUsesWindowOverrideAndCanResetToGlobalDefaults() {
+        _ = NSApplication.shared
+        var configuration = AppConfiguration.default
+        configuration.reader.readingFocus = ReadingFocusSettings(
+            widthMode: .page,
+            customWidthRatio: 0.72,
+            height: 96
+        )
+        let store = DocumentStore(appConfiguration: configuration)
+        let workspace = ReaderWorkspaceViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        workspace.loadViewIfNeeded()
+
+        let temporarySettings = ReadingFocusSettings(
+            widthMode: .column,
+            customWidthRatio: 0.6,
+            height: 120
+        )
+        workspace.setReadingFocusSettings(temporarySettings)
+
+        #expect(workspace.readingFocusSettings == temporarySettings)
+        #expect(workspace.primaryReaderViewController.readingFocusSettings == temporarySettings)
+        #expect(workspace.secondaryReaderViewController.readingFocusSettings == temporarySettings)
+
+        configuration.reader.readingFocus = ReadingFocusSettings(
+            widthMode: .custom,
+            customWidthRatio: 0.8,
+            height: 144
+        )
+        store.updateAppConfiguration(configuration)
+        #expect(workspace.readingFocusSettings == temporarySettings)
+
+        workspace.resetReadingFocusSettings()
+        #expect(workspace.readingFocusSettings == configuration.reader.readingFocus)
+        #expect(workspace.primaryReaderViewController.readingFocusSettings == configuration.reader.readingFocus)
+        #expect(workspace.secondaryReaderViewController.readingFocusSettings == configuration.reader.readingFocus)
+    }
+
+    @Test
     func highlightModeUsesCompactInlineIndicator() {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
@@ -1347,7 +1445,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 560, height: 520))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 600, height: 610))
     }
 
     @Test
@@ -1384,7 +1482,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 560, height: 520))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 600, height: 610))
     }
 
     @Test
@@ -1431,6 +1529,53 @@ struct WindowChromeTests {
         let updatedConfiguration = try #require(publishedConfigurations.last)
         #expect(abs(updatedConfiguration.layout.sidebarOpacity - 0.55) < 0.001)
         #expect(textField(identifier: "sidebarOpacityValueLabel", in: contentView)?.stringValue == "55%")
+    }
+
+    @Test
+    func settingsWindowCanEditReadingFocusDefaults() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) { configuration in
+            publishedConfigurations.append(configuration)
+        }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let widthPopUp = try #require(
+            findView(identifier: "readingFocusWidthPopUp", in: contentView) as? NSPopUpButton
+        )
+        let customWidthSlider = try #require(
+            slider(identifier: "readingFocusCustomWidthSlider", in: contentView)
+        )
+        let heightSlider = try #require(
+            slider(identifier: "readingFocusHeightSlider", in: contentView)
+        )
+        #expect(customWidthSlider.isEnabled == false)
+
+        let customItem = try #require(
+            widthPopUp.itemArray.first {
+                ($0.representedObject as? String) == ReadingFocusWidthMode.custom.rawValue
+            }
+        )
+        widthPopUp.select(customItem)
+        customWidthSlider.doubleValue = 0.6
+        heightSlider.doubleValue = 132
+
+        let action = try #require(widthPopUp.action)
+        let target = try #require(widthPopUp.target)
+        NSApp.sendAction(action, to: target, from: widthPopUp)
+
+        let updatedConfiguration = try #require(publishedConfigurations.last)
+        #expect(updatedConfiguration.reader.readingFocus.widthMode == .custom)
+        #expect(abs(updatedConfiguration.reader.readingFocus.customWidthRatio - 0.6) < 0.001)
+        #expect(updatedConfiguration.reader.readingFocus.height == 132)
+        #expect(customWidthSlider.isEnabled)
+        #expect(
+            textField(identifier: "readingFocusCustomWidthValueLabel", in: contentView)?.stringValue == "60%"
+        )
+        #expect(
+            textField(identifier: "readingFocusHeightValueLabel", in: contentView)?.stringValue == "132 pt"
+        )
     }
 
     @Test

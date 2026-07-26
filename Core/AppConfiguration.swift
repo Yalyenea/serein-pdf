@@ -79,6 +79,39 @@ enum DarkTheme: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum ReadingFocusWidthMode: String, CaseIterable, Codable, Sendable {
+    case page
+    case column
+    case custom
+
+    var menuTitle: String {
+        switch self {
+        case .page:
+            "Page Width"
+        case .column:
+            "Column (½ Page)"
+        case .custom:
+            "Custom"
+        }
+    }
+}
+
+struct ReadingFocusSettings: Equatable, Sendable {
+    static let minimumCustomWidthRatio: CGFloat = 0.3
+    static let maximumCustomWidthRatio: CGFloat = 1
+    static let minimumHeight: CGFloat = 48
+    static let maximumHeight: CGFloat = 240
+    static let `default` = ReadingFocusSettings(
+        widthMode: .page,
+        customWidthRatio: 0.72,
+        height: 96
+    )
+
+    var widthMode: ReadingFocusWidthMode
+    var customWidthRatio: CGFloat
+    var height: CGFloat
+}
+
 struct AppConfiguration: Equatable, Sendable {
     struct Appearance: Equatable, Sendable {
         var mode: AppearanceMode
@@ -95,10 +128,22 @@ struct AppConfiguration: Equatable, Sendable {
     struct Reader: Equatable, Sendable {
         var defaultDisplayMode: ReaderDisplayMode
         var fitWidthOnOpen: Bool
+        var readingFocus: ReadingFocusSettings
+
+        init(
+            defaultDisplayMode: ReaderDisplayMode,
+            fitWidthOnOpen: Bool,
+            readingFocus: ReadingFocusSettings = .default
+        ) {
+            self.defaultDisplayMode = defaultDisplayMode
+            self.fitWidthOnOpen = fitWidthOnOpen
+            self.readingFocus = readingFocus
+        }
 
         static let `default` = Reader(
             defaultDisplayMode: .singlePageContinuous,
-            fitWidthOnOpen: false
+            fitWidthOnOpen: false,
+            readingFocus: .default
         )
     }
 
@@ -167,6 +212,8 @@ struct AppConfiguration: Equatable, Sendable {
             .highlightSelection: KeyboardShortcut(key: "a", modifiers: []),
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
+            .toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: []),
+            .adjustReadingFocus: KeyboardShortcut(key: "f", modifiers: [.option]),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
             .copyCurrentPDFPath: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
@@ -407,6 +454,9 @@ enum AppConfigurationError: LocalizedError {
     case invalidLightTheme(String)
     case invalidDarkTheme(String)
     case invalidDisplayMode(String)
+    case invalidReadingFocusWidthMode(String)
+    case invalidReadingFocusWidthRatio(String)
+    case invalidReadingFocusHeight(String)
     case invalidShortcut(String)
     case invalidStringArray(String)
     case invalidAnnotationSavePolicy(String)
@@ -427,6 +477,12 @@ enum AppConfigurationError: LocalizedError {
             "Invalid dark theme in config: \(value)"
         case let .invalidDisplayMode(value):
             "Invalid reader display mode in config: \(value)"
+        case let .invalidReadingFocusWidthMode(value):
+            "Invalid reading focus width mode in config: \(value)"
+        case let .invalidReadingFocusWidthRatio(value):
+            "Invalid reading focus width ratio in config: \(value)"
+        case let .invalidReadingFocusHeight(value):
+            "Invalid reading focus height in config: \(value)"
         case let .invalidShortcut(value):
             "Invalid keyboard shortcut in config: \(value)"
         case let .invalidStringArray(value):
@@ -454,6 +510,9 @@ dark_theme = "rose_pine_moon"
 [reader]
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
+reading_focus_width = "page"
+reading_focus_custom_width = 0.72
+reading_focus_height = 96
 
 [annotations]
 auto_save = "after_10_minutes"
@@ -485,6 +544,8 @@ github_token = ""
 highlight_selection = "a"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
+toggle_reading_focus = "f"
+adjust_reading_focus = "option+f"
 # Cmd+K, Cmd+T is a built-in chord.
 switch_current_theme = "none"
 # Cmd+K, Cmd+O is a built-in chord.
@@ -567,6 +628,9 @@ dark_theme = "\(configuration.appearance.darkTheme.rawValue)"
 [reader]
 default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
 fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
+reading_focus_width = "\(configuration.reader.readingFocus.widthMode.rawValue)"
+reading_focus_custom_width = \(serializedDecimal(configuration.reader.readingFocus.customWidthRatio))
+reading_focus_height = \(Int(configuration.reader.readingFocus.height.rounded()))
 
 [annotations]
 auto_save = "\(configuration.annotations.autoSavePolicy.rawValue)"
@@ -580,7 +644,7 @@ right_sidebar_min_width = \(Int(configuration.layout.rightSidebarMinWidth.rounde
 right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounded()))
 sidebars_swapped = \(configuration.layout.sidebarsSwapped ? "true" : "false")
 show_recent_files_in_sidebar = \(configuration.layout.showRecentFilesInSidebar ? "true" : "false")
-sidebar_opacity = \(serializedOpacity(configuration.layout.sidebarOpacity))
+sidebar_opacity = \(serializedDecimal(configuration.layout.sidebarOpacity))
 
 [library]
 folders = \(serializedPathArray(configuration.library.folderURLs))
@@ -597,6 +661,8 @@ github_token = "\(escapedTOMLString(configuration.updates.githubToken))"
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
+toggle_reading_focus = "\(serializedShortcut(.toggleReadingFocus, configuration: configuration))"
+adjust_reading_focus = "\(serializedShortcut(.adjustReadingFocus, configuration: configuration))"
 switch_current_theme = "\(serializedShortcut(.switchCurrentTheme, configuration: configuration))"
 open_library_pdf = "\(serializedShortcut(.openLibraryPDF, configuration: configuration))"
 refresh_library_index = "\(serializedShortcut(.refreshLibraryIndex, configuration: configuration))"
@@ -673,6 +739,12 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "mode",
         "light_theme",
         "dark_theme",
+        "[reader]",
+        "default_display_mode",
+        "fit_width_on_open",
+        "reading_focus_width",
+        "reading_focus_custom_width",
+        "reading_focus_height",
         "[annotations]",
         "auto_save",
         "[layout]",
@@ -696,6 +768,8 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "highlight_selection",
         "exit_highlight_mode",
         "toggle_night_mode",
+        "toggle_reading_focus",
+        "adjust_reading_focus",
         "switch_current_theme",
         "open_library_pdf",
         "refresh_library_index",
@@ -757,7 +831,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "redo_last_highlight",
     ]
 
-    private static func serializedOpacity(_ value: CGFloat) -> String {
+    private static func serializedDecimal(_ value: CGFloat) -> String {
         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), Double(value))
     }
 
@@ -863,6 +937,10 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .exitHighlightMode, to: &configuration)
         case ("shortcuts", "toggle_night_mode"):
             try applyShortcut(rawValue, command: .toggleNightMode, to: &configuration)
+        case ("shortcuts", "toggle_reading_focus"):
+            try applyShortcut(rawValue, command: .toggleReadingFocus, to: &configuration)
+        case ("shortcuts", "adjust_reading_focus"):
+            try applyShortcut(rawValue, command: .adjustReadingFocus, to: &configuration)
         case ("shortcuts", "switch_current_theme"):
             try applyShortcut(rawValue, command: .switchCurrentTheme, to: &configuration)
         case ("shortcuts", "open_library_pdf"):
@@ -891,6 +969,16 @@ struct AppConfigurationParser {
             configuration.reader.defaultDisplayMode = displayMode
         case ("reader", "fit_width_on_open"):
             configuration.reader.fitWidthOnOpen = try parseBool(rawValue)
+        case ("reader", "reading_focus_width"):
+            let value = parseString(rawValue)
+            guard let widthMode = ReadingFocusWidthMode(rawValue: value) else {
+                throw AppConfigurationError.invalidReadingFocusWidthMode(value)
+            }
+            configuration.reader.readingFocus.widthMode = widthMode
+        case ("reader", "reading_focus_custom_width"):
+            configuration.reader.readingFocus.customWidthRatio = try parseReadingFocusWidthRatio(rawValue)
+        case ("reader", "reading_focus_height"):
+            configuration.reader.readingFocus.height = try parseReadingFocusHeight(rawValue)
         case ("annotations", "auto_save"):
             let value = parseString(rawValue)
             guard let policy = AnnotationSavePolicy(rawValue: value) else {
@@ -1119,6 +1207,28 @@ struct AppConfigurationParser {
         let trimmed = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
         guard let value = Double(trimmed), value.isFinite, (0...1).contains(value) else {
             throw AppConfigurationError.invalidOpacity(rawValue)
+        }
+        return CGFloat(value)
+    }
+
+    private func parseReadingFocusWidthRatio(_ rawValue: String) throws -> CGFloat {
+        let trimmed = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        guard let value = Double(trimmed),
+              value.isFinite,
+              (Double(ReadingFocusSettings.minimumCustomWidthRatio)...Double(ReadingFocusSettings.maximumCustomWidthRatio))
+                .contains(value) else {
+            throw AppConfigurationError.invalidReadingFocusWidthRatio(rawValue)
+        }
+        return CGFloat(value)
+    }
+
+    private func parseReadingFocusHeight(_ rawValue: String) throws -> CGFloat {
+        let trimmed = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        guard let value = Double(trimmed),
+              value.isFinite,
+              (Double(ReadingFocusSettings.minimumHeight)...Double(ReadingFocusSettings.maximumHeight))
+                .contains(value) else {
+            throw AppConfigurationError.invalidReadingFocusHeight(rawValue)
         }
         return CGFloat(value)
     }

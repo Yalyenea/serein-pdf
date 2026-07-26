@@ -17,12 +17,15 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.appearance.darkTheme, .rosePineMoon)
         XCTAssertEqual(configuration.reader.defaultDisplayMode, .singlePageContinuous)
         XCTAssertFalse(configuration.reader.fitWidthOnOpen)
+        XCTAssertEqual(configuration.reader.readingFocus, .default)
         XCTAssertEqual(configuration.library.folderURLs, [])
         XCTAssertEqual(configuration.access.rootURLs.map(\.path), ["/Users"])
         XCTAssertEqual(configuration.access.rootBookmarkData, [:])
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleReadingFocus], KeyboardShortcut(key: "f", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.adjustReadingFocus], KeyboardShortcut(key: "f", modifiers: [.option]))
         XCTAssertNil(configuration.shortcuts.bindings[.switchCurrentTheme])
         XCTAssertNil(configuration.shortcuts.bindings[.openLibraryPDF])
         XCTAssertNil(configuration.shortcuts.bindings[.refreshLibraryIndex])
@@ -96,11 +99,15 @@ dark_theme = "normal"
 [reader]
 default_display_mode = "two_up"
 fit_width_on_open = false
+reading_focus_width = "column"
+reading_focus_custom_width = 0.64
+reading_focus_height = 112
 
 [shortcuts]
 highlight_selection = "h"
 exit_highlight_mode = "escape"
 toggle_night_mode = "n"
+adjust_reading_focus = "control+r"
 switch_current_theme = "command+option+t"
 save_annotations = "command+shift+s"
 share_document = "command+option+e"
@@ -149,9 +156,13 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.appearance.darkTheme, .normal)
         XCTAssertEqual(configuration.reader.defaultDisplayMode, .twoUp)
         XCTAssertFalse(configuration.reader.fitWidthOnOpen)
+        XCTAssertEqual(configuration.reader.readingFocus.widthMode, .column)
+        XCTAssertEqual(configuration.reader.readingFocus.customWidthRatio, 0.64, accuracy: 0.001)
+        XCTAssertEqual(configuration.reader.readingFocus.height, 112, accuracy: 0.001)
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "h", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "n", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.adjustReadingFocus], KeyboardShortcut(key: "r", modifiers: [.control]))
         XCTAssertEqual(configuration.shortcuts.bindings[.switchCurrentTheme], KeyboardShortcut(key: "t", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.openLibraryPDF], KeyboardShortcut(key: "o", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command, .shift]))
@@ -203,6 +214,29 @@ open_library_pdf = "command+option+o"
         }
     }
 
+    func testParserRejectsInvalidReadingFocusSettings() {
+        let parser = AppConfigurationParser()
+
+        XCTAssertThrowsError(try parser.parse("[reader]\nreading_focus_width = \"viewport\"")) { error in
+            guard case AppConfigurationError.invalidReadingFocusWidthMode = error else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+        XCTAssertThrowsError(try parser.parse("[reader]\nreading_focus_custom_width = 0.2")) { error in
+            guard case AppConfigurationError.invalidReadingFocusWidthRatio = error else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+        XCTAssertThrowsError(try parser.parse("[reader]\nreading_focus_height = 260")) { error in
+            guard case AppConfigurationError.invalidReadingFocusHeight = error else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+    }
+
     func testExistingConfigGetsMissingShortcutKeysBackfilled() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -225,9 +259,13 @@ fit_width = "command+9"
         XCTAssertTrue(content.contains("mode = \"system\""))
         XCTAssertTrue(content.contains("light_theme = \"normal\""))
         XCTAssertTrue(content.contains("dark_theme = \"rose_pine_moon\""))
+        XCTAssertTrue(content.contains("reading_focus_width = \"page\""))
+        XCTAssertTrue(content.contains("reading_focus_custom_width = 0.72"))
+        XCTAssertTrue(content.contains("reading_focus_height = 96"))
         XCTAssertTrue(content.contains("highlight_selection = \"a\""))
         XCTAssertTrue(content.contains("exit_highlight_mode = \"escape\""))
         XCTAssertTrue(content.contains("toggle_night_mode = \"i\""))
+        XCTAssertTrue(content.contains("adjust_reading_focus = \"option+f\""))
         XCTAssertTrue(content.contains("switch_current_theme = \"none\""))
         XCTAssertTrue(content.contains("open_library_pdf = \"none\""))
         XCTAssertTrue(content.contains("refresh_library_index = \"none\""))
@@ -460,6 +498,11 @@ fit_width = "command+9"
         configuration.appearance.darkTheme = .normal
         configuration.reader.defaultDisplayMode = .twoUpContinuous
         configuration.reader.fitWidthOnOpen = true
+        configuration.reader.readingFocus = ReadingFocusSettings(
+            widthMode: .custom,
+            customWidthRatio: 0.58,
+            height: 128
+        )
         configuration.annotations.autoSavePolicy = .never
         configuration.library.folderURLs = [
             URL(fileURLWithPath: "/tmp/Books"),
@@ -481,6 +524,9 @@ fit_width = "command+9"
         XCTAssertEqual(reloadedConfiguration.appearance.darkTheme, .normal)
         XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .twoUpContinuous)
         XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
+        XCTAssertEqual(reloadedConfiguration.reader.readingFocus.widthMode, .custom)
+        XCTAssertEqual(reloadedConfiguration.reader.readingFocus.customWidthRatio, 0.58, accuracy: 0.001)
+        XCTAssertEqual(reloadedConfiguration.reader.readingFocus.height, 128, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.annotations.autoSavePolicy, .never)
         XCTAssertEqual(reloadedConfiguration.library.folderURLs.map(\.path), ["/tmp/Books", "/tmp/Papers"])
         XCTAssertEqual(reloadedConfiguration.access.rootURLs.map(\.path), ["/Users"])
@@ -490,6 +536,9 @@ fit_width = "command+9"
         XCTAssertTrue(persistedContent.contains("dark_theme = \"normal\""))
         XCTAssertTrue(persistedContent.contains("default_display_mode = \"two_up_continuous\""))
         XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
+        XCTAssertTrue(persistedContent.contains("reading_focus_width = \"custom\""))
+        XCTAssertTrue(persistedContent.contains("reading_focus_custom_width = 0.58"))
+        XCTAssertTrue(persistedContent.contains("reading_focus_height = 128"))
         XCTAssertTrue(persistedContent.contains("auto_save = \"never\""))
         XCTAssertTrue(persistedContent.contains("folders = [\"/tmp/Books\", \"/tmp/Papers\"]"))
         XCTAssertTrue(persistedContent.contains("roots = [\"/Users\"]"))

@@ -344,6 +344,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .highlightSelection: { [weak self] in self?.highlightSelection(nil) },
             .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
+            .toggleReadingFocus: { [weak self] in self?.toggleReadingFocusModeAction(nil) },
+            .adjustReadingFocus: { [weak self] in self?.showReadingFocusControlsAction(nil) },
             .switchCurrentTheme: { [weak self] in self?.switchCurrentTheme(nil) },
             .openLibraryPDF: { [weak self] in self?.showLibraryPalette(nil) },
             .refreshLibraryIndex: { [weak self] in self?.refreshLibraryIndex(nil) },
@@ -890,6 +892,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 action: #selector(toggleNightMode(_:))
             ),
             makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleReadingFocus.menuTitle,
+                command: .toggleReadingFocus,
+                action: #selector(toggleReadingFocusModeAction(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.adjustReadingFocus.menuTitle,
+                command: .adjustReadingFocus,
+                action: #selector(showReadingFocusControlsAction(_:))
+            ),
+            makeConfiguredMenuItem(
                 title: ShortcutCommand.switchCurrentTheme.menuTitle,
                 command: .switchCurrentTheme,
                 action: #selector(switchCurrentTheme(_:))
@@ -1374,6 +1386,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func toggleImmersiveModeAction(_ sender: Any?) {
         mainWindowController?.toggleImmersiveMode()
+    }
+
+    @objc
+    private func toggleReadingFocusModeAction(_ sender: Any?) {
+        mainWindowController?.toggleReadingFocusMode()
+    }
+
+    @objc
+    private func showReadingFocusControlsAction(_ sender: Any?) {
+        mainWindowController?.showReadingFocusControls()
     }
 
     @objc
@@ -2242,6 +2264,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return controller?.isHighlightModeEnabled == true
         case #selector(toggleNightMode(_:)):
             menuItem.state = controller?.isNightModeEnabled == true ? .on : .off
+            return activePDFSession != nil
+        case #selector(toggleReadingFocusModeAction(_:)):
+            menuItem.state = controller?.isReadingFocusModeEnabled == true ? .on : .off
+            return activePDFSession != nil
+        case #selector(showReadingFocusControlsAction(_:)):
             return activePDFSession != nil
         case #selector(saveAnnotations(_:)):
             return activePDFSession?.isDirty == true

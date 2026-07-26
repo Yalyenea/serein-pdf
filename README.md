@@ -18,6 +18,7 @@ site for showcase, download notes, and compact docs.
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
+- Cursor reading focus (`f`) dims the page outside a compact rounded band without blocking PDF interaction; `option+f` adjusts the current window between Page, Column (half-page), and Custom widths plus a configurable height
 - Compare split in the center reader (`cmd+ctrl+\`) opens a compact candidate chooser and can arrange the two independent readers left/right or top/bottom from the View menu
 - Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
@@ -119,6 +120,9 @@ dark_theme = "rose_pine_moon" # or "normal"
 [reader]
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
+reading_focus_width = "page"       # or "column" / "custom"
+reading_focus_custom_width = 0.72  # 0.3–1.0, used by "custom"
+reading_focus_height = 96          # 48–240 pt
 
 [annotations]
 auto_save = "after_10_minutes"   # or "never"
@@ -152,6 +156,8 @@ export_clean_copy = "none"
 new_blank_tab = "command+t"
 copy_current_pdf_path = "command+shift+c"
 toggle_continuous_reading = "none"
+toggle_reading_focus = "f"
+adjust_reading_focus = "option+f"
 merge_all_windows = "none"      # cmd+k, cmd+m is a built-in chord
 move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
@@ -169,6 +175,10 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
+- Reading focus defaults apply to every window until that window receives a
+  temporary `option+f` adjustment. `page` follows the PDF page width, `column`
+  selects the half-page under the pointer, and `custom` follows the pointer
+  using `reading_focus_custom_width`.
 - `library.folders` can contain one or more folders. The library browser scans
   them recursively, groups results by library root and PDF folder, keeps a
   lightweight in-session catalog cache, and invalidates it when the configured
@@ -201,6 +211,8 @@ Defined in `[shortcuts]` above. Highlights:
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
 | New blank tab | `cmd+t` |
 | Fit width / height | `cmd+0` / `cmd+9` |
+| Toggle cursor reading focus | `f` |
+| Adjust current-window focus width / height | `option+f` |
 | Toggle Single Page Continuous | `c` |
 | Select document tabs 1–3 | physical left `cmd+1` / `cmd+2` / `cmd+3` |
 | Single Page Continuous | physical right `cmd+2` |

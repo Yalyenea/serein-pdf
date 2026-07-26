@@ -32,7 +32,7 @@ private final class ReaderPaneHostView: NSView {
     }
 }
 
-final class ReaderWorkspaceViewController: NSViewController {
+final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     private static let sideBySideMinimumPaneWidth: CGFloat = 320
     private static let stackedMinimumPaneHeight: CGFloat = 160
 
@@ -41,6 +41,14 @@ final class ReaderWorkspaceViewController: NSViewController {
     let primaryReaderViewController: ReaderViewController
     let secondaryReaderViewController: ReaderViewController
     var onFocusedReaderDidChange: ((PDFView) -> Void)?
+    private(set) var isReadingFocusModeEnabled = false
+    private(set) var readingFocusSettingsOverride: ReadingFocusSettings?
+    private var readingFocusControlsPopover: NSPopover?
+    private weak var readingFocusControlsReader: ReaderViewController?
+
+    var readingFocusSettings: ReadingFocusSettings {
+        readingFocusSettingsOverride ?? documentStore.appConfiguration.reader.readingFocus
+    }
 
     private let splitView = NSSplitView()
     private let primaryHostView = ReaderPaneHostView()
@@ -290,6 +298,85 @@ final class ReaderWorkspaceViewController: NSViewController {
         activeReaderViewController().toggleNightMode()
     }
 
+    @discardableResult
+    func toggleReadingFocusMode() -> Bool {
+        isReadingFocusModeEnabled.toggle()
+        primaryReaderViewController.setReadingFocusModeEnabled(isReadingFocusModeEnabled)
+        secondaryReaderViewController.setReadingFocusModeEnabled(isReadingFocusModeEnabled)
+        return isReadingFocusModeEnabled
+    }
+
+    func setReadingFocusSettings(_ settings: ReadingFocusSettings) {
+        readingFocusSettingsOverride = settings
+        applyReadingFocusSettings()
+    }
+
+    func resetReadingFocusSettings() {
+        readingFocusSettingsOverride = nil
+        applyReadingFocusSettings()
+    }
+
+    func showReadingFocusControls() {
+        guard documentStore.activeSession(in: windowID)?.isBlank == false else { return }
+        if readingFocusControlsPopover?.isShown == true {
+            readingFocusControlsPopover?.close()
+            return
+        }
+
+        if isReadingFocusModeEnabled == false {
+            _ = toggleReadingFocusMode()
+        }
+
+        let controls = ReadingFocusControlsViewController(
+            settings: readingFocusSettings,
+            defaultSettings: documentStore.appConfiguration.reader.readingFocus
+        )
+        controls.onSettingsChanged = { [weak self] settings in
+            self?.setReadingFocusSettings(settings)
+        }
+        controls.onResetToDefaults = { [weak self, weak controls] in
+            guard let self else { return }
+            self.resetReadingFocusSettings()
+            controls?.apply(
+                settings: self.readingFocusSettings,
+                defaultSettings: self.documentStore.appConfiguration.reader.readingFocus
+            )
+        }
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        popover.contentViewController = controls
+        readingFocusControlsPopover = popover
+
+        let reader = activeReaderViewController()
+        let readerView = reader.view
+        let pointInView: NSPoint
+        if let window = readerView.window {
+            pointInView = readerView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        } else {
+            pointInView = NSPoint(x: readerView.bounds.midX, y: readerView.bounds.midY)
+        }
+        let anchorPoint = NSPoint(
+            x: min(max(pointInView.x, readerView.bounds.minX + 8), readerView.bounds.maxX - 8),
+            y: min(max(pointInView.y, readerView.bounds.minY + 8), readerView.bounds.maxY - 8)
+        )
+        readingFocusControlsReader = reader
+        reader.setReadingFocusControlsPresented(true, anchorPointInView: anchorPoint)
+        popover.show(
+            relativeTo: NSRect(origin: anchorPoint, size: NSSize(width: 1, height: 1)),
+            of: readerView,
+            preferredEdge: .maxY
+        )
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        readingFocusControlsReader?.setReadingFocusControlsPresented(false)
+        readingFocusControlsReader = nil
+        readingFocusControlsPopover = nil
+    }
+
     func refreshThemeAppearance() {
         primaryReaderViewController.refreshThemeAppearance()
         secondaryReaderViewController.refreshThemeAppearance()
@@ -321,6 +408,7 @@ final class ReaderWorkspaceViewController: NSViewController {
     }
 
     private func syncFromStore() {
+        applyReadingFocusSettings()
         primaryReaderViewController.targetSessionID = documentStore.displayedSessionID(for: .primary, in: windowID)
         secondaryReaderViewController.targetSessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
 
@@ -355,6 +443,12 @@ final class ReaderWorkspaceViewController: NSViewController {
         secondaryHostView.isFocused = splitEnabled && focusedPane == .secondary
         syncSplitCandidateView()
         onFocusedReaderDidChange?(activeReaderViewController().pdfView)
+    }
+
+    private func applyReadingFocusSettings() {
+        let settings = readingFocusSettings
+        primaryReaderViewController.setReadingFocusSettings(settings)
+        secondaryReaderViewController.setReadingFocusSettings(settings)
     }
 
     private func installSplitCandidateView() {

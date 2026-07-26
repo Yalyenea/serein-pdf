@@ -24,6 +24,43 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(triggeredCommands, [.toggleNightMode])
     }
 
+    func testPlainFTogglesReadingFocus() {
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [.toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: [])]
+            },
+            handlerProvider: {
+                [.toggleReadingFocus: { triggeredCommands.append(.toggleReadingFocus) }]
+            }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertTrue(
+            controller.handlePlainShortcut(
+                for: makeKeyEvent(characters: "f", modifiers: []),
+                in: window
+            )
+        )
+        XCTAssertEqual(triggeredCommands, [.toggleReadingFocus])
+    }
+
+    func testOptionFReadingFocusShortcutMatchesModifiedCharacterEvent() {
+        let shortcut = KeyboardShortcut(key: "f", modifiers: [.option])
+        let event = makeKeyEvent(
+            characters: "ƒ",
+            charactersIgnoringModifiers: "f",
+            modifiers: [.option]
+        )
+
+        XCTAssertTrue(shortcut.matches(event: event))
+    }
+
     func testHandlePlainShortcutSkipsEditableTextView() {
         var didTrigger = false
         let controller = ReaderShortcutsController(
@@ -320,6 +357,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
 
     private func makeKeyEvent(
         characters: String,
+        charactersIgnoringModifiers: String? = nil,
         modifiers: NSEvent.ModifierFlags
     ) -> NSEvent {
         NSEvent.keyEvent(
@@ -330,7 +368,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             windowNumber: 0,
             context: nil,
             characters: characters,
-            charactersIgnoringModifiers: characters,
+            charactersIgnoringModifiers: charactersIgnoringModifiers ?? characters,
             isARepeat: false,
             keyCode: 0
         )!
