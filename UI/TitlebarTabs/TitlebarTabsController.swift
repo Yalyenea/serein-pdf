@@ -155,6 +155,9 @@ final class TitlebarTabsController: NSViewController {
     func refreshChromeColors() {
         guard isViewLoaded else { return }
         applyChromeColors()
+        stackView.arrangedSubviews
+            .compactMap { $0 as? TitlebarTabItemView }
+            .forEach { $0.refreshChromeColors() }
     }
 
     private func applyChromeColors() {

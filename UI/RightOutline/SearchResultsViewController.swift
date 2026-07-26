@@ -17,9 +17,10 @@ private final class SearchResultCellView: NSTableCellView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         titleLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        titleLabel.textColor = NightModeStyle.primaryTextColor
         titleLabel.lineBreakMode = .byTruncatingTail
         subtitleLabel.font = .systemFont(ofSize: 11, weight: .regular)
-        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.textColor = NightModeStyle.secondaryTextColor
         subtitleLabel.lineBreakMode = .byTruncatingTail
 
         let stack = NSStackView(views: [titleLabel, subtitleLabel])
@@ -126,7 +127,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         scrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
-        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         emptyStateLabel.maximumNumberOfLines = 0
         emptyStateLabel.alignment = .center
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -154,7 +155,9 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = NSColor.clear.cgColor
             tableView.backgroundColor = .clear
+            emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         }
+        tableView.reloadData()
     }
 
     func selectNextMatch() -> SearchSidebarMatch? {
@@ -328,7 +331,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         cell.identifier = identifier
         let label = NSTextField(labelWithString: "")
         label.font = .systemFont(ofSize: 11, weight: .semibold)
-        label.textColor = .secondaryLabelColor
+        label.textColor = NightModeStyle.secondaryTextColor
         label.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(label)
         cell.textField = label

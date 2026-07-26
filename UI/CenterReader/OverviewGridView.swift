@@ -211,7 +211,7 @@ private final class OverviewPageItemView: NSView {
 
         pageLabel.translatesAutoresizingMaskIntoConstraints = false
         pageLabel.font = .systemFont(ofSize: 10, weight: .medium)
-        pageLabel.textColor = NSColor.secondaryLabelColor
+        pageLabel.textColor = NightModeStyle.secondaryTextColor
         pageLabel.alignment = .center
         pageLabel.drawsBackground = false
         pageLabel.isBezeled = false

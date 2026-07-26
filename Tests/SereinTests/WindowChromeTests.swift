@@ -453,6 +453,14 @@ struct WindowChromeTests {
         let updatedSRGB = updatedColor.usingColorSpace(.sRGB) ?? updatedColor
 
         #expect(abs(updatedSRGB.redComponent - originalSRGB.redComponent) > 0.01)
+        #expect(reader.pdfView.displaysPageBreaks)
+        #expect(reader.pdfView.pageShadowsEnabled == false)
+        let leftMaterial = try #require(splitController.verticalTabsViewController.view as? SidebarMaterialView)
+        let rightMaterial = try #require(splitController.rightSidebarViewController.view as? SidebarMaterialView)
+        #expect(leftMaterial.blendingMode == .withinWindow)
+        #expect(rightMaterial.blendingMode == .withinWindow)
+        #expect(abs(leftMaterial.tintAlpha - 1) < 0.01)
+        #expect(abs(rightMaterial.tintAlpha - 1) < 0.01)
         reader.view.effectiveAppearance.performAsCurrentDrawingAppearance {
             assertColor(updatedColor, matches: NightModeStyle.readerBackdropColor)
             let pageBackground = NightModeStyle.pageBackgroundColor

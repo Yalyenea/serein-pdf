@@ -45,8 +45,8 @@ site for showcase, download notes, and compact docs.
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - `cmd+k`, then `cmd+t` switches the current light or dark theme, VS Code-style
 - `cmd+k` chords also refresh the PDF Library index, jump to Library / Shortcuts settings, share the current PDF, merge windows, and move the current PDF to a new window
-- Rose Pine Dawn warms the PDF page itself into a paper-like tone instead of keeping pure white
-- Rose Pine Moon keeps PDF page margins tinted to the dark sidebar surface instead of PDFKit's light surround
+- Rose Pine Dawn replaces only the PDF's white paper with an Obsidian-like warm surface, preserving the document's original text and accent colors
+- Rose Pine Moon maps the PDF's white/black endpoints to a dark paper/text pair, preserves warm/cool accent direction, and keeps the surrounding sidebars one shade deeper
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
 - Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets

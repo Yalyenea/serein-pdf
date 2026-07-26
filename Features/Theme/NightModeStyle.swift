@@ -7,24 +7,18 @@ enum NightModeStyle {
         let green: CGFloat
         let blue: CGFloat
 
-        static func + (lhs: Self, rhs: Self) -> Self {
-            Self(red: lhs.red + rhs.red, green: lhs.green + rhs.green, blue: lhs.blue + rhs.blue)
-        }
-
-        static func - (lhs: Self, rhs: Self) -> Self {
-            Self(red: lhs.red - rhs.red, green: lhs.green - rhs.green, blue: lhs.blue - rhs.blue)
-        }
-
-        static func * (lhs: CGFloat, rhs: Self) -> Self {
-            Self(red: lhs * rhs.red, green: lhs * rhs.green, blue: lhs * rhs.blue)
-        }
-
-        func clamped() -> Self {
+        var linearized: Self {
             Self(
-                red: min(max(red, 0), 1),
-                green: min(max(green, 0), 1),
-                blue: min(max(blue, 0), 1)
+                red: Self.linearize(red),
+                green: Self.linearize(green),
+                blue: Self.linearize(blue)
             )
+        }
+
+        private static func linearize(_ component: CGFloat) -> CGFloat {
+            component <= 0.04045
+                ? component / 12.92
+                : pow((component + 0.055) / 1.055, 2.4)
         }
     }
 
@@ -37,6 +31,12 @@ enum NightModeStyle {
     private enum PDFStyle {
         case none
         case classicInvert
+        case paper(background: RGBComponents)
+        case darkPaper(
+            background: RGBComponents,
+            foreground: RGBComponents,
+            accentPreservation: CGFloat
+        )
         case remap(
             background: RGBComponents,
             foreground: RGBComponents,
@@ -50,12 +50,15 @@ enum NightModeStyle {
         let pageForeground: NSColor
         let primaryText: NSColor
         let secondaryText: NSColor
+        let tertiaryText: NSColor
         let readerBackdrop: NSColor
         let splitBackground: NSColor
         let paneBackground: NSColor
         let chromeDivider: NSColor
         let selectedChromeBackground: NSColor
         let chromeStroke: NSColor
+        let usesOpaqueSidebar: Bool
+        let prefersFlatPDFChrome: Bool
         let highlightPalette: HighlightPalette
         let pdfStyle: PDFStyle
     }
@@ -70,6 +73,8 @@ enum NightModeStyle {
         red: 57.0 / 255.0, green: 53.0 / 255.0, blue: 82.0 / 255.0)
     private static let moonMuted = RGBComponents(
         red: 110.0 / 255.0, green: 106.0 / 255.0, blue: 134.0 / 255.0)
+    private static let moonSubtle = RGBComponents(
+        red: 144.0 / 255.0, green: 140.0 / 255.0, blue: 170.0 / 255.0)
     private static let moonText = RGBComponents(
         red: 224.0 / 255.0, green: 222.0 / 255.0, blue: 244.0 / 255.0)
 
@@ -77,10 +82,16 @@ enum NightModeStyle {
         red: 250.0 / 255.0, green: 244.0 / 255.0, blue: 237.0 / 255.0)
     private static let dawnSurface = RGBComponents(
         red: 255.0 / 255.0, green: 250.0 / 255.0, blue: 243.0 / 255.0)
-    private static let dawnOverlay = RGBComponents(
-        red: 242.0 / 255.0, green: 233.0 / 255.0, blue: 222.0 / 255.0)
+    private static let dawnHighlight = RGBComponents(
+        red: 233.0 / 255.0, green: 223.0 / 255.0, blue: 218.0 / 255.0)
+    private static let dawnUI = RGBComponents(
+        red: 234.0 / 255.0, green: 227.0 / 255.0, blue: 225.0 / 255.0)
+    private static let dawnStrongUI = RGBComponents(
+        red: 206.0 / 255.0, green: 202.0 / 255.0, blue: 205.0 / 255.0)
     private static let dawnMuted = RGBComponents(
         red: 152.0 / 255.0, green: 147.0 / 255.0, blue: 165.0 / 255.0)
+    private static let dawnSubtle = RGBComponents(
+        red: 121.0 / 255.0, green: 117.0 / 255.0, blue: 147.0 / 255.0)
     private static let dawnText = RGBComponents(
         red: 87.0 / 255.0, green: 82.0 / 255.0, blue: 121.0 / 255.0)
 
@@ -104,6 +115,9 @@ enum NightModeStyle {
     static let secondaryTextColor = dynamicColor { appearance in
         activeDescriptor(for: appearance).secondaryText
     }
+    static let tertiaryTextColor = dynamicColor { appearance in
+        activeDescriptor(for: appearance).tertiaryText
+    }
     static let readerBackdropColor = dynamicColor { appearance in
         activeDescriptor(for: appearance).readerBackdrop
     }
@@ -121,6 +135,14 @@ enum NightModeStyle {
     }
     static let chromeStrokeColor = dynamicColor { appearance in
         activeDescriptor(for: appearance).chromeStroke
+    }
+
+    static func usesOpaqueSidebar(for appearance: NSAppearance? = nil) -> Bool {
+        activeDescriptor(for: appearance).usesOpaqueSidebar
+    }
+
+    static func prefersFlatPDFChrome(for appearance: NSAppearance? = nil) -> Bool {
+        activeDescriptor(for: appearance).prefersFlatPDFChrome
     }
 
     static func highlightColor(for color: HighlightColor, appearance: NSAppearance? = nil) -> NSColor {
@@ -141,62 +163,51 @@ enum NightModeStyle {
             filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 1), forKey: "inputAVector")
             filter.setValue(CIVector(x: bias, y: bias, z: bias, w: 0), forKey: "inputBiasVector")
             return [filter]
-        case .remap(let background, let foreground, let accentPreservation, let backgroundLuminance):
+        case .paper(let background):
             guard let filter = CIFilter(name: "CIColorMatrix") else { return [] }
-            let rows = colorMatrixRows(
-                background: background,
-                foreground: foreground,
-                accentPreservation: accentPreservation,
-                backgroundLuminance: backgroundLuminance
-            )
+            let linearBackground = background.linearized
             filter.setValue(
-                CIVector(x: rows.red.red, y: rows.red.green, z: rows.red.blue, w: 0),
+                CIVector(x: linearBackground.red, y: 0, z: 0, w: 0),
                 forKey: "inputRVector")
             filter.setValue(
-                CIVector(x: rows.green.red, y: rows.green.green, z: rows.green.blue, w: 0),
+                CIVector(x: 0, y: linearBackground.green, z: 0, w: 0),
                 forKey: "inputGVector")
             filter.setValue(
-                CIVector(x: rows.blue.red, y: rows.blue.green, z: rows.blue.blue, w: 0),
+                CIVector(x: 0, y: 0, z: linearBackground.blue, w: 0),
                 forKey: "inputBVector")
             filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 1), forKey: "inputAVector")
-            filter.setValue(
-                CIVector(x: foreground.red, y: foreground.green, z: foreground.blue, w: 0),
-                forKey: "inputBiasVector"
-            )
+            filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 0), forKey: "inputBiasVector")
+            return [filter]
+        case .darkPaper(let background, let foreground, let accentPreservation):
+            guard
+                let filter = makeRemapFilter(
+                    background: background.linearized,
+                    foreground: foreground.linearized,
+                    accentPreservation: accentPreservation,
+                    backgroundLuminance: 1.0
+                )
+            else {
+                return []
+            }
+            return [filter]
+        case .remap(
+            let background,
+            let foreground,
+            let accentPreservation,
+            let backgroundLuminance
+        ):
+            guard
+                let filter = makeRemapFilter(
+                    background: background,
+                    foreground: foreground,
+                    accentPreservation: accentPreservation,
+                    backgroundLuminance: backgroundLuminance
+                )
+            else {
+                return []
+            }
             return [filter]
         }
-    }
-
-    static func transformedColor(
-        for color: NSColor,
-        background: NSColor = color(from: moonBase),
-        foreground: NSColor = color(from: moonText),
-        accentPreservation: CGFloat = 0.14,
-        backgroundLuminance: CGFloat = 1.0
-    ) -> NSColor {
-        let srgb = color.usingColorSpace(.sRGB) ?? color
-        let input = RGBComponents(
-            red: srgb.redComponent, green: srgb.greenComponent, blue: srgb.blueComponent)
-        let targetBackground = RGBComponents(
-            red: (background.usingColorSpace(.sRGB) ?? background).redComponent,
-            green: (background.usingColorSpace(.sRGB) ?? background).greenComponent,
-            blue: (background.usingColorSpace(.sRGB) ?? background).blueComponent
-        )
-        let targetForeground = RGBComponents(
-            red: (foreground.usingColorSpace(.sRGB) ?? foreground).redComponent,
-            green: (foreground.usingColorSpace(.sRGB) ?? foreground).greenComponent,
-            blue: (foreground.usingColorSpace(.sRGB) ?? foreground).blueComponent
-        )
-        let output = remap(
-            input: input,
-            background: targetBackground,
-            foreground: targetForeground,
-            accentPreservation: accentPreservation,
-            backgroundLuminance: backgroundLuminance
-        )
-        return NSColor(
-            calibratedRed: output.red, green: output.green, blue: output.blue,
-            alpha: srgb.alphaComponent)
     }
 
     private static func activeDescriptor(for appearance: NSAppearance? = nil) -> ThemeDescriptor {
@@ -214,31 +225,35 @@ enum NightModeStyle {
                 pageForeground: .black,
                 primaryText: .labelColor,
                 secondaryText: .secondaryLabelColor,
+                tertiaryText: .tertiaryLabelColor,
                 readerBackdrop: .white,
                 splitBackground: NSColor(calibratedWhite: 0.96, alpha: 1.0),
                 paneBackground: NSColor(calibratedWhite: 0.955, alpha: 1.0),
                 chromeDivider: NSColor(calibratedWhite: 0.88, alpha: 1.0),
                 selectedChromeBackground: NSColor(calibratedWhite: 0.915, alpha: 1.0),
                 chromeStroke: NSColor(calibratedWhite: 0.82, alpha: 1.0),
+                usesOpaqueSidebar: false,
+                prefersFlatPDFChrome: false,
                 highlightPalette: .normal,
                 pdfStyle: .none
             )
         case .rosePineDawn:
             return ThemeDescriptor(
-                pageBackground: color(from: dawnBase),
+                pageBackground: color(from: dawnSurface),
                 pageForeground: color(from: dawnText),
                 primaryText: color(from: dawnText),
-                secondaryText: color(from: dawnMuted),
+                secondaryText: color(from: dawnSubtle),
+                tertiaryText: color(from: dawnMuted),
                 readerBackdrop: color(from: dawnBase),
-                splitBackground: color(from: dawnSurface),
-                paneBackground: color(from: dawnSurface),
-                chromeDivider: color(from: dawnOverlay),
-                selectedChromeBackground: color(from: dawnOverlay),
-                chromeStroke: color(from: dawnMuted),
+                splitBackground: color(from: dawnBase),
+                paneBackground: color(from: dawnBase),
+                chromeDivider: color(from: dawnUI),
+                selectedChromeBackground: color(from: dawnHighlight, alpha: 0.5),
+                chromeStroke: color(from: dawnStrongUI),
+                usesOpaqueSidebar: true,
+                prefersFlatPDFChrome: true,
                 highlightPalette: .rosePineDawn,
-                pdfStyle: .remap(
-                    background: dawnBase, foreground: dawnText, accentPreservation: 0.06,
-                    backgroundLuminance: 1.0)
+                pdfStyle: .paper(background: dawnSurface)
             )
         }
     }
@@ -253,12 +268,15 @@ enum NightModeStyle {
                 pageForeground: NSColor(calibratedWhite: 0.95, alpha: 1.0),
                 primaryText: .labelColor,
                 secondaryText: .secondaryLabelColor,
+                tertiaryText: .tertiaryLabelColor,
                 readerBackdrop: NSColor(calibratedWhite: 0.09, alpha: 1.0),
                 splitBackground: NSColor(calibratedWhite: 0.10, alpha: 1.0),
                 paneBackground: NSColor(calibratedWhite: 0.09, alpha: 1.0),
                 chromeDivider: NSColor(calibratedWhite: 0.12, alpha: 1.0),
                 selectedChromeBackground: NSColor(calibratedWhite: 0.19, alpha: 1.0),
                 chromeStroke: NSColor(calibratedWhite: 0.28, alpha: 1.0),
+                usesOpaqueSidebar: false,
+                prefersFlatPDFChrome: true,
                 highlightPalette: .normal,
                 pdfStyle: .remap(
                     background: pageBackground, foreground: pageForeground,
@@ -269,19 +287,51 @@ enum NightModeStyle {
                 pageBackground: color(from: moonSurface),
                 pageForeground: color(from: moonText),
                 primaryText: color(from: moonText),
-                secondaryText: color(from: moonMuted),
-                readerBackdrop: color(from: moonSurface),
-                splitBackground: color(from: moonSurface),
-                paneBackground: color(from: moonSurface),
+                secondaryText: color(from: moonSubtle),
+                tertiaryText: color(from: moonMuted),
+                readerBackdrop: color(from: moonBase),
+                splitBackground: color(from: moonBase),
+                paneBackground: color(from: moonBase),
                 chromeDivider: color(from: moonOverlay),
                 selectedChromeBackground: color(from: moonOverlay),
                 chromeStroke: color(from: moonMuted),
+                usesOpaqueSidebar: true,
+                prefersFlatPDFChrome: true,
                 highlightPalette: .rosePineMoon,
-                pdfStyle: .remap(
-                    background: moonOverlay, foreground: moonText, accentPreservation: 0.14,
-                    backgroundLuminance: 0.84)
+                pdfStyle: .darkPaper(
+                    background: moonSurface, foreground: moonText, accentPreservation: 0.85)
             )
         }
+    }
+
+    private static func makeRemapFilter(
+        background: RGBComponents,
+        foreground: RGBComponents,
+        accentPreservation: CGFloat,
+        backgroundLuminance: CGFloat
+    ) -> CIFilter? {
+        guard let filter = CIFilter(name: "CIColorMatrix") else { return nil }
+        let rows = colorMatrixRows(
+            background: background,
+            foreground: foreground,
+            accentPreservation: accentPreservation,
+            backgroundLuminance: backgroundLuminance
+        )
+        filter.setValue(
+            CIVector(x: rows.red.red, y: rows.red.green, z: rows.red.blue, w: 0),
+            forKey: "inputRVector")
+        filter.setValue(
+            CIVector(x: rows.green.red, y: rows.green.green, z: rows.green.blue, w: 0),
+            forKey: "inputGVector")
+        filter.setValue(
+            CIVector(x: rows.blue.red, y: rows.blue.green, z: rows.blue.blue, w: 0),
+            forKey: "inputBVector")
+        filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 1), forKey: "inputAVector")
+        filter.setValue(
+            CIVector(x: foreground.red, y: foreground.green, z: foreground.blue, w: 0),
+            forKey: "inputBiasVector"
+        )
+        return filter
     }
 
     private static func colorMatrixRows(
@@ -337,31 +387,9 @@ enum NightModeStyle {
         )
     }
 
-    private static func remap(
-        input: RGBComponents,
-        background: RGBComponents,
-        foreground: RGBComponents,
-        accentPreservation: CGFloat,
-        backgroundLuminance: CGFloat
-    ) -> RGBComponents {
-        let luminance =
-            input.red * luminanceWeights.red + input.green * luminanceWeights.green + input.blue
-            * luminanceWeights.blue
-        let normalizedLuminance = min(luminance / max(backgroundLuminance, 0.001), 1.0)
-        let inverted = foreground - normalizedLuminance * (foreground - background)
-        let huePreserved =
-            accentPreservation
-            * RGBComponents(
-                red: input.red - luminance,
-                green: input.green - luminance,
-                blue: input.blue - luminance
-            )
-        return (inverted + huePreserved).clamped()
-    }
-
     private static func color(from components: RGBComponents, alpha: CGFloat = 1.0) -> NSColor {
         NSColor(
-            calibratedRed: components.red, green: components.green, blue: components.blue,
+            srgbRed: components.red, green: components.green, blue: components.blue,
             alpha: alpha)
     }
 

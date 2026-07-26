@@ -96,7 +96,7 @@ final class VerticalTabItemView: NSView {
         titleLabel.isSelectable = false
         titleLabel.isBezeled = false
         titleLabel.drawsBackground = false
-        titleLabel.textColor = .labelColor
+        titleLabel.textColor = NightModeStyle.primaryTextColor
         titleLabel.backgroundColor = .clear
         titleLabel.delegate = self
 
@@ -106,7 +106,7 @@ final class VerticalTabItemView: NSView {
         closeButton.focusRingType = .none
         closeButton.target = self
         closeButton.action = #selector(handleClose)
-        closeButton.contentTintColor = .secondaryLabelColor
+        closeButton.contentTintColor = NightModeStyle.secondaryTextColor
         closeButton.setButtonType(.momentaryChange)
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
         closeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -274,6 +274,10 @@ final class VerticalTabItemView: NSView {
         updateAppearance()
     }
 
+    func refreshChromeColors() {
+        updateAppearance()
+    }
+
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if isSelected {
@@ -292,8 +296,12 @@ final class VerticalTabItemView: NSView {
                 ? HighlightColor.pink.nsColor.cgColor
                 : SplitViewController.chromeStrokeColor.withAlphaComponent(0.75).cgColor
         }
-        titleLabel.textColor = isSelected || isTabSelected ? .labelColor : .secondaryLabelColor
-        closeButton.contentTintColor = isSelected ? .labelColor : .tertiaryLabelColor
+        titleLabel.textColor = isSelected || isTabSelected
+            ? NightModeStyle.primaryTextColor
+            : NightModeStyle.secondaryTextColor
+        closeButton.contentTintColor = isSelected
+            ? NightModeStyle.primaryTextColor
+            : NightModeStyle.tertiaryTextColor
         separator.isHidden = isSelected
     }
 }

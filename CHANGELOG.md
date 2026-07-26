@@ -66,6 +66,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Visual
 - Use theme-specific sRGB palettes for pink, yellow, and green highlights across Normal, Rose Pine Dawn, and Rose Pine Moon.
+- Match Rose Pine Dawn more closely to Obsidian: replace the PDF's white paper with the warm Dawn surface while leaving document colors intact, and use flat opaque theme chrome.
+- Give Rose Pine Moon the same paper-first treatment: map white and black to the Moon surface/text endpoints, preserve warm/cool accent direction, and separate the dark paper from the deeper sidebar base.
 
 ### Recent Files
 - Route Return and keypad Enter at the recent-files panel level so the highlighted or selected recent PDFs open reliably

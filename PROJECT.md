@@ -118,8 +118,8 @@ flowchart LR
 - 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
 - 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
-- `rose_pine_dawn` 不只改阅读区外围,也把 PDF 白底映射成暖纸色
-- 反色夜间模式采用暖色、低刺激的 Rose Pine Moon 映射,避免生硬黄蓝互翻
+- `rose_pine_dawn` 仅把 PDF 白底映射成接近 Obsidian 的暖纸色,保留正文与图表原色;侧栏使用不透明的扁平主题表面
+- `rose_pine_moon` 把 PDF 白底 / 黑字映射到 Moon 纸面 / 正文端点,保留暖冷强调色方向,并用更深的侧栏底色建立层级
 - `Settings` 按当前页内容自适应尺寸,`General` 页可编辑左右侧栏默认宽度,`Shortcuts` 页会自动放大到合适大小
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位

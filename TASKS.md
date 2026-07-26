@@ -14,6 +14,7 @@
 
 - `TabPresentationMode`:`verticalSidebar` / `horizontalTitlebar`
 - 外观配置:`mode(system/light/dark)` + `light_theme(normal/rose_pine_dawn)` + `dark_theme(normal/rose_pine_moon)`
+- Rose Pine Dawn 仅替换 PDF 白底并保留原文档颜色;Rose Pine Moon 映射纸面 / 正文端点并保留暖冷强调色方向;两者使用不透明扁平侧栏
 - 访问配置:`access.roots` 默认保存 `/Users`,`access.root_bookmarks` 保存启动时生成的持久访问授权,避免重装后逐个文件请求权限
 - 本地安装签名:`just build` / `just install` 使用 `Serein Local Code Signing` 稳定签名身份,避免重装后变成新的 cdhash-only app 身份
 - PDF 库配置:`library.folders` 保存一个或多个文件夹,打开库时递归扫描 PDF,建立轻量索引并缓存,按库 root / 子文件夹 / PDF 列表二级浏览

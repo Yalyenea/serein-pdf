@@ -45,8 +45,10 @@ class SidebarMaterialView: NSVisualEffectView {
 
     func applyTint(opacity: CGFloat) {
         let clampedOpacity = min(max(opacity, 0), 1)
+        let isOpaque = NightModeStyle.usesOpaqueSidebar(for: effectiveAppearance)
+        blendingMode = isOpaque ? .withinWindow : .behindWindow
         tintView.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor(
-            opacity: clampedOpacity
+            opacity: isOpaque ? 1 : clampedOpacity
         ).cgColor
     }
 

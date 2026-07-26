@@ -151,7 +151,7 @@ final class OutlineRowView: NSControl {
         disclosureButton.isEnabled = isExpandable
         disclosureButton.alphaValue = isExpandable ? 1 : 0
         updateDisclosureAppearance()
-        disclosureButton.contentTintColor = NightModeStyle.secondaryTextColor
+        disclosureButton.contentTintColor = NightModeStyle.tertiaryTextColor
 
         textField.maximumNumberOfLines = 0
         textField.lineBreakMode = .byCharWrapping
@@ -237,7 +237,7 @@ final class OutlineRowView: NSControl {
     func updateAppearance(attributedTitle: NSAttributedString, isExpanded: Bool, isSelected: Bool) {
         textField.attributedStringValue = attributedTitle
         isRowExpanded = isExpanded
-        disclosureButton.contentTintColor = NightModeStyle.secondaryTextColor
+        disclosureButton.contentTintColor = NightModeStyle.tertiaryTextColor
         updateDisclosureAppearance()
         setSelected(isSelected)
     }
@@ -381,7 +381,7 @@ final class OutlineViewController: NSViewController {
         emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         pageCounterLabel.font = .systemFont(ofSize: 11, weight: .regular)
-        pageCounterLabel.textColor = NightModeStyle.secondaryTextColor
+        pageCounterLabel.textColor = NightModeStyle.tertiaryTextColor
         pageCounterLabel.alignment = .right
 
         rowsContainerView.identifier = NSUserInterfaceItemIdentifier("outlineRowsStack")
@@ -443,9 +443,9 @@ final class OutlineViewController: NSViewController {
             outlineDocumentView.layer?.backgroundColor = NSColor.clear.cgColor
             scrollView.contentView.backgroundColor = .clear
             titleLabel.textColor = NightModeStyle.primaryTextColor
-            expansionToggleButton.contentTintColor = NightModeStyle.secondaryTextColor
+            expansionToggleButton.contentTintColor = NightModeStyle.tertiaryTextColor
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
-            pageCounterLabel.textColor = NightModeStyle.secondaryTextColor
+            pageCounterLabel.textColor = NightModeStyle.tertiaryTextColor
         }
         renderOutlineRows()
     }
@@ -545,7 +545,10 @@ final class OutlineViewController: NSViewController {
 
             for row in rows {
                 let rowKey = OutlineRowView.pathKey(row.path)
-                let title = attributedTitle(for: row.node)
+                let title = attributedTitle(
+                    for: row.node,
+                    isSelected: selectedPath == row.path
+                )
                 let isExpanded = collapsedPaths.contains(row.path) == false
                 let rowHeight = OutlineRowView.fittingHeight(
                     for: title,
@@ -627,9 +630,7 @@ final class OutlineViewController: NSViewController {
     }
 
     private func updateSelectionHighlights() {
-        for case let rowView as OutlineRowView in rowsContainerView.subviews {
-            rowView.setSelected(rowView.path == selectedPath)
-        }
+        layoutOutlineRows()
     }
 
     private func toggleNodeExpansion(at path: [Int]) {
@@ -663,7 +664,7 @@ final class OutlineViewController: NSViewController {
             accessibilityDescription: accessibilityDescription
         )
         expansionToggleButton.toolTip = accessibilityDescription
-        expansionToggleButton.contentTintColor = NightModeStyle.secondaryTextColor
+        expansionToggleButton.contentTintColor = NightModeStyle.tertiaryTextColor
     }
 
     private func visibleRows() -> [VisibleRow] {
@@ -715,15 +716,26 @@ final class OutlineViewController: NSViewController {
         return paragraphStyle
     }
 
-    private func textAttributes(for node: OutlineNode) -> [NSAttributedString.Key: Any] {
+    private func textAttributes(
+        for node: OutlineNode,
+        isSelected: Bool
+    ) -> [NSAttributedString.Key: Any] {
         [
             .font: font(for: node),
-            .foregroundColor: node.isDocumentRoot ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor,
+            .foregroundColor: node.isDocumentRoot || isSelected
+                ? NightModeStyle.primaryTextColor
+                : NightModeStyle.secondaryTextColor,
             .paragraphStyle: paragraphStyle(),
         ]
     }
 
-    private func attributedTitle(for node: OutlineNode) -> NSAttributedString {
-        NSAttributedString(string: node.title, attributes: textAttributes(for: node))
+    private func attributedTitle(
+        for node: OutlineNode,
+        isSelected: Bool = false
+    ) -> NSAttributedString {
+        NSAttributedString(
+            string: node.title,
+            attributes: textAttributes(for: node, isSelected: isSelected)
+        )
     }
 }

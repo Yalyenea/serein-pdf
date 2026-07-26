@@ -50,7 +50,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         scopeControl.translatesAutoresizingMaskIntoConstraints = false
 
         statusLabel.font = .systemFont(ofSize: 11, weight: .regular)
-        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.textColor = NightModeStyle.secondaryTextColor
         statusLabel.alignment = .right
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -59,7 +59,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
             button.bezelStyle = .regularSquare
             button.focusRingType = .none
             button.font = .systemFont(ofSize: 13, weight: .medium)
-            button.contentTintColor = .secondaryLabelColor
+            button.contentTintColor = NightModeStyle.secondaryTextColor
             button.translatesAutoresizingMaskIntoConstraints = false
         }
         previousButton.target = self
@@ -132,6 +132,10 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NightModeStyle.paneBackgroundColor.cgColor
             divider.fillColor = SplitViewController.dividerBackgroundColor
+            statusLabel.textColor = NightModeStyle.secondaryTextColor
+            for button in [previousButton, nextButton, closeButton] {
+                button.contentTintColor = NightModeStyle.secondaryTextColor
+            }
         }
     }
 

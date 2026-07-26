@@ -100,7 +100,7 @@ final class TitlebarTabItemView: NSView {
         titleLabel.isSelectable = false
         titleLabel.isBezeled = false
         titleLabel.drawsBackground = false
-        titleLabel.textColor = .labelColor
+        titleLabel.textColor = NightModeStyle.primaryTextColor
         titleLabel.backgroundColor = .clear
         titleLabel.delegate = self
 
@@ -269,6 +269,10 @@ final class TitlebarTabItemView: NSView {
         updateAppearance()
     }
 
+    func refreshChromeColors() {
+        updateAppearance()
+    }
+
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if isSelected {
@@ -288,8 +292,12 @@ final class TitlebarTabItemView: NSView {
                 ? HighlightColor.pink.nsColor.cgColor
                 : SplitViewController.chromeStrokeColor.withAlphaComponent(0.75).cgColor
         }
-        titleLabel.textColor = isSelected || isTabSelected ? .labelColor : .secondaryLabelColor
-        closeButton.contentTintColor = isSelected ? .labelColor : .tertiaryLabelColor
+        titleLabel.textColor = isSelected || isTabSelected
+            ? NightModeStyle.primaryTextColor
+            : NightModeStyle.secondaryTextColor
+        closeButton.contentTintColor = isSelected
+            ? NightModeStyle.primaryTextColor
+            : NightModeStyle.tertiaryTextColor
         dividerView.isHidden = isSelected
     }
 }

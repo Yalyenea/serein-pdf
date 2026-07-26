@@ -24,11 +24,11 @@ class PlaceholderViewController: NSViewController {
     override func loadView() {
         let titleLabel = NSTextField(labelWithString: titleText)
         titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        titleLabel.textColor = .labelColor
+        titleLabel.textColor = NightModeStyle.primaryTextColor
 
         let detailLabel = NSTextField(labelWithString: detailText)
         detailLabel.font = .systemFont(ofSize: 12)
-        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.textColor = NightModeStyle.secondaryTextColor
         detailLabel.maximumNumberOfLines = 0
 
         let stackView = NSStackView(views: [titleLabel, detailLabel])

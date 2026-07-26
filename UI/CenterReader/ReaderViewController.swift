@@ -80,7 +80,7 @@ private final class ReaderSurfaceView: NSView {
         guard dropHighlightView.isHidden == visible else { return }
         dropHighlightView.isHidden = !visible
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            dropHighlightView.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.45).cgColor
+            dropHighlightView.layer?.borderColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.45).cgColor
         }
     }
 
@@ -333,13 +333,13 @@ final class ReaderViewController: NSViewController {
         pdfView.pageShadowsEnabled = false
 
         emptyStateTitleLabel.font = .systemFont(ofSize: 18, weight: .medium)
-        emptyStateTitleLabel.textColor = .secondaryLabelColor
+        emptyStateTitleLabel.textColor = NightModeStyle.secondaryTextColor
         emptyStateTitleLabel.alignment = .center
         emptyStateTitleLabel.maximumNumberOfLines = 0
         emptyStateTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         emptyStateHintLabel.font = .systemFont(ofSize: 12)
-        emptyStateHintLabel.textColor = .tertiaryLabelColor
+        emptyStateHintLabel.textColor = NightModeStyle.tertiaryTextColor
         emptyStateHintLabel.alignment = .center
         emptyStateHintLabel.maximumNumberOfLines = 0
         emptyStateHintLabel.stringValue = emptyStateHintText()
@@ -365,7 +365,7 @@ final class ReaderViewController: NSViewController {
 
         highlightModeLabel.translatesAutoresizingMaskIntoConstraints = false
         highlightModeLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        highlightModeLabel.textColor = .secondaryLabelColor
+        highlightModeLabel.textColor = NightModeStyle.secondaryTextColor
         highlightModeLabel.alignment = .left
         highlightModeLabel.isEditable = false
         highlightModeLabel.isBordered = false
@@ -1788,13 +1788,15 @@ final class ReaderViewController: NSViewController {
         let appearance = NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
             let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
+            let usesFlatPDFChrome = NightModeStyle.prefersFlatPDFChrome(for: appearance)
             pdfView.displaysPageBreaks = !isNightModeEnabled
-            pdfView.pageShadowsEnabled = !isNightModeEnabled
+            pdfView.pageShadowsEnabled = !isNightModeEnabled && !usesFlatPDFChrome
             view.layer?.backgroundColor = pageBackground.cgColor
             pdfView.backgroundColor = .clear
             pdfView.layer?.backgroundColor = NSColor.clear.cgColor
-            emptyStateTitleLabel.textColor = isNightModeEnabled ? .tertiaryLabelColor : .secondaryLabelColor
-            emptyStateHintLabel.textColor = .tertiaryLabelColor
+            emptyStateTitleLabel.textColor = NightModeStyle.secondaryTextColor
+            emptyStateHintLabel.textColor = NightModeStyle.tertiaryTextColor
+            highlightModeLabel.textColor = NightModeStyle.secondaryTextColor
         }
         applyOverviewSurfaceAppearance()
         if emptyStateContainer.isHidden {
@@ -1847,7 +1849,7 @@ final class ReaderViewController: NSViewController {
     private func updateSwitchTitleToastAppearance() {
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         switchTitleToastView.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(isDark ? 0.86 : 0.92).cgColor
-        switchTitleToastLabel.textColor = .labelColor
+        switchTitleToastLabel.textColor = NightModeStyle.primaryTextColor
     }
 
     private func updateHighlightModeIndicator() {

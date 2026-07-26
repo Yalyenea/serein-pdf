@@ -293,6 +293,7 @@ final class ReaderWorkspaceViewController: NSViewController {
     func refreshThemeAppearance() {
         primaryReaderViewController.refreshThemeAppearance()
         secondaryReaderViewController.refreshThemeAppearance()
+        syncSplitCandidateView()
     }
 
     func saveAnnotations() throws {
@@ -363,7 +364,7 @@ final class ReaderWorkspaceViewController: NSViewController {
         splitCandidateBackdrop.isHidden = true
 
         splitCandidateLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        splitCandidateLabel.textColor = .secondaryLabelColor
+        splitCandidateLabel.textColor = NightModeStyle.secondaryTextColor
         splitCandidateLabel.alignment = .center
         splitCandidateLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -396,6 +397,7 @@ final class ReaderWorkspaceViewController: NSViewController {
 
     private func syncSplitCandidateView() {
         splitCandidateBackdrop.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
+        splitCandidateLabel.textColor = NightModeStyle.secondaryTextColor
         let candidates = documentStore.splitCandidateSessions(in: windowID)
         let shouldShow = documentStore.isSplitEnabled(in: windowID) &&
             documentStore.displayedSessionID(for: .secondary, in: windowID) == nil &&

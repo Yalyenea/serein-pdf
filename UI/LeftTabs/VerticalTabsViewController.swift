@@ -103,7 +103,7 @@ final class VerticalTabsViewController: NSViewController {
         container.layer?.masksToBounds = true
 
         countLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        countLabel.textColor = .secondaryLabelColor
+        countLabel.textColor = NightModeStyle.secondaryTextColor
         countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let headerStack = NSStackView(views: [NSView(), countLabel])
@@ -112,7 +112,7 @@ final class VerticalTabsViewController: NSViewController {
         headerStack.spacing = 8
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
-        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         emptyStateLabel.maximumNumberOfLines = 0
         emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -129,7 +129,7 @@ final class VerticalTabsViewController: NSViewController {
         recentSectionContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         recentTitleLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        recentTitleLabel.textColor = .tertiaryLabelColor
+        recentTitleLabel.textColor = NightModeStyle.tertiaryTextColor
 
         recentListStackView.orientation = .vertical
         recentListStackView.alignment = .leading
@@ -182,6 +182,15 @@ final class VerticalTabsViewController: NSViewController {
             (view as? SidebarMaterialView)?.applyTint(
                 opacity: documentStore.appConfiguration.layout.sidebarOpacity
             )
+            countLabel.textColor = NightModeStyle.secondaryTextColor
+            emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
+            recentTitleLabel.textColor = NightModeStyle.tertiaryTextColor
+            recentButtons.forEach {
+                $0.contentTintColor = NightModeStyle.secondaryTextColor
+            }
+            listStackView.arrangedSubviews
+                .compactMap { $0 as? VerticalTabItemView }
+                .forEach { $0.refreshChromeColors() }
         }
     }
 
@@ -330,7 +339,7 @@ final class VerticalTabsViewController: NSViewController {
             button.alignment = .left
             button.controlSize = .small
             button.font = .systemFont(ofSize: 11, weight: .regular)
-            button.contentTintColor = .secondaryLabelColor
+            button.contentTintColor = NightModeStyle.secondaryTextColor
             button.setButtonType(.momentaryChange)
             button.bezelStyle = .regularSquare
             button.lineBreakMode = .byTruncatingMiddle

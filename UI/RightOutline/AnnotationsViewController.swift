@@ -42,13 +42,14 @@ final class AnnotationHighlightCellView: NSTableCellView {
         super.init(frame: frameRect)
 
         titleLabel.font = Self.titleFont
+        titleLabel.textColor = NightModeStyle.primaryTextColor
         titleLabel.maximumNumberOfLines = 0
         titleLabel.lineBreakMode = .byWordWrapping
         titleLabel.cell?.wraps = true
         titleLabel.cell?.usesSingleLineMode = false
 
         subtitleLabel.font = Self.subtitleFont
-        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.textColor = NightModeStyle.secondaryTextColor
         subtitleLabel.maximumNumberOfLines = 1
         subtitleLabel.lineBreakMode = .byTruncatingTail
 
@@ -209,7 +210,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         scrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
-        emptyStateLabel.textColor = .secondaryLabelColor
+        emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         emptyStateLabel.maximumNumberOfLines = 0
         emptyStateLabel.alignment = .center
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -224,18 +225,20 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         detailContainer.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         snippetLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        snippetLabel.textColor = NightModeStyle.primaryTextColor
         snippetLabel.maximumNumberOfLines = 2
         snippetLabel.translatesAutoresizingMaskIntoConstraints = false
         snippetLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         snippetLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         metaLabel.font = .systemFont(ofSize: 11)
-        metaLabel.textColor = .secondaryLabelColor
+        metaLabel.textColor = NightModeStyle.tertiaryTextColor
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
         metaLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         metaLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         commentLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        commentLabel.textColor = NightModeStyle.primaryTextColor
         commentLabel.translatesAutoresizingMaskIntoConstraints = false
         commentLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         commentLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -340,7 +343,12 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = NSColor.clear.cgColor
             tableView.backgroundColor = .clear
+            emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
+            snippetLabel.textColor = NightModeStyle.primaryTextColor
+            metaLabel.textColor = NightModeStyle.tertiaryTextColor
+            commentLabel.textColor = NightModeStyle.primaryTextColor
         }
+        tableView.reloadData()
     }
 
     @objc
@@ -556,7 +564,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         cell.identifier = identifier
         let label = NSTextField(labelWithString: "")
         label.font = .systemFont(ofSize: 11, weight: .semibold)
-        label.textColor = .secondaryLabelColor
+        label.textColor = NightModeStyle.secondaryTextColor
         label.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(label)
         cell.textField = label
