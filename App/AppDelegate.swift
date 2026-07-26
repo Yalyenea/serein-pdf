@@ -51,6 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var temporaryShareDirectories: [URL] = []
     private let recentFilesMenu = NSMenu(title: "Open Recent")
     private let windowMenu = NSMenu(title: "Window")
+    private let moveCurrentPDFToWindowMenu = NSMenu(title: "Move Current PDF to Window")
+    private let moveCurrentPDFToWindowItem = NSMenuItem(
+        title: "Move Current PDF to Window",
+        action: nil,
+        keyEquivalent: ""
+    )
     private var autoSaveTimer: Timer?
     private var lastRecentFilesCleanupDate: Date?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
@@ -324,6 +330,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        if menu === windowMenu || menu === moveCurrentPDFToWindowMenu {
+            rebuildMoveCurrentPDFToWindowMenu()
+        }
         refreshManagedMenuState(in: menu)
     }
 
@@ -851,6 +860,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func buildViewMenuItem() -> NSMenuItem {
         let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
         let viewMenu = managedMenu(title: "View")
+        let sideBySideSplitItem = NSMenuItem(
+            title: "Split Left & Right",
+            action: #selector(useSideBySideReaderSplit(_:)),
+            keyEquivalent: ""
+        )
+        sideBySideSplitItem.target = self
+        let stackedSplitItem = NSMenuItem(
+            title: "Split Top & Bottom",
+            action: #selector(useStackedReaderSplit(_:)),
+            keyEquivalent: ""
+        )
+        stackedSplitItem.target = self
 
         viewMenu.items = [
             makeConfiguredMenuItem(
@@ -936,6 +957,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 command: .toggleReaderSplit,
                 action: #selector(toggleReaderSplitAction(_:))
             ),
+            sideBySideSplitItem,
+            stackedSplitItem,
             makeConfiguredMenuItem(
                 title: ShortcutCommand.toggleRightSidebarMode.menuTitle,
                 command: .toggleRightSidebarMode,
@@ -1011,6 +1034,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func buildWindowMenuItem() -> NSMenuItem {
         let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+        windowMenu.delegate = self
+        moveCurrentPDFToWindowMenu.autoenablesItems = false
+        moveCurrentPDFToWindowMenu.delegate = self
+        moveCurrentPDFToWindowItem.submenu = moveCurrentPDFToWindowMenu
         let minimizeItem = NSMenuItem(
             title: "Minimize",
             action: #selector(NSWindow.performMiniaturize(_:)),
@@ -1048,6 +1075,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             zoomItem,
             .separator(),
             mergeAllWindowsItem,
+            moveCurrentPDFToWindowItem,
             moveCurrentPDFItem,
             .separator(),
             bringAllToFrontItem,
@@ -1184,6 +1212,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
+    private func moveCurrentPDFToExistingWindow(_ sender: NSMenuItem) {
+        guard let destinationWindowIDString = sender.representedObject as? String,
+              let destinationWindowID = UUID(uuidString: destinationWindowIDString),
+              let sourceController = mainWindowController,
+              let session = documentStore.activeSession(in: sourceController.windowID),
+              session.isBlank == false,
+              documentStore.moveSession(
+                session.id,
+                from: sourceController.windowID,
+                to: destinationWindowID
+              ) else { return }
+        bringWindowToFront(destinationWindowID)
+    }
+
+    private func rebuildMoveCurrentPDFToWindowMenu() {
+        moveCurrentPDFToWindowMenu.removeAllItems()
+        guard let sourceController = mainWindowController,
+              let activeSession = documentStore.activeSession(in: sourceController.windowID),
+              activeSession.isBlank == false else {
+            moveCurrentPDFToWindowItem.isEnabled = false
+            addUnavailableWindowMoveItem(title: "No PDF to Move")
+            return
+        }
+
+        let windowIDs = documentStore.windowIDs()
+        let destinations = windowIDs.filter { $0 != sourceController.windowID }
+        moveCurrentPDFToWindowItem.isEnabled = destinations.isEmpty == false
+        guard destinations.isEmpty == false else {
+            addUnavailableWindowMoveItem(title: "No Other Windows")
+            return
+        }
+
+        for destinationWindowID in destinations {
+            let windowNumber = (windowIDs.firstIndex(of: destinationWindowID) ?? 0) + 1
+            let destinationTitle = documentStore.activeSession(in: destinationWindowID)
+                .flatMap { $0.isBlank ? nil : $0.title }
+                ?? "Empty Window"
+            let item = NSMenuItem(
+                title: "Window \(windowNumber): \(destinationTitle)",
+                action: #selector(moveCurrentPDFToExistingWindow(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = destinationWindowID.uuidString
+            moveCurrentPDFToWindowMenu.addItem(item)
+        }
+    }
+
+    private func addUnavailableWindowMoveItem(title: String) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        moveCurrentPDFToWindowMenu.addItem(item)
+    }
+
+    @objc
     private func showRecentFilesPalette(_ sender: Any?) {
         runRecentFilesCleanupIfNeeded()
         if recentFilesPaletteController == nil {
@@ -1301,6 +1384,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func toggleReaderSplitAction(_ sender: Any?) {
         mainWindowController?.toggleReaderSplit()
+    }
+
+    @objc
+    private func useSideBySideReaderSplit(_ sender: Any?) {
+        showReaderSplit(layout: .sideBySide)
+    }
+
+    @objc
+    private func useStackedReaderSplit(_ sender: Any?) {
+        showReaderSplit(layout: .stacked)
+    }
+
+    private func showReaderSplit(layout: ReaderSplitLayout) {
+        guard let controller = mainWindowController,
+              documentStore.activeSession(in: controller.windowID)?.isBlank == false else { return }
+        documentStore.setSplitLayout(layout, in: controller.windowID)
+        documentStore.setSplitEnabled(true, in: controller.windowID)
     }
 
     @objc
@@ -2124,6 +2224,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return mainWindowControllers.count > 1
         case #selector(moveCurrentPDFToNewWindow(_:)):
             return activePDFSession != nil
+        case #selector(moveCurrentPDFToExistingWindow(_:)):
+            guard let destinationWindowIDString = menuItem.representedObject as? String,
+                  let destinationWindowID = UUID(uuidString: destinationWindowIDString),
+                  let sourceWindowID = windowID else { return false }
+            return activePDFSession != nil &&
+                destinationWindowID != sourceWindowID &&
+                documentStore.windowIDs().contains(destinationWindowID)
         case #selector(refreshLibraryIndex(_:)), #selector(showLibraryPalette(_:)):
             return appConfiguration.library.folderURLs.isEmpty == false
         case #selector(openLibrarySettings(_:)), #selector(openShortcutSettings(_:)):
@@ -2234,6 +2341,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(toggleReaderSplitAction(_:)):
             menuItem.state = controller?.isReaderSplitEnabled == true ? .on : .off
+            return activePDFSession != nil
+        case #selector(useSideBySideReaderSplit(_:)):
+            menuItem.state = windowID.map {
+                documentStore.isSplitEnabled(in: $0) && documentStore.splitLayout(in: $0) == .sideBySide
+            } == true ? .on : .off
+            return activePDFSession != nil
+        case #selector(useStackedReaderSplit(_:)):
+            menuItem.state = windowID.map {
+                documentStore.isSplitEnabled(in: $0) && documentStore.splitLayout(in: $0) == .stacked
+            } == true ? .on : .off
             return activePDFSession != nil
         case #selector(toggleRightSidebarModeAction(_:)):
             return windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true

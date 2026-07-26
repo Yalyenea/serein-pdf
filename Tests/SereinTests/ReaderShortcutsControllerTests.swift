@@ -1,4 +1,5 @@
 import AppKit
+import IOKit
 import XCTest
 @testable import Serein
 
@@ -202,6 +203,82 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(handledEvents, ["o"])
     }
 
+    func testReaderWindowRoutesOnlyLeftCommandOneThroughThreeToNumberedTabs() {
+        let window = ReaderShortcutWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        var activatedTabs: [Int] = []
+        window.numberedTabShortcutHandler = { activatedTabs.append($0) }
+
+        for number in 1...3 {
+            XCTAssertTrue(
+                window.handlePhysicalCommandNumberShortcut(
+                    with: makePhysicalCommandNumberEvent(number, left: true)
+                )
+            )
+        }
+        XCTAssertTrue(
+            window.handlePhysicalCommandNumberShortcut(
+                with: makePhysicalCommandNumberEvent(4, left: true)
+            )
+        )
+
+        XCTAssertEqual(activatedTabs, [1, 2, 3])
+    }
+
+    func testReaderWindowLeavesRightCommandNumbersForConfiguredMenuShortcuts() {
+        let window = ReaderShortcutWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        var activatedTabs: [Int] = []
+        window.numberedTabShortcutHandler = { activatedTabs.append($0) }
+
+        for number in 1...4 {
+            XCTAssertFalse(
+                window.handlePhysicalCommandNumberShortcut(
+                    with: makePhysicalCommandNumberEvent(number, right: true)
+                )
+            )
+        }
+
+        XCTAssertTrue(activatedTabs.isEmpty)
+    }
+
+    func testReaderWindowConsumesAmbiguousCommandNumberEvents() {
+        let window = ReaderShortcutWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        var activatedTabs: [Int] = []
+        window.numberedTabShortcutHandler = { activatedTabs.append($0) }
+
+        XCTAssertTrue(
+            window.handlePhysicalCommandNumberShortcut(
+                with: makePhysicalCommandNumberEvent(1)
+            )
+        )
+        XCTAssertTrue(
+            window.handlePhysicalCommandNumberShortcut(
+                with: makePhysicalCommandNumberEvent(1, left: true, right: true)
+            )
+        )
+        XCTAssertFalse(
+            window.handlePhysicalCommandNumberShortcut(
+                with: makeKeyEvent(characters: "5", modifiers: [.command])
+            )
+        )
+
+        XCTAssertTrue(activatedTabs.isEmpty)
+    }
+
     func testThemeChordDoesNotRunWhileEditingText() {
         var didTrigger = false
         let controller = ReaderShortcutsController(
@@ -257,5 +334,23 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             isARepeat: false,
             keyCode: 0
         )!
+    }
+
+    private func makePhysicalCommandNumberEvent(
+        _ number: Int,
+        left: Bool = false,
+        right: Bool = false
+    ) -> NSEvent {
+        var rawModifiers = NSEvent.ModifierFlags.command.rawValue
+        if left {
+            rawModifiers |= UInt(NX_DEVICELCMDKEYMASK)
+        }
+        if right {
+            rawModifiers |= UInt(NX_DEVICERCMDKEYMASK)
+        }
+        return makeKeyEvent(
+            characters: String(number),
+            modifiers: NSEvent.ModifierFlags(rawValue: rawModifiers)
+        )
     }
 }

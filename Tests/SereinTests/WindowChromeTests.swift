@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import IOKit
 import PDFKit
 import Testing
 @testable import Serein
@@ -112,6 +113,49 @@ struct WindowChromeTests {
     }
 
     @Test
+    func titlebarTabsMoveDroppedPDFToExistingWindow() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let sourceAnchor = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-drag-source-anchor"))
+        let moved = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-drag-moved"))
+        let sourceWindowID = store.defaultWindowID
+        let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
+        let destinationAnchor = try store.open(
+            documentAt: makeTemporaryPDF(named: "titlebar-drag-destination-anchor"),
+            in: destinationWindowID
+        )
+        let controller = TitlebarTabsController(
+            documentStore: store,
+            windowID: destinationWindowID
+        )
+        controller.loadViewIfNeeded()
+
+        #expect(
+            controller.testingMoveTab(
+                TabDragPayload(sourceWindowID: sourceWindowID, sessionID: moved.id)
+            )
+        )
+        #expect(store.sessions(in: sourceWindowID).map(\.id) == [sourceAnchor.id])
+        #expect(
+            store.sessions(in: destinationWindowID).map(\.id) ==
+                [destinationAnchor.id, moved.id]
+        )
+        #expect(store.activeSessionID(in: destinationWindowID) == moved.id)
+    }
+
+    @Test
+    func titlebarPDFTabUsesDragSourceAsPrimaryHitTarget() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-drag-hit-target"))
+        let controller = TitlebarTabsController(documentStore: store)
+        controller.loadViewIfNeeded()
+        controller.view.layoutSubtreeIfNeeded()
+
+        #expect(controller.testingTabDragSourceHitTargets == [true])
+    }
+
+    @Test
     func transparentTitlebarDragAreaIsReservedBeforePDFContent() throws {
         _ = NSApplication.shared
         let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
@@ -152,6 +196,46 @@ struct WindowChromeTests {
         #expect(window.toolbar != nil)
         let titlebarPoint = NSPoint(x: contentView.bounds.midX, y: contentView.bounds.maxY - 2)
         #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: titlebarPoint)) == false)
+    }
+
+    @Test
+    func leftCommandNumberActivatesTabInOwningWindowOrderIncludingBlankTabs() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let firstWindowID = store.defaultWindowID
+        let firstWindowSession = try store.open(
+            documentAt: makeTemporaryPDF(named: "numbered-tab-first-window"),
+            in: firstWindowID
+        )
+        let secondWindowID = store.createWindow(copyingFrom: firstWindowID)
+        _ = try store.open(
+            documentAt: makeTemporaryPDF(named: "numbered-tab-second-window-first"),
+            in: secondWindowID
+        )
+        let blankSession = store.newBlankTab(in: secondWindowID)
+        _ = try store.open(
+            documentAt: makeTemporaryPDF(named: "numbered-tab-second-window-third"),
+            in: secondWindowID
+        )
+        store.updateSearch(query: "query", scope: .currentDocument, in: secondWindowID)
+
+        let firstController = MainWindowController(documentStore: store, windowID: firstWindowID)
+        let secondController = MainWindowController(documentStore: store, windowID: secondWindowID)
+        defer {
+            secondController.close()
+            firstController.close()
+        }
+        let secondWindow = try #require(secondController.window as? ReaderShortcutWindow)
+
+        #expect(
+            secondWindow.performKeyEquivalent(
+                with: physicalCommandNumberEvent(2, in: secondWindow, left: true)
+            )
+        )
+        #expect(store.activeSessionID(in: secondWindowID) == blankSession.id)
+        #expect(store.selectedSessionIDs(in: secondWindowID) == [blankSession.id])
+        #expect(store.searchQuery(in: secondWindowID).isEmpty)
+        #expect(store.activeSessionID(in: firstWindowID) == firstWindowSession.id)
     }
 
     @Test
@@ -686,6 +770,71 @@ struct WindowChromeTests {
         controller.toggleReaderSplit()
         controller.window?.layoutIfNeeded()
         #expect(controller.isReaderSplitEnabled == false)
+    }
+
+    @Test
+    func readerSplitSwitchesAxisWithoutChangingPaneSessions() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "split-axis-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "split-axis-second"))
+        let windowID = controller.windowID
+
+        store.setLeftSidebarVisible(false, in: windowID)
+        store.setRightSidebarVisible(false, in: windowID)
+        controller.window?.setContentSize(NSSize(width: 560, height: 640))
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split controller")
+            return
+        }
+        let workspace = splitController.readerWorkspaceViewController
+        let splitView = workspace.testingSplitView
+        #expect(workspace.testingActiveSplitMinimumConstraintCount == 0)
+
+        store.activate(sessionID: first.id, in: windowID)
+        store.activate(sessionID: second.id, in: windowID, targetPane: .secondary)
+        store.setFocusedPane(.secondary, in: windowID)
+        flushLayout(controller.window)
+        let primarySessionID = store.displayedSessionID(for: .primary, in: windowID)
+        let secondarySessionID = store.displayedSessionID(for: .secondary, in: windowID)
+
+        store.setSplitLayout(.sideBySide, in: windowID)
+        flushLayout(controller.window)
+
+        let sideBySideFrames = splitView.subviews.map(\.frame)
+        #expect(splitView.isVertical)
+        #expect(workspace.testingActiveSplitMinimumConstraintCount == 2)
+        #expect(sideBySideFrames.count == 2)
+        if sideBySideFrames.count == 2 {
+            #expect(sideBySideFrames.allSatisfy { $0.width > 0 })
+            #expect(abs(sideBySideFrames[0].width - sideBySideFrames[1].width) < 2)
+            #expect(abs(sideBySideFrames[0].midX - sideBySideFrames[1].midX) > 100)
+            #expect(abs(sideBySideFrames[0].midY - sideBySideFrames[1].midY) < 2)
+        }
+
+        store.setSplitLayout(.stacked, in: windowID)
+        flushLayout(controller.window)
+
+        let stackedFrames = splitView.subviews.map(\.frame)
+        #expect(splitView.isVertical == false)
+        #expect(workspace.testingActiveSplitMinimumConstraintCount == 2)
+        #expect(stackedFrames.count == 2)
+        if stackedFrames.count == 2 {
+            #expect(abs(stackedFrames[0].height - stackedFrames[1].height) < 2)
+            #expect(abs(stackedFrames[0].midY - stackedFrames[1].midY) > 100)
+            #expect(abs(stackedFrames[0].midX - stackedFrames[1].midX) < 2)
+        }
+        #expect(store.displayedSessionID(for: .primary, in: windowID) == primarySessionID)
+        #expect(store.displayedSessionID(for: .secondary, in: windowID) == secondarySessionID)
+        #expect(store.focusedPane(in: windowID) == .secondary)
+
+        store.setSplitEnabled(false, in: windowID)
+        flushLayout(controller.window)
+        #expect(workspace.testingActiveSplitMinimumConstraintCount == 0)
     }
 
     @Test
@@ -2039,6 +2188,59 @@ struct WindowChromeTests {
     }
 
     @Test
+    func hotReloadKeepsLivePageWhenStoreMissedPageChange() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let pageSize = NSSize(width: 720, height: 900)
+        let url = try makeTemporaryPDF(
+            named: "hot-reload-live-page",
+            pageSizes: Array(repeating: pageSize, count: 3)
+        )
+        let session = try store.open(documentAt: url)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let clipView = pdfClipView(in: splitController.readerViewController.pdfView),
+              let scrollView = splitController.readerViewController.pdfView.subviews
+                .compactMap({ $0 as? NSScrollView })
+                .first else {
+            Issue.record("Failed to locate reader scroll view")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        let originalDocument = try #require(reader.pdfView.document)
+        NotificationCenter.default.removeObserver(
+            reader,
+            name: Notification.Name.PDFViewPageChanged,
+            object: reader.pdfView
+        )
+        let secondPage = try #require(originalDocument.page(at: 1))
+        reader.pdfView.go(to: secondPage)
+        scrollView.reflectScrolledClipView(clipView)
+        flushLayout(controller.window)
+
+        let livePageIndex = reader.pdfView.currentPage.map { originalDocument.index(for: $0) }
+        #expect(livePageIndex == 1)
+        #expect(store.session(for: session.id)?.currentPageIndex == 0)
+        try writeTemporaryPDF(
+            to: url,
+            named: "hot-reload-live-page-updated",
+            pageSizes: Array(repeating: pageSize, count: 4)
+        )
+        store.refreshExternallyChangedFile(at: url)
+        flushLayout(controller.window)
+
+        let reloadedDocument = try #require(reader.pdfView.document)
+        let reloadedPageIndex = reader.pdfView.currentPage.map { reloadedDocument.index(for: $0) }
+        #expect(reloadedDocument !== originalDocument)
+        #expect(reloadedPageIndex == 1)
+        #expect(store.session(for: session.id)?.currentPageIndex == 1)
+    }
+
+    @Test
     func fitWidthSkipsProgrammaticReapplyWhenTargetScaleIsAlreadyActive() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
@@ -2170,6 +2372,34 @@ private func mouseDownEvent(in window: NSWindow, at location: NSPoint) -> NSEven
         eventNumber: 0,
         clickCount: 1,
         pressure: 1
+    )!
+}
+
+@MainActor
+private func physicalCommandNumberEvent(
+    _ number: Int,
+    in window: NSWindow,
+    left: Bool = false,
+    right: Bool = false
+) -> NSEvent {
+    var rawModifiers = NSEvent.ModifierFlags.command.rawValue
+    if left {
+        rawModifiers |= UInt(NX_DEVICELCMDKEYMASK)
+    }
+    if right {
+        rawModifiers |= UInt(NX_DEVICERCMDKEYMASK)
+    }
+    return NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: NSEvent.ModifierFlags(rawValue: rawModifiers),
+        timestamp: 0,
+        windowNumber: window.windowNumber,
+        context: nil,
+        characters: String(number),
+        charactersIgnoringModifiers: String(number),
+        isARepeat: false,
+        keyCode: UInt16(17 + number)
     )!
 }
 
@@ -2340,6 +2570,12 @@ private func makeTemporaryPDF(named name: String, pageSizes: [NSSize] = [NSSize(
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension("pdf")
+    try writeTemporaryPDF(to: url, named: name, pageSizes: pageSizes)
+    return url
+}
+
+@MainActor
+private func writeTemporaryPDF(to url: URL, named name: String, pageSizes: [NSSize]) throws {
     let document = PDFDocument()
 
     for (index, pageSize) in pageSizes.enumerated() {
@@ -2370,7 +2606,6 @@ private func makeTemporaryPDF(named name: String, pageSizes: [NSSize] = [NSSize(
     guard document.write(to: url) else {
         throw CocoaError(.fileWriteUnknown)
     }
-    return url
 }
 
 @MainActor

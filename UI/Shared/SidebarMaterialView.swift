@@ -1,10 +1,36 @@
 import AppKit
 
+private final class SidebarBackgroundView: NSView {
+    var allowsWindowDrag = false
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        allowsWindowDrag
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard allowsWindowDrag,
+              event.clickCount == 1,
+              let window,
+              window.isMovable,
+              window.styleMask.contains(.fullScreen) == false else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        window.performDrag(with: event)
+    }
+}
+
 class SidebarMaterialView: NSVisualEffectView {
-    private let tintView = NSView()
+    private let tintView = SidebarBackgroundView()
 
     var tintAlpha: CGFloat {
         tintView.layer?.backgroundColor?.alpha ?? 0
+    }
+
+    var allowsWindowDragFromBackground: Bool {
+        get { tintView.allowsWindowDrag }
+        set { tintView.allowsWindowDrag = newValue }
     }
 
     override init(frame frameRect: NSRect) {
@@ -43,3 +69,11 @@ class SidebarMaterialView: NSVisualEffectView {
         ])
     }
 }
+
+#if DEBUG
+extension SidebarMaterialView {
+    var testingBackgroundView: NSView {
+        tintView
+    }
+}
+#endif

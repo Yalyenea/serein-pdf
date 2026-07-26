@@ -1844,6 +1844,168 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(Set(store.windowIDs()), [sourceWindowID, newWindowID])
     }
 
+    func testMoveActiveComparisonSessionToNewWindowMovesPublicPDF() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-new-window"))
+        let sourceWindowID = store.defaultWindowID
+        store.activate(sessionID: pdf.id, in: sourceWindowID, targetPane: .secondary)
+        let comparisonSessionID = try XCTUnwrap(
+            store.displayedSessionID(for: .secondary, in: sourceWindowID)
+        )
+        XCTAssertNotEqual(comparisonSessionID, pdf.id)
+        XCTAssertEqual(store.activeSessionID(in: sourceWindowID), comparisonSessionID)
+
+        let destinationWindowID = try XCTUnwrap(
+            store.moveActiveSessionToNewWindow(from: sourceWindowID)
+        )
+
+        XCTAssertTrue(store.sessions(in: sourceWindowID).isEmpty)
+        XCTAssertEqual(store.sessions(in: destinationWindowID).map(\.id), [pdf.id])
+        XCTAssertNil(store.session(for: comparisonSessionID))
+    }
+
+    func testMoveComparisonSessionToExistingWindowMovesPublicPDF() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-existing-window"))
+        let sourceWindowID = store.defaultWindowID
+        let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
+        store.activate(sessionID: pdf.id, in: sourceWindowID, targetPane: .secondary)
+        let comparisonSessionID = try XCTUnwrap(
+            store.displayedSessionID(for: .secondary, in: sourceWindowID)
+        )
+
+        XCTAssertTrue(
+            store.moveSession(
+                comparisonSessionID,
+                from: sourceWindowID,
+                to: destinationWindowID
+            )
+        )
+
+        XCTAssertTrue(store.sessions(in: sourceWindowID).isEmpty)
+        XCTAssertEqual(store.sessions(in: destinationWindowID).map(\.id), [pdf.id])
+        XCTAssertNil(store.session(for: comparisonSessionID))
+    }
+
+    func testMoveSessionToExistingWindowPreservesDocumentStateAndAppendsIt() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let sourceAnchor = try store.open(documentAt: makeTemporaryPDF(named: "move-existing-source"))
+        let moved = try store.open(documentAt: makeTemporaryPDF(named: "move-existing-current", pageCount: 4))
+        let sourceWindowID = store.defaultWindowID
+        let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
+        let destinationAnchor = try store.open(
+            documentAt: makeTemporaryPDF(named: "move-existing-destination"),
+            in: destinationWindowID
+        )
+        store.updateCurrentPage(index: 2, for: moved.id)
+        store.setDirty(true, for: moved.id)
+        let loadedDocument = try store.pdfDocument(for: moved.id)
+
+        XCTAssertTrue(store.moveSession(moved.id, from: sourceWindowID, to: destinationWindowID))
+
+        XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [sourceAnchor.id])
+        XCTAssertEqual(store.activeSessionID(in: sourceWindowID), sourceAnchor.id)
+        XCTAssertEqual(
+            store.sessions(in: destinationWindowID).map(\.id),
+            [destinationAnchor.id, moved.id]
+        )
+        XCTAssertEqual(store.activeSessionID(in: destinationWindowID), moved.id)
+        XCTAssertEqual(store.selectedSessionIDs(in: destinationWindowID), [moved.id])
+        XCTAssertEqual(store.openLocation(for: moved.url), DocumentOpenLocation(windowID: destinationWindowID, sessionID: moved.id))
+        XCTAssertEqual(store.session(for: moved.id)?.currentPageIndex, 2)
+        XCTAssertTrue(store.session(for: moved.id)?.isDirty == true)
+        XCTAssertTrue(try store.pdfDocument(for: moved.id) === loadedDocument)
+        XCTAssertTrue(store.recentlyClosedURLs(in: sourceWindowID).isEmpty)
+        XCTAssertTrue(store.recentlyClosedURLs(in: destinationWindowID).isEmpty)
+
+        let persistedState = try XCTUnwrap(persistence.state)
+        XCTAssertEqual(
+            persistedState.windows.first(where: { $0.id == sourceWindowID })?.sessionIDs,
+            [sourceAnchor.id]
+        )
+        XCTAssertEqual(
+            persistedState.windows.first(where: { $0.id == destinationWindowID })?.sessionIDs,
+            [destinationAnchor.id, moved.id]
+        )
+    }
+
+    func testMoveSessionRepairsSourceSelectionContinuousReadingAndSplitPair() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "move-state-first"))
+        let moved = try store.open(documentAt: makeTemporaryPDF(named: "move-state-current"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "move-state-third"))
+        let sourceWindowID = store.defaultWindowID
+        store.selectSessions([first.id, moved.id], in: sourceWindowID)
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: sourceWindowID))
+        store.activate(sessionID: first.id, in: sourceWindowID)
+        store.activate(sessionID: moved.id, in: sourceWindowID, targetPane: .secondary)
+        let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
+
+        XCTAssertTrue(store.moveSession(moved.id, from: sourceWindowID, to: destinationWindowID))
+
+        XCTAssertFalse(store.isSplitEnabled(in: sourceWindowID))
+        XCTAssertNil(store.splitPair(in: sourceWindowID))
+        XCTAssertEqual(store.activeSessionID(in: sourceWindowID), first.id)
+        XCTAssertEqual(store.selectedSessionIDs(in: sourceWindowID), [first.id])
+        XCTAssertFalse(store.isContinuousReadingEnabled(in: sourceWindowID))
+        XCTAssertTrue(store.continuousReadingSessionIDs(in: sourceWindowID).isEmpty)
+        XCTAssertEqual(store.sessions(in: destinationWindowID).map(\.id), [moved.id])
+        XCTAssertEqual(store.activeSessionID(in: destinationWindowID), moved.id)
+    }
+
+    func testMoveSessionRejectsBlankSameWindowAndUnknownTargets() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-invalid-pdf"))
+        let blank = store.newBlankTab()
+        let sourceWindowID = store.defaultWindowID
+        let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
+
+        XCTAssertFalse(store.moveSession(blank.id, from: sourceWindowID, to: destinationWindowID))
+        XCTAssertFalse(store.moveSession(pdf.id, from: sourceWindowID, to: sourceWindowID))
+        XCTAssertFalse(store.moveSession(pdf.id, from: sourceWindowID, to: UUID()))
+        XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [pdf.id, blank.id])
+        XCTAssertTrue(store.sessions(in: destinationWindowID).isEmpty)
+    }
+
+    func testMoveLastSessionKeepsSourceWindowEmpty() throws {
+        let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+        let moved = try store.open(documentAt: makeTemporaryPDF(named: "move-last-session"))
+        let sourceWindowID = store.defaultWindowID
+        let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
+
+        XCTAssertTrue(store.moveSession(moved.id, from: sourceWindowID, to: destinationWindowID))
+
+        XCTAssertEqual(Set(store.windowIDs()), [sourceWindowID, destinationWindowID])
+        XCTAssertTrue(store.sessions(in: sourceWindowID).isEmpty)
+        XCTAssertNil(store.activeSessionID(in: sourceWindowID))
+        XCTAssertEqual(store.sessions(in: destinationWindowID).map(\.id), [moved.id])
+    }
+
     func testAllOpenSearchBuildsSectionsAcrossSessions() throws {
         let store = DocumentStore(
             persistence: InMemoryDocumentStorePersistence(),

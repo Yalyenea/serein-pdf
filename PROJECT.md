@@ -74,14 +74,14 @@ flowchart LR
 | 决策 | 结论 |
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
-| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,支持合并所有窗口与把当前 PDF 移到新窗口 |
+| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,支持合并窗口,并通过菜单或 tab 拖拽把 PDF 原样移到新窗口 / 已有窗口 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
 | 目录来源 | 右栏需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
-| PDF 热重载 | `DocumentStore` 监听已打开 PDF 文件及其父目录;原地写入或原子替换导致文件快照变化后只重载 clean sessions,dirty 批注会话保持内存状态 |
+| PDF 热重载 | `DocumentStore` 监听已打开 PDF 文件及其父目录;原地写入或原子替换后只重载 clean sessions,优先恢复 PDFView 实时页码;dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
 | 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
@@ -89,11 +89,12 @@ flowchart LR
 | 重复打开 | 外部 `open`、Open Recent、PDF Library 或 `Cmd+O` 选到已打开 PDF 时激活已有 window/session,不创建重复普通 tab |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
+| 分屏方向 | `ReaderSplitLayout` 为窗口运行期状态,支持左右 `sideBySide` / 上下 `stacked`;切换方向不改 pair、pane session 与焦点 |
 | 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
-| 侧栏外观 | 左右侧栏使用 native `NSVisualEffectView.sidebar` material;`layout.sidebarOpacity` 控制 tint 强度,设置页即时生效,不影响中栏 PDF 背景 |
+| 侧栏外观 | 左右侧栏使用 native `NSVisualEffectView.sidebar` material;`layout.sidebarOpacity` 控制 tint 强度;文档侧栏空白背景可拖窗,不抢 tab / close / divider / scroll 事件 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
 
@@ -141,7 +142,7 @@ flowchart LR
 **阅读**
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
-- `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`:`singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`;`C` 在 `singlePage` 与 `singlePageContinuous` 间切换
+- 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`:`singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`;`C` 在 `singlePage` 与 `singlePageContinuous` 间切换
 - `singlePage` 完整放下当前页时双轴居中并钳制空白区域滑动;放大到超出视口后仍允许页内平移
 - `J` / `K`:下一页 / 上一页(文本输入上下文让路)
 - `Ctrl+D` / `Ctrl+U`:下滚 / 上滚半页
@@ -167,17 +168,19 @@ flowchart LR
 - `Cmd+Shift+N`:新建窗口
 - `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
 - `Cmd+K` → `Cmd+N`:把当前 PDF 移到新窗口
+- `Window > Move Current PDF to Window`:移到指定已有窗口;垂直 / 标题栏 tab 也可直接跨窗拖拽
 - `Cmd+Shift+Space`:最近文件启动器
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 普通切换,`Option+Click` / `Option+Enter` 进入 split-edit;重复 `Ctrl+Tab` 或 `Esc` 关闭
 - 多 PDF 连续阅读:批量打开会预选本批 PDF,也可 `Cmd` / `Shift` 点击多选后通过 tab 右键菜单开启 / 退出
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
+- 物理左 `Cmd+1` / `Cmd+2` / `Cmd+3`:激活当前窗口第 1 / 2 / 3 个 tab
 - `Option+Click` tab:进入 split-edit;已分屏时替换当前焦点 pane,未分屏时以当前 PDF + 目标 PDF 建 pair
 
 **布局**
 - `Cmd+B` / `Cmd+Option+B`:切换左 / 右侧栏
 - `Cmd+Shift+1` / `Cmd+Shift+2`:垂直 sidebar tabs / 水平 titlebar tabs
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
-- `Cmd+Ctrl+\`:切换同窗分屏;左侧保持当前 PDF,右侧显示紧凑候选,首项为同一个 PDF;选中目标后两个 pane 自动适应宽度(新窗口与重启恢复默认单屏)
+- `Cmd+Ctrl+\`:切换同窗分屏;次级 pane 显示紧凑候选,首项为同一个 PDF;`View` 菜单可在左右 / 上下布局间切换(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,视口自适应铺满页网格,缩放后为手动尺寸,`Esc` 退出)
 - `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
 - `Cmd+Ctrl+L`:双侧栏都关闭时打开两个侧栏;否则关闭两个侧栏与 tab chrome
@@ -222,12 +225,12 @@ flowchart LR
 
 ### 5.2 `DocumentStore`
 
-- 管理 sessions(open / close / activate / reorder)
+- 管理 sessions(open / close / activate / reorder / 跨窗口 move)
 - 维护多个 `WindowWorkspace`,驱动多窗口 / 分屏 / 焦点 pane / 右栏模式 / 搜索 scope
 - 每个 `WindowWorkspace` 独立维护自己的 session/tab 集合,open/close 不跨窗扩散
 - 维护 active session 与运行期 split pair,驱动左栏 tab 与中栏 reader 联动
 - 按需创建 `PDFDocument`,用小容量 LRU 保留当前 pane / 分屏 pane / 最近文档;干净后台文档可释放
-- 监听已打开 PDF 的外部改写;clean session 清理 `PDFDocument` / Outline / Search / Annotations 缓存并触发 UI 重读,dirty session 不自动刷新
+- 监听已打开 PDF 的外部改写;clean session 清理缓存并触发 UI 重读,Reader 在替换 document 前捕获实时阅读位并恢复;dirty session 不自动刷新
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - `DocumentStoreChange` 区分 chrome / content / `readingPosition`;翻页与缩放写回不触发 tab / search / annotations 列表全量重建,也不重写 workspace 快照
 - `ReadingStateStore` 每文档阅读位:上限 500(LRU)、磁盘写入 debounce、退出时 flush;失败走 `os.Logger`
@@ -246,6 +249,7 @@ flowchart LR
 | `rightSidebarMode` | `outline` / `pages` / `search` |
 | `searchQuery` / `searchScope` | 当前窗口搜索上下文 |
 | `isSplitEnabled` | 当前是否显示双 Reader |
+| `splitLayout` | 当前运行期左右 / 上下分屏方向,不跨启动恢复 |
 | `primarySessionID` / `secondarySessionID` | 两个 pane 当前展示的 session;secondary 可为空候选态 |
 | `splitPair` | 当前运行期绑定的两个 PDF,不跨启动恢复 |
 | `focusedPane` | split-edit 与搜索跳转的落点 |
@@ -390,6 +394,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 | M8 批注深度化 | ✅ | 右栏 Annotations、评论编辑、Markdown / Plain / JSON 导出、Shortcuts 页、`none` 清空绑定;开发 + 手测通过 |
 | M9 最近文件启动器 | ✅ | Spotlight 风格 recent-files palette,搜索 / 空格多选 / 回车打开 / 底部操作提示;开发 + 手测通过 |
 | M10–M10.13 体验扩展 | ✅ | Framing、连续阅读、PDF 库、热重载、切换提示、绿灯窗口、空白 tab、路径复制、浏览器式分屏、Go to Page 焦点等;开发 + 手测通过 |
+| M14 窗口工作流交互 | ✅ | PDF 跨已有窗口菜单 / 拖拽移动、热重载实时页码、左右 / 上下分屏、侧栏空白拖窗、左右物理 Command 数字键 |
 
 已完成细项以 commit 历史与 [TASKS.md](TASKS.md) 为准,不在本文件展开。
 

@@ -41,8 +41,8 @@
       "split.kicker": "Compare split",
       "split.title": "Two views, one screen",
       "split.desc":
-        "Open a second pane beside the current PDF — same file with independent page and zoom, or another open tab. Compare, cross-check, keep a source open while you work.",
-      "split.card": "same PDF · other tab · Option edits pane",
+        "Open a second reader for the same PDF or another tab, then arrange the pair side by side or stacked. Each pane keeps its own page and zoom.",
+      "split.card": "side by side · stacked · independent state",
 
       "flow.kicker": "Continuous reading",
       "flow.title": "Many PDFs, one ordered flow",
@@ -53,8 +53,8 @@
       "reload.kicker": "Hot reload",
       "reload.title": "Recompile without reopening",
       "reload.desc":
-        "When LaTeX, Typst, or another toolchain rewrites an open clean PDF, Serein reloads it in place. Sessions with unsaved annotations stay untouched.",
-      "reload.card": "LaTeX · Typst · atomic replace",
+        "When LaTeX, Typst, or another toolchain rewrites an open clean PDF, Serein reloads it in place and returns to the live page. Sessions with unsaved annotations stay untouched.",
+      "reload.card": "LaTeX · Typst · keep your page",
 
       "keys.kicker": "Keyboard-first",
       "keys.title": "Built for hands on the home row",
@@ -144,8 +144,8 @@
       "split.kicker": "对照分屏",
       "split.title": "两个视图，同一屏幕",
       "split.desc":
-        "在当前 PDF 旁打开第二栏——同文件独立页码与缩放，或另一个已打开标签。对照、交叉核对，或一边读一边留着源文。",
-      "split.card": "同 PDF · 其他标签 · Option 编辑分栏",
+        "为同一 PDF 或其他标签打开第二个阅读区，再按左右或上下排列。两个 pane 各自保留页码与缩放。",
+      "split.card": "左右 · 上下 · 独立阅读状态",
 
       "flow.kicker": "连续阅读",
       "flow.title": "多份 PDF，一条有序流",
@@ -156,8 +156,8 @@
       "reload.kicker": "热重载",
       "reload.title": "重新编译，不必重开",
       "reload.desc":
-        "当 LaTeX、Typst 或其他工具链原地改写已打开的干净 PDF 时，Serein 就地重载。带未保存批注的会话保持不动。",
-      "reload.card": "LaTeX · Typst · 原子替换",
+        "当 LaTeX、Typst 或其他工具链改写已打开的干净 PDF 时，Serein 就地重载并回到实时页码。带未保存批注的会话保持不动。",
+      "reload.card": "LaTeX · Typst · 保留页码",
 
       "keys.kicker": "键盘优先",
       "keys.title": "为指尖留在主键位而生",

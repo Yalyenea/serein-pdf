@@ -18,25 +18,26 @@ site for showcase, download notes, and compact docs.
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
-- Compare split in the center reader (`cmd+ctrl+\`) opens the current PDF beside a compact candidate chooser; the first candidate is the same PDF, with independent page and zoom state
+- Compare split in the center reader (`cmd+ctrl+\`) opens a compact candidate chooser and can arrange the two independent readers left/right or top/bottom from the View menu
 - Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
 - Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
 - Opening a PDF that is already open focuses the existing tab and window instead of creating a duplicate tab
-- Window commands can merge every Serein window into the current one or move the current PDF into a new window
+- Window commands can merge every Serein window, move the current PDF into a new or existing window, and vertical/titlebar tabs can be dragged directly between windows
 - Main windows participate in native macOS green-button window management: Full Screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
 - Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every tab in the current window; `option+enter` / `option+click` uses the same split-edit behavior as the tab strip
 - Continuous reading groups from the tab context menu let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
 - `cmd+w` closes all selected tabs when multiple PDF tabs are selected; otherwise it closes the current tab/window as usual
 - `cmd+shift+w` closes the current window while preserving the normal close confirmation for unsaved annotations
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
-- Clean PDFs hot-reload when LaTeX, Typst, or another external compiler rewrites the open file in place or replaces it atomically; PDFs with unsaved Serein annotations are left untouched
+- Clean PDFs hot-reload when LaTeX, Typst, or another external compiler rewrites the open file in place or replaces it atomically, preserving the live page; PDFs with unsaved Serein annotations are left untouched
 - On first launch, Serein asks for persistent access to `/Users` so PDFs under user folders stay readable after reinstalling
 - PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Opened PDFs are also noted to macOS native recent documents, and the active PDF URL is exposed to the window for system window/document integration
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
+- Blank space in the document sidebar drags the current window while tabs, close buttons, scrolling, and the divider keep their own interactions
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Settings General can edit the default left and right sidebar widths and native material sidebar opacity
 - Theme controls now split into `Mode`, `Light Theme`, and `Dark Theme`
@@ -201,8 +202,9 @@ Defined in `[shortcuts]` above. Highlights:
 | New blank tab | `cmd+t` |
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Toggle Single Page Continuous | `c` |
-| Single Page Continuous | `cmd+2` |
-| Other display modes | `cmd+1` / `cmd+3` / `cmd+4` |
+| Select document tabs 1–3 | physical left `cmd+1` / `cmd+2` / `cmd+3` |
+| Single Page Continuous | physical right `cmd+2` |
+| Other display modes | physical right `cmd+1` / `cmd+3` / `cmd+4` |
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |
@@ -217,12 +219,14 @@ Defined in `[shortcuts]` above. Highlights:
 | New window | `cmd+shift+n` |
 | Merge all windows | `cmd+k`, then `cmd+m` |
 | Move current PDF to new window | `cmd+k`, then `cmd+n` |
+| Move current PDF to an existing window | Window menu, or drag its tab into that window |
 | Quick recent-files launcher | `cmd+shift+space` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |
 | Toggle left / right sidebar | `cmd+b` / `cmd+option+b` |
 | Toggle demo mode | `cmd+l` |
 | Toggle immersive mode | `cmd+ctrl+l` |
 | Toggle compare split | `cmd+ctrl+\` |
+| Choose left/right or top/bottom split | View menu |
 | Toggle right sidebar: Outline / Pages | `cmd+shift+l` |
 | Swap left and right sidebars | `cmd+shift+x` |
 | All-pages overview | `cmd+shift+o` |

@@ -20,6 +20,11 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### UX
 - GitHub Releases auto-update: launch check + **Serein → Check for Updates…** downloads the latest `Serein-*.dmg`, replaces the installed app, and relaunches (private repo needs `[updates] github_token`).
+- Move the current PDF to any existing Serein window from the Window menu, or drag a vertical/titlebar tab directly between windows without losing its reading state.
+- Let compare split switch between left/right and top/bottom layouts while keeping the same pane sessions and focus.
+- Preserve the PDFView's live page across external-file hot reloads, even when the store has not yet received the latest page-change event.
+- Drag the reader window from blank space in the document sidebar without stealing tab, close, divider, or scroll interactions.
+- Use physical left `cmd+1/2/3` to select the first three document tabs; physical right `cmd+1/2/3/4` retains the four configured reader display modes.
 - All-pages overview (`cmd+shift+o`) uses a seamless custom grid (no nested panel/chrome): viewport-fit tiling, same surface color as the reader, click page to jump and exit.
 - Empty reader state now shows a single onboarding panel with `⌘O`, recent-files shortcut, and drag-and-drop PDF open hints.
 

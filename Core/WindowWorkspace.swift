@@ -48,6 +48,11 @@ enum ReaderPane: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum ReaderSplitLayout: Equatable, Sendable {
+    case sideBySide
+    case stacked
+}
+
 struct ContinuousReadingState: Equatable, Codable, Sendable {
     var orderedSessionIDs: [UUID]
 
@@ -92,6 +97,7 @@ struct WindowWorkspace: Equatable, Sendable {
     var searchQuery: String
     var searchScope: SearchScope
     var isSplitEnabled: Bool
+    var splitLayout: ReaderSplitLayout
     var primarySessionID: UUID?
     var secondarySessionID: UUID?
     var splitPair: ReaderSplitPair?
@@ -112,6 +118,7 @@ struct WindowWorkspace: Equatable, Sendable {
         searchQuery: String = "",
         searchScope: SearchScope = .currentDocument,
         isSplitEnabled: Bool = false,
+        splitLayout: ReaderSplitLayout = .sideBySide,
         primarySessionID: UUID? = nil,
         secondarySessionID: UUID? = nil,
         splitPair: ReaderSplitPair? = nil,
@@ -131,6 +138,7 @@ struct WindowWorkspace: Equatable, Sendable {
         self.searchQuery = searchQuery
         self.searchScope = searchScope
         self.isSplitEnabled = isSplitEnabled
+        self.splitLayout = splitLayout
         self.primarySessionID = primarySessionID
         self.secondarySessionID = secondarySessionID
         self.splitPair = splitPair

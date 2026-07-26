@@ -1,8 +1,45 @@
 import AppKit
 
 private final class CollapsibleContainerView: SidebarMaterialView {
+    var destinationWindowID: UUID?
+    var onMoveTab: ((TabDragPayload) -> Bool)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([TabDragPayload.pasteboardType])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override var fittingSize: NSSize {
         NSSize(width: 1, height: super.fittingSize.height)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        acceptedPayload(from: sender) == nil ? [] : .move
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        acceptedPayload(from: sender) == nil ? [] : .move
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        acceptedPayload(from: sender) != nil
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let payload = acceptedPayload(from: sender) else { return false }
+        return onMoveTab?(payload) == true
+    }
+
+    private func acceptedPayload(from sender: NSDraggingInfo) -> TabDragPayload? {
+        guard let destinationWindowID,
+              let payload = TabDragPayload.read(from: sender.draggingPasteboard),
+              payload.sourceWindowID != destinationWindowID else { return nil }
+        return payload
     }
 }
 
@@ -57,7 +94,12 @@ final class VerticalTabsViewController: NSViewController {
 
     override func loadView() {
         let container = CollapsibleContainerView()
+        container.destinationWindowID = windowID
+        container.onMoveTab = { [weak self] payload in
+            self?.handleDroppedTab(payload) == true
+        }
         container.applyTint(opacity: documentStore.appConfiguration.layout.sidebarOpacity)
+        container.allowsWindowDragFromBackground = true
         container.layer?.masksToBounds = true
 
         countLabel.font = .systemFont(ofSize: 11, weight: .medium)
@@ -191,6 +233,9 @@ final class VerticalTabsViewController: NSViewController {
                 isContinuousReadingMember: continuousSessionSet.contains(session.id),
                 isContinuousReadingLeader: continuousLeaderID == session.id,
                 canStartContinuousReading: selectedSessionIDs.count > 1,
+                dragPayload: session.isBlank
+                    ? nil
+                    : TabDragPayload(sourceWindowID: windowID, sessionID: session.id),
                 onSelect: { [weak self] sessionID, modifierFlags in
                     self?.handleSessionSelection(sessionID, modifierFlags: modifierFlags)
                 },
@@ -253,6 +298,16 @@ final class VerticalTabsViewController: NSViewController {
         documentStore.selectSessions([sessionID], in: windowID)
     }
 
+    private func handleDroppedTab(_ payload: TabDragPayload) -> Bool {
+        guard documentStore.moveSession(
+            payload.sessionID,
+            from: payload.sourceWindowID,
+            to: windowID
+        ) else { return false }
+        view.window?.makeKeyAndOrderFront(nil)
+        return true
+    }
+
     private func rebuildRecentList() {
         recentButtons.removeAll(keepingCapacity: true)
         recentButtonURLs.removeAll(keepingCapacity: true)
@@ -304,13 +359,7 @@ final class VerticalTabsViewController: NSViewController {
     private func setupEventMonitors() {
         // Double-click on a tab → rename
         let mouse = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            guard let self, event.clickCount == 2 else { return event }
-            guard eventBelongsToOwnWindow(event) else { return event }
-            let locationInView = view.convert(event.locationInWindow, from: nil)
-            guard view.bounds.contains(locationInView) else { return event }
-            guard let selectedView = listStackView.arrangedSubviews.compactMap({ $0 as? VerticalTabItemView }).first(where: { $0.isSelected }) else { return event }
-            selectedView.beginEditing()
-            return nil
+            self?.handleRenameMouseEvent(event) ?? event
         }
         eventMonitors.append(mouse as Any)
 
@@ -319,6 +368,22 @@ final class VerticalTabsViewController: NSViewController {
             self?.handleRenameKeyEvent(event) ?? event
         }
         eventMonitors.append(key as Any)
+    }
+
+    private func handleRenameMouseEvent(_ event: NSEvent) -> NSEvent? {
+        guard event.clickCount == 2,
+              eventBelongsToOwnWindow(event),
+              let itemView = tabItemView(at: event.locationInWindow) else { return event }
+        itemView.beginEditing()
+        return nil
+    }
+
+    private func tabItemView(at locationInWindow: NSPoint) -> VerticalTabItemView? {
+        listStackView.arrangedSubviews
+            .compactMap { $0 as? VerticalTabItemView }
+            .first { itemView in
+                itemView.bounds.contains(itemView.convert(locationInWindow, from: nil))
+            }
     }
 
     private func handleRenameKeyEvent(_ event: NSEvent) -> NSEvent? {
@@ -380,6 +445,27 @@ extension VerticalTabsViewController {
 
     func testingHandleRenameKeyEvent(_ event: NSEvent) -> NSEvent? {
         handleRenameKeyEvent(event)
+    }
+
+    func testingHandleRenameMouseEvent(_ event: NSEvent) -> NSEvent? {
+        handleRenameMouseEvent(event)
+    }
+
+    var testingWindowDragBackgroundView: NSView? {
+        (view as? SidebarMaterialView)?.testingBackgroundView
+    }
+
+    func testingMoveTab(_ payload: TabDragPayload) -> Bool {
+        handleDroppedTab(payload)
+    }
+
+    var testingTabDragSourceHitTargets: [Bool] {
+        listStackView.arrangedSubviews
+            .compactMap { $0 as? VerticalTabItemView }
+            .map { itemView in
+                itemView.hitTest(NSPoint(x: itemView.bounds.midX, y: itemView.bounds.midY))
+                    is TabDragSourceButton
+            }
     }
 }
 #endif

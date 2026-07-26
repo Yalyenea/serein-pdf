@@ -42,6 +42,14 @@ private final class VTInMemoryRecentFilesStore: RecentFilesStore {
     }
 }
 
+private final class VTRecordingWindow: NSWindow {
+    private(set) var windowDragCount = 0
+
+    override func performDrag(with event: NSEvent) {
+        windowDragCount += 1
+    }
+}
+
 @MainActor
 final class VerticalTabsViewControllerTests: XCTestCase {
     func testRecentFooterShowsAndOpensMostRecentURL() throws {
@@ -151,6 +159,83 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertFalse(controller.testingIsSelectedTabEditing)
     }
 
+    func testVerticalTabsEmptyBackgroundDragsWindowWithoutStealingTabControls() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "vertical-background-drag"))
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let window = makeRecordingWindow(for: controller.view)
+        defer { window.close() }
+        controller.view.layoutSubtreeIfNeeded()
+
+        let backgroundView = try XCTUnwrap(controller.testingWindowDragBackgroundView)
+        let blankPoint = try XCTUnwrap(firstPoint(in: controller.view) { point in
+            controller.view.hitTest(point) === backgroundView
+        })
+        let tabItem = try XCTUnwrap(firstSubview(of: VerticalTabItemView.self, in: controller.view))
+        let tabPoint = controller.view.convert(
+            NSPoint(x: tabItem.bounds.midX, y: tabItem.bounds.midY),
+            from: tabItem
+        )
+        let closeButton = try XCTUnwrap(firstButton(titled: "×", in: tabItem))
+        let closePoint = controller.view.convert(
+            NSPoint(x: closeButton.bounds.midX, y: closeButton.bounds.midY),
+            from: closeButton
+        )
+
+        XCTAssertTrue(controller.view.hitTest(blankPoint) === backgroundView)
+        XCTAssertFalse(controller.view.hitTest(tabPoint) === backgroundView)
+        XCTAssertTrue(controller.view.hitTest(closePoint) === closeButton)
+        XCTAssertTrue(backgroundView.acceptsFirstMouse(for: nil))
+
+        let blankPointInBackground = backgroundView.convert(blankPoint, from: controller.view)
+        backgroundView.mouseDown(
+            with: mouseDownEvent(
+                in: window,
+                at: backgroundView.convert(blankPointInBackground, to: nil)
+            )
+        )
+
+        XCTAssertEqual(window.windowDragCount, 1)
+    }
+
+    func testVerticalTabsBlankDoubleClickDoesNotRenameSelectedTab() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "vertical-background-double-click"))
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let window = makeWindow(for: controller.view)
+        defer { window.close() }
+        controller.view.layoutSubtreeIfNeeded()
+
+        let backgroundView = try XCTUnwrap(controller.testingWindowDragBackgroundView)
+        let blankPoint = try XCTUnwrap(firstPoint(in: controller.view) { point in
+            controller.view.hitTest(point) === backgroundView
+        })
+        let blankPointInWindow = controller.view.convert(blankPoint, to: nil)
+
+        XCTAssertNotNil(
+            controller.testingHandleRenameMouseEvent(
+                mouseDownEvent(in: window, at: blankPointInWindow, clickCount: 2)
+            )
+        )
+        XCTAssertFalse(controller.testingIsSelectedTabEditing)
+
+        let tabItem = try XCTUnwrap(firstSubview(of: VerticalTabItemView.self, in: controller.view))
+        let tabPointInWindow = tabItem.convert(
+            NSPoint(x: tabItem.bounds.midX, y: tabItem.bounds.midY),
+            to: nil
+        )
+        XCTAssertNil(
+            controller.testingHandleRenameMouseEvent(
+                mouseDownEvent(in: window, at: tabPointInWindow, clickCount: 2)
+            )
+        )
+        XCTAssertTrue(controller.testingIsSelectedTabEditing)
+    }
+
     func testTitlebarTabsReturnRenameRequiresVisibleHorizontalModeOwnWindow() throws {
         _ = NSApplication.shared
         let store = makeStore()
@@ -185,6 +270,61 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         controller.setTabsStripVisible(false)
         XCTAssertNotNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: window)))
         XCTAssertFalse(controller.testingIsSelectedTabEditing)
+    }
+
+    func testTabDragPayloadRoundTripsThroughPasteboard() throws {
+        let payload = TabDragPayload(sourceWindowID: UUID(), sessionID: UUID())
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("SereinTests.TabDragPayload.\(UUID())"))
+        pasteboard.clearContents()
+        let item = try XCTUnwrap(payload.makePasteboardItem())
+
+        XCTAssertTrue(pasteboard.writeObjects([item]))
+        XCTAssertEqual(TabDragPayload.read(from: pasteboard), payload)
+    }
+
+    func testVerticalTabsMoveDroppedPDFToExistingWindow() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        let sourceAnchor = try store.open(documentAt: makeTemporaryPDF(named: "vertical-drag-source-anchor"))
+        let moved = try store.open(documentAt: makeTemporaryPDF(named: "vertical-drag-moved"))
+        let sourceWindowID = store.defaultWindowID
+        let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
+        let destinationAnchor = try store.open(
+            documentAt: makeTemporaryPDF(named: "vertical-drag-destination-anchor"),
+            in: destinationWindowID
+        )
+        let controller = VerticalTabsViewController(
+            documentStore: store,
+            windowID: destinationWindowID
+        )
+        controller.loadViewIfNeeded()
+
+        XCTAssertTrue(
+            controller.testingMoveTab(
+                TabDragPayload(sourceWindowID: sourceWindowID, sessionID: moved.id)
+            )
+        )
+        XCTAssertEqual(store.sessions(in: sourceWindowID).map(\.id), [sourceAnchor.id])
+        XCTAssertEqual(
+            store.sessions(in: destinationWindowID).map(\.id),
+            [destinationAnchor.id, moved.id]
+        )
+        XCTAssertEqual(store.activeSessionID(in: destinationWindowID), moved.id)
+    }
+
+    func testVerticalPDFTabUsesDragSourceAsPrimaryHitTarget() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "vertical-drag-hit-target"))
+        let controller = VerticalTabsViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 240, height: 360)
+        controller.view.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(controller.testingTabDragSourceHitTargets, [true])
     }
 
     private func makeTemporaryPDF(named name: String) throws -> URL {
@@ -225,6 +365,78 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         window.contentView = contentView
         window.makeKeyAndOrderFront(nil)
         return window
+    }
+
+    private func makeRecordingWindow(for contentView: NSView) -> VTRecordingWindow {
+        let window = VTRecordingWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 480),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = contentView
+        window.makeKeyAndOrderFront(nil)
+        return window
+    }
+
+    private func mouseDownEvent(
+        in window: NSWindow,
+        at location: NSPoint,
+        clickCount: Int = 1
+    ) -> NSEvent {
+        NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: location,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: clickCount,
+            pressure: 1
+        )!
+    }
+
+    private func firstPoint(in view: NSView, matching predicate: (NSPoint) -> Bool) -> NSPoint? {
+        let step: CGFloat = 12
+        var y = view.bounds.minY + step
+        while y < view.bounds.maxY {
+            var x = view.bounds.minX + step
+            while x < view.bounds.maxX {
+                let point = NSPoint(x: x, y: y)
+                if predicate(point) {
+                    return point
+                }
+                x += step
+            }
+            y += step
+        }
+        return nil
+    }
+
+    private func firstSubview<T: NSView>(of type: T.Type, in root: NSView) -> T? {
+        if let match = root as? T {
+            return match
+        }
+        for subview in root.subviews {
+            if let match = firstSubview(of: type, in: subview) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    private func firstButton(titled title: String, in root: NSView) -> NSButton? {
+        if let button = root as? NSButton, button.title == title {
+            return button
+        }
+        for subview in root.subviews {
+            if let button = firstButton(titled: title, in: subview) {
+                return button
+            }
+        }
+        return nil
     }
 
     private func returnKeyEvent(in window: NSWindow, modifiers: NSEvent.ModifierFlags = []) -> NSEvent {

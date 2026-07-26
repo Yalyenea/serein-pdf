@@ -3,7 +3,7 @@ import AppKit
 final class TitlebarTabItemView: NSView {
     private static let cornerRadius: CGFloat = 3
     private let sessionID: UUID
-    private let selectButton = NSButton(title: "", target: nil, action: nil)
+    private let selectButton = TabDragSourceButton(title: "", target: nil, action: nil)
     private let dirtyIndicator = NSView()
     private let groupIndicator = NSView()
     private let titleLabel = NSTextField()
@@ -46,6 +46,7 @@ final class TitlebarTabItemView: NSView {
         isContinuousReadingMember: Bool = false,
         isContinuousReadingLeader: Bool = false,
         canStartContinuousReading: Bool = false,
+        dragPayload: TabDragPayload?,
         onSelect: @escaping (UUID, NSEvent.ModifierFlags) -> Void,
         onAlternateSelect: @escaping (UUID) -> Void,
         onClose: @escaping (UUID) -> Void,
@@ -72,6 +73,8 @@ final class TitlebarTabItemView: NSView {
         layer?.cornerRadius = Self.cornerRadius
         layer?.borderWidth = 0
 
+        selectButton.dragPayload = dragPayload
+        selectButton.dragPreviewView = self
         selectButton.isBordered = false
         selectButton.title = ""
         selectButton.bezelStyle = .regularSquare
@@ -174,6 +177,19 @@ final class TitlebarTabItemView: NSView {
     @objc
     private func handleClose() {
         onClose?(sessionID)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard bounds.contains(point) else { return nil }
+        if titleLabel.isEditable {
+            return super.hitTest(point)
+        }
+
+        let closePoint = closeButton.convert(point, from: self)
+        if closeButton.bounds.contains(closePoint) {
+            return closeButton
+        }
+        return selectButton
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

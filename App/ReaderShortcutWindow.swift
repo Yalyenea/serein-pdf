@@ -1,12 +1,18 @@
 import AppKit
+import IOKit
 
 final class ReaderShortcutWindow: NSWindow {
     var plainShortcutHandler: ((NSEvent, NSWindow) -> Bool)?
+    var numberedTabShortcutHandler: ((Int) -> Void)?
     var reservesTransparentTitlebarDragArea = true
 
     override func sendEvent(_ event: NSEvent) {
         if shouldHandleTransparentTitlebarDrag(with: event) {
             performDrag(with: event)
+            return
+        }
+
+        if handlePhysicalCommandNumberShortcut(with: event) {
             return
         }
 
@@ -19,6 +25,10 @@ final class ReaderShortcutWindow: NSWindow {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handlePhysicalCommandNumberShortcut(with: event) {
+            return true
+        }
+
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
         if modifiers.isEmpty {
             return false
@@ -27,6 +37,31 @@ final class ReaderShortcutWindow: NSWindow {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    func handlePhysicalCommandNumberShortcut(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown,
+              event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
+              let characters = event.charactersIgnoringModifiers,
+              characters.count == 1,
+              let number = Int(characters),
+              (1...4).contains(number) else { return false }
+
+        let rawModifiers = event.modifierFlags.rawValue
+        let usesLeftCommand = rawModifiers & UInt(NX_DEVICELCMDKEYMASK) != 0
+        let usesRightCommand = rawModifiers & UInt(NX_DEVICERCMDKEYMASK) != 0
+
+        switch (usesLeftCommand, usesRightCommand) {
+        case (true, false):
+            if number <= 3 {
+                numberedTabShortcutHandler?(number)
+            }
+            return true
+        case (false, true):
+            return false
+        case (false, false), (true, true):
+            return true
+        }
     }
 
     func shouldHandleTransparentTitlebarDrag(with event: NSEvent) -> Bool {

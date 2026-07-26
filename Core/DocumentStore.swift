@@ -258,14 +258,16 @@ final class DocumentStore {
 
     func moveActiveSessionToNewWindow(from sourceWindowID: UUID) -> UUID? {
         guard let sourceIndex = windowWorkspaces.firstIndex(where: { $0.id == sourceWindowID }),
-              let sessionID = windowWorkspaces[sourceIndex].activeSessionID,
-              session(for: sessionID) != nil else { return nil }
+              let sessionID = publicSessionID(
+                for: windowWorkspaces[sourceIndex].activeSessionID,
+                in: windowWorkspaces[sourceIndex]
+              ) else { return nil }
 
-        var source = windowWorkspaces[sourceIndex]
+        let source = windowWorkspaces[sourceIndex]
         guard source.sessionIDs.contains(sessionID) else { return nil }
 
-        var destination = WindowWorkspace(
-            sessionIDs: [sessionID],
+        let destination = WindowWorkspace(
+            sessionIDs: [],
             selectedSessionIDs: [],
             continuousReadingState: ContinuousReadingState(),
             tabPresentationMode: source.tabPresentationMode,
@@ -275,7 +277,7 @@ final class DocumentStore {
             searchQuery: "",
             searchScope: .currentDocument,
             isSplitEnabled: false,
-            primarySessionID: sessionID,
+            primarySessionID: nil,
             secondarySessionID: nil,
             focusedPane: .primary,
             recentlyClosedURLs: [],
@@ -283,20 +285,38 @@ final class DocumentStore {
             rightSidebarWidth: source.rightSidebarWidth
         )
 
-        source.sessionIDs.removeAll { $0 == sessionID }
-        source.selectedSessionIDs.remove(sessionID)
-        source.continuousReadingState.orderedSessionIDs.removeAll { $0 == sessionID }
-        clearSplitReferences(to: sessionID, in: &source)
-        if source.splitPair == nil || source.sessionIDs.count < 2 {
-            source.isSplitEnabled = false
+        windowWorkspaces.append(destination)
+        let destinationIndex = windowWorkspaces.index(before: windowWorkspaces.endIndex)
+        guard transferSession(
+            sessionID,
+            fromWorkspaceAt: sourceIndex,
+            toWorkspaceAt: destinationIndex
+        ) else {
+            windowWorkspaces.remove(at: destinationIndex)
+            return nil
         }
 
-        normalizeWorkspace(&source)
-        normalizeWorkspace(&destination, preferredSessionID: sessionID)
-        windowWorkspaces[sourceIndex] = source
-        windowWorkspaces.append(destination)
         notifyChange()
         return destination.id
+    }
+
+    @discardableResult
+    func moveSession(_ sessionID: UUID, from sourceWindowID: UUID, to destinationWindowID: UUID) -> Bool {
+        guard sourceWindowID != destinationWindowID,
+              let sourceIndex = windowWorkspaces.firstIndex(where: { $0.id == sourceWindowID }),
+              let destinationIndex = windowWorkspaces.firstIndex(where: { $0.id == destinationWindowID }),
+              let resolvedSessionID = publicSessionID(
+                for: sessionID,
+                in: windowWorkspaces[sourceIndex]
+              ),
+              transferSession(
+                resolvedSessionID,
+                fromWorkspaceAt: sourceIndex,
+                toWorkspaceAt: destinationIndex
+              ) else { return false }
+
+        notifyChange()
+        return true
     }
 
     func activeSessionID(in windowID: UUID) -> UUID? {
@@ -324,6 +344,10 @@ final class DocumentStore {
 
     func isSplitEnabled(in windowID: UUID) -> Bool {
         windowWorkspace(for: windowID)?.isSplitEnabled ?? false
+    }
+
+    func splitLayout(in windowID: UUID) -> ReaderSplitLayout {
+        windowWorkspace(for: windowID)?.splitLayout ?? .sideBySide
     }
 
     func splitPair(in windowID: UUID) -> ReaderSplitPair? {
@@ -726,6 +750,13 @@ final class DocumentStore {
         normalizeWorkspace(&workspace)
         windowWorkspaces[index] = workspace
         removeUnreferencedSessions()
+        notifyChange()
+    }
+
+    func setSplitLayout(_ layout: ReaderSplitLayout, in windowID: UUID) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              windowWorkspaces[index].splitLayout != layout else { return }
+        windowWorkspaces[index].splitLayout = layout
         notifyChange()
     }
 
@@ -1452,6 +1483,47 @@ final class DocumentStore {
         if windowWorkspaces[index].sessionIDs.contains(sessionID) == false {
             windowWorkspaces[index].sessionIDs.append(sessionID)
         }
+    }
+
+    private func transferSession(
+        _ sessionID: UUID,
+        fromWorkspaceAt sourceIndex: Int,
+        toWorkspaceAt destinationIndex: Int
+    ) -> Bool {
+        guard sourceIndex != destinationIndex,
+              windowWorkspaces.indices.contains(sourceIndex),
+              windowWorkspaces.indices.contains(destinationIndex),
+              let session = session(for: sessionID),
+              session.isBlank == false else { return false }
+
+        var source = windowWorkspaces[sourceIndex]
+        var destination = windowWorkspaces[destinationIndex]
+        guard let sessionIndex = source.sessionIDs.firstIndex(of: sessionID),
+              destination.sessionIDs.contains(sessionID) == false else { return false }
+
+        let wasReferencedInSplit = isSessionReferencedInSplit(sessionID, workspace: source)
+        source.sessionIDs.remove(at: sessionIndex)
+        source.selectedSessionIDs.remove(sessionID)
+        source.continuousReadingState.orderedSessionIDs.removeAll { $0 == sessionID }
+        clearSplitReferences(to: sessionID, in: &source)
+        if wasReferencedInSplit || source.sessionIDs.count < 2 {
+            source.isSplitEnabled = false
+        }
+
+        let preferredSourceSessionID = source.sessionIDs.isEmpty
+            ? nil
+            : source.sessionIDs[min(max(sessionIndex - 1, 0), source.sessionIDs.count - 1)]
+
+        destination.sessionIDs.append(sessionID)
+        destination.selectedSessionIDs = [sessionID]
+        activateSessionForTabNavigation(sessionID: sessionID, in: &destination)
+
+        normalizeWorkspace(&source, preferredSessionID: preferredSourceSessionID)
+        normalizeWorkspace(&destination, preferredSessionID: sessionID)
+        windowWorkspaces[sourceIndex] = source
+        windowWorkspaces[destinationIndex] = destination
+        removeUnreferencedSessions()
+        return true
     }
 
     private func isSessionReferenced(_ sessionID: UUID) -> Bool {

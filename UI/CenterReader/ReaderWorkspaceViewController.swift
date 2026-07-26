@@ -33,6 +33,9 @@ private final class ReaderPaneHostView: NSView {
 }
 
 final class ReaderWorkspaceViewController: NSViewController {
+    private static let sideBySideMinimumPaneWidth: CGFloat = 320
+    private static let stackedMinimumPaneHeight: CGFloat = 160
+
     let documentStore: DocumentStore
     let windowID: UUID
     let primaryReaderViewController: ReaderViewController
@@ -45,7 +48,10 @@ final class ReaderWorkspaceViewController: NSViewController {
     private let splitCandidateBackdrop = NSView()
     private let splitCandidateLabel = NSTextField(labelWithString: "Second pane")
     private let splitCandidatePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private var sideBySideMinimumConstraints: [NSLayoutConstraint] = []
+    private var stackedMinimumConstraints: [NSLayoutConstraint] = []
     private var appliedSplitEnabled: Bool?
+    private var appliedSplitLayout: ReaderSplitLayout?
     private var appliedSecondarySessionID: UUID?
     private var pendingSplitGeometryUpdate = false
     private var splitGeometryUpdateScheduled = false
@@ -98,7 +104,8 @@ final class ReaderWorkspaceViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        if pendingSplitGeometryUpdate, splitView.bounds.width > 0 {
+        let splitLayout = documentStore.splitLayout(in: windowID)
+        if pendingSplitGeometryUpdate, splitLength(for: splitLayout) > 0 {
             requestSplitGeometryUpdate()
         }
     }
@@ -133,9 +140,26 @@ final class ReaderWorkspaceViewController: NSViewController {
             splitView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             splitView.topAnchor.constraint(equalTo: container.topAnchor),
             splitView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            primaryHostView.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
-            secondaryHostView.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
         ])
+        sideBySideMinimumConstraints = [
+            primaryHostView.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: Self.sideBySideMinimumPaneWidth
+            ),
+            secondaryHostView.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: Self.sideBySideMinimumPaneWidth
+            ),
+        ]
+        stackedMinimumConstraints = [
+            primaryHostView.heightAnchor.constraint(
+                greaterThanOrEqualToConstant: Self.stackedMinimumPaneHeight
+            ),
+            secondaryHostView.heightAnchor.constraint(
+                greaterThanOrEqualToConstant: Self.stackedMinimumPaneHeight
+            ),
+        ]
+        (sideBySideMinimumConstraints + stackedMinimumConstraints).forEach {
+            $0.priority = .defaultLow
+        }
 
         view = container
     }
@@ -144,6 +168,14 @@ final class ReaderWorkspaceViewController: NSViewController {
         documentStore.focusedPane(in: windowID) == .secondary && documentStore.isSplitEnabled(in: windowID)
             ? secondaryReaderViewController
             : primaryReaderViewController
+    }
+
+    var testingSplitView: NSSplitView {
+        splitView
+    }
+
+    var testingActiveSplitMinimumConstraintCount: Int {
+        (sideBySideMinimumConstraints + stackedMinimumConstraints).filter(\.isActive).count
     }
 
     func toggleSplit() {
@@ -301,14 +333,19 @@ final class ReaderWorkspaceViewController: NSViewController {
         )
 
         let splitEnabled = documentStore.isSplitEnabled(in: windowID)
+        let splitLayout = documentStore.splitLayout(in: windowID)
         let secondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
         let splitStateChanged = appliedSplitEnabled != splitEnabled
+        let splitLayoutChanged = appliedSplitLayout != splitLayout
         let secondarySessionChanged = appliedSecondarySessionID != secondarySessionID
+        if splitStateChanged || splitLayoutChanged {
+            applySplitLayout(splitLayout, splitEnabled: splitEnabled)
+        }
         secondaryHostView.isHidden = !splitEnabled
         if splitEnabled, splitView.subviews.count > 1 {
             splitView.subviews[1].isHidden = false
         }
-        if splitStateChanged || (splitEnabled && secondarySessionChanged) {
+        if splitStateChanged || splitLayoutChanged || (splitEnabled && secondarySessionChanged) {
             requestSplitGeometryUpdate()
         }
 
@@ -419,17 +456,57 @@ final class ReaderWorkspaceViewController: NSViewController {
         }
     }
 
+    private func applySplitLayout(_ layout: ReaderSplitLayout, splitEnabled: Bool) {
+        let allMinimumConstraints = sideBySideMinimumConstraints + stackedMinimumConstraints
+        let activeMinimumConstraints: [NSLayoutConstraint]
+        if splitEnabled {
+            activeMinimumConstraints = switch layout {
+            case .sideBySide:
+                sideBySideMinimumConstraints
+            case .stacked:
+                stackedMinimumConstraints
+            }
+        } else {
+            activeMinimumConstraints = []
+        }
+        for constraint in allMinimumConstraints {
+            constraint.isActive = activeMinimumConstraints.contains { $0 === constraint }
+        }
+
+        if appliedSplitLayout != layout {
+            splitView.isVertical = layout == .sideBySide
+            appliedSplitLayout = layout
+            splitView.needsLayout = true
+        }
+    }
+
+    private func splitLength(for layout: ReaderSplitLayout) -> CGFloat {
+        switch layout {
+        case .sideBySide:
+            splitView.bounds.width
+        case .stacked:
+            splitView.bounds.height
+        }
+    }
+
     private func applyPendingSplitGeometryUpdate() {
         guard pendingSplitGeometryUpdate else { return }
-        guard splitView.subviews.count > 1, splitView.bounds.width > 0 else { return }
+        let splitLayout = documentStore.splitLayout(in: windowID)
+        let splitEnabled = documentStore.isSplitEnabled(in: windowID)
+        applySplitLayout(splitLayout, splitEnabled: splitEnabled)
+        let length = splitLength(for: splitLayout)
+        guard splitView.subviews.count > 1, length > 0 else { return }
 
         pendingSplitGeometryUpdate = false
-        let splitEnabled = documentStore.isSplitEnabled(in: windowID)
+        let secondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
+        let shouldFitReadersToWidth = splitEnabled && (
+            appliedSplitEnabled != splitEnabled || appliedSecondarySessionID != secondarySessionID
+        )
         if splitEnabled {
             splitView.subviews[1].isHidden = false
-            splitView.setPosition(splitView.bounds.width / 2, ofDividerAt: 0)
+            splitView.setPosition(length / 2, ofDividerAt: 0)
         } else {
-            splitView.setPosition(splitView.bounds.width, ofDividerAt: 0)
+            splitView.setPosition(length, ofDividerAt: 0)
             splitView.subviews[1].isHidden = true
         }
         splitView.adjustSubviews()
@@ -438,12 +515,12 @@ final class ReaderWorkspaceViewController: NSViewController {
         }
         splitView.layoutSubtreeIfNeeded()
         appliedSplitEnabled = splitEnabled
-        appliedSecondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
-        fitReadersToWidthAfterSplitIfNeeded(splitEnabled: splitEnabled)
+        appliedSecondarySessionID = secondarySessionID
+        fitReadersToWidthAfterSplitIfNeeded(shouldFitReadersToWidth)
     }
 
-    private func fitReadersToWidthAfterSplitIfNeeded(splitEnabled: Bool) {
-        guard splitEnabled else { return }
+    private func fitReadersToWidthAfterSplitIfNeeded(_ shouldFit: Bool) {
+        guard shouldFit else { return }
         view.layoutSubtreeIfNeeded()
         primaryReaderViewController.view.layoutSubtreeIfNeeded()
         secondaryReaderViewController.view.layoutSubtreeIfNeeded()

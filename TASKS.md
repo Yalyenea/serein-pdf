@@ -92,6 +92,7 @@
 | M12 Backlog 体验分流 | 进行中 |
 | M13 本地产品网站 | ✅ |
 | M13.1 网站后续完善 | 待办 |
+| M14 窗口工作流交互 | ✅ |
 
 ## 4. 下一步执行顺序
 
@@ -324,6 +325,7 @@
 - [x] `M12-007` 侧栏透明度与沉浸切换收口:左右侧栏使用 native material,Settings General 可调 tint 强度;`Cmd+Ctrl+L` 仅在双侧栏都关闭时打开两个侧栏,否则关闭两个侧栏。
 - [x] `M12-008` 重复打开收口:系统 `open`、Open Recent、PDF Library 与 `Cmd+O` 遇到已打开 PDF 时切回已有 window/session,不创建重复普通 tab。
 - [x] `M12-009` 中栏空窗统一引导:无 PDF / 空白 tab 时,中栏显示主文案 + `⌘O` / 最近文件快捷键提示 + 拖放 PDF 打开;错误态只显示错误信息。
+- [x] `M12-015` 文档侧栏空白区域拖窗:只让背景接管窗口拖动,不抢 tab、关闭按钮、divider、滚动与跨窗 tab 拖拽。
 - [ ] `M12-010` 空窗侧栏占比收口:无 session 时自动折叠侧栏或采用更窄默认宽度,把引导集中到中栏。
 - [ ] `M12-011` 右栏空窗 chrome 弱化:无文档时隐藏 / disable segmented 与 Outline 操作控件,避免「已就绪但未加载」噪音。
 - [ ] `M12-012` 左栏空态层次增强:补 `Documents` section 标题;空态时上移 Recent 列表或在中栏同步展示快捷入口。
@@ -332,7 +334,6 @@
 
 ### 18.2 暂缓
 
-- [ ] `M12-D001` 侧边栏空白区域拖动窗口:暂缓。价值偏低,且容易和 tab 选择、侧栏 divider 拖拽、滚动区域产生冲突;仅在标题栏拖动仍明显不够用时重评。
 - [ ] `M12-D002` Pages 缩略图滑动渲染优化:暂缓。当前依赖 `PDFThumbnailView`;只有在真实大 PDF 出现可复现卡顿、白屏或错序渲染样本后,再考虑自定义缓存/预热。
 - [ ] `M12-D003` Zed / VS Code / LaTeX / Typst PDF sync:暂缓。热重载已覆盖基础编译预览;SyncTeX / 编辑器反向定位属于更大集成,先写 RFC 再决定。
 - [ ] `M12-D004` 双屏同步滚动对照阅读:暂缓。需要跨窗口或跨 pane 阅读位置同步模型;等同窗分屏和同 PDF comparison 手测稳定后再启动。
@@ -358,7 +359,16 @@
 - [ ] `M13.1-005` 可选:补充 1–2 张暗色 / Rose Pine 主题截图,与站点 dark theme 对照。
 - [ ] `M13.1-006` 文案与 i18n 终稿校对(EN/中文),确认与 `README` 功能表述一致。
 
-## 20. 手测清单(尚未覆盖)
+## 20. Milestone 14:窗口工作流交互
+
+- [x] `M14-001` 多窗口文件移动:`DocumentStore` 原子迁移同一 session;Window 菜单与垂直 / 标题栏 tab 跨窗拖拽共用该入口。
+- [x] `M14-002` 热重载定位:替换 `PDFDocument` 前捕获 PDFView 实时阅读位,新文档页数变化时钳制并写回 store。
+- [x] `M14-003` 双向分屏:窗口运行期支持左右 / 上下方向,切换不改 pair、pane session、焦点与跨启动恢复语义。
+- [x] `M14-004` 侧栏空白拖窗:仅背景区域调用原生窗口拖动,tab / close / divider / scroll 保持独立。
+- [x] `M14-005` 物理 Command 数字键:左 `Cmd+1/2/3` 激活前三个 tab,右 `Cmd+1/2/3/4` 继续走可配置阅读模式。
+- [x] `M14-006` 测试与文档:覆盖跨窗状态清理、两种分屏几何、stale-store 热重载、左右 Command 路由与拖拽事件边界;同步 README / PROJECT / CHANGELOG / 网站文案。
+
+## 21. 手测清单(尚未覆盖)
 
 - [x] `UAT-24` `Cmd+F` 搜索后,右栏 Search 按页或按文档分组展示 snippet / 页码;有 PDF 选中文本时会自动带入并立即搜索
 - [x] `UAT-25` find bar 内 `↑` / `↓` / `Enter` 与 `Cmd+G` / `Cmd+Shift+G` 都能驱动右栏结果与跳转
@@ -392,5 +402,10 @@
 - [x] `UAT-50` 已分屏时 `Option+Click` / `Option+Enter` 替换当前焦点 pane,垂直 tabs 与标题栏 tabs 行为一致
 - [x] `UAT-51` `File > Share…` 可分享 Original / Clean Copy / Highlights,`File > Export Clean Copy…` 可导出保留链接与表单控件的干净副本,`Cmd+K` → `Cmd+E` 可触发 Share
 - [x] `UAT-52` 拖动左右侧栏后切换 PDF 宽度不跳变;Settings General 修改左右默认宽度后会写入配置并更新窗口运行期宽度
+- [ ] `UAT-53` 打开两个窗口,分别用 Window 菜单和垂直 / 标题栏 tab 拖拽移动 PDF;页码、缩放、dirty 批注与目标激活状态不丢失
+- [ ] `UAT-54` 在 PDFView 已翻页但 store 尚未收到 page-change 的瞬间覆盖编译 PDF,热重载后仍停在实时页码;新文件页数缩短时落在最后有效页
+- [ ] `UAT-55` 在 View 菜单切换左右 / 上下分屏,两个 pane 的 PDF、页码与焦点不变,关闭后重开沿用本次运行期方向
+- [ ] `UAT-56` 从文档侧栏空白处拖动窗口;tab 点击 / 跨窗拖拽、关闭按钮、侧栏滚动与 divider 拖动均不受影响
+- [ ] `UAT-57` 左侧物理 `Cmd+1/2/3` 激活前三个 tab;右侧物理 `Cmd+1/2/3/4` 切换四种阅读模式,左 `Cmd+4` 不触发显示模式
 
 已完成:`UAT-01` ~ `UAT-23`(详见 commit 历史)。

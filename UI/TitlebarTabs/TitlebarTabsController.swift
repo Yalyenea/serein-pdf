@@ -1,5 +1,44 @@
 import AppKit
 
+private final class TitlebarTabsContainerView: NSView {
+    var destinationWindowID: UUID?
+    var onMoveTab: ((TabDragPayload) -> Bool)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([TabDragPayload.pasteboardType])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        acceptedPayload(from: sender) == nil ? [] : .move
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        acceptedPayload(from: sender) == nil ? [] : .move
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        acceptedPayload(from: sender) != nil
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let payload = acceptedPayload(from: sender) else { return false }
+        return onMoveTab?(payload) == true
+    }
+
+    private func acceptedPayload(from sender: NSDraggingInfo) -> TabDragPayload? {
+        guard let destinationWindowID,
+              let payload = TabDragPayload.read(from: sender.draggingPasteboard),
+              payload.sourceWindowID != destinationWindowID else { return nil }
+        return payload
+    }
+}
+
 final class TitlebarTabsController: NSViewController {
     static let maximumVisibleStripSize = NSSize(width: 760, height: 28)
     private static let hiddenStripSize = NSSize(width: 1, height: 1)
@@ -53,8 +92,12 @@ final class TitlebarTabsController: NSViewController {
     }
 
     override func loadView() {
-        let container = NSView()
+        let container = TitlebarTabsContainerView()
         container.frame = NSRect(origin: .zero, size: Self.maximumVisibleStripSize)
+        container.destinationWindowID = windowID
+        container.onMoveTab = { [weak self] payload in
+            self?.handleDroppedTab(payload) == true
+        }
         container.wantsLayer = true
         container.layer?.cornerRadius = Self.stripCornerRadius
         container.layer?.masksToBounds = true
@@ -163,6 +206,9 @@ final class TitlebarTabsController: NSViewController {
                 isContinuousReadingMember: continuousSessionSet.contains(session.id),
                 isContinuousReadingLeader: continuousLeaderID == session.id,
                 canStartContinuousReading: selectedSessionIDs.count > 1,
+                dragPayload: session.isBlank
+                    ? nil
+                    : TabDragPayload(sourceWindowID: windowID, sessionID: session.id),
                 onSelect: { [weak self] sessionID, modifierFlags in
                     self?.handleSessionSelection(sessionID, modifierFlags: modifierFlags)
                 },
@@ -212,6 +258,16 @@ final class TitlebarTabsController: NSViewController {
     private func selectForContextMenuIfNeeded(_ sessionID: UUID) {
         guard documentStore.selectedSessionIDs(in: windowID).contains(sessionID) == false else { return }
         documentStore.selectSessions([sessionID], in: windowID)
+    }
+
+    private func handleDroppedTab(_ payload: TabDragPayload) -> Bool {
+        guard documentStore.moveSession(
+            payload.sessionID,
+            from: payload.sourceWindowID,
+            to: windowID
+        ) else { return false }
+        view.window?.makeKeyAndOrderFront(nil)
+        return true
     }
 
     private func updateDocumentContainerFrame() {
@@ -309,6 +365,19 @@ extension TitlebarTabsController {
 
     func testingHandleRenameKeyEvent(_ event: NSEvent) -> NSEvent? {
         handleRenameKeyEvent(event)
+    }
+
+    func testingMoveTab(_ payload: TabDragPayload) -> Bool {
+        handleDroppedTab(payload)
+    }
+
+    var testingTabDragSourceHitTargets: [Bool] {
+        stackView.arrangedSubviews
+            .compactMap { $0 as? TitlebarTabItemView }
+            .map { itemView in
+                itemView.hitTest(NSPoint(x: itemView.bounds.midX, y: itemView.bounds.midY))
+                    is TabDragSourceButton
+            }
     }
 }
 #endif

@@ -49,6 +49,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
         super.init(window: window)
 
+        window.numberedTabShortcutHandler = { [weak self] oneBasedIndex in
+            self?.activateNumberedTab(oneBasedIndex)
+        }
         window.delegate = self
         toolbar.delegate = self
         shouldCascadeWindows = true
@@ -366,6 +369,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {
         guard let window = window as? ReaderShortcutWindow else { return }
         window.plainShortcutHandler = handler
+    }
+
+    private func activateNumberedTab(_ oneBasedIndex: Int) {
+        let sessions = documentStore.sessions(in: windowID)
+        let index = oneBasedIndex - 1
+        guard sessions.indices.contains(index) else { return }
+
+        let sessionID = sessions[index].id
+        documentStore.selectSessions([sessionID], in: windowID)
+        documentStore.clearSearch(in: windowID)
+        documentStore.activate(sessionID: sessionID, in: windowID)
     }
 
     func installSidebarRecentOpenHandler(_ handler: @escaping (URL, UUID) -> Void) {

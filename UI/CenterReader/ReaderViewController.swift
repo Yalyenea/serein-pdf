@@ -958,6 +958,9 @@ final class ReaderViewController: NSViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.isOnlySidebarChromeChange == false else { return }
+        // Store notifications are synchronous; do not sample PDFKit while a
+        // programmatic document/viewport restore is still settling.
+        guard isApplyingStoreState == false else { return }
         if syncDisplayedStateWithoutRefreshIfPossible() == false {
             refreshDisplayedDocument()
         }
@@ -1072,6 +1075,7 @@ final class ReaderViewController: NSViewController {
 
         let previousSessionID = displayedSessionID
         let isNewSession = displayedSessionID != session.id
+        let liveReadingPosition = isNewSession ? nil : liveReadingPositionForReload()
         let document: PDFDocument
         do {
             document = try documentStore.pdfDocument(for: session.id)
@@ -1083,11 +1087,16 @@ final class ReaderViewController: NSViewController {
             return
         }
         let refreshedSession = targetSession() ?? session
+        let documentChanged = isNewSession || pdfView.document !== document
+        let reloadedLivePosition = documentChanged && !isNewSession
+            ? liveReadingPosition.flatMap { clampedReadingPosition($0, in: document) }
+            : nil
+        let targetReadingPosition = reloadedLivePosition ?? refreshedSession.lastReadPosition
 
         isApplyingStoreState = true
         defer { isApplyingStoreState = false }
 
-        if isNewSession || pdfView.document !== document {
+        if documentChanged {
             pdfView.document = document
             displayedSessionID = refreshedSession.id
             displayedReadingPosition = nil
@@ -1097,7 +1106,15 @@ final class ReaderViewController: NSViewController {
 
         applyDisplayModeIfNeeded(refreshedSession)
         applyScaleIfNeeded(refreshedSession)
-        applyReadingPositionIfNeeded(refreshedSession, isNewSession: isNewSession)
+        applyReadingPositionIfNeeded(targetReadingPosition, force: documentChanged)
+        if let reloadedLivePosition,
+           reloadedLivePosition != refreshedSession.lastReadPosition {
+            documentStore.updateReadingPosition(
+                reloadedLivePosition,
+                scaleFactor: pdfView.scaleFactor,
+                for: refreshedSession.id
+            )
+        }
         configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
 
@@ -1286,26 +1303,53 @@ final class ReaderViewController: NSViewController {
         displayedScaleMode = session.scaleMode
     }
 
-    private func applyReadingPositionIfNeeded(_ session: DocumentSession, isNewSession: Bool) {
-        guard isNewSession || displayedReadingPosition != session.lastReadPosition else { return }
+    private func applyReadingPositionIfNeeded(_ readingPosition: ReadingPosition, force: Bool) {
+        guard force || displayedReadingPosition != readingPosition else { return }
         guard let document = pdfView.document,
-              let page = document.page(at: session.lastReadPosition.pageIndex) else { return }
+              let page = document.page(at: readingPosition.pageIndex) else { return }
 
-        if !isNewSession,
+        if !force,
            let currentPage = pdfView.currentPage,
-           document.index(for: currentPage) == session.lastReadPosition.pageIndex {
-            displayedReadingPosition = session.lastReadPosition
+           document.index(for: currentPage) == readingPosition.pageIndex {
+            displayedReadingPosition = readingPosition
             return
         }
 
-        isApplyingStoreState = true
-        let destination = PDFDestination(page: page, at: session.lastReadPosition.point)
+        let destination = PDFDestination(page: page, at: readingPosition.point)
         pdfView.go(to: destination)
-        isApplyingStoreState = false
-        displayedReadingPosition = session.lastReadPosition
+        displayedReadingPosition = readingPosition
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
         recenterDocumentViewIfNeeded()
+    }
+
+    private func clampedReadingPosition(
+        _ readingPosition: ReadingPosition,
+        in document: PDFDocument
+    ) -> ReadingPosition? {
+        guard document.pageCount > 0 else { return nil }
+        let pageIndex = min(max(readingPosition.pageIndex, 0), document.pageCount - 1)
+        return ReadingPosition(
+            pageIndex: pageIndex,
+            point: pageIndex == readingPosition.pageIndex ? readingPosition.point : .zero
+        )
+    }
+
+    private func liveReadingPositionForReload() -> ReadingPosition? {
+        guard let document = pdfView.document,
+              let page = pdfView.currentPage else { return currentReadingPosition() }
+        let pageIndex = document.index(for: page)
+        guard document.pageCount > 0, (0..<document.pageCount).contains(pageIndex) else {
+            return currentReadingPosition()
+        }
+        if let position = currentReadingPosition(), position.pageIndex == pageIndex {
+            return position
+        }
+        let bounds = page.bounds(for: pdfView.displayBox)
+        return ReadingPosition(
+            pageIndex: pageIndex,
+            point: NSPoint(x: bounds.minX, y: bounds.maxY)
+        )
     }
 
     private func applyFitWidth(for session: DocumentSession) {
