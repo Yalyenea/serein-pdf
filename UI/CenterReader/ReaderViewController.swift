@@ -102,6 +102,56 @@ private final class ReaderSurfaceView: NSView {
     }
 }
 
+/// Strips horizontal trackpad/mouse-wheel deltas before AppKit applies them.
+private enum ScrollWheelHorizontalStripper {
+    static func hasHorizontalComponent(_ event: NSEvent) -> Bool {
+        abs(event.scrollingDeltaX) > 0.001 || abs(event.deltaX) > 0.001
+    }
+
+    static func isHorizontalOnly(_ event: NSEvent) -> Bool {
+        hasHorizontalComponent(event)
+            && abs(event.scrollingDeltaY) < 0.1
+            && abs(event.deltaY) < 0.1
+    }
+
+    static func verticalOnly(from event: NSEvent) -> NSEvent? {
+        guard hasHorizontalComponent(event),
+              let cgEvent = event.cgEvent?.copy() else { return event }
+        // Axis2 is horizontal on macOS scroll-wheel CGEvents.
+        cgEvent.setDoubleValueField(.scrollWheelEventDeltaAxis2, value: 0)
+        cgEvent.setDoubleValueField(.scrollWheelEventPointDeltaAxis2, value: 0)
+        cgEvent.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: 0)
+        return NSEvent(cgEvent: cgEvent)
+    }
+}
+
+/// Clip view that hard-locks horizontal origin (belt after event stripping).
+private final class PDFReaderClipView: NSClipView {
+    /// When non-nil, every horizontal scroll/bounds change is forced to this X.
+    var forcedOriginX: CGFloat?
+
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var bounds = super.constrainBoundsRect(proposedBounds)
+        if let forcedOriginX {
+            bounds.origin.x = forcedOriginX
+        }
+        return bounds
+    }
+
+    override func scroll(to newOrigin: NSPoint) {
+        super.scroll(to: clampedOrigin(for: newOrigin))
+    }
+
+    override func setBoundsOrigin(_ newOrigin: NSPoint) {
+        super.setBoundsOrigin(clampedOrigin(for: newOrigin))
+    }
+
+    private func clampedOrigin(for origin: NSPoint) -> NSPoint {
+        guard let forcedOriginX else { return origin }
+        return NSPoint(x: forcedOriginX, y: origin.y)
+    }
+}
+
 final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
 
@@ -147,6 +197,7 @@ final class ReaderViewController: NSViewController {
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
     private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
+    private let panLockIndicator = NSTextField(labelWithString: "H-lock · L")
     private let switchTitleToastView = NSView()
     private let switchTitleToastLabel = NSTextField(labelWithString: "")
     private let overviewGridView = OverviewGridView()
@@ -164,6 +215,7 @@ final class ReaderViewController: NSViewController {
     private var appearanceObservation: NSKeyValueObservation?
     nonisolated(unsafe) private var leftMouseDownMonitor: Any?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
+    nonisolated(unsafe) private var panLockScrollMonitor: Any?
     private var pendingFitWidthSessionID: UUID?
     private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
@@ -174,6 +226,7 @@ final class ReaderViewController: NSViewController {
     private var pendingAnnotationFocusToken: Int = 0
     private var switchTitleToastHideWorkItem: DispatchWorkItem?
     private(set) var isReadingFocusModeEnabled = false
+    private(set) var isHorizontalPanLocked = false
     private(set) var readingFocusSettings: ReadingFocusSettings = .default
     var targetSessionID: UUID? {
         didSet {
@@ -250,6 +303,15 @@ final class ReaderViewController: NSViewController {
             }
             return event
         }
+        // Strip horizontal deltas before any view (including PDFKit's scroll view) sees them.
+        panLockScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self else { return event }
+            var rewritten: NSEvent? = event
+            MainActor.assumeIsolated {
+                rewritten = self.rewriteScrollEventIfPanLocked(event)
+            }
+            return rewritten
+        }
         refreshDisplayedDocument()
         configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
@@ -318,6 +380,9 @@ final class ReaderViewController: NSViewController {
         if let monitor = leftMouseUpMonitor {
             NSEvent.removeMonitor(monitor)
         }
+        if let monitor = panLockScrollMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     override func loadView() {
@@ -382,6 +447,15 @@ final class ReaderViewController: NSViewController {
         highlightModeIndicator.addArrangedSubview(highlightModeColorDot)
         highlightModeIndicator.addArrangedSubview(highlightModeLabel)
 
+        panLockIndicator.translatesAutoresizingMaskIntoConstraints = false
+        panLockIndicator.font = .systemFont(ofSize: 11, weight: .medium)
+        panLockIndicator.textColor = NightModeStyle.secondaryTextColor
+        panLockIndicator.alignment = .right
+        panLockIndicator.isEditable = false
+        panLockIndicator.isBordered = false
+        panLockIndicator.drawsBackground = false
+        panLockIndicator.isHidden = true
+
         switchTitleToastView.translatesAutoresizingMaskIntoConstraints = false
         switchTitleToastView.wantsLayer = true
         switchTitleToastView.layer?.cornerRadius = 8
@@ -412,6 +486,7 @@ final class ReaderViewController: NSViewController {
         container.addSubview(pdfContainerView)
         container.addSubview(emptyStateContainer)
         container.addSubview(highlightModeIndicator)
+        container.addSubview(panLockIndicator)
         container.addSubview(switchTitleToastView)
         container.addSubview(overviewGridView)
         container.addSubview(findBarView)
@@ -438,6 +513,8 @@ final class ReaderViewController: NSViewController {
             highlightModeIndicator.leadingAnchor.constraint(equalTo: pdfContainerView.leadingAnchor, constant: 12),
             highlightModeColorDot.widthAnchor.constraint(equalToConstant: 7),
             highlightModeColorDot.heightAnchor.constraint(equalToConstant: 7),
+            panLockIndicator.topAnchor.constraint(equalTo: pdfContainerView.topAnchor, constant: 8),
+            panLockIndicator.trailingAnchor.constraint(equalTo: pdfContainerView.trailingAnchor, constant: -12),
             switchTitleToastView.topAnchor.constraint(equalTo: pdfContainerView.topAnchor, constant: 10),
             switchTitleToastView.centerXAnchor.constraint(equalTo: pdfContainerView.centerXAnchor),
             switchTitleToastView.widthAnchor.constraint(lessThanOrEqualTo: pdfContainerView.widthAnchor, multiplier: 0.62),
@@ -818,6 +895,54 @@ final class ReaderViewController: NSViewController {
         isReadingFocusModeEnabled = enabled
         guard isViewLoaded else { return }
         syncReadingFocusAvailability()
+    }
+
+    @discardableResult
+    func toggleHorizontalPanLock() -> Bool {
+        setHorizontalPanLockEnabled(!isHorizontalPanLocked)
+        return isHorizontalPanLocked
+    }
+
+    func setHorizontalPanLockEnabled(_ enabled: Bool) {
+        guard enabled != isHorizontalPanLocked else {
+            guard isViewLoaded else { return }
+            updatePanLockIndicator()
+            configurePDFScrollBehaviorIfNeeded()
+            return
+        }
+        isHorizontalPanLocked = enabled
+        guard isViewLoaded else { return }
+        updatePanLockIndicator()
+        configurePDFScrollBehaviorIfNeeded()
+        if isHorizontalPanLocked {
+            recenterDocumentViewIfNeeded()
+        } else {
+            (pdfClipView() as? PDFReaderClipView)?.forcedOriginX = nil
+        }
+    }
+
+    private func rewriteScrollEventIfPanLocked(_ event: NSEvent) -> NSEvent? {
+        guard shouldLockHorizontalPan else { return event }
+        guard scrollEventIsOverPDFContent(event) else { return event }
+
+        // Horizontal-dominant or pure-horizontal: discard entirely so PDFKit never pans on X.
+        let horizontal = abs(event.scrollingDeltaX)
+        let vertical = abs(event.scrollingDeltaY)
+        if ScrollWheelHorizontalStripper.isHorizontalOnly(event) || horizontal > vertical {
+            return nil
+        }
+        guard ScrollWheelHorizontalStripper.hasHorizontalComponent(event) else { return event }
+        return ScrollWheelHorizontalStripper.verticalOnly(from: event) ?? event
+    }
+
+    private func scrollEventIsOverPDFContent(_ event: NSEvent) -> Bool {
+        guard isAllPagesOverviewActive == false,
+              pdfContainerView.isHidden == false,
+              pdfView.isHidden == false,
+              let window = event.window,
+              window === view.window else { return false }
+        let pointInPDF = pdfView.convert(event.locationInWindow, from: nil)
+        return pdfView.bounds.contains(pointInPDF)
     }
 
     func setReadingFocusSettings(_ settings: ReadingFocusSettings) {
@@ -1606,6 +1731,7 @@ final class ReaderViewController: NSViewController {
         scrollView.verticalScrollElasticity = .none
         scrollView.horizontalScrollElasticity = .none
         scrollView.usesPredominantAxisScrolling = true
+        installReaderClipViewIfNeeded(in: scrollView)
         let clipView = scrollView.contentView
         clipView.postsBoundsChangedNotifications = true
         if observedPDFClipView !== clipView {
@@ -1624,7 +1750,34 @@ final class ReaderViewController: NSViewController {
                 object: clipView
             )
         }
+        syncHorizontalPanLockConstraint()
         syncPDFMarginBackgroundAfterPDFKitLayout()
+    }
+
+    private func installReaderClipViewIfNeeded(in scrollView: NSScrollView) {
+        if scrollView.contentView is PDFReaderClipView { return }
+
+        let previousClip = scrollView.contentView
+        let documentView = previousClip.documentView
+        let replacement = PDFReaderClipView(frame: previousClip.bounds)
+        replacement.drawsBackground = previousClip.drawsBackground
+        replacement.backgroundColor = previousClip.backgroundColor
+        replacement.postsBoundsChangedNotifications = true
+        scrollView.contentView = replacement
+        if let documentView {
+            scrollView.documentView = documentView
+        }
+    }
+
+    private func syncHorizontalPanLockConstraint() {
+        guard let clipView = pdfClipView() as? PDFReaderClipView else { return }
+        guard shouldLockHorizontalPan, let documentView = pdfDocumentView() else {
+            clipView.forcedOriginX = nil
+            return
+        }
+
+        let overflowX = max(documentView.frame.width - clipView.bounds.width, 0)
+        clipView.forcedOriginX = overflowX <= 0.5 ? 0 : overflowX * 0.5
     }
 
     @objc
@@ -1727,21 +1880,32 @@ final class ReaderViewController: NSViewController {
             documentView.frame = frame
         }
 
+        // Keep forced X in sync with current geometry before any clamp scroll.
+        syncHorizontalPanLockConstraint()
+
         var targetOrigin = clipView.bounds.origin
         if fitsHorizontally {
             targetOrigin.x = 0
+        } else if shouldLockHorizontalPan {
+            let overflowX = max(documentView.frame.width - clipView.bounds.width, 0)
+            targetOrigin.x = overflowX * 0.5
         }
         if fitsVertically {
             targetOrigin.y = 0
         }
+        let clampThreshold: CGFloat = shouldLockHorizontalPan ? 0.01 : 0.5
         let targetBounds = clipView.constrainBoundsRect(NSRect(origin: targetOrigin, size: clipView.bounds.size))
-        guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > 0.5 ||
-                abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
+        guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > clampThreshold ||
+                abs(targetBounds.origin.y - clipView.bounds.origin.y) > clampThreshold else { return }
 
         isApplyingScrollClamp = true
         clipView.scroll(to: targetBounds.origin)
         scrollView.reflectScrolledClipView(clipView)
         isApplyingScrollClamp = false
+    }
+
+    private var shouldLockHorizontalPan: Bool {
+        isHorizontalPanLocked && isAllPagesOverviewActive == false
     }
 
     private func stabilizePDFScrollPosition() {
@@ -1854,6 +2018,7 @@ final class ReaderViewController: NSViewController {
         applyThemeFilter()
         syncPDFMarginBackgroundAfterPDFKitLayout()
         updateHighlightModeIndicator()
+        updatePanLockIndicator()
     }
 
     private func syncReadingFocusAvailability() {
@@ -1944,6 +2109,12 @@ final class ReaderViewController: NSViewController {
         ).withAlphaComponent(0.85).cgColor
     }
 
+    private func updatePanLockIndicator() {
+        panLockIndicator.isHidden = !isHorizontalPanLocked
+        panLockIndicator.stringValue = "H-lock · L"
+        panLockIndicator.textColor = NightModeStyle.secondaryTextColor
+    }
+
     private func applyThemeFilter() {
         let filters = NightModeStyle.makePDFContentFilters(for: NSApp.effectiveAppearance)
         pdfView.contentFilters = filters
@@ -1987,6 +2158,14 @@ extension ReaderViewController {
 
     var testingReadingFocusModeIsEnabled: Bool {
         isReadingFocusModeEnabled
+    }
+
+    var testingHorizontalPanLockIsEnabled: Bool {
+        isHorizontalPanLocked
+    }
+
+    var testingPanLockIndicatorIsVisible: Bool {
+        panLockIndicator.isHidden == false
     }
 }
 

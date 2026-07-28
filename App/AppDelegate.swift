@@ -346,6 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
             .toggleReadingFocus: { [weak self] in self?.toggleReadingFocusModeAction(nil) },
             .adjustReadingFocus: { [weak self] in self?.showReadingFocusControlsAction(nil) },
+            .toggleHorizontalPanLock: { [weak self] in self?.toggleHorizontalPanLockAction(nil) },
             .switchCurrentTheme: { [weak self] in self?.switchCurrentTheme(nil) },
             .openLibraryPDF: { [weak self] in self?.showLibraryPalette(nil) },
             .refreshLibraryIndex: { [weak self] in self?.refreshLibraryIndex(nil) },
@@ -902,6 +903,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 action: #selector(showReadingFocusControlsAction(_:))
             ),
             makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleHorizontalPanLock.menuTitle,
+                command: .toggleHorizontalPanLock,
+                action: #selector(toggleHorizontalPanLockAction(_:))
+            ),
+            makeConfiguredMenuItem(
                 title: ShortcutCommand.switchCurrentTheme.menuTitle,
                 command: .switchCurrentTheme,
                 action: #selector(switchCurrentTheme(_:))
@@ -1391,6 +1397,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func toggleReadingFocusModeAction(_ sender: Any?) {
         mainWindowController?.toggleReadingFocusMode()
+    }
+
+    @objc
+    private func toggleHorizontalPanLockAction(_ sender: Any?) {
+        mainWindowController?.toggleHorizontalPanLock()
     }
 
     @objc
@@ -2267,6 +2278,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(toggleReadingFocusModeAction(_:)):
             menuItem.state = controller?.isReadingFocusModeEnabled == true ? .on : .off
+            return activePDFSession != nil
+        case #selector(toggleHorizontalPanLockAction(_:)):
+            menuItem.state = controller?.isHorizontalPanLocked == true ? .on : .off
             return activePDFSession != nil
         case #selector(showReadingFocusControlsAction(_:)):
             return activePDFSession != nil

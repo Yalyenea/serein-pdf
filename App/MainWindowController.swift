@@ -279,6 +279,18 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         return splitViewController.readerWorkspaceViewController.toggleReadingFocusMode()
     }
 
+    var isHorizontalPanLocked: Bool {
+        splitViewController.readerWorkspaceViewController.isHorizontalPanLocked
+    }
+
+    @discardableResult
+    func toggleHorizontalPanLock() -> Bool {
+        guard documentStore.activeSession(in: windowID)?.isBlank == false else {
+            return isHorizontalPanLocked
+        }
+        return splitViewController.readerWorkspaceViewController.toggleHorizontalPanLock()
+    }
+
     func showReadingFocusControls() {
         guard documentStore.activeSession(in: windowID)?.isBlank == false else { return }
         splitViewController.readerWorkspaceViewController.showReadingFocusControls()

@@ -26,6 +26,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleReadingFocus], KeyboardShortcut(key: "f", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.adjustReadingFocus], KeyboardShortcut(key: "f", modifiers: [.option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.toggleHorizontalPanLock], KeyboardShortcut(key: "l", modifiers: []))
         XCTAssertNil(configuration.shortcuts.bindings[.switchCurrentTheme])
         XCTAssertNil(configuration.shortcuts.bindings[.openLibraryPDF])
         XCTAssertNil(configuration.shortcuts.bindings[.refreshLibraryIndex])

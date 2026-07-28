@@ -4,6 +4,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reading
+- Add horizontal pan lock: press `l` to center the page on X and block left/right panning while zoomed; vertical scroll, page turns, selection, and highlights stay free. Toggle again to unlock. Focused pane only; light `H-lock · L` badge when active.
+- Pan lock forbids horizontal input at the source: a local `scrollWheel` monitor drops pure left/right gestures and zeros diagonal X before PDFKit sees them; the custom clip view still pins X as a final belt.
+
 ## [0.5.0] - 2026-07-27
 
 ### Reading Focus

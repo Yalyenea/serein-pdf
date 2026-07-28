@@ -214,6 +214,7 @@ struct AppConfiguration: Equatable, Sendable {
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: []),
             .adjustReadingFocus: KeyboardShortcut(key: "f", modifiers: [.option]),
+            .toggleHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: []),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
             .copyCurrentPDFPath: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
@@ -546,6 +547,7 @@ exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
+toggle_horizontal_pan_lock = "l"
 # Cmd+K, Cmd+T is a built-in chord.
 switch_current_theme = "none"
 # Cmd+K, Cmd+O is a built-in chord.
@@ -663,6 +665,7 @@ exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: c
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
 toggle_reading_focus = "\(serializedShortcut(.toggleReadingFocus, configuration: configuration))"
 adjust_reading_focus = "\(serializedShortcut(.adjustReadingFocus, configuration: configuration))"
+toggle_horizontal_pan_lock = "\(serializedShortcut(.toggleHorizontalPanLock, configuration: configuration))"
 switch_current_theme = "\(serializedShortcut(.switchCurrentTheme, configuration: configuration))"
 open_library_pdf = "\(serializedShortcut(.openLibraryPDF, configuration: configuration))"
 refresh_library_index = "\(serializedShortcut(.refreshLibraryIndex, configuration: configuration))"
@@ -770,6 +773,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "toggle_night_mode",
         "toggle_reading_focus",
         "adjust_reading_focus",
+        "toggle_horizontal_pan_lock",
         "switch_current_theme",
         "open_library_pdf",
         "refresh_library_index",
@@ -941,6 +945,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .toggleReadingFocus, to: &configuration)
         case ("shortcuts", "adjust_reading_focus"):
             try applyShortcut(rawValue, command: .adjustReadingFocus, to: &configuration)
+        case ("shortcuts", "toggle_horizontal_pan_lock"):
+            try applyShortcut(rawValue, command: .toggleHorizontalPanLock, to: &configuration)
         case ("shortcuts", "switch_current_theme"):
             try applyShortcut(rawValue, command: .switchCurrentTheme, to: &configuration)
         case ("shortcuts", "open_library_pdf"):
