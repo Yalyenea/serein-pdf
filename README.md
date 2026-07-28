@@ -19,6 +19,7 @@ site for showcase, download notes, and compact docs.
 - Find bar supports `This Document` / `All Open`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
 - Cursor reading focus (`f`) dims the page outside a compact rounded band without blocking PDF interaction; `option+f` adjusts the current window between Page, Column (half-page), and Custom widths plus a configurable height
+- Horizontal pan lock (`l`) centers the page on X and blocks left/right panning while zoomed; vertical scroll and page turns stay free
 - Compare split in the center reader (`cmd+ctrl+\`) opens a compact candidate chooser and can arrange the two independent readers left/right or top/bottom from the View menu
 - Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
@@ -158,6 +159,7 @@ copy_current_pdf_path = "command+shift+c"
 toggle_continuous_reading = "none"
 toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
+toggle_horizontal_pan_lock = "l"
 merge_all_windows = "none"      # cmd+k, cmd+m is a built-in chord
 move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
@@ -213,6 +215,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Toggle cursor reading focus | `f` |
 | Adjust current-window focus width / height | `option+f` |
+| Toggle horizontal pan lock (center X while zoomed) | `l` |
 | Toggle Single Page Continuous | `c` |
 | Select document tabs 1–3 | physical left `cmd+1` / `cmd+2` / `cmd+3` |
 | Single Page Continuous | physical right `cmd+2` |

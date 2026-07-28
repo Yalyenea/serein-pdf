@@ -1790,6 +1790,66 @@ struct WindowChromeTests {
     }
 
     @Test
+    func horizontalPanLockCentersAndBlocksHorizontalScroll() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "horizontal-pan-lock",
+                pageSizes: [NSSize(width: 1600, height: 900)]
+            )
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController,
+              let clipView = pdfClipView(in: splitController.readerViewController.pdfView),
+              let scrollView = splitController.readerViewController.pdfView.subviews
+                .compactMap({ $0 as? NSScrollView })
+                .first,
+              let documentView = clipView.documentView else {
+            Issue.record("Failed to locate PDF scroll geometry")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        for _ in 0..<8 {
+            reader.zoomIn()
+        }
+        flushLayout(controller.window)
+
+        #expect(documentView.frame.width > clipView.bounds.width + 8)
+
+        clipView.setBoundsOrigin(NSPoint(x: 40, y: clipView.bounds.origin.y))
+        scrollView.reflectScrolledClipView(clipView)
+        flushLayout(controller.window)
+        #expect(abs(clipView.bounds.origin.x - 40) < 1.5)
+
+        #expect(controller.toggleHorizontalPanLock() == true)
+        #expect(reader.testingHorizontalPanLockIsEnabled)
+        #expect(reader.testingPanLockIndicatorIsVisible)
+        flushLayout(controller.window)
+
+        let lockedX = max(documentView.frame.width - clipView.bounds.width, 0) * 0.5
+        #expect(abs(clipView.bounds.origin.x - lockedX) < 1.5)
+
+        let beforeY = clipView.bounds.origin.y
+        clipView.setBoundsOrigin(NSPoint(x: lockedX + 55, y: beforeY))
+        scrollView.reflectScrolledClipView(clipView)
+        flushLayout(controller.window)
+        #expect(abs(clipView.bounds.origin.x - lockedX) < 1.5)
+        #expect(abs(clipView.bounds.origin.y - beforeY) < 1.5)
+
+        #expect(controller.toggleHorizontalPanLock() == false)
+        #expect(reader.testingHorizontalPanLockIsEnabled == false)
+        #expect(reader.testingPanLockIndicatorIsVisible == false)
+    }
+
+    @Test
     func singlePageZoomKeepsViewportCenterStable() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance

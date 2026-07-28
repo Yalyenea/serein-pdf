@@ -50,6 +50,32 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(triggeredCommands, [.toggleReadingFocus])
     }
 
+    func testPlainLTogglesHorizontalPanLock() {
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [.toggleHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: [])]
+            },
+            handlerProvider: {
+                [.toggleHorizontalPanLock: { triggeredCommands.append(.toggleHorizontalPanLock) }]
+            }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertTrue(
+            controller.handlePlainShortcut(
+                for: makeKeyEvent(characters: "l", modifiers: []),
+                in: window
+            )
+        )
+        XCTAssertEqual(triggeredCommands, [.toggleHorizontalPanLock])
+    }
+
     func testOptionFReadingFocusShortcutMatchesModifiedCharacterEvent() {
         let shortcut = KeyboardShortcut(key: "f", modifiers: [.option])
         let event = makeKeyEvent(

@@ -306,6 +306,15 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         return isReadingFocusModeEnabled
     }
 
+    var isHorizontalPanLocked: Bool {
+        activeReaderViewController().isHorizontalPanLocked
+    }
+
+    @discardableResult
+    func toggleHorizontalPanLock() -> Bool {
+        activeReaderViewController().toggleHorizontalPanLock()
+    }
+
     func setReadingFocusSettings(_ settings: ReadingFocusSettings) {
         readingFocusSettingsOverride = settings
         applyReadingFocusSettings()
