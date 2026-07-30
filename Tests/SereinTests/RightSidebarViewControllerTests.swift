@@ -6,7 +6,7 @@ import Testing
 struct RightSidebarViewControllerTests {
     @Test
     func loadingSidebarDoesNotEagerlyLoadAnnotationsPane() {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = RightSidebarViewController(
             documentStore: store,
             windowID: store.defaultWindowID
@@ -19,7 +19,7 @@ struct RightSidebarViewControllerTests {
 
     @Test
     func selectingAnnotationsLoadsAnnotationsPane() {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = RightSidebarViewController(
             documentStore: store,
             windowID: store.defaultWindowID
@@ -33,7 +33,7 @@ struct RightSidebarViewControllerTests {
 
     @Test
     func reapplyingSameModeDoesNotInvalidateLayout() {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = RightSidebarViewController(
             documentStore: store,
             windowID: store.defaultWindowID

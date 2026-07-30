@@ -526,7 +526,9 @@ final class DocumentStoreTests: XCTestCase {
         store.setDirty(true, for: session.id, now: dirtyDate)
 
         try overwriteFileInPlace(at: url, withPDFPageCount: 2)
-        _ = waitForMainRunLoop(timeout: 0.8) { false }
+        // Drive the same path as the file monitor callback; a timed wait that
+        // always fails cannot distinguish "dirty guard worked" from "event never ran".
+        store.refreshExternallyChangedFile(at: url)
 
         let dirtySession = try XCTUnwrap(store.session(for: session.id))
         XCTAssertTrue(store.isPDFDocumentLoaded(for: session.id))
@@ -874,7 +876,9 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(notedURLs.isEmpty)
     }
 
-    func testRestorePersistedVerticalModeForcesLeftSidebarVisible() throws {
+    func testRestorePersistedVerticalModePreservesCollapsedLeftSidebar() throws {
+        // restorePersistedState keeps the saved left-sidebar flag; live
+        // setTabPresentationMode(.verticalSidebar) is what forces it visible.
         let url = try makeTemporaryPDF(named: "restore-vertical")
         let persistence = InMemoryDocumentStorePersistence()
         persistence.state = PersistedDocumentStoreState(
@@ -2333,6 +2337,7 @@ final class DocumentStoreTests: XCTestCase {
         let readingStateStore = InMemoryReadingStateStore()
         let recentFilesStore = InMemoryRecentFilesStore()
         let store = DocumentStore(
+            persistence: InMemoryDocumentStorePersistence(),
             readingStateStore: readingStateStore,
             recentFilesStore: recentFilesStore
         )

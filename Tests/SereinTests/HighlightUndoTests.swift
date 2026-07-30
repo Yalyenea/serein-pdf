@@ -3,32 +3,6 @@ import PDFKit
 import XCTest
 @testable import Serein
 
-private final class InMemoryDocumentStorePersistenceUndo: DocumentStorePersistence {
-    var state: PersistedDocumentStoreState?
-    func loadState() throws -> PersistedDocumentStoreState? { state }
-    func saveState(_ state: PersistedDocumentStoreState) throws { self.state = state }
-}
-
-private final class InMemoryReadingStateStoreUndo: ReadingStateStore {
-    var states: [URL: PersistedReadingState] = [:]
-    func loadState(for url: URL) throws -> PersistedReadingState? { states[url] }
-    func saveState(_ state: PersistedReadingState) throws { states[state.url] = state }
-}
-
-private final class InMemoryRecentFilesStoreUndo: RecentFilesStore {
-    var recentFiles: [URL] = []
-    func loadRecentFiles() throws -> [URL] { recentFiles }
-    func recordOpen(for url: URL) throws -> [URL] {
-        recentFiles.removeAll { $0 == url }
-        recentFiles.insert(url, at: 0)
-        return recentFiles
-    }
-    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
-        if let index = recentFiles.firstIndex(of: oldURL) { recentFiles[index] = newURL }
-        return recentFiles
-    }
-}
-
 @MainActor
 final class HighlightUndoTests: XCTestCase {
     func testApplyHighlightReturnsRecordForEveryLine() throws {
@@ -85,9 +59,14 @@ final class HighlightUndoTests: XCTestCase {
     func testUndoStackCapsAtFifty() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTextFile(text: "alpha"))
+        let document = try store.pdfDocument(for: session.id)
+        let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
+        let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.pink.nsColor)
+        XCTAssertFalse(records.isEmpty)
 
+        // noteHighlightsAdded rejects empty records; cap must use real entries.
         for _ in 0..<(DocumentStore.undoStackLimit + 5) {
-            store.recordHighlightUndo(.added([]), for: session.id)
+            store.noteHighlightsAdded(records, for: session.id)
         }
 
         let updated = try XCTUnwrap(store.session(for: session.id))
@@ -98,8 +77,10 @@ final class HighlightUndoTests: XCTestCase {
         let store = makeStore()
         let first = try store.open(documentAt: makeTextFile(text: "alpha"))
         let second = try store.open(documentAt: makeTextFile(text: "beta"))
-
-        store.recordHighlightUndo(.added([]), for: first.id)
+        let firstDocument = try store.pdfDocument(for: first.id)
+        let selection = try XCTUnwrap(firstDocument.findString("alpha", withOptions: []).first)
+        let records = HighlightService.applyHighlight(to: selection)
+        store.noteHighlightsAdded(records, for: first.id)
 
         XCTAssertTrue(store.hasUndoableHighlight(for: first.id))
         XCTAssertFalse(store.hasUndoableHighlight(for: second.id))
@@ -169,11 +150,7 @@ final class HighlightUndoTests: XCTestCase {
     }
 
     private func makeStore() -> DocumentStore {
-        DocumentStore(
-            persistence: InMemoryDocumentStorePersistenceUndo(),
-            readingStateStore: InMemoryReadingStateStoreUndo(),
-            recentFilesStore: InMemoryRecentFilesStoreUndo()
-        )
+        makeIsolatedDocumentStore()
     }
 
     private func annotationCount(in document: PDFDocument) -> Int {

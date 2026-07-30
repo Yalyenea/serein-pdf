@@ -3,18 +3,6 @@ import PDFKit
 import XCTest
 @testable import Serein
 
-private final class InMemoryDocumentStorePersistence2: DocumentStorePersistence {
-    var state: PersistedDocumentStoreState?
-    func loadState() throws -> PersistedDocumentStoreState? { state }
-    func saveState(_ state: PersistedDocumentStoreState) throws { self.state = state }
-}
-
-private final class InMemoryReadingStateStore2: ReadingStateStore {
-    var states: [URL: PersistedReadingState] = [:]
-    func loadState(for url: URL) throws -> PersistedReadingState? { states[url] }
-    func saveState(_ state: PersistedReadingState) throws { states[state.url] = state }
-}
-
 @MainActor
 final class AnnotationSaveTests: XCTestCase {
     func testAnnotationSavePolicyDefaultIsAfter10Minutes() {
@@ -45,6 +33,8 @@ final class AnnotationSaveTests: XCTestCase {
 
         XCTAssertTrue(errors.isEmpty)
         XCTAssertEqual(store.session(for: session.id)?.isDirty, true)
+        // Must not write to disk either — dirty alone could false-green a buggy save.
+        XCTAssertEqual(PDFDocument(url: session.url)?.page(at: 0)?.annotations.count ?? 0, 0)
     }
 
     func testAutoSaveWritesWhenIntervalElapsed() throws {
@@ -73,6 +63,7 @@ final class AnnotationSaveTests: XCTestCase {
 
         XCTAssertTrue(errors.isEmpty)
         XCTAssertEqual(store.session(for: session.id)?.isDirty, true)
+        XCTAssertEqual(PDFDocument(url: session.url)?.page(at: 0)?.annotations.count ?? 0, 0)
     }
 
     func testManualSaveClearsDirtyAndPersistsAnnotations() throws {
@@ -89,10 +80,7 @@ final class AnnotationSaveTests: XCTestCase {
     }
 
     private func makeStore() -> DocumentStore {
-        DocumentStore(
-            persistence: InMemoryDocumentStorePersistence2(),
-            readingStateStore: InMemoryReadingStateStore2()
-        )
+        makeIsolatedDocumentStore()
     }
 
     private func addHighlightAnnotation(to session: DocumentSession, in store: DocumentStore) throws {

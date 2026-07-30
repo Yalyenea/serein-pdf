@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reliability
+- Test hygiene: stop several UI suites from writing real UserDefaults; kill false-green hot-reload / title / library / vim-grid / autosave assertions; share in-memory store doubles.
+
 ### Reading
 - Center the PDF horizontally when zoomed out so the page is narrower than the viewport (continuous and two-up modes, not only Single Page).
 - Fix zoom-out visual centering: AppKit was pinning clip origin to the document frame min, canceling margin offsets; keep clip origin at zero when content fits.

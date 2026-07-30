@@ -17,23 +17,23 @@ struct WindowChromeTests {
     }
 
     @Test
-    func mainWindowRepresentsActivePDFURL() throws {
+    func mainWindowTitleTracksActivePDF() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "represented-url"))
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "window-title-active"))
 
         #expect(controller.window?.title == session.title)
     }
 
     @Test
-    func mainWindowClearsRepresentedURLForBlankTab() throws {
+    func mainWindowTitleResetsForBlankTab() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "represented-blank-anchor"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "window-title-blank-anchor"))
 
         _ = store.newBlankTab()
 
@@ -41,17 +41,19 @@ struct WindowChromeTests {
     }
 
     @Test
-    func mainWindowUpdatesRepresentedURLWhenTabsSwitch() throws {
+    func mainWindowTitleUpdatesWhenTabsSwitch() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        let first = try store.open(documentAt: makeTemporaryPDF(named: "represented-first"))
-        let second = try store.open(documentAt: makeTemporaryPDF(named: "represented-second"))
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "window-title-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "window-title-second"))
 
+        #expect(controller.window?.title == second.title)
         store.activate(sessionID: first.id, in: store.defaultWindowID)
-
         #expect(controller.window?.title == first.title)
+        store.activate(sessionID: second.id, in: store.defaultWindowID)
+        #expect(controller.window?.title == second.title)
     }
 
     @Test
@@ -1620,17 +1622,26 @@ struct WindowChromeTests {
 
     @Test
     func settingsWindowOpensWithConfiguredLibraryFolders() throws {
+        let folderURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("serein-library-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folderURL) }
+
         var configuration = AppConfiguration.default
-        configuration.library.folderURLs = [URL(fileURLWithPath: "/Users/your-name/Documents/Papers")]
+        configuration.library.folderURLs = [folderURL]
         let controller = SettingsWindowController(configuration: configuration) { _ in }
         controller.showWindow(nil)
+        defer { controller.window?.close() }
 
         let window = try #require(controller.window)
-        controller.selectPageForTesting(1)
+        controller.selectPageForTesting(1) // Library
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        window.layoutIfNeeded()
 
         #expect(window.title == "Settings")
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 484))
+        let labels = textFields(in: window.contentView ?? NSView())
+            .map(\.stringValue)
+        #expect(labels.contains(where: { $0.contains(folderURL.lastPathComponent) || $0 == folderURL.path }))
     }
 
     @Test
@@ -1925,8 +1936,9 @@ struct WindowChromeTests {
     @Test
     func halfPageScrollMovesViewportAndCanReturn() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "half-page-scroll",
@@ -1953,7 +1965,17 @@ struct WindowChromeTests {
         controller.scrollHalfPageDown()
         flushLayout(controller.window)
         let afterDownOrigin = clipView.bounds.origin.y
-        #expect(abs(afterDownOrigin - beforeOrigin) > 20)
+        let downDelta = afterDownOrigin - beforeOrigin
+        #expect(abs(downDelta) > 20)
+
+        controller.scrollHalfPageUp()
+        flushLayout(controller.window)
+        let afterUpOrigin = clipView.bounds.origin.y
+        let upStep = afterUpOrigin - afterDownOrigin
+        // Exact return can drift when store writeback re-applies the reading
+        // position; require a real reverse step, not pixel-perfect restore.
+        #expect(abs(upStep) > 20)
+        #expect(upStep * downDelta < 0)
     }
 
     @Test

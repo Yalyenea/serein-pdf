@@ -44,12 +44,16 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         XCTAssertEqual(controller.testingSelectedItemCount, 1)
 
         let columnCount = controller.testingCurrentColumnCount
+        XCTAssertGreaterThan(columnCount, 0)
+        let afterDown = min(sessions.count - 1, 1 + columnCount)
         XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(characters: "j", keyCode: 38, window: controller.window)))
-        XCTAssertEqual(controller.testingHighlightedIndex, min(sessions.count - 1, 1 + columnCount))
+        XCTAssertEqual(controller.testingHighlightedIndex, afterDown)
         XCTAssertEqual(controller.testingSelectedItemCount, 1)
 
+        // h moves left within the row (absolute expectation, not derived from actual).
+        let afterLeft = max(afterDown / columnCount * columnCount, afterDown - 1)
         XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(characters: "h", keyCode: 4, window: controller.window)))
-        XCTAssertEqual(controller.testingHighlightedIndex, max((controller.testingHighlightedIndex ?? 0) / columnCount * columnCount, min(sessions.count - 1, columnCount)))
+        XCTAssertEqual(controller.testingHighlightedIndex, afterLeft)
         XCTAssertEqual(controller.testingSelectedItemCount, 1)
     }
 

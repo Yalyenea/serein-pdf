@@ -7,7 +7,7 @@ import Testing
 struct OutlineViewControllerTests {
     @Test
     func outlineContentTracksSidebarWidth() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "width-outline"))
         let controller = OutlineViewController(
             documentStore: store,
@@ -29,7 +29,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func outlineContentShrinksWithSidebarAndLocksHorizontalPanning() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "narrow-outline"))
         let controller = OutlineViewController(
             documentStore: store,
@@ -59,7 +59,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func outlineRowsWrapLongTitlesWithLargerText() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(
             documentAt: makeTemporaryPDFWithOutline(
                 named: "wrapped-outline",
@@ -98,7 +98,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func outlineRowsKeepSingleLineTitlesCompact() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "compact-outline"))
         let controller = OutlineViewController(
             documentStore: store,
@@ -118,7 +118,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func outlinePaneHidesScrollersAndDisablesHorizontalScroll() {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = OutlineViewController(
             documentStore: store,
             windowID: store.defaultWindowID
@@ -137,7 +137,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func outlinePaneEmbedsDirectlyOnTransparentSidebarSurface() {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = OutlineViewController(
             documentStore: store,
             windowID: store.defaultWindowID
@@ -159,7 +159,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func outlineExpansionToggleCollapsesAndExpandsTree() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "nested-outline", includeChild: true))
         let controller = OutlineViewController(
             documentStore: store,
@@ -194,7 +194,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func collapsedOutlineStaysTopAnchoredWhenContentShrinks() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(
             documentAt: makeTemporaryPDFWithOutline(
                 named: "top-anchored-outline",
@@ -234,7 +234,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func switchingPDFClearsOldRowsWithMatchingPaths() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let first = try store.open(
             documentAt: makeTemporaryPDFWithOutline(
                 named: "switch-first",
@@ -269,7 +269,7 @@ struct OutlineViewControllerTests {
 
     @Test
     func continuousReadingOutlineGroupsDocuments() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let sessions = try store.open(
             documentsAt: [
                 makeTemporaryPDFWithOutline(named: "continuous-outline-first"),
