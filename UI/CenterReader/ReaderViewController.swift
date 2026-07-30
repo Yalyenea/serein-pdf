@@ -1853,15 +1853,15 @@ final class ReaderViewController: NSViewController {
               let clipView = pdfClipView(),
               let documentView = pdfDocumentView() else { return }
 
+        // Horizontal: center whenever the document is narrower than the viewport
+        // (all display modes). Vertical: only single-page, where blank margin
+        // should sit evenly around a fully visible slide.
         let isSinglePage = displayedDisplayMode == .singlePage
-        let fitsHorizontally = isSinglePage && documentView.frame.width <= clipView.bounds.width + 0.5
+        let fitsHorizontally = documentView.frame.width <= clipView.bounds.width + 0.5
         let fitsVertically = isSinglePage && documentView.frame.height <= clipView.bounds.height + 0.5
-        let targetMinX: CGFloat
-        if isSinglePage {
-            targetMinX = max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
-        } else {
-            targetMinX = 0
-        }
+        let targetMinX = fitsHorizontally
+            ? max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
+            : 0
         let targetMinY = isSinglePage
             ? max((clipView.bounds.height - documentView.frame.height) * 0.5, 0)
             : documentView.frame.minY

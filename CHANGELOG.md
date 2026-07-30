@@ -5,6 +5,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Reading
+- Center the PDF horizontally when zoomed out so the page is narrower than the viewport (continuous and two-up modes, not only Single Page).
 - Add horizontal pan lock: press `l` to center the page on X and block left/right panning while zoomed; vertical scroll, page turns, selection, and highlights stay free. Toggle again to unlock. Focused pane only; light `H-lock · L` badge when active.
 - Pan lock forbids horizontal input at the source: a local `scrollWheel` monitor drops pure left/right gestures and zeros diagonal X before PDFKit sees them; the custom clip view still pins X as a final belt.
 

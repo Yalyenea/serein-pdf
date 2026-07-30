@@ -1698,6 +1698,48 @@ struct WindowChromeTests {
     }
 
     @Test
+    func continuousZoomedOutDocumentStaysHorizontallyCentered() throws {
+        _ = NSApplication.shared
+        let store = DocumentStore(appConfiguration: .default)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "continuous-centered",
+                pageSizes: [
+                    NSSize(width: 720, height: 960),
+                    NSSize(width: 720, height: 960),
+                ]
+            )
+        )
+        store.setDisplayMode(.singlePageContinuous, for: session.id)
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        for _ in 0..<4 {
+            reader.zoomOut()
+        }
+        flushLayout(controller.window)
+
+        guard let clipView = pdfClipView(in: reader.pdfView),
+              let documentView = pdfDocumentView(in: reader.pdfView) else {
+            Issue.record("Failed to locate PDF clip/document views")
+            return
+        }
+
+        #expect(documentView.frame.width < clipView.bounds.width - 8)
+        let expectedMinX = max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
+        #expect(abs(documentView.frame.minX - expectedMinX) < 1.0)
+    }
+
+    @Test
     func singlePageFitPageCentersWideSlideOnBothAxes() throws {
         _ = NSApplication.shared
         let store = DocumentStore(appConfiguration: .default)
