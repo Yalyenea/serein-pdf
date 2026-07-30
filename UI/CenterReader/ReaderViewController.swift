@@ -125,7 +125,8 @@ private enum ScrollWheelHorizontalStripper {
     }
 }
 
-/// Clip view that hard-locks horizontal origin (belt after event stripping).
+/// Clip view that hard-locks horizontal origin (belt after event stripping) and
+/// preserves margin centering when the document is smaller than the viewport.
 private final class PDFReaderClipView: NSClipView {
     /// When non-nil, every horizontal scroll/bounds change is forced to this X.
     var forcedOriginX: CGFloat?
@@ -134,6 +135,17 @@ private final class PDFReaderClipView: NSClipView {
         var bounds = super.constrainBoundsRect(proposedBounds)
         if let forcedOriginX {
             bounds.origin.x = forcedOriginX
+            return bounds
+        }
+        // AppKit pins origin to documentView.frame.min when content is smaller
+        // than the clip, which cancels centering done via frame.origin. Keep
+        // origin at zero so those frame offsets stay visible as margins.
+        guard let documentView else { return bounds }
+        if documentView.frame.width <= bounds.width + 0.5 {
+            bounds.origin.x = 0
+        }
+        if documentView.frame.height <= bounds.height + 0.5 {
+            bounds.origin.y = 0
         }
         return bounds
     }
@@ -561,6 +573,7 @@ final class ReaderViewController: NSViewController {
         lastAppliedFitBoundsWidth = 0
         lastAppliedFitBoundsHeight = 0
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: false)
+        displayedScaleMode = .manual
         documentStore.setScaleMode(.manual, scaleFactor: scaleFactor, for: session.id)
     }
 
@@ -572,12 +585,10 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
-        let viewportAnchor = captureViewportAnchor()
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
+        // Pin before store writeback so the notification does not re-apply scale.
+        displayedScaleMode = .manual
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
-        if let viewportAnchor {
-            restoreViewportAnchorAfterStoreUpdate(viewportAnchor)
-        }
     }
 
     func zoomOut() {
@@ -588,12 +599,10 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
-        let viewportAnchor = captureViewportAnchor()
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
+        // Pin before store writeback so the notification does not re-apply scale.
+        displayedScaleMode = .manual
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
-        if let viewportAnchor {
-            restoreViewportAnchorAfterStoreUpdate(viewportAnchor)
-        }
     }
 
     @discardableResult
@@ -1525,27 +1534,32 @@ final class ReaderViewController: NSViewController {
     private func applyFitWidth(for session: DocumentSession) {
         guard let scaleFactor = fitWidthScaleFactor(for: session) else {
             pendingFitWidthSessionID = session.id
+            displayedScaleMode = .fitWidth
             documentStore.setScaleMode(.fitWidth, scaleFactor: session.zoomScale, for: session.id)
             return
         }
         guard shouldApplyFitWidth(scaleFactor, for: session) else {
             lastAppliedFitBoundsWidth = pdfView.bounds.width
+            displayedScaleMode = .fitWidth
             documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
             return
         }
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
         lastAppliedFitBoundsWidth = pdfView.bounds.width
+        displayedScaleMode = .fitWidth
         documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
     }
 
     private func applyFitHeight(for session: DocumentSession) {
         guard let scaleFactor = fitHeightScaleFactor(for: session) else {
             pendingFitHeightSessionID = session.id
+            displayedScaleMode = .fitHeight
             documentStore.setScaleMode(.fitHeight, scaleFactor: session.zoomScale, for: session.id)
             return
         }
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
         lastAppliedFitBoundsHeight = pdfView.bounds.height
+        displayedScaleMode = .fitHeight
         documentStore.setScaleMode(.fitHeight, scaleFactor: scaleFactor, for: session.id)
     }
 
@@ -1567,13 +1581,12 @@ final class ReaderViewController: NSViewController {
         syncPDFMarginBackgroundAfterPDFKitLayout()
         recenterDocumentViewIfNeeded()
         if let viewportAnchor {
+            // PDFKit may reshuffle frames after the first scroll; one settle pass.
             restoreViewportAnchor(viewportAnchor)
             pdfView.layoutDocumentView()
             pdfView.layoutSubtreeIfNeeded()
-            syncPDFMarginBackgroundAfterPDFKitLayout()
             recenterDocumentViewIfNeeded()
             restoreViewportAnchor(viewportAnchor)
-            recenterDocumentViewIfNeeded()
         }
     }
 
@@ -1860,11 +1873,18 @@ final class ReaderViewController: NSViewController {
         let fitsHorizontally = documentView.frame.width <= clipView.bounds.width + 0.5
         let fitsVertically = isSinglePage && documentView.frame.height <= clipView.bounds.height + 0.5
         let targetMinX = fitsHorizontally
-            ? max((clipView.bounds.width - documentView.frame.width) * 0.5, 0)
+            ? (clipView.bounds.width - documentView.frame.width) * 0.5
             : 0
-        let targetMinY = isSinglePage
-            ? max((clipView.bounds.height - documentView.frame.height) * 0.5, 0)
-            : documentView.frame.minY
+        // Oversized single-page docs stay top-aligned (origin Y = 0); continuous
+        // modes leave PDFKit's Y alone so vertical scrolling is undisturbed.
+        let targetMinY: CGFloat
+        if fitsVertically {
+            targetMinY = (clipView.bounds.height - documentView.frame.height) * 0.5
+        } else if isSinglePage {
+            targetMinY = 0
+        } else {
+            targetMinY = documentView.frame.minY
+        }
 
         var frame = documentView.frame
         var shouldUpdateFrame = false
@@ -1951,21 +1971,10 @@ final class ReaderViewController: NSViewController {
         )
         guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > 0.5 ||
                 abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
+        isApplyingScrollClamp = true
         clipView.scroll(to: targetBounds.origin)
         scrollView.reflectScrolledClipView(clipView)
-    }
-
-    private func restoreViewportAnchorAfterStoreUpdate(_ anchor: PDFViewportAnchor) {
-        guard let document = pdfView.document,
-              document.index(for: anchor.page) != NSNotFound else { return }
-
-        for _ in 0..<3 {
-            pdfView.layoutDocumentView()
-            pdfView.layoutSubtreeIfNeeded()
-            syncPDFMarginBackground()
-            recenterDocumentViewIfNeeded()
-            restoreViewportAnchor(anchor)
-        }
+        isApplyingScrollClamp = false
     }
 
 
