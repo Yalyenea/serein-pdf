@@ -2892,61 +2892,19 @@ private func resolvedColor(_ color: NSColor, in appearance: NSAppearance) -> NSC
 
 @MainActor
 private func makeTemporaryPDF(named name: String, pageSizes: [NSSize] = [NSSize(width: 200, height: 260)]) throws -> URL {
-    let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent(UUID().uuidString)
-        .appendingPathExtension("pdf")
-    try writeTemporaryPDF(to: url, named: name, pageSizes: pageSizes)
-    return url
+    try TestPDFFixtures.makeLabeledPDF(named: name, pageSizes: pageSizes)
 }
 
 @MainActor
 private func writeTemporaryPDF(to url: URL, named name: String, pageSizes: [NSSize]) throws {
-    let document = PDFDocument()
-
-    for (index, pageSize) in pageSizes.enumerated() {
-        let image = NSImage(size: pageSize)
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSBezierPath(rect: NSRect(origin: .zero, size: pageSize)).fill()
-
-        let textRect = NSRect(
-            x: max(pageSize.width * 0.12, 24),
-            y: max(pageSize.height * 0.42, 24),
-            width: max(pageSize.width * 0.76, 120),
-            height: 40
-        )
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 16, weight: .medium),
-            .foregroundColor: NSColor.black,
-        ]
-        NSString(string: "\(name)-\(index)").draw(in: textRect, withAttributes: attributes)
-        image.unlockFocus()
-
-        guard let page = PDFPage(image: image) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
-        document.insert(page, at: index)
-    }
-
-    guard document.write(to: url) else {
-        throw CocoaError(.fileWriteUnknown)
-    }
+    try TestPDFFixtures.writeLabeledPDF(to: url, named: name, pageSizes: pageSizes)
 }
 
 @MainActor
 private func makeSelectableTemporaryPDF(named name: String, text: String) throws -> URL {
-    let size = NSSize(width: 480, height: 240)
-    let textView = NSTextView(frame: NSRect(origin: .zero, size: size))
-    textView.string = text
-    textView.font = NSFont.systemFont(ofSize: 28, weight: .regular)
-    textView.textContainerInset = NSSize(width: 24, height: 32)
-    let data = textView.dataWithPDF(inside: textView.bounds)
-    let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("\(name)-\(UUID().uuidString)")
-        .appendingPathExtension("pdf")
-    try data.write(to: url)
-    return url
+    try TestPDFFixtures.makeSelectablePDF(named: name, text: text)
 }
+
 
 @MainActor
 private func makeTemporaryPDFWithOutline(named name: String) throws -> URL {

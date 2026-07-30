@@ -4,77 +4,16 @@ import XCTest
 
 final class AppConfigurationTests: XCTestCase {
     func testBootstrapCreatesDefaultTomlConfig() throws {
-        let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let fileURL = rootURL.appendingPathComponent("config.toml")
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            let store = try AppConfigurationStore(fileURL: fileURL)
+            let configuration = try store.load()
 
-        let store = try AppConfigurationStore(fileURL: fileURL)
-        let configuration = try store.load()
-
-        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
-        XCTAssertEqual(configuration.appearance.mode, .system)
-        XCTAssertEqual(configuration.appearance.lightTheme, .normal)
-        XCTAssertEqual(configuration.appearance.darkTheme, .rosePineMoon)
-        XCTAssertEqual(configuration.reader.defaultDisplayMode, .singlePageContinuous)
-        XCTAssertFalse(configuration.reader.fitWidthOnOpen)
-        XCTAssertEqual(configuration.reader.readingFocus, .default)
-        XCTAssertEqual(configuration.library.folderURLs, [])
-        XCTAssertEqual(configuration.access.rootURLs.map(\.path), ["/Users"])
-        XCTAssertEqual(configuration.access.rootBookmarkData, [:])
-        XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "a", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "i", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleReadingFocus], KeyboardShortcut(key: "f", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.adjustReadingFocus], KeyboardShortcut(key: "f", modifiers: [.option]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleHorizontalPanLock], KeyboardShortcut(key: "l", modifiers: []))
-        XCTAssertNil(configuration.shortcuts.bindings[.switchCurrentTheme])
-        XCTAssertNil(configuration.shortcuts.bindings[.openLibraryPDF])
-        XCTAssertNil(configuration.shortcuts.bindings[.refreshLibraryIndex])
-        XCTAssertNil(configuration.shortcuts.bindings[.openLibrarySettings])
-        XCTAssertNil(configuration.shortcuts.bindings[.openShortcutSettings])
-        XCTAssertEqual(configuration.shortcuts.bindings[.saveAnnotations], KeyboardShortcut(key: "s", modifiers: [.command]))
-        XCTAssertNil(configuration.shortcuts.bindings[.shareDocument])
-        XCTAssertNil(configuration.shortcuts.bindings[.exportCleanCopy])
-        XCTAssertEqual(configuration.shortcuts.bindings[.copyHighlightsMarkdown], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.copyCurrentPDFPath], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.removeHighlight], KeyboardShortcut(key: "d", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth]?.key, "0")
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "b", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "w", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentWindow], KeyboardShortcut(key: "w", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.highlightColorGreen], KeyboardShortcut(key: "g", modifiers: [.command, .control]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.pageDown], KeyboardShortcut(key: "j", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.pageUp], KeyboardShortcut(key: "k", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.halfPageDown], KeyboardShortcut(key: "d", modifiers: [.control]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.halfPageUp], KeyboardShortcut(key: "u", modifiers: [.control]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.goToFirstPage], KeyboardShortcut(key: "g", modifiers: []))
-        XCTAssertEqual(configuration.shortcuts.bindings[.goToLastPage], KeyboardShortcut(key: "g", modifiers: [.shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.navigateBack], KeyboardShortcut(key: "[", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.navigateForward], KeyboardShortcut(key: "]", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.findAllOpen], KeyboardShortcut(key: "f", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.findNextMatch], KeyboardShortcut(key: "g", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "g", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.gotoPage], KeyboardShortcut(key: "g", modifiers: [.command, .option]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "space", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.showAllTabs], KeyboardShortcut(key: "tab", modifiers: [.control]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.newBlankTab], KeyboardShortcut(key: "t", modifiers: [.command]))
-        XCTAssertNil(configuration.shortcuts.bindings[.mergeAllWindows])
-        XCTAssertNil(configuration.shortcuts.bindings[.moveCurrentPDFToNewWindow])
-        XCTAssertNil(configuration.shortcuts.bindings[.toggleContinuousReading])
-        XCTAssertEqual(configuration.shortcuts.bindings[.openContainingFolder], KeyboardShortcut(key: "r", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "9", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.zoomIn], KeyboardShortcut(key: "=", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.zoomOut], KeyboardShortcut(key: "-", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.undoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.redoLastHighlight], KeyboardShortcut(key: "z", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleDemoMode], KeyboardShortcut(key: "l", modifiers: [.command]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleImmersiveMode], KeyboardShortcut(key: "l", modifiers: [.command, .control]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.toggleRightSidebarMode], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.shortcuts.bindings[.swapSidebars], KeyboardShortcut(key: "x", modifiers: [.command, .shift]))
-        XCTAssertEqual(configuration.layout.leftSidebarMinWidth, 36)
-        XCTAssertFalse(configuration.layout.sidebarsSwapped)
-        XCTAssertTrue(configuration.layout.showRecentFilesInSidebar)
-        XCTAssertEqual(configuration.layout.sidebarOpacity, 0.48, accuracy: 0.001)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+            // Full default surface: laundry-list key checks live in
+            // testConfigKeyListsStayInSyncAndMissingKeysSelfHeal.
+            XCTAssertEqual(configuration, .default)
+        }
     }
 
     func testKeyboardShortcutRejectsRawControlCharacters() {
@@ -89,6 +28,7 @@ final class AppConfigurationTests: XCTestCase {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try """
@@ -239,12 +179,9 @@ open_library_pdf = "command+option+o"
     }
 
     func testExistingConfigGetsMissingShortcutKeysBackfilled() throws {
-        let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
-        let fileURL = rootURL.appendingPathComponent("config.toml")
-
-        try """
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            try """
 [reader]
 default_display_mode = "single_page"
 fit_width_on_open = false
@@ -253,73 +190,28 @@ fit_width_on_open = false
 fit_width = "command+9"
 """.write(to: fileURL, atomically: true, encoding: .utf8)
 
-        _ = try AppConfigurationStore(fileURL: fileURL)
-        let content = try String(contentsOf: fileURL, encoding: .utf8)
+            _ = try AppConfigurationStore(fileURL: fileURL)
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            let keys = assignmentKeys(in: content)
 
-        XCTAssertTrue(content.contains("[appearance]"))
-        XCTAssertTrue(content.contains("mode = \"system\""))
-        XCTAssertTrue(content.contains("light_theme = \"normal\""))
-        XCTAssertTrue(content.contains("dark_theme = \"rose_pine_moon\""))
-        XCTAssertTrue(content.contains("reading_focus_width = \"page\""))
-        XCTAssertTrue(content.contains("reading_focus_custom_width = 0.72"))
-        XCTAssertTrue(content.contains("reading_focus_height = 96"))
-        XCTAssertTrue(content.contains("highlight_selection = \"a\""))
-        XCTAssertTrue(content.contains("exit_highlight_mode = \"escape\""))
-        XCTAssertTrue(content.contains("toggle_night_mode = \"i\""))
-        XCTAssertTrue(content.contains("adjust_reading_focus = \"option+f\""))
-        XCTAssertTrue(content.contains("switch_current_theme = \"none\""))
-        XCTAssertTrue(content.contains("open_library_pdf = \"none\""))
-        XCTAssertTrue(content.contains("refresh_library_index = \"none\""))
-        XCTAssertTrue(content.contains("open_library_settings = \"none\""))
-        XCTAssertTrue(content.contains("open_shortcut_settings = \"none\""))
-        XCTAssertTrue(content.contains("save_annotations = \"command+s\""))
-        XCTAssertTrue(content.contains("share_document = \"none\""))
-        XCTAssertTrue(content.contains("export_clean_copy = \"none\""))
-        XCTAssertTrue(content.contains("copy_highlights_markdown = \"command+shift+e\""))
-        XCTAssertTrue(content.contains("copy_current_pdf_path = \"command+shift+c\""))
-        XCTAssertTrue(content.contains("toggle_left_sidebar = \"command+b\""))
-        XCTAssertTrue(content.contains("close_current_tab = \"command+w\""))
-        XCTAssertTrue(content.contains("close_current_window = \"command+shift+w\""))
-        XCTAssertTrue(content.contains("fit_height = \"command+9\""))
-        XCTAssertTrue(content.contains("fit_width = \"command+9\""))
-        XCTAssertTrue(content.contains("remove_highlight = \"d\""))
-        XCTAssertTrue(content.contains("page_down = \"j\""))
-        XCTAssertTrue(content.contains("page_up = \"k\""))
-        XCTAssertTrue(content.contains("half_page_down = \"control+d\""))
-        XCTAssertTrue(content.contains("half_page_up = \"control+u\""))
-        XCTAssertTrue(content.contains("go_to_first_page = \"g\""))
-        XCTAssertTrue(content.contains("go_to_last_page = \"shift+g\""))
-        XCTAssertTrue(content.contains("navigate_back = \"command+[\""))
-        XCTAssertTrue(content.contains("navigate_forward = \"command+]\""))
-        XCTAssertTrue(content.contains("find_all_open = \"command+shift+f\""))
-        XCTAssertTrue(content.contains("find_next_match = \"command+g\""))
-        XCTAssertTrue(content.contains("find_previous_match = \"command+shift+g\""))
-        XCTAssertTrue(content.contains("goto_page = \"command+option+g\""))
-        XCTAssertTrue(content.contains("show_recent_files_palette = \"command+shift+space\""))
-        XCTAssertTrue(content.contains("merge_all_windows = \"none\""))
-        XCTAssertTrue(content.contains("move_current_pdf_to_new_window = \"none\""))
-        XCTAssertTrue(content.contains("show_all_tabs = \"control+tab\""))
-        XCTAssertTrue(content.contains("toggle_continuous_reading = \"none\""))
-        XCTAssertTrue(content.contains("open_containing_folder = \"command+r\""))
-        XCTAssertTrue(content.contains("zoom_in = \"command+=\""))
-        XCTAssertTrue(content.contains("zoom_out = \"command+-\""))
-        XCTAssertTrue(content.contains("undo_last_highlight = \"command+z\""))
-        XCTAssertTrue(content.contains("redo_last_highlight = \"command+shift+z\""))
-        XCTAssertTrue(content.contains("toggle_demo_mode = \"command+l\""))
-        XCTAssertTrue(content.contains("toggle_immersive_mode = \"command+control+l\""))
-        XCTAssertTrue(content.contains("show_recent_files_in_sidebar = true"))
-        XCTAssertTrue(content.contains("sidebar_opacity = 0.48"))
-        XCTAssertTrue(content.contains("[library]"))
-        XCTAssertTrue(content.contains("folders = []"))
-        XCTAssertTrue(content.contains("[access]"))
-        XCTAssertTrue(content.contains("roots = [\"/Users\"]"))
-        XCTAssertTrue(content.contains("root_bookmarks = []"))
+            // Minimal seed is expanded to the full required key set + templates.
+            XCTAssertTrue(keys.isSuperset(of: Set(AppConfigurationFile.requiredKeys)))
+            XCTAssertTrue(content.contains("fit_width = \"command+9\""), "user override preserved")
+            XCTAssertTrue(content.contains("[appearance]"))
+            XCTAssertTrue(content.contains("[library]"))
+            XCTAssertTrue(content.contains("[access]"))
+            // Sample of self-healed defaults (not every key).
+            XCTAssertTrue(content.contains("highlight_selection = \"a\""))
+            XCTAssertTrue(content.contains("new_blank_tab = \"command+t\""))
+            XCTAssertTrue(content.contains("sidebar_opacity = 0.48"))
+        }
     }
 
     func testLegacyGreenShortcutMigratesAwayFromFindPreviousConflict() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try AppConfigurationFile.defaultContents
@@ -340,6 +232,7 @@ fit_width = "command+9"
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try AppConfigurationFile.defaultContents
@@ -358,6 +251,7 @@ fit_width = "command+9"
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try AppConfigurationFile.defaultContents
@@ -379,6 +273,7 @@ fit_width = "command+9"
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try AppConfigurationFile.defaultContents
@@ -400,6 +295,7 @@ fit_width = "command+9"
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try AppConfigurationFile.defaultContents
@@ -452,6 +348,7 @@ fit_width = "command+9"
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
         try AppConfigurationFile.defaultContents
             .replacingOccurrences(of: "new_blank_tab = \"command+t\"\n", with: "")
@@ -490,6 +387,7 @@ fit_width = "command+9"
     func testSavePersistsUpdatedReaderAndAnnotationDefaults() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
         let store = try AppConfigurationStore(fileURL: fileURL)
 
@@ -550,6 +448,7 @@ fit_width = "command+9"
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
         let path = "/Users"
         let bookmark = Data("bookmark-data".utf8)
@@ -571,6 +470,7 @@ root_bookmarks = ["\(entry)"]
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
 
         try AppConfigurationFile.defaultContents
@@ -594,6 +494,7 @@ root_bookmarks = ["\(entry)"]
     func testSidebarsSwappedPersistsAndRoundTrips() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
         let store = try AppConfigurationStore(fileURL: fileURL)
 
@@ -616,6 +517,7 @@ root_bookmarks = ["\(entry)"]
     func testClearedShortcutPersistsAsNone() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
         let store = try AppConfigurationStore(fileURL: fileURL)
 

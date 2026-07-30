@@ -3,49 +3,6 @@ import PDFKit
 import XCTest
 @testable import Serein
 
-private final class SidebarInMemoryDocumentStorePersistence: DocumentStorePersistence {
-    var state: PersistedDocumentStoreState?
-
-    func loadState() throws -> PersistedDocumentStoreState? {
-        state
-    }
-
-    func saveState(_ state: PersistedDocumentStoreState) throws {
-        self.state = state
-    }
-}
-
-private final class SidebarInMemoryReadingStateStore: ReadingStateStore {
-    var states: [URL: PersistedReadingState] = [:]
-
-    func loadState(for url: URL) throws -> PersistedReadingState? {
-        states[url]
-    }
-
-    func saveState(_ state: PersistedReadingState) throws {
-        states[state.url] = state
-    }
-}
-
-private final class SidebarInMemoryRecentFilesStore: RecentFilesStore {
-    var recentFiles: [URL] = []
-
-    func loadRecentFiles() throws -> [URL] {
-        recentFiles
-    }
-
-    func recordOpen(for url: URL) throws -> [URL] {
-        recentFiles.removeAll { $0 == url }
-        recentFiles.insert(url, at: 0)
-        return recentFiles
-    }
-
-    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
-        if let index = recentFiles.firstIndex(of: oldURL) { recentFiles[index] = newURL }
-        return recentFiles
-    }
-}
-
 @MainActor
 final class AnnotationsViewControllerTests: XCTestCase {
     func testApplyCommentPersistsFromSidebarEditor() throws {
@@ -167,11 +124,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
     }
 
     private func makeStore() -> DocumentStore {
-        DocumentStore(
-            persistence: SidebarInMemoryDocumentStorePersistence(),
-            readingStateStore: SidebarInMemoryReadingStateStore(),
-            recentFilesStore: SidebarInMemoryRecentFilesStore()
-        )
+        makeIsolatedDocumentStore()
     }
 }
 
@@ -194,78 +147,8 @@ private func makeHighlightRecord(in document: PDFDocument) throws -> HighlightAn
     return HighlightAnnotationRecord(pageIndex: 0, annotation: annotation)
 }
 
+
 @MainActor
 private func makeTemporaryPDF(named name: String) throws -> URL {
-    let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent(UUID().uuidString)
-        .appendingPathExtension("pdf")
-    let document = PDFDocument()
-
-    let image = NSImage(size: NSSize(width: 200, height: 260))
-    image.lockFocus()
-    NSColor.white.setFill()
-    NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 260)).fill()
-    NSString(string: name).draw(
-        in: NSRect(x: 24, y: 110, width: 152, height: 40),
-        withAttributes: [
-            .font: NSFont.systemFont(ofSize: 16, weight: .medium),
-            .foregroundColor: NSColor.black,
-        ]
-    )
-    image.unlockFocus()
-
-    guard let page = PDFPage(image: image) else {
-        throw CocoaError(.fileWriteUnknown)
-    }
-    document.insert(page, at: 0)
-
-    guard document.write(to: url) else {
-        throw CocoaError(.fileWriteUnknown)
-    }
-    return url
-}
-
-@MainActor
-private func findButton(titled title: String, in root: NSView) -> NSButton? {
-    if let button = root as? NSButton, button.title == title {
-        return button
-    }
-
-    for subview in root.subviews {
-        if let button = findButton(titled: title, in: subview) {
-            return button
-        }
-    }
-
-    return nil
-}
-
-@MainActor
-private func findDescendant<T: NSView>(of type: T.Type, in root: NSView) -> T? {
-    if let match = root as? T {
-        return match
-    }
-
-    for subview in root.subviews {
-        if let match = findDescendant(of: type, in: subview) {
-            return match
-        }
-    }
-
-    return nil
-}
-
-@MainActor
-private func findTextField(matching stringValue: String, in root: NSView) -> NSTextField? {
-    if let textField = root as? NSTextField, textField.stringValue == stringValue {
-        return textField
-    }
-
-    for subview in root.subviews {
-        if let textField = findTextField(matching: stringValue, in: subview) {
-            return textField
-        }
-    }
-
-    return nil
+    try TestPDFFixtures.makeLabeledPDF(named: name)
 }

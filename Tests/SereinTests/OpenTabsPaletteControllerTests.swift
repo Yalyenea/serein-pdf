@@ -187,23 +187,4 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         return document
     }
 
-    private func makeKeyEvent(
-        characters: String,
-        keyCode: UInt16,
-        modifierFlags: NSEvent.ModifierFlags = [],
-        window: NSWindow?
-    ) -> NSEvent {
-        NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: modifierFlags,
-            timestamp: 0,
-            windowNumber: window?.windowNumber ?? 0,
-            context: nil,
-            characters: characters,
-            charactersIgnoringModifiers: characters,
-            isARepeat: false,
-            keyCode: keyCode
-        )!
-    }
 }

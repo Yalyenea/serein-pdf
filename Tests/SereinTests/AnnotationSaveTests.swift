@@ -94,22 +94,6 @@ final class AnnotationSaveTests: XCTestCase {
     }
 
     private func makeTemporaryPDF(named name: String) throws -> URL {
-        let temporaryDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-        let url = temporaryDirectory.appendingPathComponent("\(name).pdf")
-
-        let image = NSImage(size: NSSize(width: 200, height: 260))
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 260)).fill()
-        image.unlockFocus()
-
-        let document = PDFDocument()
-        if let page = PDFPage(image: image) {
-            document.insert(page, at: 0)
-        }
-        XCTAssertTrue(document.write(to: url))
-        return url
+        try TestPDFFixtures.makeBlankPDF(named: name)
     }
 }

@@ -3,45 +3,6 @@ import PDFKit
 import XCTest
 @testable import Serein
 
-private final class SearchNavInMemoryDocumentStorePersistence: DocumentStorePersistence {
-    var state: PersistedDocumentStoreState?
-
-    func loadState() throws -> PersistedDocumentStoreState? {
-        state
-    }
-
-    func saveState(_ state: PersistedDocumentStoreState) throws {
-        self.state = state
-    }
-}
-
-private final class SearchNavInMemoryReadingStateStore: ReadingStateStore {
-    func loadState(for url: URL) throws -> PersistedReadingState? {
-        nil
-    }
-
-    func saveState(_ state: PersistedReadingState) throws {}
-}
-
-private final class SearchNavInMemoryRecentFilesStore: RecentFilesStore {
-    private var recentFiles: [URL] = []
-
-    func loadRecentFiles() throws -> [URL] {
-        recentFiles
-    }
-
-    func recordOpen(for url: URL) throws -> [URL] {
-        recentFiles.removeAll { $0 == url }
-        recentFiles.insert(url, at: 0)
-        return recentFiles
-    }
-
-    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
-        if let index = recentFiles.firstIndex(of: oldURL) { recentFiles[index] = newURL }
-        return recentFiles
-    }
-}
-
 @MainActor
 final class SearchNavigationTests: XCTestCase {
     func testFirstSubmitOnlySearchesAndSecondSubmitStartsNavigation() throws {
@@ -229,69 +190,11 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
     }
 
-    private func findDescendant<T: NSView>(of type: T.Type, in root: NSView) -> T? {
-        if let match = root as? T {
-            return match
-        }
-        for subview in root.subviews {
-            if let match = findDescendant(of: type, in: subview) {
-                return match
-            }
-        }
-        return nil
-    }
-
     private func makeStore() -> DocumentStore {
-        DocumentStore(
-            persistence: SearchNavInMemoryDocumentStorePersistence(),
-            readingStateStore: SearchNavInMemoryReadingStateStore(),
-            recentFilesStore: SearchNavInMemoryRecentFilesStore()
-        )
+        makeIsolatedDocumentStore()
     }
 
     private func makeSearchableTemporaryPDF(named name: String, pages: [String]) throws -> URL {
-        let temporaryDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: temporaryDirectory,
-            withIntermediateDirectories: true
-        )
-
-        let url = temporaryDirectory.appendingPathComponent("\(name).pdf")
-        var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
-        guard let context = CGContext(url as CFURL, mediaBox: &mediaBox, nil) else {
-            XCTFail("Failed to create PDF context")
-            throw CocoaError(.fileWriteUnknown)
-        }
-
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byWordWrapping
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 20, weight: .regular),
-            .foregroundColor: NSColor.black,
-            .paragraphStyle: paragraph,
-        ]
-
-        for pageText in pages {
-            context.beginPDFPage(nil)
-            let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = graphicsContext
-            NSColor.white.setFill()
-            NSBezierPath(rect: mediaBox).fill()
-            NSString(string: pageText).draw(
-                in: NSRect(x: 72, y: 520, width: 468, height: 160),
-                withAttributes: attributes
-            )
-            NSGraphicsContext.restoreGraphicsState()
-            context.endPDFPage()
-        }
-        context.closePDF()
-
-        guard let document = PDFDocument(url: url), document.pageCount == pages.count else {
-            XCTFail("Failed to read generated searchable PDF")
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        return url
+        try TestPDFFixtures.makeSearchablePDF(named: name, pages: pages)
     }
 }

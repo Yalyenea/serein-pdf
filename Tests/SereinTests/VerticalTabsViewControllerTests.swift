@@ -3,45 +3,6 @@ import PDFKit
 import XCTest
 @testable import Serein
 
-private final class VTInMemoryDocumentStorePersistence: DocumentStorePersistence {
-    var state: PersistedDocumentStoreState?
-
-    func loadState() throws -> PersistedDocumentStoreState? {
-        state
-    }
-
-    func saveState(_ state: PersistedDocumentStoreState) throws {
-        self.state = state
-    }
-}
-
-private final class VTInMemoryReadingStateStore: ReadingStateStore {
-    func loadState(for url: URL) throws -> PersistedReadingState? {
-        nil
-    }
-
-    func saveState(_ state: PersistedReadingState) throws {}
-}
-
-private final class VTInMemoryRecentFilesStore: RecentFilesStore {
-    private(set) var recentFiles: [URL] = []
-
-    func loadRecentFiles() throws -> [URL] {
-        recentFiles
-    }
-
-    func recordOpen(for url: URL) throws -> [URL] {
-        recentFiles.removeAll { $0 == url }
-        recentFiles.insert(url, at: 0)
-        return recentFiles
-    }
-
-    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
-        if let index = recentFiles.firstIndex(of: oldURL) { recentFiles[index] = newURL }
-        return recentFiles
-    }
-}
-
 private final class VTRecordingWindow: NSWindow {
     private(set) var windowDragCount = 0
 
@@ -54,11 +15,7 @@ private final class VTRecordingWindow: NSWindow {
 final class VerticalTabsViewControllerTests: XCTestCase {
     func testRecentFooterShowsAndOpensMostRecentURL() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(
-            persistence: VTInMemoryDocumentStorePersistence(),
-            readingStateStore: VTInMemoryReadingStateStore(),
-            recentFilesStore: VTInMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let firstURL = try makeTemporaryPDF(named: "recent-sidebar-first")
         let secondURL = try makeTemporaryPDF(named: "recent-sidebar-second")
         _ = try store.open(documentAt: firstURL)
@@ -80,12 +37,7 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         _ = NSApplication.shared
         var configuration = AppConfiguration.default
         configuration.layout.showRecentFilesInSidebar = false
-        let store = DocumentStore(
-            persistence: VTInMemoryDocumentStorePersistence(),
-            readingStateStore: VTInMemoryReadingStateStore(),
-            recentFilesStore: VTInMemoryRecentFilesStore(),
-            appConfiguration: configuration
-        )
+        let store = makeIsolatedDocumentStore(appConfiguration: configuration)
         _ = try store.open(documentAt: makeTemporaryPDF(named: "recent-sidebar-hidden"))
 
         let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
@@ -97,11 +49,7 @@ final class VerticalTabsViewControllerTests: XCTestCase {
 
     func testRecentFooterAdaptsToSidebarWidthChanges() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(
-            persistence: VTInMemoryDocumentStorePersistence(),
-            readingStateStore: VTInMemoryReadingStateStore(),
-            recentFilesStore: VTInMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         _ = try store.open(documentAt: makeTemporaryPDF(named: "recent-sidebar-width"))
 
         let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
@@ -173,12 +121,12 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         let blankPoint = try XCTUnwrap(firstPoint(in: controller.view) { point in
             controller.view.hitTest(point) === backgroundView
         })
-        let tabItem = try XCTUnwrap(firstSubview(of: VerticalTabItemView.self, in: controller.view))
+        let tabItem = try XCTUnwrap(findDescendant(of: VerticalTabItemView.self, in: controller.view))
         let tabPoint = controller.view.convert(
             NSPoint(x: tabItem.bounds.midX, y: tabItem.bounds.midY),
             from: tabItem
         )
-        let closeButton = try XCTUnwrap(firstButton(titled: "×", in: tabItem))
+        let closeButton = try XCTUnwrap(findButton(titled: "×", in: tabItem))
         let closePoint = controller.view.convert(
             NSPoint(x: closeButton.bounds.midX, y: closeButton.bounds.midY),
             from: closeButton
@@ -223,7 +171,7 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         )
         XCTAssertFalse(controller.testingIsSelectedTabEditing)
 
-        let tabItem = try XCTUnwrap(firstSubview(of: VerticalTabItemView.self, in: controller.view))
+        let tabItem = try XCTUnwrap(findDescendant(of: VerticalTabItemView.self, in: controller.view))
         let tabPointInWindow = tabItem.convert(
             NSPoint(x: tabItem.bounds.midX, y: tabItem.bounds.midY),
             to: nil
@@ -328,30 +276,11 @@ final class VerticalTabsViewControllerTests: XCTestCase {
     }
 
     private func makeTemporaryPDF(named name: String) throws -> URL {
-        let temporaryDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-        let url = temporaryDirectory.appendingPathComponent("\(name).pdf")
-
-        let image = NSImage(size: NSSize(width: 200, height: 260))
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 260)).fill()
-        image.unlockFocus()
-
-        let document = PDFDocument()
-        let page = PDFPage(image: image)
-        document.insert(page!, at: 0)
-        XCTAssertTrue(document.write(to: url))
-        return url
+        try TestPDFFixtures.makeBlankPDF(named: name)
     }
 
     private func makeStore() -> DocumentStore {
-        DocumentStore(
-            persistence: VTInMemoryDocumentStorePersistence(),
-            readingStateStore: VTInMemoryReadingStateStore(),
-            recentFilesStore: VTInMemoryRecentFilesStore()
-        )
+        makeIsolatedDocumentStore()
     }
 
     private func makeWindow(for contentView: NSView) -> NSWindow {
@@ -415,42 +344,7 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         return nil
     }
 
-    private func firstSubview<T: NSView>(of type: T.Type, in root: NSView) -> T? {
-        if let match = root as? T {
-            return match
-        }
-        for subview in root.subviews {
-            if let match = firstSubview(of: type, in: subview) {
-                return match
-            }
-        }
-        return nil
-    }
-
-    private func firstButton(titled title: String, in root: NSView) -> NSButton? {
-        if let button = root as? NSButton, button.title == title {
-            return button
-        }
-        for subview in root.subviews {
-            if let button = firstButton(titled: title, in: subview) {
-                return button
-            }
-        }
-        return nil
-    }
-
     private func returnKeyEvent(in window: NSWindow, modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
-        NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: modifiers,
-            timestamp: 0,
-            windowNumber: window.windowNumber,
-            context: nil,
-            characters: "\r",
-            charactersIgnoringModifiers: "\r",
-            isARepeat: false,
-            keyCode: 36
-        )!
+        makeReturnKeyEvent(in: window, modifiers: modifiers)
     }
 }

@@ -193,39 +193,7 @@ final class HighlightServiceTests: XCTestCase {
     }
 
     private func makeSearchableDocument(text: String) throws -> PDFDocument {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-            .appendingPathComponent("highlight-searchable.pdf")
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-
-        var mediaBox = CGRect(x: 0, y: 0, width: 420, height: 220)
-        let data = NSMutableData()
-        guard let consumer = CGDataConsumer(data: data),
-              let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
-            XCTFail("Failed to create PDF context")
-            throw NSError(domain: "HighlightServiceTests", code: 1)
-        }
-
-        context.beginPDFPage(nil)
-        let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = graphicsContext
-        NSColor.white.setFill()
-        NSBezierPath(rect: mediaBox).fill()
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 22, weight: .medium),
-            .foregroundColor: NSColor.black,
-        ]
-        NSString(string: text).draw(at: NSPoint(x: 48, y: 112), withAttributes: attributes)
-        NSGraphicsContext.restoreGraphicsState()
-        context.endPDFPage()
-        context.closePDF()
-        data.write(to: url, atomically: true)
-
-        return try XCTUnwrap(PDFDocument(url: url))
+        try TestPDFFixtures.makeSearchableDocument(text: text)
     }
 }
 
