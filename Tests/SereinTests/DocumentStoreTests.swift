@@ -3,50 +3,9 @@ import PDFKit
 import XCTest
 @testable import Serein
 
-private final class InMemoryDocumentStorePersistence: DocumentStorePersistence {
-    var state: PersistedDocumentStoreState?
-
-    func loadState() throws -> PersistedDocumentStoreState? {
-        state
-    }
-
-    func saveState(_ state: PersistedDocumentStoreState) throws {
-        self.state = state
-    }
-}
-
-private final class InMemoryReadingStateStore: ReadingStateStore {
-    var states: [URL: PersistedReadingState] = [:]
-
-    func loadState(for url: URL) throws -> PersistedReadingState? {
-        states[url]
-    }
-
-    func saveState(_ state: PersistedReadingState) throws {
-        states[state.url] = state
-    }
-}
-
-private final class InMemoryRecentFilesStore: RecentFilesStore {
-    var recentFiles: [URL] = []
-
-    func loadRecentFiles() throws -> [URL] {
-        recentFiles
-    }
-
-    func recordOpen(for url: URL) throws -> [URL] {
-        recentFiles.removeAll { $0 == url }
-        recentFiles.insert(url, at: 0)
-        return recentFiles
-    }
-
-    func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL] {
-        if let index = recentFiles.firstIndex(of: oldURL) {
-            recentFiles[index] = newURL
-        }
-        return recentFiles
-    }
-}
+private typealias InMemoryDocumentStorePersistence = TestInMemoryDocumentStorePersistence
+private typealias InMemoryReadingStateStore = TestInMemoryReadingStateStore
+private typealias InMemoryRecentFilesStore = TestInMemoryRecentFilesStore
 
 private final class NotificationCounterObserver: NSObject {
     private(set) var count = 0
@@ -68,12 +27,22 @@ private final class DocumentStoreChangeRecorder: @unchecked Sendable {
 
 @MainActor
 final class DocumentStoreTests: XCTestCase {
-    func testOpenDocumentCreatesActiveSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
+    private func makeStore(
+        persistence: DocumentStorePersistence = InMemoryDocumentStorePersistence(),
+        readingStateStore: ReadingStateStore = InMemoryReadingStateStore(),
+        recentFilesStore: RecentFilesStore = InMemoryRecentFilesStore(),
+        appConfiguration: AppConfiguration = .default
+    ) -> DocumentStore {
+        DocumentStore(
+            persistence: persistence,
+            readingStateStore: readingStateStore,
+            recentFilesStore: recentFilesStore,
+            appConfiguration: appConfiguration
         )
+    }
+
+    func testOpenDocumentCreatesActiveSession() throws {
+        let store = makeStore()
         let url = try makeTemporaryPDF(named: "single")
 
         let session = try store.open(documentAt: url)
@@ -84,11 +53,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testNewBlankTabCreatesActiveUntitledSessionWithoutRecentFile() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
 
         let session = store.newBlankTab()
 
@@ -101,11 +66,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testClosingBlankTabDoesNotPushRecentlyClosedURL() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let pdf = try store.open(documentAt: makeTemporaryPDF(named: "blank-close-anchor"))
         let blank = store.newBlankTab()
 
@@ -132,11 +93,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testOpenMultipleDocumentsKeepsAllSessionsAndActivatesLast() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let firstURL = try makeTemporaryPDF(named: "first")
         let secondURL = try makeTemporaryPDF(named: "second")
         let thirdURL = try makeTemporaryPDF(named: "third")
@@ -151,11 +108,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testActivateOpenDocumentFocusesExistingSessionWithoutDuplicating() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let firstURL = try makeTemporaryPDF(named: "reuse-open-first")
         let secondURL = try makeTemporaryPDF(named: "reuse-open-second")
         let firstSession = try store.open(documentAt: firstURL)
@@ -173,11 +126,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testOpenDocumentsNotesSystemRecentURLs() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let urls = try (0..<3).map { try makeTemporaryPDF(named: "system-recent-\($0)") }
         var notedURLs: [URL] = []
         store.noteRecentDocumentURL = { notedURLs.append($0) }
@@ -188,11 +137,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testBlankTabDoesNotNoteSystemRecentURL() {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         var notedURLs: [URL] = []
         store.noteRecentDocumentURL = { notedURLs.append($0) }
 
@@ -202,11 +147,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testBatchOpenCreatesLightweightSessionsWithoutLoadingPDFDocuments() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let urls = try (0..<3).map { try makeTemporaryPDF(named: "lazy-open-\($0)") }
 
         let sessions = try store.open(documentsAt: urls, in: store.defaultWindowID)
@@ -223,11 +164,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testBatchOpenPostsSingleStoreChangeNotification() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let observer = NotificationCounterObserver()
         NotificationCenter.default.addObserver(
             observer,
@@ -244,11 +181,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testBatchOpenSelectsNewTabsForContinuousReadingEntry() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let urls = try (0..<3).map { try makeTemporaryPDF(named: "continuous-open-\($0)") }
 
         let sessions = try store.open(documentsAt: urls, in: store.defaultWindowID)
@@ -258,11 +191,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testContinuousReadingStartsFromSelectedTabsInWindowOrder() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let sessions = try store.open(
             documentsAt: [
                 makeTemporaryPDF(named: "continuous-first"),
@@ -279,11 +208,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testSelectedSessionIDsExposeWindowOrderForBatchTabCommands() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let sessions = try store.open(
             documentsAt: [
                 makeTemporaryPDF(named: "batch-close-order-first"),
@@ -299,11 +224,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testOpeningNewBatchClearsPriorContinuousReadingGroup() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         _ = try store.open(
             documentsAt: [
                 makeTemporaryPDF(named: "continuous-clear-first"),
@@ -325,11 +246,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testContinuousReadingTargetsNeighborDocumentsAtBoundaries() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let sessions = try store.open(
             documentsAt: [
                 makeTemporaryPDF(named: "continuous-boundary-first", pageCount: 2),
@@ -352,11 +269,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testPDFDocumentCacheEvictsCleanBackgroundDocumentsButKeepsDirtyOnes() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let urls = try (0..<5).map { try makeTemporaryPDF(named: "lru-\($0)") }
         let sessions = try store.open(documentsAt: urls, in: store.defaultWindowID)
 
@@ -372,11 +285,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testExternalPDFChangeInvalidatesCleanLoadedDocumentAndDerivedCaches() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let url = try makeSearchableTemporaryPDF(named: "hot-reload-clean", pages: ["old needle"])
         let session = try store.open(documentAt: url)
         let oldDocument = try store.pdfDocument(for: session.id)
@@ -407,11 +316,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testExternalPDFChangeReloadsEveryCleanSessionForSameURL() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let url = try makeTemporaryPDF(named: "hot-reload-duplicates", pageCount: 1)
         let first = try store.open(documentAt: url)
         let second = try store.open(documentAt: url)
@@ -428,11 +333,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testExternalPDFChangeDoesNotReloadDirtySession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let url = try makeTemporaryPDF(named: "hot-reload-dirty", pageCount: 1)
         let session = try store.open(documentAt: url)
         _ = try store.pdfDocument(for: session.id)
@@ -450,11 +351,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testExternalPDFInPlaceWriteEventReloadsCleanSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let url = try makeTemporaryPDF(named: "hot-reload-in-place", pageCount: 1)
         let session = try store.open(documentAt: url)
         let oldDocument = try store.pdfDocument(for: session.id)
@@ -470,11 +367,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testExternalPDFAtomicReplaceEventReloadsCleanSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let url = try makeTemporaryPDF(named: "hot-reload-replace", pageCount: 1)
         let session = try store.open(documentAt: url)
         let oldDocument = try store.pdfDocument(for: session.id)
@@ -492,11 +385,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testExternalPDFInPlaceWriteEventReloadsEveryCleanSessionForSameURL() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let url = try makeTemporaryPDF(named: "hot-reload-event-duplicates", pageCount: 1)
         let first = try store.open(documentAt: url)
         let second = try store.open(documentAt: url)
@@ -514,11 +403,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testExternalPDFInPlaceWriteEventDoesNotReloadDirtySession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let url = try makeTemporaryPDF(named: "hot-reload-in-place-dirty", pageCount: 1)
         let session = try store.open(documentAt: url)
         _ = try store.pdfDocument(for: session.id)
@@ -538,11 +423,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCloseActiveSessionFallsBackToPreviousSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
 
@@ -555,11 +436,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testClosingContinuousReadingTabCleansGroup() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let sessions = try store.open(
             documentsAt: [
                 makeTemporaryPDF(named: "continuous-close-first"),
@@ -582,11 +459,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCloseSessionPushesURLOntoRecentlyClosedStack() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let firstURL = try makeTemporaryPDF(named: "closed-alpha")
         let secondURL = try makeTemporaryPDF(named: "closed-beta")
         let first = try store.open(documentAt: firstURL)
@@ -603,11 +476,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testRecentlyClosedStackCapsAtTenEntriesWithoutDuplicates() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         var urls: [URL] = []
         for index in 0..<12 {
             let url = try makeTemporaryPDF(named: "stack-\(index)")
@@ -628,11 +497,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCloseActiveSessionConvenienceUsesCurrentSelection() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "close-active-alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "close-active-beta"))
 
@@ -644,11 +509,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testActivateSessionSwitchesActiveDocument() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
 
@@ -661,11 +522,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testActivatePreviousSessionWrapsAround() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "prev-alpha"))
         _ = try store.open(documentAt: makeTemporaryPDF(named: "prev-beta"))
         let third = try store.open(documentAt: makeTemporaryPDF(named: "prev-gamma"))
@@ -680,11 +537,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testActivateNextSessionWrapsAround() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "next-alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "next-beta"))
         _ = try store.open(documentAt: makeTemporaryPDF(named: "next-gamma"))
@@ -699,11 +552,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testUpdateCurrentPageMutatesOnlyTargetSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
 
@@ -716,21 +565,13 @@ final class DocumentStoreTests: XCTestCase {
 
     func testDefaultTabPresentationModeIsVerticalSidebar() {
         XCTAssertEqual(
-            DocumentStore(
-                persistence: InMemoryDocumentStorePersistence(),
-                readingStateStore: InMemoryReadingStateStore(),
-                recentFilesStore: InMemoryRecentFilesStore()
-            ).tabPresentationMode,
+            makeStore().tabPresentationMode,
             .verticalSidebar
         )
     }
 
     func testSetTabPresentationModeUpdatesStore() {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
 
         store.setTabPresentationMode(.horizontalTitlebar)
 
@@ -738,11 +579,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCloseUnknownSessionDoesNotCrashOrMutateMode() {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let unknownSessionID = UUID()
 
         store.close(sessionID: unknownSessionID)
@@ -752,11 +589,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testSetTabPresentationModeAdjustsLeftSidebarVisibility() {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
 
         store.setTabPresentationMode(.horizontalTitlebar)
         XCTAssertEqual(store.tabPresentationMode, .horizontalTitlebar)
@@ -782,11 +615,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testSidebarVisibilityChangePostsLightweightNotification() {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let recorder = DocumentStoreChangeRecorder()
         let observer = NotificationCenter.default.addObserver(
             forName: .documentStoreDidChange,
@@ -803,11 +632,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testRightSidebarModeChangePostsLightweightNotification() {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let recorder = DocumentStoreChangeRecorder()
         let observer = NotificationCenter.default.addObserver(
             forName: .documentStoreDidChange,
@@ -995,9 +820,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testOpenDocumentUsesConfiguredDefaultsWhenNoPersistedReadingStateExists() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
+        let store = makeStore(
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .twoUp, fitWidthOnOpen: false),
                 annotations: .default,
@@ -1054,10 +877,7 @@ final class DocumentStoreTests: XCTestCase {
 
     func testUpdateReadingPositionPersistsScaleAndPoint() throws {
         let readingStateStore = InMemoryReadingStateStore()
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: readingStateStore
-        )
+        let store = makeStore(readingStateStore: readingStateStore)
         let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-state"))
 
         store.updateReadingPosition(
@@ -1077,10 +897,7 @@ final class DocumentStoreTests: XCTestCase {
 
     func testUpdateReadingPositionSamePagePointDoesNotNotifyGlobalObservers() throws {
         let readingStateStore = InMemoryReadingStateStore()
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: readingStateStore
-        )
+        let store = makeStore(readingStateStore: readingStateStore)
         let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-position-notify"))
 
         let counter = NotificationCounterObserver()
@@ -1113,10 +930,7 @@ final class DocumentStoreTests: XCTestCase {
     func testPageTurnNotifiesReadingPositionWithoutRewritingWorkspacePersistence() throws {
         let persistence = InMemoryDocumentStorePersistence()
         let readingStateStore = InMemoryReadingStateStore()
-        let store = DocumentStore(
-            persistence: persistence,
-            readingStateStore: readingStateStore
-        )
+        let store = makeStore(persistence: persistence, readingStateStore: readingStateStore)
         let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-position-mask"))
         let snapshotAfterOpen = try XCTUnwrap(persistence.state)
 
@@ -1142,10 +956,7 @@ final class DocumentStoreTests: XCTestCase {
 
     func testReadingStateRemainsIndependentAcrossSessions() throws {
         let readingStateStore = InMemoryReadingStateStore()
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: readingStateStore
-        )
+        let store = makeStore(readingStateStore: readingStateStore)
         let first = try store.open(documentAt: makeTemporaryPDF(named: "first-reading-state"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "second-reading-state"))
 
@@ -1169,10 +980,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testToggleSinglePageContinuousDisplayMode() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "toggle-single-page-continuous"))
 
         store.setDisplayMode(.singlePage, for: session.id)
@@ -1188,10 +996,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testSaveAnnotationsWritesPDFAndClearsDirtyState() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "save-annotations"))
         let annotation = PDFAnnotation(
             bounds: NSRect(x: 20, y: 20, width: 60, height: 18),
@@ -1211,10 +1016,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCleanCopyDataDoesNotMutateSessionDocumentOrDirtyState() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "clean-copy-data"))
         let document = try store.pdfDocument(for: session.id)
         let page = try XCTUnwrap(document.page(at: 0))
@@ -1243,10 +1045,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testWriteCleanCopyDoesNotOverwriteSourcePDF() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "write-clean-copy"))
         let document = try store.pdfDocument(for: session.id)
         let page = try XCTUnwrap(document.page(at: 0))
@@ -1271,10 +1070,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testAnnotationSectionsExposeSnippetColorAndPageGrouping() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "annotation-sections",
             pages: ["alpha beta gamma", "delta epsilon"]
@@ -1294,10 +1090,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testAddingHighlightDoesNotBuildAnnotationCacheBeforeAnnotationsPaneLoads() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "annotation-cache-stays-lazy",
             pages: ["alpha beta gamma"]
@@ -1313,10 +1106,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testLoadedAnnotationCacheUpdatesIncrementallyForAddedAndRemovedHighlights() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "annotation-cache-incremental",
             pages: ["alpha beta gamma"]
@@ -1343,10 +1133,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testLoadedAnnotationCacheTracksUndoAndRedo() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "annotation-cache-undo-redo",
             pages: ["alpha beta gamma"]
@@ -1366,10 +1153,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testHasHighlightsDoesNotBuildAnnotationCache() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "highlight-menu-validation"))
         let annotation = PDFAnnotation(
             bounds: NSRect(x: 20, y: 20, width: 60, height: 18),
@@ -1384,10 +1168,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testUpdateCommentPersistsAcrossHighlightGroupAndMarksSessionDirty() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "annotation-comment",
             pages: ["alpha beta gamma"]
@@ -1411,10 +1192,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testUpdateAppConfigurationAppliesNewDefaultsToFutureSessions() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         let firstSession = try store.open(documentAt: makeTemporaryPDF(named: "settings-first"))
 
         store.updateAppConfiguration(
@@ -1437,10 +1215,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testUpdateAppConfigurationAppliesLayoutWidthsToWindowRuntimeState() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore()
-        )
+        let store = makeStore()
         _ = try store.open(documentAt: makeTemporaryPDF(named: "settings-layout-widths"))
         store.updateSidebarWidths(left: 180, right: 260, in: store.defaultWindowID)
 
@@ -1466,9 +1241,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testUpdateAppConfigurationDisablingFitWidthFlipsExistingSessionsToManual() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
+        let store = makeStore(
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: true),
                 annotations: .default,
@@ -1497,8 +1270,7 @@ final class DocumentStoreTests: XCTestCase {
 
     func testUserZoomAfterFitWidthOnOpenPinsManualScale() throws {
         let readingStateStore = InMemoryReadingStateStore()
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
+        let store = makeStore(
             readingStateStore: readingStateStore,
             appConfiguration: AppConfiguration(
                 reader: .init(defaultDisplayMode: .singlePageContinuous, fitWidthOnOpen: true),
@@ -1559,11 +1331,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testSplitWorkspaceRoutesActiveSessionByFocusedPane() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "split-second"))
         let windowID = store.defaultWindowID
@@ -1588,11 +1356,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testBrowserSplitPairHidesAndRestoresAroundOtherTabs() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-pair-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "split-pair-second"))
         let third = try store.open(documentAt: makeTemporaryPDF(named: "split-pair-third"))
@@ -1619,11 +1383,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testOptionActivationReplacesFocusedSplitPane() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-option-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "split-option-second"))
         let third = try store.open(documentAt: makeTemporaryPDF(named: "split-option-third"))
@@ -1640,11 +1400,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testSplitWithSingleSessionCreatesIndependentComparisonSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "split-single-duplicate"))
         let windowID = store.defaultWindowID
 
@@ -1691,11 +1447,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testActivatingSameSessionIntoOtherPaneReusesExistingComparisonSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         _ = try store.open(documentAt: makeTemporaryPDF(named: "split-reuse-duplicate"))
         let windowID = store.defaultWindowID
 
@@ -1712,11 +1464,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testDisablingSplitRemovesAutoCreatedComparisonSession() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "split-disable-cleans-clone"))
         let windowID = store.defaultWindowID
 
@@ -1733,11 +1481,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCreateWindowStartsEmptyButKeepsIndependentUIState() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "window-copy-first"))
         _ = try store.open(documentAt: makeTemporaryPDF(named: "window-copy-second"))
         let sourceWindowID = store.defaultWindowID
@@ -1767,11 +1511,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testOpeningAndClosingSessionsStayScopedToTheirWindow() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "window-scope-first"))
         let sourceWindowID = store.defaultWindowID
         let copiedWindowID = store.createWindow(copyingFrom: sourceWindowID)
@@ -1794,11 +1534,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testClosingEmptyWindowKeepsOtherWindowSessionsIntact() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "window-close-source"))
         let sourceWindowID = store.defaultWindowID
         let copiedWindowID = store.createWindow(copyingFrom: sourceWindowID)
@@ -1813,11 +1549,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMergeAllWindowsMovesSessionsIntoTargetWindow() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "merge-window-first"))
         let targetWindowID = store.defaultWindowID
         let secondWindowID = store.createWindow(copyingFrom: targetWindowID)
@@ -1831,11 +1563,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMoveActiveSessionToNewWindowDetachesOnlyCurrentPDF() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "detach-window-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "detach-window-second"))
         let sourceWindowID = store.defaultWindowID
@@ -1849,11 +1577,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMoveActiveComparisonSessionToNewWindowMovesPublicPDF() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-new-window"))
         let sourceWindowID = store.defaultWindowID
         store.activate(sessionID: pdf.id, in: sourceWindowID, targetPane: .secondary)
@@ -1873,11 +1597,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMoveComparisonSessionToExistingWindowMovesPublicPDF() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-existing-window"))
         let sourceWindowID = store.defaultWindowID
         let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
@@ -1947,11 +1667,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMoveSessionRepairsSourceSelectionContinuousReadingAndSplitPair() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "move-state-first"))
         let moved = try store.open(documentAt: makeTemporaryPDF(named: "move-state-current"))
         _ = try store.open(documentAt: makeTemporaryPDF(named: "move-state-third"))
@@ -1975,11 +1691,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMoveSessionRejectsBlankSameWindowAndUnknownTargets() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-invalid-pdf"))
         let blank = store.newBlankTab()
         let sourceWindowID = store.defaultWindowID
@@ -1993,11 +1705,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMoveLastSessionKeepsSourceWindowEmpty() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let moved = try store.open(documentAt: makeTemporaryPDF(named: "move-last-session"))
         let sourceWindowID = store.defaultWindowID
         let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
@@ -2011,11 +1719,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testAllOpenSearchBuildsSectionsAcrossSessions() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let alphaURL = try makeSearchableTemporaryPDF(
             named: "alpha-search",
             pages: ["alpha needle one", "shared beta needle"]
@@ -2038,11 +1742,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testClearSearchResetsCachesAndSidebarMode() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let firstURL = try makeSearchableTemporaryPDF(
             named: "clear-search-first",
             pages: ["clearable token", "second token"]
@@ -2066,11 +1766,7 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testCurrentDocumentSearchOnTwoHundredPagesStaysUnderHalfSecond() throws {
-        let store = DocumentStore(
-            persistence: InMemoryDocumentStorePersistence(),
-            readingStateStore: InMemoryReadingStateStore(),
-            recentFilesStore: InMemoryRecentFilesStore()
-        )
+        let store = makeStore()
         let pages = (0..<220).map { index in
             "performance needle page \(index) repeated needle"
         }

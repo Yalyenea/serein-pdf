@@ -11,7 +11,8 @@ struct WindowChromeTests {
     @Test
     func mainWindowDoesNotUseAppKitStateRestoration() {
         _ = NSApplication.shared
-        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
+        defer { controller.close() }
 
         #expect(controller.window?.isRestorable == false)
     }
@@ -59,8 +60,9 @@ struct WindowChromeTests {
     @Test
     func verticalTabsDetachToolbarStrip() {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         controller.window?.layoutIfNeeded()
 
         #expect(controller.window?.toolbar == nil)
@@ -77,8 +79,9 @@ struct WindowChromeTests {
     @Test
     func horizontalTabsHideWhenLeftSidebarReturns() {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
 
         store.setTabPresentationMode(.horizontalTitlebar)
         controller.window?.layoutIfNeeded()
@@ -91,7 +94,7 @@ struct WindowChromeTests {
 
     @Test
     func horizontalTabsUseAdaptiveToolbarStripSize() throws {
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDF(named: "short"))
         let controller = TitlebarTabsController(documentStore: store)
         controller.loadViewIfNeeded()
@@ -117,7 +120,7 @@ struct WindowChromeTests {
     @Test
     func titlebarTabsMoveDroppedPDFToExistingWindow() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let sourceAnchor = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-drag-source-anchor"))
         let moved = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-drag-moved"))
         let sourceWindowID = store.defaultWindowID
@@ -148,7 +151,7 @@ struct WindowChromeTests {
     @Test
     func titlebarPDFTabUsesDragSourceAsPrimaryHitTarget() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-drag-hit-target"))
         let controller = TitlebarTabsController(documentStore: store)
         controller.loadViewIfNeeded()
@@ -160,7 +163,7 @@ struct WindowChromeTests {
     @Test
     func transparentTitlebarDragAreaIsReservedBeforePDFContent() throws {
         _ = NSApplication.shared
-        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
         defer { controller.close() }
         let window = try #require(controller.window as? ReaderShortcutWindow)
         let contentView = try #require(window.contentView)
@@ -179,7 +182,7 @@ struct WindowChromeTests {
     @Test
     func transparentTitlebarDragDoesNotStealWindowControlsOrTitlebarTabs() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let window = try #require(controller.window as? ReaderShortcutWindow)
@@ -203,7 +206,7 @@ struct WindowChromeTests {
     @Test
     func leftCommandNumberActivatesTabInOwningWindowOrderIncludingBlankTabs() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let firstWindowID = store.defaultWindowID
         let firstWindowSession = try store.open(
             documentAt: makeTemporaryPDF(named: "numbered-tab-first-window"),
@@ -247,7 +250,7 @@ struct WindowChromeTests {
         app.appearance = NSAppearance(named: .darkAqua)
         defer { app.appearance = previousAppearance }
 
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "night-mode-live-pdf"))
         let controller = ReaderViewController(documentStore: store)
         controller.targetSessionID = session.id
@@ -260,7 +263,7 @@ struct WindowChromeTests {
     @Test
     func readerHidesPDFKitDocumentTreeFromAccessibilityInspection() {
         _ = NSApplication.shared
-        let controller = ReaderViewController(documentStore: DocumentStore(appConfiguration: .default))
+        let controller = ReaderViewController(documentStore: makeIsolatedDocumentStore())
         controller.loadViewIfNeeded()
 
         #expect(controller.pdfView.isAccessibilityElement() == false)
@@ -270,7 +273,7 @@ struct WindowChromeTests {
     @Test
     func readingFocusOnlyRunsForLivePDFContent() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = ReaderViewController(documentStore: store)
         controller.loadViewIfNeeded()
 
@@ -298,7 +301,7 @@ struct WindowChromeTests {
     @Test
     func readingFocusModeIsWindowLocalAndSynchronizesSplitReaders() {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let firstWorkspace = ReaderWorkspaceViewController(
             documentStore: store,
             windowID: store.defaultWindowID
@@ -333,7 +336,7 @@ struct WindowChromeTests {
             customWidthRatio: 0.72,
             height: 96
         )
-        let store = DocumentStore(appConfiguration: configuration)
+        let store = makeIsolatedDocumentStore(appConfiguration: configuration)
         let workspace = ReaderWorkspaceViewController(
             documentStore: store,
             windowID: store.defaultWindowID
@@ -368,7 +371,7 @@ struct WindowChromeTests {
     @Test
     func highlightModeUsesCompactInlineIndicator() {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = ReaderViewController(documentStore: store)
         controller.loadViewIfNeeded()
 
@@ -386,7 +389,7 @@ struct WindowChromeTests {
     @Test
     func switchingPDFShowsBriefFileNameToast() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
 
@@ -415,7 +418,7 @@ struct WindowChromeTests {
         app.appearance = NSAppearance(named: .darkAqua)
         defer { app.appearance = previousAppearance }
 
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "night-mode-background"))
@@ -468,7 +471,7 @@ struct WindowChromeTests {
         app.appearance = NSAppearance(named: .aqua)
         defer { app.appearance = previousAppearance }
 
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "night-mode-transition"))
@@ -521,7 +524,7 @@ struct WindowChromeTests {
             app.appearance = previousAppearance
         }
 
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "theme-refresh-light"))
@@ -594,7 +597,7 @@ struct WindowChromeTests {
             app.appearance = previousAppearance
         }
 
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "theme-refresh-outline"))
@@ -659,7 +662,7 @@ struct WindowChromeTests {
             )
         }
 
-        let controller = SplitViewController(documentStore: DocumentStore(appConfiguration: .default))
+        let controller = SplitViewController(documentStore: makeIsolatedDocumentStore())
         controller.loadViewIfNeeded()
 
         for key in legacyKeys {
@@ -671,8 +674,9 @@ struct WindowChromeTests {
     @Test
     func documentStoreRefreshKeepsAdjustedRightSidebarWidth() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let mainWindowController = MainWindowController(documentStore: store)
+        defer { mainWindowController.close() }
         guard let window = mainWindowController.window,
               let controller = window.contentViewController as? SplitViewController else {
             Issue.record("Failed to create main split view")
@@ -698,8 +702,9 @@ struct WindowChromeTests {
     @Test
     func collapsedRightSidebarStaysCollapsedAfterStoreRefresh() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(documentAt: makeTemporaryPDF(named: "collapsed-right-sidebar"))
         flushLayout(controller.window)
 
@@ -725,8 +730,9 @@ struct WindowChromeTests {
     @Test
     func switchingRightSidebarModesKeepsUnifiedSidebarWidth() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "right-sidebar-mode-width"))
         flushLayout(controller.window)
 
@@ -762,8 +768,9 @@ struct WindowChromeTests {
     @Test
     func switchingBetweenSearchAndAnnotationsKeepsUnifiedWidthWithRealContent() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let windowID = controller.windowID
         let session = try store.open(
             documentAt: makeSelectableTemporaryPDF(
@@ -815,7 +822,7 @@ struct WindowChromeTests {
     @Test
     func switchingTabsKeepsWindowSidebarWidths() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
 
@@ -842,8 +849,9 @@ struct WindowChromeTests {
     @Test
     func hiddenVerticalTabsStayHiddenAcrossSessionActivation() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let first = try store.open(documentAt: makeTemporaryPDF(named: "hidden-tabs-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "hidden-tabs-second"))
         flushLayout(controller.window)
@@ -863,8 +871,9 @@ struct WindowChromeTests {
     @Test
     func readerSplitToggleCanEnableAndDisableAgain() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "split-toggle"))
         controller.window?.layoutIfNeeded()
 
@@ -883,7 +892,7 @@ struct WindowChromeTests {
     @Test
     func readerSplitSwitchesAxisWithoutChangingPaneSessions() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-axis-first"))
@@ -948,8 +957,9 @@ struct WindowChromeTests {
     @Test
     func alternateTabActivationUsesBrowserSplitEditSemantics() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-second"))
         let third = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-third"))
@@ -979,8 +989,9 @@ struct WindowChromeTests {
     @Test
     func immersiveShortcutClosesAnyVisibleSidebarAndOpensBothWhenNoneVisible() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let windowID = controller.windowID
         _ = try store.open(documentAt: makeTemporaryPDF(named: "immersive-toggle"))
 
@@ -1015,8 +1026,9 @@ struct WindowChromeTests {
     @Test
     func demoModeEntersImmersiveModeAndRestoresPreviousImmersiveState() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let windowID = controller.windowID
         _ = try store.open(documentAt: makeTemporaryPDF(named: "demo-mode"))
 
@@ -1048,8 +1060,9 @@ struct WindowChromeTests {
     @Test
     func demoModeFitsEntirePageAndRestoresReaderState() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "demo-fit-page",
@@ -1093,8 +1106,9 @@ struct WindowChromeTests {
     @Test
     func demoModeLeavesPreexistingImmersiveModeEnabledOnExit() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let windowID = controller.windowID
         _ = try store.open(documentAt: makeTemporaryPDF(named: "demo-from-immersive"))
 
@@ -1115,8 +1129,9 @@ struct WindowChromeTests {
     @Test
     func escapeExitsDemoModeAndRestoresPreviousChromeState() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let windowID = controller.windowID
         _ = try store.open(documentAt: makeTemporaryPDF(named: "escape-demo-mode"))
 
@@ -1144,8 +1159,9 @@ struct WindowChromeTests {
     @Test
     func closeFocusedPaneInSplitCollapsesToSinglePane() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-close-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "split-close-second"))
         let windowID = controller.windowID
@@ -1171,8 +1187,9 @@ struct WindowChromeTests {
     @Test
     func closeDuplicatedSplitPaneKeepsSingleDocumentOpen() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(documentAt: makeTemporaryPDF(named: "split-duplicate"))
         let windowID = controller.windowID
 
@@ -1195,8 +1212,9 @@ struct WindowChromeTests {
     @Test
     func closeCommandClosesMultipleSelectedTabs() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let first = try store.open(documentAt: makeTemporaryPDF(named: "batch-close-first"))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "batch-close-second"))
         let third = try store.open(documentAt: makeTemporaryPDF(named: "batch-close-third"))
@@ -1216,8 +1234,9 @@ struct WindowChromeTests {
     @Test
     func readerSplitPreservesAdjustedDividerPositionAcrossStoreRefresh() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-divider-first"))
         _ = try store.open(documentAt: makeTemporaryPDF(named: "split-divider-second"))
         let windowID = controller.windowID
@@ -1250,8 +1269,9 @@ struct WindowChromeTests {
     @Test
     func horizontalTitlebarModeCanOpenDocument() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
 
         store.setTabPresentationMode(.horizontalTitlebar)
         store.setLeftSidebarVisible(false)
@@ -1267,8 +1287,9 @@ struct WindowChromeTests {
     @Test
     func outlineSelectionNavigatesReaderToTargetPage() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "outline-navigation"))
         flushLayout(controller.window)
 
@@ -1292,7 +1313,7 @@ struct WindowChromeTests {
     @Test
     func continuousReadingNextPageActivatesNextPDF() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let sessions = try store.open(
@@ -1316,7 +1337,7 @@ struct WindowChromeTests {
     @Test
     func continuousReadingPreviousPageActivatesPreviousPDFLastPage() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let sessions = try store.open(
@@ -1348,8 +1369,9 @@ struct WindowChromeTests {
         var configuration = AppConfiguration.default
         configuration.reader.defaultDisplayMode = .singlePage
         configuration.reader.fitWidthOnOpen = true
-        let store = DocumentStore(appConfiguration: configuration)
+        let store = makeIsolatedDocumentStore(appConfiguration: configuration)
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
 
         let session = try store.open(
             documentAt: makeTemporaryPDF(
@@ -1373,8 +1395,9 @@ struct WindowChromeTests {
     @Test
     func readerWorkspaceStartsCollapsedWhenSplitDisabled() {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         controller.window?.layoutIfNeeded()
 
         guard let splitController = controller.window?.contentViewController as? SplitViewController,
@@ -1397,8 +1420,9 @@ struct WindowChromeTests {
     @Test
     func enablingSplitFitsBothReadersToPaneWidth() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let first = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "split-fit-first",
@@ -1585,7 +1609,7 @@ struct WindowChromeTests {
         _ = NSApplication.shared
         var configuration = AppConfiguration.default
         configuration.layout.sidebarOpacity = 0.44
-        let store = DocumentStore(appConfiguration: configuration)
+        let store = makeIsolatedDocumentStore(appConfiguration: configuration)
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-opacity"))
@@ -1646,7 +1670,8 @@ struct WindowChromeTests {
 
     @Test
     func mainWindowUsesUpdatedReaderFramingDefaults() {
-        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
+        defer { controller.close() }
         let contentSize = controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size
 
         #expect(contentSize == MainWindowController.defaultContentSize)
@@ -1656,7 +1681,7 @@ struct WindowChromeTests {
     @Test
     func mainWindowSupportsSystemGreenButtonTilingActions() throws {
         _ = NSApplication.shared
-        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
         defer { controller.close() }
         let window = try #require(controller.window)
 
@@ -1674,7 +1699,7 @@ struct WindowChromeTests {
     @Test
     func singlePageZoomedOutDocumentStaysCentered() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let session = try store.open(
@@ -1703,7 +1728,7 @@ struct WindowChromeTests {
     @Test
     func continuousZoomedOutDocumentStaysHorizontallyCentered() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let session = try store.open(
@@ -1737,8 +1762,9 @@ struct WindowChromeTests {
     @Test
     func singlePageFitPageCentersWideSlideOnBothAxes() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "single-page-fit-slide-centered",
@@ -1763,8 +1789,9 @@ struct WindowChromeTests {
     @Test
     func singlePageFullyVisibleSlideRejectsBlankAreaScroll() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "single-page-slide-scroll-clamp",
@@ -1799,8 +1826,9 @@ struct WindowChromeTests {
     @Test
     func singlePageOversizedPageStillAllowsViewportScroll() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "single-page-large-page-scroll",
@@ -1829,7 +1857,7 @@ struct WindowChromeTests {
     @Test
     func horizontalPanLockCentersAndBlocksHorizontalScroll() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let session = try store.open(
@@ -1893,7 +1921,7 @@ struct WindowChromeTests {
         app.appearance = NSAppearance(named: .aqua)
         defer { app.appearance = previousAppearance }
 
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let session = try store.open(
@@ -1981,8 +2009,9 @@ struct WindowChromeTests {
     @Test
     func halfPageScrollDoesNotDriftAfterSettling() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "half-page-scroll-settle",
@@ -2025,8 +2054,9 @@ struct WindowChromeTests {
     @Test
     func halfPageScrollDoesNotDriftAfterSettlingWithOutlineSidebarVisible() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "half-page-scroll-outline"))
         flushLayout(controller.window)
 
@@ -2087,8 +2117,9 @@ struct WindowChromeTests {
         ]
 
         for scenario in scenarios {
-            let store = DocumentStore(appConfiguration: .default)
+            let store = makeIsolatedDocumentStore()
             let controller = MainWindowController(documentStore: store)
+            defer { controller.close() }
             let session = try store.open(
                 documentAt: makeTemporaryPDF(named: scenario.name, pageSizes: scenario.pageSizes)
             )
@@ -2118,8 +2149,9 @@ struct WindowChromeTests {
     @Test
     func fitHeightUsesPDFKitRowHeight() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "fit-height",
@@ -2145,8 +2177,9 @@ struct WindowChromeTests {
     @Test
     func pdfScrollViewDisablesElasticity() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         _ = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "scroll-elasticity",
@@ -2170,8 +2203,9 @@ struct WindowChromeTests {
     @Test
     func highlightingAfterZoomKeepsManualScale() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let url = try makeSelectableTemporaryPDF(named: "highlight-zoom-stability", text: "Hello DeepSeek world")
         let session = try store.open(documentAt: url)
         flushLayout(controller.window)
@@ -2203,8 +2237,9 @@ struct WindowChromeTests {
     @Test
     func highlightingAfterDirectPDFViewScaleChangeKeepsManualScale() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let url = try makeSelectableTemporaryPDF(named: "highlight-direct-scale-stability", text: "Hello DeepSeek world")
         let session = try store.open(documentAt: url)
         flushLayout(controller.window)
@@ -2239,8 +2274,9 @@ struct WindowChromeTests {
     @Test
     func pageTurnKeepsManualScale() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "page-turn-manual-scale",
@@ -2275,8 +2311,9 @@ struct WindowChromeTests {
     @Test
     func pageTurnFromFitWidthKeepsLiveScaleWhenPageShapeChanges() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "page-turn-fit-width-scale",
@@ -2311,8 +2348,9 @@ struct WindowChromeTests {
     @Test
     func rapidPageTurnsSettleWithoutResidualDrift() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "rapid-page-turn-settle",
@@ -2352,8 +2390,9 @@ struct WindowChromeTests {
     @Test
     func highlightingKeepsLiveManualScaleWhenStoreMissedScaleChange() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let url = try makeSelectableTemporaryPDF(named: "highlight-stale-scale-store", text: "Hello DeepSeek world")
         let session = try store.open(documentAt: url)
         flushLayout(controller.window)
@@ -2395,8 +2434,9 @@ struct WindowChromeTests {
     @Test
     func storeRefreshKeepsLivePageWhenStoreMissedPageChange() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "stale-page-store",
@@ -2451,7 +2491,7 @@ struct WindowChromeTests {
     @Test
     func hotReloadKeepsLivePageWhenStoreMissedPageChange() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let pageSize = NSSize(width: 720, height: 900)
@@ -2504,8 +2544,9 @@ struct WindowChromeTests {
     @Test
     func fitWidthSkipsProgrammaticReapplyWhenTargetScaleIsAlreadyActive() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "fit-width-stable-refresh",
@@ -2534,7 +2575,7 @@ struct WindowChromeTests {
     @Test
     func emptyReaderShowsOnboardingHintWhenNoDocumentIsOpen() {
         _ = NSApplication.shared
-        let controller = MainWindowController(documentStore: DocumentStore(appConfiguration: .default))
+        let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
         defer { controller.close() }
         flushLayout(controller.window)
 
@@ -2554,7 +2595,7 @@ struct WindowChromeTests {
     @Test
     func emptyReaderHidesOnboardingWhenDocumentOpens() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-state-onboarding"))
@@ -2572,7 +2613,7 @@ struct WindowChromeTests {
     @Test
     func blankTabShowsOnboardingHintWithoutErrorDetails() throws {
         _ = NSApplication.shared
-        let store = DocumentStore(appConfiguration: .default)
+        let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         _ = store.newBlankTab()

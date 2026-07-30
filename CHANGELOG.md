@@ -6,6 +6,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Reliability
 - Test hygiene: stop several UI suites from writing real UserDefaults; kill false-green hot-reload / title / library / vim-grid / autosave assertions; share in-memory store doubles.
+- Further test isolation: DocumentStoreTests always injects in-memory recent/persistence; WindowChrome closes every main window and uses isolated stores; NightModeStyleTests restores global theme after each case.
 
 ### Reading
 - Center the PDF horizontally when zoomed out so the page is narrower than the viewport (continuous and two-up modes, not only Single Page).
