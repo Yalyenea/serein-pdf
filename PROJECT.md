@@ -49,6 +49,7 @@ flowchart LR
     C --> G["TitlebarTabsController"]
     E --> E1["Primary ReaderViewController"]
     E --> E2["Secondary ReaderViewController"]
+    E --> E3["FloatingOutlineViewController"]
     F --> F1["OutlineViewController"]
     F --> F2["PDFThumbnailView (Pages)"]
     F --> F3["SearchResultsViewController"]
@@ -79,7 +80,7 @@ flowchart LR
 | 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,支持合并窗口,并通过菜单或 tab 拖拽把 PDF 原样移到新窗口 / 已有窗口 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
-| 目录来源 | 右栏需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
+| 目录来源 | 右栏或浮动目录需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
 | 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
@@ -109,21 +110,21 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏 |
-| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持一键折叠 / 展开;所有预览类内容都在右栏,不回流到中栏 |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;Outline pane 隐藏且当前 PDF 有目录时,右缘显示标题短横线,hover 后覆盖展开完整目录;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
+| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持一键折叠 / 展开;所有预览类内容都在右栏,仅隐藏态浮动目录可覆盖中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
 
 - 紧凑布局,轻量圆角,无厚重阴影
-- 侧栏平铺嵌入,最多保留一条淡分割线(禁悬浮 / 液态玻璃 / 漂浮面板感)
+- 常规侧栏平铺嵌入,最多保留一条淡分割线;右栏隐藏态的浮动目录保持轻描边、紧凑、无厚重阴影
 - 按钮 / tab 视觉重量轻,突出选中态
 - 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
 - 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
 - `rose_pine_dawn` 仅把 PDF 白底映射成接近 Obsidian 的暖纸色,保留正文与图表原色;侧栏使用不透明的扁平主题表面
 - `rose_pine_moon` 把 PDF 白底 / 黑字映射到 Moon 纸面 / 正文端点,保留暖冷强调色方向,并用更深的侧栏底色建立层级
-- `Settings` 按当前页内容自适应尺寸,`General` 页可编辑左右侧栏默认宽度,`Shortcuts` 页会自动放大到合适大小
+- `Settings` 按当前页内容自适应尺寸,`General` 页可编辑左右侧栏默认宽度和浮动目录默认高度,`Shortcuts` 页会自动放大到合适大小
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
 - 阅读聚焦使用单一圆角矩形镂空与统一外围压暗,禁止多方向渐变拼接;轻描边 / 阴影只强化焦点边界,不得污染框内文字
@@ -324,6 +325,7 @@ UI/TitlebarTabs/                          # 标题栏水平 tabs
 
 UI/CenterReader/                          # 中栏阅读区
   ReaderWorkspaceViewController.swift     # 中栏 workspace:单 / 双 Reader 分屏 + 焦点 pane
+  FloatingOutlineViewController.swift     # 右栏隐藏时的 Notion 式目录 rail + hover / 高度拖拽 overlay
   ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
   PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
   ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何
@@ -369,6 +371,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   RecentFilesStoreTests.swift             # 最近文件栈
   OutlineExtractorTests.swift             # PDF outline 解析
   OutlineViewControllerTests.swift        # 目录树视图交互
+  FloatingOutlineViewControllerTests.swift # 浮动目录显隐 / hover / 高度拖拽 / swap / 跳页 / overlay 布局
   VerticalTabsViewControllerTests.swift   # 左栏 tabs 行为
   TitlebarTabsControllerTests.swift       # (若存在)标题栏 tabs 行为,否则见 WindowChromeTests
   RightSidebarViewControllerTests.swift   # 右栏 segmented 切换

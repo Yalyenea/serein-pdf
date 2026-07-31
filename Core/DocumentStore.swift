@@ -152,6 +152,12 @@ final class DocumentStore {
         windowWorkspace(for: windowID)?.isRightSidebarVisible ?? true
     }
 
+    func isOutlineSidebarVisible(in windowID: UUID) -> Bool {
+        appConfiguration.layout.sidebarsSwapped
+            ? isLeftSidebarVisible(in: windowID)
+            : isRightSidebarVisible(in: windowID)
+    }
+
     func sidebarWidths(in windowID: UUID) -> (left: CGFloat, right: CGFloat) {
         guard let workspace = windowWorkspace(for: windowID) else {
             return (appConfiguration.layout.leftSidebarWidth, appConfiguration.layout.rightSidebarWidth)

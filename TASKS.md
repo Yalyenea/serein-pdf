@@ -56,6 +56,7 @@
 - 左侧 tabs 栏底部可选显示 recent PDFs 快捷入口(设置可开关)
 - 水平 tab 复用标题栏,不单独开行,可见宽度随标题内容自适应
 - 右栏支持 Outline / Pages / Search / Annotations,`Cmd+Shift+L` 仍在 Outline / Pages 间切换;Outline 随侧栏宽度收缩且无水平滑动,目录树可一键折叠 / 展开
+- Outline pane 关闭且当前 PDF 有目录时,阅读区右缘显示 Notion 式标题短横线;hover 覆盖展开完整目录,拖动上下边缘时以中心对称调节高度并在当前窗口内记忆,全局默认值由 `layout.floating_outline_height` 控制;移开收起,点击沿用现有跳页 / 连续阅读语义,不得改变阅读区宽度与 PDF scale
 - 左右侧栏可见性切换只触发 chrome 布局更新,不得重建 reader / tabs / outline / search / annotations 数据;开关后按窗口 preferred 宽度对齐侧栏,中栏拿走剩余宽度并 reflow fit-width/fit-height PDF,禁止侧栏覆盖阅读区
 - `Cmd+L` 进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
 - `Cmd+Ctrl+L`:仅当左右侧栏都关闭时打开两个侧栏;其他任一状态关闭两个侧栏与 tab chrome
@@ -332,6 +333,7 @@
 - [x] `M12-008` 重复打开收口:系统 `open`、Open Recent、PDF Library 与 `Cmd+O` 遇到已打开 PDF 时切回已有 window/session,不创建重复普通 tab。
 - [x] `M12-009` 中栏空窗统一引导:无 PDF / 空白 tab 时,中栏显示主文案 + `⌘O` / 最近文件快捷键提示 + 拖放 PDF 打开;错误态只显示错误信息。
 - [x] `M12-015` 文档侧栏空白区域拖窗:只让背景接管窗口拖动,不抢 tab、关闭按钮、divider、滚动与跨窗 tab 拖拽。
+- [x] `M12-016` Notion 式浮动目录:Outline pane 隐藏时以标题短横线常驻阅读区右缘,hover 覆盖展开现有完整目录;上下边缘以中心对称调节当前窗口高度,General / TOML 配置全局默认值;支持 swap / 连续阅读 / 点击跳页,无目录时隐藏且不改变 reader framing。
 - [ ] `M12-010` 空窗侧栏占比收口:无 session 时自动折叠侧栏或采用更窄默认宽度,把引导集中到中栏。
 - [ ] `M12-011` 右栏空窗 chrome 弱化:无文档时隐藏 / disable segmented 与 Outline 操作控件,避免「已就绪但未加载」噪音。
 - [ ] `M12-012` 左栏空态层次增强:补 `Documents` section 标题;空态时上移 Recent 列表或在中栏同步展示快捷入口。

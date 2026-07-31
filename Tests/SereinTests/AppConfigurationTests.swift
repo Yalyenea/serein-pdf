@@ -13,6 +13,7 @@ final class AppConfigurationTests: XCTestCase {
             // Full default surface: laundry-list key checks live in
             // testConfigKeyListsStayInSyncAndMissingKeysSelfHeal.
             XCTAssertEqual(configuration, .default)
+            XCTAssertEqual(configuration.layout.floatingOutlineHeight, 360, accuracy: 0.001)
         }
     }
 
@@ -78,6 +79,7 @@ move_current_pdf_to_new_window = "command+option+n"
 [layout]
 show_recent_files_in_sidebar = false
 sidebar_opacity = 0.42
+floating_outline_height = 480
 
 [library]
 folders = ["/tmp/Books", "/tmp/Papers"]
@@ -132,6 +134,7 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.moveCurrentPDFToNewWindow], KeyboardShortcut(key: "n", modifiers: [.command, .option]))
         XCTAssertFalse(configuration.layout.showRecentFilesInSidebar)
         XCTAssertEqual(configuration.layout.sidebarOpacity, 0.42, accuracy: 0.001)
+        XCTAssertEqual(configuration.layout.floatingOutlineHeight, 480, accuracy: 0.001)
         XCTAssertEqual(
             configuration.library.folderURLs.map(\.path),
             ["/tmp/Books", "/tmp/Papers"]
@@ -151,6 +154,21 @@ open_library_pdf = "command+option+o"
             guard case AppConfigurationError.invalidOpacity = error else {
                 XCTFail("Unexpected error: \(error)")
                 return
+            }
+        }
+    }
+
+    func testParserRejectsOutOfRangeFloatingOutlineHeight() {
+        let parser = AppConfigurationParser()
+
+        for value in [179, 721] {
+            XCTAssertThrowsError(
+                try parser.parse("[layout]\nfloating_outline_height = \(value)")
+            ) { error in
+                guard case AppConfigurationError.invalidFloatingOutlineHeight = error else {
+                    XCTFail("Unexpected error: \(error)")
+                    return
+                }
             }
         }
     }
@@ -344,6 +362,7 @@ fit_width = "command+9"
             "every shortcut key must be self-healable via requiredKeys"
         )
         XCTAssertTrue(required.contains("new_blank_tab"))
+        XCTAssertTrue(required.contains("floating_outline_height"))
 
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -403,6 +422,7 @@ fit_width = "command+9"
             height: 128
         )
         configuration.annotations.autoSavePolicy = .never
+        configuration.layout.floatingOutlineHeight = 540
         configuration.library.folderURLs = [
             URL(fileURLWithPath: "/tmp/Books"),
             URL(fileURLWithPath: "/tmp/Papers"),
@@ -427,6 +447,7 @@ fit_width = "command+9"
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.customWidthRatio, 0.58, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.height, 128, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.annotations.autoSavePolicy, .never)
+        XCTAssertEqual(reloadedConfiguration.layout.floatingOutlineHeight, 540, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.library.folderURLs.map(\.path), ["/tmp/Books", "/tmp/Papers"])
         XCTAssertEqual(reloadedConfiguration.access.rootURLs.map(\.path), ["/Users"])
         XCTAssertEqual(reloadedConfiguration.access.rootBookmarkData["/Users"], Data("users-bookmark".utf8))
@@ -438,6 +459,7 @@ fit_width = "command+9"
         XCTAssertTrue(persistedContent.contains("reading_focus_width = \"custom\""))
         XCTAssertTrue(persistedContent.contains("reading_focus_custom_width = 0.58"))
         XCTAssertTrue(persistedContent.contains("reading_focus_height = 128"))
+        XCTAssertTrue(persistedContent.contains("floating_outline_height = 540"))
         XCTAssertTrue(persistedContent.contains("auto_save = \"never\""))
         XCTAssertTrue(persistedContent.contains("folders = [\"/tmp/Books\", \"/tmp/Papers\"]"))
         XCTAssertTrue(persistedContent.contains("roots = [\"/Users\"]"))

@@ -1310,6 +1310,7 @@ final class DocumentStoreTests: XCTestCase {
         store.updateSidebarWidths(left: 40, right: 320, in: store.defaultWindowID)
         store.setLeftSidebarVisible(true)
         store.setRightSidebarVisible(false)
+        XCTAssertFalse(store.isOutlineSidebarVisible(in: store.defaultWindowID))
 
         var swappedConfig = store.appConfiguration
         swappedConfig.layout.sidebarsSwapped = true
@@ -1319,6 +1320,11 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).right, 40)
         XCTAssertFalse(store.isLeftSidebarVisible)
         XCTAssertTrue(store.isRightSidebarVisible)
+        XCTAssertFalse(store.isOutlineSidebarVisible(in: store.defaultWindowID))
+
+        store.setLeftSidebarVisible(true)
+        XCTAssertTrue(store.isOutlineSidebarVisible(in: store.defaultWindowID))
+        store.setLeftSidebarVisible(false)
 
         var unswappedConfig = store.appConfiguration
         unswappedConfig.layout.sidebarsSwapped = false
@@ -1328,6 +1334,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sidebarWidths(in: store.defaultWindowID).right, 320)
         XCTAssertTrue(store.isLeftSidebarVisible)
         XCTAssertFalse(store.isRightSidebarVisible)
+        XCTAssertFalse(store.isOutlineSidebarVisible(in: store.defaultWindowID))
     }
 
     func testSplitWorkspaceRoutesActiveSessionByFocusedPane() throws {

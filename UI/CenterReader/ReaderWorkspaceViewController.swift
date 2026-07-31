@@ -40,6 +40,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     let windowID: UUID
     let primaryReaderViewController: ReaderViewController
     let secondaryReaderViewController: ReaderViewController
+    let floatingOutlineViewController: FloatingOutlineViewController
     var onFocusedReaderDidChange: ((PDFView) -> Void)?
     private(set) var isReadingFocusModeEnabled = false
     private(set) var readingFocusSettingsOverride: ReadingFocusSettings?
@@ -63,6 +64,8 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     private var appliedSecondarySessionID: UUID?
     private var pendingSplitGeometryUpdate = false
     private var splitGeometryUpdateScheduled = false
+    private var floatingOutlineWidthConstraint: NSLayoutConstraint!
+    private var floatingOutlineHeightConstraint: NSLayoutConstraint!
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -75,10 +78,18 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             documentStore: documentStore,
             windowID: windowID
         )
+        self.floatingOutlineViewController = FloatingOutlineViewController(
+            documentStore: documentStore,
+            windowID: windowID
+        )
         super.init(nibName: nil, bundle: nil)
         title = "Reader Workspace"
         addChild(primaryReaderViewController)
         addChild(secondaryReaderViewController)
+        addChild(floatingOutlineViewController)
+        floatingOutlineViewController.preferredSizeDidChange = { [weak self] _ in
+            self?.applyFloatingOutlineSize()
+        }
     }
 
     @available(*, unavailable)
@@ -96,6 +107,18 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             guard let self else { return }
             self.documentStore.setFocusedPane(.secondary, in: self.windowID)
         }
+        primaryReaderViewController.onOverviewPresentationDidChange = { [weak self] active in
+            guard let self else { return }
+            self.floatingOutlineViewController.setSuppressed(
+                active || self.secondaryReaderViewController.isAllPagesOverviewActive
+            )
+        }
+        secondaryReaderViewController.onOverviewPresentationDidChange = { [weak self] active in
+            guard let self else { return }
+            self.floatingOutlineViewController.setSuppressed(
+                active || self.primaryReaderViewController.isAllPagesOverviewActive
+            )
+        }
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDocumentStoreDidChange),
@@ -112,6 +135,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        applyFloatingOutlineSize()
         let splitLayout = documentStore.splitLayout(in: windowID)
         if pendingSplitGeometryUpdate, splitLength(for: splitLayout) > 0 {
             requestSplitGeometryUpdate()
@@ -143,11 +167,21 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         installSplitCandidateView()
 
         container.addSubview(splitView)
+        let floatingOutlineView = floatingOutlineViewController.view
+        floatingOutlineView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(floatingOutlineView)
+        floatingOutlineWidthConstraint = floatingOutlineView.widthAnchor.constraint(equalToConstant: 28)
+        floatingOutlineHeightConstraint = floatingOutlineView.heightAnchor.constraint(equalToConstant: 56)
         NSLayoutConstraint.activate([
             splitView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             splitView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             splitView.topAnchor.constraint(equalTo: container.topAnchor),
             splitView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+
+            floatingOutlineView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+            floatingOutlineView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            floatingOutlineWidthConstraint,
+            floatingOutlineHeightConstraint,
         ])
         sideBySideMinimumConstraints = [
             primaryHostView.widthAnchor.constraint(
@@ -170,6 +204,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         }
 
         view = container
+        applyFloatingOutlineSize()
     }
 
     func activeReaderViewController() -> ReaderViewController {
@@ -396,6 +431,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     func refreshThemeAppearance() {
         primaryReaderViewController.refreshThemeAppearance()
         secondaryReaderViewController.refreshThemeAppearance()
+        floatingOutlineViewController.refreshChromeColors()
         syncSplitCandidateView()
     }
 
@@ -554,6 +590,27 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             childView.topAnchor.constraint(equalTo: hostView.topAnchor),
             childView.bottomAnchor.constraint(equalTo: hostView.bottomAnchor),
         ])
+    }
+
+    private func applyFloatingOutlineSize() {
+        guard isViewLoaded,
+              floatingOutlineWidthConstraint != nil,
+              floatingOutlineHeightConstraint != nil else { return }
+        let maximumWidth = max(view.bounds.width - 28, 28)
+        let maximumHeight = max(
+            view.bounds.height - 48,
+            AppConfiguration.Layout.minimumFloatingOutlineHeight
+        )
+        floatingOutlineViewController.setMaximumAvailableHeight(maximumHeight)
+        let preferredSize = floatingOutlineViewController.preferredSize
+        let width = min(preferredSize.width, maximumWidth)
+        let height = min(preferredSize.height, maximumHeight)
+        if abs(floatingOutlineWidthConstraint.constant - width) > 0.5 {
+            floatingOutlineWidthConstraint.constant = width
+        }
+        if abs(floatingOutlineHeightConstraint.constant - height) > 0.5 {
+            floatingOutlineHeightConstraint.constant = height
+        }
     }
 
     private func requestSplitGeometryUpdate() {

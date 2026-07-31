@@ -154,6 +154,9 @@ struct AppConfiguration: Equatable, Sendable {
     }
 
     struct Layout: Equatable, Sendable {
+        static let minimumFloatingOutlineHeight: CGFloat = 180
+        static let maximumFloatingOutlineHeight: CGFloat = 720
+
         var leftSidebarWidth: CGFloat
         var leftSidebarMinWidth: CGFloat
         var leftSidebarMaxWidth: CGFloat
@@ -163,6 +166,7 @@ struct AppConfiguration: Equatable, Sendable {
         var sidebarsSwapped: Bool
         var showRecentFilesInSidebar: Bool = true
         var sidebarOpacity: CGFloat = 0.48
+        var floatingOutlineHeight: CGFloat = 360
 
         static let `default` = Layout(
             leftSidebarWidth: 220,
@@ -173,7 +177,8 @@ struct AppConfiguration: Equatable, Sendable {
             rightSidebarMaxWidth: 720,
             sidebarsSwapped: false,
             showRecentFilesInSidebar: true,
-            sidebarOpacity: 0.48
+            sidebarOpacity: 0.48,
+            floatingOutlineHeight: 360
         )
     }
 
@@ -463,6 +468,7 @@ enum AppConfigurationError: LocalizedError {
     case invalidAnnotationSavePolicy(String)
     case invalidWidth(String)
     case invalidOpacity(String)
+    case invalidFloatingOutlineHeight(String)
 
     var errorDescription: String? {
         switch self {
@@ -494,6 +500,8 @@ enum AppConfigurationError: LocalizedError {
             "Invalid sidebar width in config: \(value)"
         case let .invalidOpacity(value):
             "Invalid sidebar opacity in config: \(value)"
+        case let .invalidFloatingOutlineHeight(value):
+            "Invalid floating outline height in config: \(value)"
         }
     }
 }
@@ -528,6 +536,7 @@ right_sidebar_max_width = 720
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
 sidebar_opacity = 0.48
+floating_outline_height = 360
 
 [library]
 folders = []
@@ -647,6 +656,7 @@ right_sidebar_max_width = \(Int(configuration.layout.rightSidebarMaxWidth.rounde
 sidebars_swapped = \(configuration.layout.sidebarsSwapped ? "true" : "false")
 show_recent_files_in_sidebar = \(configuration.layout.showRecentFilesInSidebar ? "true" : "false")
 sidebar_opacity = \(serializedDecimal(configuration.layout.sidebarOpacity))
+floating_outline_height = \(Int(configuration.layout.floatingOutlineHeight.rounded()))
 
 [library]
 folders = \(serializedPathArray(configuration.library.folderURLs))
@@ -760,6 +770,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "sidebars_swapped",
         "show_recent_files_in_sidebar",
         "sidebar_opacity",
+        "floating_outline_height",
         "[library]",
         "folders",
         "[access]",
@@ -1009,6 +1020,8 @@ struct AppConfigurationParser {
             configuration.layout.showRecentFilesInSidebar = try parseBool(rawValue)
         case ("layout", "sidebar_opacity"):
             configuration.layout.sidebarOpacity = try parseOpacity(rawValue)
+        case ("layout", "floating_outline_height"):
+            configuration.layout.floatingOutlineHeight = try parseFloatingOutlineHeight(rawValue)
         case ("library", "folders"):
             configuration.library.folderURLs = try parseStringArray(rawValue)
                 .map { URL(fileURLWithPath: $0).standardizedFileURL }
@@ -1213,6 +1226,17 @@ struct AppConfigurationParser {
         let trimmed = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
         guard let value = Double(trimmed), value.isFinite, (0...1).contains(value) else {
             throw AppConfigurationError.invalidOpacity(rawValue)
+        }
+        return CGFloat(value)
+    }
+
+    private func parseFloatingOutlineHeight(_ rawValue: String) throws -> CGFloat {
+        let trimmed = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
+        guard let value = Double(trimmed),
+              value.isFinite,
+              (Double(AppConfiguration.Layout.minimumFloatingOutlineHeight)...Double(AppConfiguration.Layout.maximumFloatingOutlineHeight))
+                .contains(value) else {
+            throw AppConfigurationError.invalidFloatingOutlineHeight(rawValue)
         }
         return CGFloat(value)
     }

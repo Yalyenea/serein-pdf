@@ -202,6 +202,7 @@ final class ReaderViewController: NSViewController {
     var onFocusRequested: (() -> Void)?
     var onFindActionRequested: ((FindNavigationAction) -> Void)?
     var onOpenURLsRequested: (([URL]) -> Void)?
+    var onOverviewPresentationDidChange: ((Bool) -> Void)?
     private let pdfContainerView = PDFContainerView()
     private let emptyStateContainer = NSStackView()
     private let emptyStateTitleLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
@@ -761,6 +762,7 @@ final class ReaderViewController: NSViewController {
         guard active != isAllPagesOverviewActive else { return }
 
         if active {
+            onOverviewPresentationDidChange?(true)
             overviewSavedLeftSidebar = documentStore.isLeftSidebarVisible(in: windowID)
             overviewSavedRightSidebar = documentStore.isRightSidebarVisible(in: windowID)
             documentStore.setLeftSidebarVisible(false, in: windowID)
@@ -793,6 +795,7 @@ final class ReaderViewController: NSViewController {
             }
             overviewSavedLeftSidebar = nil
             overviewSavedRightSidebar = nil
+            onOverviewPresentationDidChange?(false)
         }
     }
 
