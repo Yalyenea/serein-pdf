@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Chrome / Layout
+- Stabilize left/right sidebar on/off: store visibility is the single source of truth; one chrome pass collapses/expands, pins preferred widths so the center reader always gets the remainder (no overlay), ignores reverse split sync during programmatic apply, and reflows fit-width/fit-height PDF to the new center size.
+
 ### Find
 - Fix find-next navigation: `cmd+g` / repeated Enter now advance matches. Search list keeps a stable selection key across store reloads, same-session activate is skipped, and find shortcuts still fire while the find-bar field editor is focused.
 

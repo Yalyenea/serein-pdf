@@ -556,6 +556,35 @@ final class ReaderViewController: NSViewController {
         applyFitWidth(for: session)
     }
 
+    /// Called after split chrome changes so fit modes track the new reader width
+    /// instead of leaving the previous scale (which looks like a sidebar overlay).
+    func reflowForContainerSizeChange() {
+        guard isViewLoaded else { return }
+        view.layoutSubtreeIfNeeded()
+        pdfView.layoutSubtreeIfNeeded()
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+        guard let session = targetSession(),
+              displayedSessionID == session.id,
+              pdfView.bounds.width > 0,
+              pdfView.bounds.height > 0 else { return }
+
+        switch session.scaleMode {
+        case .fitWidth:
+            pendingFitWidthSessionID = nil
+            // Invalidate so applyFitWidth always recomputes against the settled clip.
+            lastAppliedFitBoundsWidth = -1
+            applyFitWidth(for: session)
+        case .fitHeight:
+            pendingFitHeightSessionID = nil
+            lastAppliedFitBoundsHeight = -1
+            applyFitHeight(for: session)
+        case .manual:
+            break
+        }
+        recenterDocumentViewIfNeeded()
+    }
+
     func fitToHeight() {
         guard let session = targetSession() else { return }
         if pdfView.bounds.height > 0 {

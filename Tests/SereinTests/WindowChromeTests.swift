@@ -700,6 +700,146 @@ struct WindowChromeTests {
     }
 
     @Test
+    func sidebarToggleKeepsStoreVisibilityInSyncWithoutFlipFlop() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-toggle-stable"))
+        controller.showWindow(nil)
+        flushLayout(controller.window)
+
+        let windowID = controller.windowID
+        let sequence: [(Bool, Bool)] = [
+            (false, true),
+            (false, false),
+            (true, false),
+            (true, true),
+            (false, true),
+            (true, true),
+        ]
+        for (left, right) in sequence {
+            store.setLeftSidebarVisible(left, in: windowID)
+            store.setRightSidebarVisible(right, in: windowID)
+            flushLayout(controller.window)
+
+            #expect(store.isLeftSidebarVisible(in: windowID) == left)
+            #expect(store.isRightSidebarVisible(in: windowID) == right)
+
+            let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+            #expect(splitController.splitViewItems[0].isCollapsed == !left)
+            #expect(splitController.splitViewItems[2].isCollapsed == !right)
+
+            if left {
+                let preferred = store.sidebarWidths(in: windowID).left
+                #expect(abs(splitController.splitView.arrangedSubviews[0].frame.width - preferred) < 2)
+            }
+            if right {
+                let preferred = store.sidebarWidths(in: windowID).right
+                #expect(abs(splitController.splitView.arrangedSubviews[2].frame.width - preferred) < 2)
+            }
+            #expect(splitController.splitView.arrangedSubviews[1].frame.width >= 300)
+        }
+    }
+
+    @Test
+    func sidebarToggleReflowsFitWidthPDF() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-toggle-fit-width"))
+        store.setScaleMode(.fitWidth, scaleFactor: 1, for: session.id)
+        controller.showWindow(nil)
+        flushLayout(controller.window)
+
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        let scaleBoth = reader.pdfView.scaleFactor
+        let centerBoth = splitController.splitView.arrangedSubviews[1].frame.width
+
+        store.setRightSidebarVisible(false, in: controller.windowID)
+        flushLayout(controller.window)
+        let scaleRightHidden = reader.pdfView.scaleFactor
+        let centerRightHidden = splitController.splitView.arrangedSubviews[1].frame.width
+
+        #expect(centerRightHidden > centerBoth + 50)
+        #expect(scaleRightHidden > scaleBoth + 0.01)
+
+        store.setRightSidebarVisible(true, in: controller.windowID)
+        flushLayout(controller.window)
+        #expect(abs(reader.pdfView.scaleFactor - scaleBoth) < 0.08)
+    }
+
+    @Test
+    func sidebarToggleRedistributesCenterWidthInsteadOfOverlaying() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-toggle-reflow"))
+        controller.showWindow(nil)
+        flushLayout(controller.window)
+
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        let split = splitController.splitView
+        #expect(split.arrangedSubviews.count == 3)
+
+        let preferred = store.sidebarWidths(in: controller.windowID)
+        let total = split.bounds.width
+        #expect(total > preferred.left + preferred.right + 320)
+
+        // Baseline: both sidebars visible
+        store.setLeftSidebarVisible(true, in: controller.windowID)
+        store.setRightSidebarVisible(true, in: controller.windowID)
+        flushLayout(controller.window)
+
+        let bothLeft = split.arrangedSubviews[0].frame.width
+        let bothCenter = split.arrangedSubviews[1].frame.width
+        let bothRight = split.arrangedSubviews[2].frame.width
+        #expect(abs(bothLeft - preferred.left) < 2)
+        #expect(abs(bothRight - preferred.right) < 2)
+        #expect(abs(bothLeft + bothCenter + bothRight + split.dividerThickness * 2 - total) < 3)
+        #expect(bothCenter >= 320)
+
+        // Hide left: center must grow by roughly left width (not stay same under overlay)
+        store.setLeftSidebarVisible(false, in: controller.windowID)
+        flushLayout(controller.window)
+
+        #expect(splitController.splitViewItems[0].isCollapsed)
+        #expect(store.isLeftSidebarVisible(in: controller.windowID) == false)
+        let hideLeftCenter = split.arrangedSubviews[1].frame.width
+        let hideLeftRight = split.arrangedSubviews[2].frame.width
+        #expect(hideLeftCenter > bothCenter + preferred.left * 0.5)
+        #expect(abs(hideLeftRight - preferred.right) < 2)
+
+        // Show left again: restore preferred left width and shrink center
+        store.setLeftSidebarVisible(true, in: controller.windowID)
+        flushLayout(controller.window)
+
+        #expect(splitController.splitViewItems[0].isCollapsed == false)
+        let showLeft = split.arrangedSubviews[0].frame.width
+        let showCenter = split.arrangedSubviews[1].frame.width
+        #expect(abs(showLeft - preferred.left) < 2)
+        #expect(showCenter < hideLeftCenter - preferred.left * 0.5)
+
+        // Hide right, then show both — repeated toggles stay aligned
+        store.setRightSidebarVisible(false, in: controller.windowID)
+        flushLayout(controller.window)
+        store.setRightSidebarVisible(true, in: controller.windowID)
+        store.setLeftSidebarVisible(true, in: controller.windowID)
+        flushLayout(controller.window)
+
+        #expect(abs(split.arrangedSubviews[0].frame.width - preferred.left) < 2)
+        #expect(abs(split.arrangedSubviews[2].frame.width - preferred.right) < 2)
+        #expect(split.arrangedSubviews[1].frame.width >= 320)
+        #expect(splitController.splitViewItems[0].isCollapsed == false)
+        #expect(splitController.splitViewItems[2].isCollapsed == false)
+    }
+
+    @Test
     func collapsedRightSidebarStaysCollapsedAfterStoreRefresh() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
@@ -1606,7 +1746,15 @@ struct WindowChromeTests {
 
     @Test
     func sidebarOpacityAppliesToLoadedSidebarSurfacesAndRefreshes() throws {
-        _ = NSApplication.shared
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+        app.appearance = NSAppearance(named: .aqua)
+        defer {
+            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            app.appearance = previousAppearance
+        }
+
         var configuration = AppConfiguration.default
         configuration.layout.sidebarOpacity = 0.44
         let store = makeIsolatedDocumentStore(appConfiguration: configuration)

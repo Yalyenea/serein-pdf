@@ -18,6 +18,8 @@ final class SplitViewController: NSSplitViewController {
     private var appliedSwapped: Bool?
     private var hasAppliedSidebarWidths = false
     private var isApplyingSidebarWidths = false
+    /// True while collapse/width is driven from store — ignore reverse sync from split geometry.
+    private var isApplyingChromeLayout = false
     private var pendingSidebarWidthApply = false
 
     var readerViewController: ReaderViewController {
@@ -96,8 +98,7 @@ final class SplitViewController: NSSplitViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        applyStoreState()
-        applySidebarWidthsForWindow()
+        applyChromeLayout()
     }
 
     override func viewDidLayout() {
@@ -161,8 +162,9 @@ final class SplitViewController: NSSplitViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         if notification.isOnlySidebarVisibilityChange {
-            applyStoreState(syncRightSidebarMode: false)
-            applySidebarWidthsForWindow()
+            // Visibility is store-owned. Collapse + preferred widths + reader reflow
+            // must run as one chrome pass so sidebars never "overlay" the PDF.
+            applyChromeLayout(syncRightSidebarMode: false, forceWidthReapply: true)
             return
         }
         if notification.isOnlyRightSidebarModeChange {
@@ -174,8 +176,7 @@ final class SplitViewController: NSSplitViewController {
 
         refreshChromeColors()
         rebuildSplitItemsIfSwapChanged()
-        applyStoreState()
-        applySidebarWidthsForWindow()
+        applyChromeLayout()
     }
 
     private func rebuildSplitItemsIfSwapChanged() {
@@ -208,7 +209,40 @@ final class SplitViewController: NSSplitViewController {
         hasAppliedSidebarWidths = false
     }
 
+    /// Chrome pass from store:
+    /// - always: collapse/expand from visibility flags
+    /// - always: pin visible sidebars to preferred widths when needed
+    /// - on visibility toggle (`forceWidthReapply`): settle layout, re-pin widths,
+    ///   reflow fit-width/fit-height so the PDF tracks the center remainder
+    private func applyChromeLayout(syncRightSidebarMode: Bool = true, forceWidthReapply: Bool = false) {
+        guard isApplyingChromeLayout == false else { return }
+        isApplyingChromeLayout = true
+        defer { isApplyingChromeLayout = false }
+
+        applyCollapseStateFromStore()
+
+        if forceWidthReapply {
+            splitView.layoutSubtreeIfNeeded()
+            hasAppliedSidebarWidths = false
+        }
+        applySidebarWidthsForWindow()
+
+        if forceWidthReapply {
+            splitView.layoutSubtreeIfNeeded()
+            view.layoutSubtreeIfNeeded()
+            readerWorkspaceViewController.reflowReadersForChromeLayoutChange()
+        }
+
+        if syncRightSidebarMode {
+            rightSidebarViewController.applyStateFromStore()
+        }
+    }
+
     private func applyStoreState(syncRightSidebarMode: Bool = true) {
+        applyChromeLayout(syncRightSidebarMode: syncRightSidebarMode)
+    }
+
+    private func applyCollapseStateFromStore() {
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
         let physicalLeft: NSSplitViewItem = swapped ? outlineSidebarItem : tabsSidebarItem
         let physicalRight: NSSplitViewItem = swapped ? tabsSidebarItem : outlineSidebarItem
@@ -225,10 +259,6 @@ final class SplitViewController: NSSplitViewController {
                 physicalRight.isCollapsed = rightShouldCollapse
             }
         }
-
-        if syncRightSidebarMode {
-            rightSidebarViewController.applyStateFromStore()
-        }
     }
 
     private func scheduleSidebarWidthApply() {
@@ -237,6 +267,7 @@ final class SplitViewController: NSSplitViewController {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pendingSidebarWidthApply = false
+            guard self.isApplyingChromeLayout == false else { return }
             self.applySidebarWidthsForWindow()
         }
     }
@@ -275,6 +306,8 @@ final class SplitViewController: NSSplitViewController {
         isApplyingSidebarWidths = true
         defer { isApplyingSidebarWidths = false }
 
+        // Pin visible sidebars; collapsed panes stay collapsed so the center
+        // receives the leftover width (no overlay).
         if let targetLeft {
             splitView.setPosition(targetLeft, ofDividerAt: 0)
         }
@@ -317,6 +350,11 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func syncSidebarVisibilityFromSplitView() {
+        // Only accept user-driven collapse (divider drag / double-click). Store-
+        // driven chrome passes must not echo back through this path.
+        guard isApplyingChromeLayout == false,
+              isApplyingSidebarWidths == false else { return }
+
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
         let leftItem = swapped ? outlineSidebarItem : tabsSidebarItem
         let rightItem = swapped ? tabsSidebarItem : outlineSidebarItem
