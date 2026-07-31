@@ -15,6 +15,7 @@ site for showcase, download notes, and compact docs.
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
 - Right pane hosts **Outline + Pages + Search + Annotations**; Outline wraps long titles with tight line spacing, no horizontal panning, and one-click tree expand/collapse, while all search / annotation previews stay on the right
+- When the Outline sidebar is hidden, a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as an overlay, dragging either vertical edge resizes it symmetrically around its center, and PDFs without an outline show no rail
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, `g` / `shift+g` jump to the document edges
@@ -135,6 +136,7 @@ left_sidebar_max_width = 520
 right_sidebar_width = 320
 right_sidebar_min_width = 120
 right_sidebar_max_width = 720
+floating_outline_height = 360 # 180–720 pt; default expanded height
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
 sidebar_opacity = 0.48

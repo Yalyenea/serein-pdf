@@ -1611,7 +1611,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 600, height: 610))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 600, height: 642))
     }
 
     @Test
@@ -1648,7 +1648,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 600, height: 610))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 600, height: 642))
     }
 
     @Test
@@ -1695,6 +1695,34 @@ struct WindowChromeTests {
         let updatedConfiguration = try #require(publishedConfigurations.last)
         #expect(abs(updatedConfiguration.layout.sidebarOpacity - 0.55) < 0.001)
         #expect(textField(identifier: "sidebarOpacityValueLabel", in: contentView)?.stringValue == "55%")
+    }
+
+    @Test
+    func settingsWindowCanEditFloatingOutlineHeight() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) { configuration in
+            publishedConfigurations.append(configuration)
+        }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let heightSlider = try #require(
+            slider(identifier: "floatingOutlineHeightSlider", in: contentView)
+        )
+        #expect(heightSlider.minValue == Double(AppConfiguration.Layout.minimumFloatingOutlineHeight))
+        #expect(heightSlider.maxValue == Double(AppConfiguration.Layout.maximumFloatingOutlineHeight))
+        heightSlider.doubleValue = 486
+
+        let action = try #require(heightSlider.action)
+        let target = try #require(heightSlider.target)
+        NSApp.sendAction(action, to: target, from: heightSlider)
+
+        let updatedConfiguration = try #require(publishedConfigurations.last)
+        #expect(updatedConfiguration.layout.floatingOutlineHeight == 486)
+        #expect(
+            textField(identifier: "floatingOutlineHeightValueLabel", in: contentView)?.stringValue == "486 pt"
+        )
     }
 
     @Test
