@@ -526,10 +526,22 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func activateSearchMatch(_ match: SearchSidebarMatch) {
-        let targetPane = documentStore.isSplitEnabled(in: windowID)
-            ? documentStore.focusedPane(in: windowID)
-            : nil
-        documentStore.activate(sessionID: match.sessionID, in: windowID, targetPane: targetPane)
+        let isSplit = documentStore.isSplitEnabled(in: windowID)
+        let focusedSessionID = documentStore.displayedSessionID(
+            for: documentStore.focusedPane(in: windowID),
+            in: windowID
+        )
+        let activeSessionID = documentStore.activeSessionID(in: windowID)
+        let alreadyShowingMatch = isSplit
+            ? focusedSessionID == match.sessionID
+            : activeSessionID == match.sessionID
+
+        // Skip redundant activate for same-session find-next; store notify was wiping
+        // search table selection under the full chrome observer graph.
+        if alreadyShowingMatch == false {
+            let targetPane = isSplit ? documentStore.focusedPane(in: windowID) : nil
+            documentStore.activate(sessionID: match.sessionID, in: windowID, targetPane: targetPane)
+        }
         readerWorkspaceViewController.activeReaderViewController().go(to: match.selection)
         syncFindStatus()
     }

@@ -64,6 +64,8 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     private let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SearchResultColumn"))
     private let emptyStateLabel = NSTextField(labelWithString: "Type in the find bar to preview matches here.")
     private var rows: [SearchResultsRow] = []
+    /// Survives `reloadData` / store churn better than `tableView.selectedRow` alone.
+    private var selectedMatchKey: SearchSelectionKey?
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -176,12 +178,15 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
     func selectFirstMatch() -> SearchSidebarMatch? {
         guard let row = firstMatchRow() else { return nil }
-        tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        tableView.scrollRowToVisible(row)
-        return selectedMatch()
+        return selectRow(row)
     }
 
     func selectedMatch() -> SearchSidebarMatch? {
+        if let selectedMatchKey,
+           let row = rowIndex(for: selectedMatchKey),
+           case let .match(match) = rows[row] {
+            return match
+        }
         guard rows.indices.contains(tableView.selectedRow) else { return nil }
         if case let .match(match) = rows[tableView.selectedRow] {
             return match
@@ -206,7 +211,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
     private func rebuildRows() {
         guard isViewLoaded else { return }
-        let previousSelection = selectedMatch().map {
+        let previousSelection = selectedMatchKey ?? selectedMatch().map {
             SearchSelectionKey(sessionID: $0.sessionID, matchIndex: $0.matchIndex)
         }
         rows = documentStore.searchSections(in: windowID).flatMap { section in
@@ -217,9 +222,12 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
         if let previousSelection,
            let row = rowIndex(for: previousSelection) {
+            selectedMatchKey = previousSelection
             tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             tableView.scrollRowToVisible(row)
+            notifySelectionChanged()
         } else {
+            selectedMatchKey = nil
             if tableView.selectedRow >= 0 {
                 tableView.deselectAll(nil)
             }
@@ -231,25 +239,35 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         guard rows.isEmpty == false else { return nil }
         let direction = offset >= 0 ? 1 : -1
         guard let currentRow = currentMatchRow(for: direction) else { return nil }
-        if tableView.selectedRow < 0 {
-            tableView.selectRowIndexes(IndexSet(integer: currentRow), byExtendingSelection: false)
-            tableView.scrollRowToVisible(currentRow)
-            return selectedMatch()
+        if selectedMatchKey == nil, tableView.selectedRow < 0 {
+            return selectRow(currentRow)
         }
 
         var row = currentRow
         for _ in 0..<rows.count {
             row = (row + direction + rows.count) % rows.count
             if case .match = rows[row] {
-                tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-                tableView.scrollRowToVisible(row)
-                return selectedMatch()
+                return selectRow(row)
             }
         }
         return nil
     }
 
+    @discardableResult
+    private func selectRow(_ row: Int) -> SearchSidebarMatch? {
+        guard rows.indices.contains(row),
+              case let .match(match) = rows[row] else { return nil }
+        selectedMatchKey = SearchSelectionKey(sessionID: match.sessionID, matchIndex: match.matchIndex)
+        tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        tableView.scrollRowToVisible(row)
+        notifySelectionChanged()
+        return match
+    }
+
     private func currentMatchRow(for direction: Int) -> Int? {
+        if let selectedMatchKey, let row = rowIndex(for: selectedMatchKey) {
+            return row
+        }
         if tableView.selectedRow >= 0 {
             return tableView.selectedRow
         }
@@ -300,6 +318,16 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        if rows.indices.contains(tableView.selectedRow),
+           case let .match(match) = rows[tableView.selectedRow] {
+            selectedMatchKey = SearchSelectionKey(sessionID: match.sessionID, matchIndex: match.matchIndex)
+        } else if tableView.selectedRow < 0 {
+            // Keep key across reloadData churn; only clear on explicit empty selection
+            // when we already have no key-backed match row.
+            if selectedMatchKey.flatMap(rowIndex(for:)) == nil {
+                selectedMatchKey = nil
+            }
+        }
         notifySelectionChanged()
     }
 
@@ -369,12 +397,15 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     }
 
     private func selectedMatchIndex() -> Int? {
-        guard rows.indices.contains(tableView.selectedRow) else { return nil }
+        let selectedRow = selectedMatchKey.flatMap(rowIndex(for:)) ?? {
+            rows.indices.contains(tableView.selectedRow) ? tableView.selectedRow : nil
+        }()
+        guard let selectedRow else { return nil }
 
         var currentIndex = 0
         for (rowIndex, row) in rows.enumerated() {
             if case .match = row {
-                if rowIndex == tableView.selectedRow {
+                if rowIndex == selectedRow {
                     return currentIndex
                 }
                 currentIndex += 1

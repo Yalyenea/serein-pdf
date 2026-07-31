@@ -35,6 +35,12 @@ final class ReaderShortcutsController {
     }
 
     func handleShortcutEvent(for event: NSEvent, in window: NSWindow) -> Bool {
+        // Find next/previous must work while the find-bar field editor has focus.
+        if handleFindNavigationShortcut(for: event) {
+            isWaitingForChordKey = false
+            return true
+        }
+
         guard Self.shouldHandlePlainShortcut(for: window.firstResponder) else {
             isWaitingForChordKey = false
             return false
@@ -45,6 +51,19 @@ final class ReaderShortcutsController {
         }
 
         return handlePlainShortcut(for: event, in: window)
+    }
+
+    private func handleFindNavigationShortcut(for event: NSEvent) -> Bool {
+        let shortcuts = shortcutsProvider()
+        let handlers = handlerProvider()
+        for command: ShortcutCommand in [.findNextMatch, .findPreviousMatch] {
+            guard let shortcut = shortcuts[command],
+                  shortcut.matches(event: event),
+                  let handler = handlers[command] else { continue }
+            handler()
+            return true
+        }
+        return false
     }
 
     func handlePlainShortcut(for event: NSEvent, in window: NSWindow) -> Bool {

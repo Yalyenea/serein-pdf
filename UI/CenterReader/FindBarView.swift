@@ -11,10 +11,29 @@ protocol FindBarDelegate: AnyObject {
     func findBarRequestsClose(_ view: FindBarView)
 }
 
+private final class FindQueryField: NSTextField {
+    var onCommandFindNext: (() -> Void)?
+    var onCommandFindPrevious: (() -> Void)?
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if modifiers == [.command], key == "g" {
+            onCommandFindNext?()
+            return true
+        }
+        if modifiers == [.command, .shift], key == "g" {
+            onCommandFindPrevious?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 final class FindBarView: NSView, NSTextFieldDelegate {
     weak var delegate: FindBarDelegate?
 
-    private let queryField = NSTextField()
+    private let queryField = FindQueryField()
     private let scopeControl = NSSegmentedControl(labels: ["This Document", "All Open"], trackingMode: .selectOne, target: nil, action: nil)
     private let statusLabel = NSTextField(labelWithString: "")
     private let previousButton = NSButton(title: "↑", target: nil, action: nil)
@@ -41,6 +60,14 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         queryField.delegate = self
         queryField.font = .systemFont(ofSize: 12, weight: .regular)
         queryField.translatesAutoresizingMaskIntoConstraints = false
+        queryField.onCommandFindNext = { [weak self] in
+            guard let self else { return }
+            self.delegate?.findBarRequestsNext(self)
+        }
+        queryField.onCommandFindPrevious = { [weak self] in
+            guard let self else { return }
+            self.delegate?.findBarRequestsPrevious(self)
+        }
 
         scopeControl.segmentStyle = .capsule
         scopeControl.controlSize = .small

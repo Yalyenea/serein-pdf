@@ -1068,6 +1068,10 @@ final class ReaderViewController: NSViewController {
         )
         if let selectedQuery {
             lastSubmittedSearchKey = SubmittedSearchKey(query: selectedQuery, scope: targetScope)
+        } else if query.isEmpty == false,
+                  documentStore.totalSearchMatches(in: windowID) > 0 {
+            // Re-opening Find with an existing query should treat Enter as "next".
+            lastSubmittedSearchKey = SubmittedSearchKey(query: query, scope: targetScope)
         }
         onFocusRequested?()
         if findBarView.isHidden {
@@ -1399,7 +1403,8 @@ final class ReaderViewController: NSViewController {
         }
         guard let selectedMatchIndex,
               matches.indices.contains(selectedMatchIndex) else {
-            pdfView.currentSelection = nil
+            // Leave currentSelection alone when no explicit index — find-next may
+            // have just called go(to:) and a store refresh must not wipe it.
             return
         }
         pdfView.setCurrentSelection(matches[selectedMatchIndex].selection, animate: false)

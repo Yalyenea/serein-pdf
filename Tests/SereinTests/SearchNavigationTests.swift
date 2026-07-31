@@ -190,6 +190,84 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
     }
 
+    func testSplitControllerFindNextAdvancesSelectionWithActivate() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "split-find-next",
+            pages: ["needle alpha needle beta needle"]
+        )
+        _ = try store.open(documentAt: url)
+
+        let split = SplitViewController(documentStore: store, windowID: store.defaultWindowID)
+        split.loadViewIfNeeded()
+        split.rightSidebarViewController.loadViewIfNeeded()
+        split.rightSidebarViewController.searchResultsViewController.loadViewIfNeeded()
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+
+        let searchVC = split.rightSidebarViewController.searchResultsViewController
+        XCTAssertTrue(split.findNextMatch())
+        XCTAssertEqual(searchVC.selectionSummary().selectedIndex, 0)
+        XCTAssertTrue(split.findNextMatch())
+        XCTAssertEqual(searchVC.selectionSummary().selectedIndex, 1)
+        XCTAssertTrue(split.findNextMatch())
+        XCTAssertEqual(searchVC.selectionSummary().selectedIndex, 2)
+    }
+
+    func testRepeatedSubmitNavigatesThroughSplitWiring() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "submit-navigate-wired",
+            pages: ["needle alpha needle beta"]
+        )
+        let session = try store.open(documentAt: url)
+
+        let split = SplitViewController(documentStore: store, windowID: store.defaultWindowID)
+        split.loadViewIfNeeded()
+        split.rightSidebarViewController.loadViewIfNeeded()
+        split.rightSidebarViewController.searchResultsViewController.loadViewIfNeeded()
+        let reader = split.readerViewController
+        reader.targetSessionID = session.id
+        reader.showFindBar()
+
+        reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
+        XCTAssertNil(
+            split.rightSidebarViewController.searchResultsViewController.selectionSummary().selectedIndex
+        )
+
+        reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
+        XCTAssertEqual(
+            split.rightSidebarViewController.searchResultsViewController.selectionSummary().selectedIndex,
+            0
+        )
+
+        reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
+        XCTAssertEqual(
+            split.rightSidebarViewController.searchResultsViewController.selectionSummary().selectedIndex,
+            1
+        )
+    }
+
+    func testSelectionSurvivesActivateUnderSplitObservers() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "split-activate-survive",
+            pages: ["needle alpha needle beta needle"]
+        )
+        let session = try store.open(documentAt: url)
+
+        let split = SplitViewController(documentStore: store, windowID: store.defaultWindowID)
+        split.loadViewIfNeeded()
+        split.rightSidebarViewController.loadViewIfNeeded()
+        let searchVC = split.rightSidebarViewController.searchResultsViewController
+        searchVC.loadViewIfNeeded()
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+
+        XCTAssertEqual(searchVC.selectNextMatch()?.matchIndex, 0)
+        store.activate(sessionID: session.id, in: store.defaultWindowID, targetPane: nil)
+        XCTAssertEqual(searchVC.selectedMatch()?.matchIndex, 0)
+        XCTAssertEqual(searchVC.selectNextMatch()?.matchIndex, 1)
+    }
+
     private func makeStore() -> DocumentStore {
         makeIsolatedDocumentStore()
     }

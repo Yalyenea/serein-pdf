@@ -359,6 +359,32 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertFalse(didTrigger)
     }
 
+    func testFindNextShortcutRunsWhileEditingText() {
+        var triggered: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [
+                    .findNextMatch: KeyboardShortcut(key: "g", modifiers: [.command]),
+                    .findPreviousMatch: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
+                ]
+            },
+            handlerProvider: {
+                [
+                    .findNextMatch: { triggered.append(.findNextMatch) },
+                    .findPreviousMatch: { triggered.append(.findPreviousMatch) },
+                ]
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let textView = NSTextView()
+        window.contentView = textView
+        window.makeFirstResponder(textView)
+
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifiers: [.command]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifiers: [.command, .shift]), in: window))
+        XCTAssertEqual(triggered, [.findNextMatch, .findPreviousMatch])
+    }
+
     func testPlainShortcutsAreBlockedWhileEditingText() {
         let textView = NSTextView()
 

@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Find
+- Fix find-next navigation: `cmd+g` / repeated Enter now advance matches. Search list keeps a stable selection key across store reloads, same-session activate is skipped, and find shortcuts still fire while the find-bar field editor is focused.
+
 ### Reliability
 - Test hygiene: stop several UI suites from writing real UserDefaults; kill false-green hot-reload / title / library / vim-grid / autosave assertions; share in-memory store doubles.
 - Further test isolation: DocumentStoreTests always injects in-memory recent/persistence; WindowChrome closes every main window and uses isolated stores; NightModeStyleTests restores global theme after each case.
