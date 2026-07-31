@@ -1607,11 +1607,11 @@ struct WindowChromeTests {
     }
 
     @Test
-    func settingsWindowUsesAdaptiveGeneralSize() {
+    func settingsWindowUsesFixedContentWidth() {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 600, height: 642))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 680, height: 642))
     }
 
     @Test
@@ -1630,7 +1630,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func settingsWindowSwitchesBetweenPageSizes() throws {
+    func settingsWindowSwitchesPageHeightsWithoutChangingWidth() throws {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
@@ -1643,12 +1643,37 @@ struct WindowChromeTests {
         controller.selectPageForTesting(2)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 920, height: 620))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 620))
 
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 600, height: 642))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 642))
+    }
+
+    @Test
+    func settingsShortcutRowsFitCompactWindowWithoutHorizontalScrolling() throws {
+        let controller = SettingsWindowController(configuration: .default) { _ in }
+        controller.showWindow(nil)
+        controller.selectPageForTesting(SettingsPage.shortcuts.rawValue)
+        flushLayout(controller.window)
+
+        let contentView = try #require(controller.window?.contentView)
+        let scrollView = try #require(
+            findView(identifier: "shortcutsScrollView", in: contentView) as? NSScrollView
+        )
+        let command = ShortcutCommand.highlightSelection
+        let row = try #require(
+            findView(identifier: "shortcutRow.\(command.rawValue)", in: contentView)
+        )
+        let captureButton = try #require(
+            findView(identifier: "shortcutCapture.\(command.rawValue)", in: contentView) as? NSButton
+        )
+
+        #expect(scrollView.hasHorizontalScroller == false)
+        #expect(row.frame.width < 680)
+        #expect(abs(row.frame.height - 44) < 0.5)
+        #expect(abs(captureButton.frame.width - 116) < 0.5)
     }
 
     @Test

@@ -62,7 +62,7 @@
 - `Cmd+Ctrl+L`:仅当左右侧栏都关闭时打开两个侧栏;其他任一状态关闭两个侧栏与 tab chrome
 - 左右可互换:`Cmd+Shift+X` 或设置窗口
 - 侧栏透明度:左右侧栏使用 native material,`layout.sidebar_opacity` 控制 tint 强度,设置窗口可调
-- 设置窗口 General / Library / Shortcuts 页签保持等宽,维持紧凑稳定的页头视觉
+- 设置窗口 General / Library / Shortcuts 页签等宽且页面固定统一宽度,切换时不得横向跳变;General 分组清晰,Shortcuts 紧凑排列且禁止横向滚动
 - PDF 切换:从一个已显示 PDF 切到另一个 PDF 后,阅读区顶部短暂显示当前文件名
 - 保留标准 macOS app / window 快捷键,至少包括 `Cmd+H` / `Cmd+Option+H` / `Cmd+M`
 - 主窗口适配 macOS 原生绿灯菜单:Full Screen、Move & Resize、Fill、Center、Fill & Arrange;默认尺寸不变,最小尺寸需允许系统半屏 / 四分屏
@@ -334,6 +334,7 @@
 - [x] `M12-009` 中栏空窗统一引导:无 PDF / 空白 tab 时,中栏显示主文案 + `⌘O` / 最近文件快捷键提示 + 拖放 PDF 打开;错误态只显示错误信息。
 - [x] `M12-015` 文档侧栏空白区域拖窗:只让背景接管窗口拖动,不抢 tab、关闭按钮、divider、滚动与跨窗 tab 拖拽。
 - [x] `M12-016` Notion 式浮动目录:Outline pane 隐藏时以标题短横线常驻阅读区右缘,hover 覆盖展开现有完整目录;上下边缘以中心对称调节当前窗口高度,General / TOML 配置全局默认值;支持 swap / 连续阅读 / 点击跳页,无目录时隐藏且不改变 reader framing。
+- [x] `M12-017` Settings 布局收口:General / Library / Shortcuts 固定统一紧凑宽度,切换仅调整高度;General 按职责分组,Shortcuts 以标题 / 默认值双层行压缩操作区并禁止横向滚动。
 - [ ] `M12-010` 空窗侧栏占比收口:无 session 时自动折叠侧栏或采用更窄默认宽度,把引导集中到中栏。
 - [ ] `M12-011` 右栏空窗 chrome 弱化:无文档时隐藏 / disable segmented 与 Outline 操作控件,避免「已就绪但未加载」噪音。
 - [ ] `M12-012` 左栏空态层次增强:补 `Documents` section 标题;空态时上移 Recent 列表或在中栏同步展示快捷入口。

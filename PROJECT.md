@@ -124,7 +124,7 @@ flowchart LR
 - 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
 - `rose_pine_dawn` 仅把 PDF 白底映射成接近 Obsidian 的暖纸色,保留正文与图表原色;侧栏使用不透明的扁平主题表面
 - `rose_pine_moon` 把 PDF 白底 / 黑字映射到 Moon 纸面 / 正文端点,保留暖冷强调色方向,并用更深的侧栏底色建立层级
-- `Settings` 按当前页内容自适应尺寸,`General` 页可编辑左右侧栏默认宽度和浮动目录默认高度,`Shortcuts` 页会自动放大到合适大小
+- `Settings` 的 General / Library / Shortcuts 固定为统一紧凑宽度,只允许高度按页适配;General 按 Appearance / Reading / Layout 分组,Shortcuts 使用双层信息紧凑行且禁止横向滚动
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
 - 阅读聚焦使用单一圆角矩形镂空与统一外围压暗,禁止多方向渐变拼接;轻描边 / 阴影只强化焦点边界,不得污染框内文字

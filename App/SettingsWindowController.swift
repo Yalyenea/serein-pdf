@@ -1,10 +1,11 @@
 import AppKit
 
 private enum SettingsWindowMetrics {
-    static let generalContentSize = NSSize(width: 600, height: 642)
-    static let libraryContentSize = NSSize(width: 680, height: 484)
-    static let shortcutsContentSize = NSSize(width: 920, height: 620)
-    static let pageSegmentWidth: CGFloat = 96
+    static let contentWidth: CGFloat = 680
+    static let generalContentSize = NSSize(width: contentWidth, height: 642)
+    static let libraryContentSize = NSSize(width: contentWidth, height: 484)
+    static let shortcutsContentSize = NSSize(width: contentWidth, height: 620)
+    static let pageSegmentWidth: CGFloat = 88
 }
 
 private final class FlippedContentView: NSView {
@@ -111,6 +112,7 @@ private final class ShortcutCaptureButton: NSButton {
         super.init(frame: frameRect)
         bezelStyle = .rounded
         controlSize = .small
+        font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         setButtonType(.momentaryPushIn)
         target = self
         action = #selector(beginCapture(_:))
@@ -205,7 +207,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
     private let shortcutsContentView = FlippedContentView()
     private let shortcutsStackView = NSStackView()
     private let shortcutsHintLabel = NSTextField(
-        wrappingLabelWithString: "Click a shortcut to capture. Press Delete while capturing to clear. Changes apply immediately."
+        wrappingLabelWithString: "Select a shortcut, then press its new key combination. Delete clears it; changes apply immediately."
     )
     private let shortcutsErrorLabel = NSTextField(labelWithString: "")
 
@@ -676,27 +678,35 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             valueLabel: readingFocusHeightValueLabel
         )
 
-        let grid = NSGridView(views: [
+        let appearanceGrid = makeSettingsGrid([
             [makeRowLabel("Mode"), modePopUp],
             [makeRowLabel("Light Theme"), lightThemePopUp],
             [makeRowLabel("Dark Theme"), darkThemePopUp],
+        ])
+        let readingGrid = makeSettingsGrid([
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Focus Width"), readingFocusWidthStack],
             [makeRowLabel("Focus Height"), readingFocusHeightStack],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
+        ])
+        let layoutGrid = makeSettingsGrid([
             [makeRowLabel("Sidebar Widths"), sidebarDefaultsStack],
             [makeRowLabel("Sidebar Opacity"), sidebarOpacityStack],
             [makeRowLabel("Floating Outline Height"), floatingOutlineHeightStack],
             [makeRowLabel("Layout"), layoutOptionsStack],
         ])
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        grid.rowSpacing = 14
-        grid.columnSpacing = 18
-        grid.column(at: 0).xPlacement = .trailing
-        grid.column(at: 1).xPlacement = .leading
+        let sectionsStack = NSStackView(views: [
+            makeSettingsSection(title: "Appearance", content: appearanceGrid),
+            makeSettingsSection(title: "Reading", content: readingGrid),
+            makeSettingsSection(title: "Layout", content: layoutGrid),
+        ])
+        sectionsStack.orientation = .vertical
+        sectionsStack.alignment = .leading
+        sectionsStack.spacing = 18
+        sectionsStack.translatesAutoresizingMaskIntoConstraints = false
 
-        generalContainer.addSubview(grid)
+        generalContainer.addSubview(sectionsStack)
         generalContainer.addSubview(footnoteLabel)
 
         let footnoteBottomConstraint = footnoteLabel.bottomAnchor.constraint(
@@ -706,20 +716,44 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         footnoteBottomConstraint.priority = .defaultLow
 
         NSLayoutConstraint.activate([
-            grid.leadingAnchor.constraint(equalTo: generalContainer.leadingAnchor, constant: 24),
-            grid.trailingAnchor.constraint(lessThanOrEqualTo: generalContainer.trailingAnchor, constant: -24),
-            grid.topAnchor.constraint(equalTo: generalContainer.topAnchor, constant: 20),
+            sectionsStack.leadingAnchor.constraint(equalTo: generalContainer.leadingAnchor, constant: 32),
+            sectionsStack.trailingAnchor.constraint(lessThanOrEqualTo: generalContainer.trailingAnchor, constant: -32),
+            sectionsStack.topAnchor.constraint(equalTo: generalContainer.topAnchor, constant: 16),
             modePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
             lightThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
             darkThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
             displayModePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
             readingFocusWidthPopUp.widthAnchor.constraint(equalToConstant: 138),
             autoSavePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
-            footnoteLabel.leadingAnchor.constraint(equalTo: grid.leadingAnchor),
-            footnoteLabel.trailingAnchor.constraint(equalTo: generalContainer.trailingAnchor, constant: -24),
-            footnoteLabel.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 16),
+            footnoteLabel.leadingAnchor.constraint(equalTo: sectionsStack.leadingAnchor),
+            footnoteLabel.trailingAnchor.constraint(equalTo: generalContainer.trailingAnchor, constant: -32),
+            footnoteLabel.topAnchor.constraint(equalTo: sectionsStack.bottomAnchor, constant: 14),
             footnoteBottomConstraint,
         ])
+    }
+
+    private func makeSettingsGrid(_ rows: [[NSView]]) -> NSGridView {
+        let grid = NSGridView(views: rows)
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        grid.rowSpacing = 10
+        grid.columnSpacing = 18
+        grid.column(at: 0).width = 154
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 1).xPlacement = .leading
+        return grid
+    }
+
+    private func makeSettingsSection(title: String, content: NSView) -> NSStackView {
+        let titleLabel = NSTextField(labelWithString: title.uppercased())
+        titleLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        titleLabel.textColor = .secondaryLabelColor
+
+        let stack = NSStackView(views: [titleLabel, content])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
     }
 
     private func configureSidebarWidthField(_ field: NSTextField, identifier: String) {
@@ -971,15 +1005,15 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         libraryContainer.addSubview(libraryScrollView)
 
         NSLayoutConstraint.activate([
-            libraryHintLabel.leadingAnchor.constraint(equalTo: libraryContainer.leadingAnchor, constant: 24),
+            libraryHintLabel.leadingAnchor.constraint(equalTo: libraryContainer.leadingAnchor, constant: 32),
             libraryHintLabel.trailingAnchor.constraint(equalTo: addLibraryFolderButton.leadingAnchor, constant: -16),
-            libraryHintLabel.topAnchor.constraint(equalTo: libraryContainer.topAnchor, constant: 18),
+            libraryHintLabel.topAnchor.constraint(equalTo: libraryContainer.topAnchor, constant: 16),
 
-            addLibraryFolderButton.trailingAnchor.constraint(equalTo: libraryContainer.trailingAnchor, constant: -24),
+            addLibraryFolderButton.trailingAnchor.constraint(equalTo: libraryContainer.trailingAnchor, constant: -32),
             addLibraryFolderButton.centerYAnchor.constraint(equalTo: libraryHintLabel.centerYAnchor),
 
             libraryScrollView.leadingAnchor.constraint(equalTo: libraryHintLabel.leadingAnchor),
-            libraryScrollView.trailingAnchor.constraint(equalTo: libraryContainer.trailingAnchor, constant: -24),
+            libraryScrollView.trailingAnchor.constraint(equalTo: libraryContainer.trailingAnchor, constant: -32),
             libraryScrollView.topAnchor.constraint(equalTo: libraryHintLabel.bottomAnchor, constant: 16),
             libraryScrollView.bottomAnchor.constraint(equalTo: libraryContainer.bottomAnchor, constant: -20),
 
@@ -1009,7 +1043,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         shortcutsErrorLabel.maximumNumberOfLines = 0
 
         shortcutsStackView.orientation = .vertical
-        shortcutsStackView.spacing = 8
+        shortcutsStackView.spacing = 0
         shortcutsStackView.translatesAutoresizingMaskIntoConstraints = false
 
         shortcutsContentView.translatesAutoresizingMaskIntoConstraints = false
@@ -1018,21 +1052,22 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         shortcutsContentView.addSubview(shortcutsStackView)
 
         NSLayoutConstraint.activate([
-            shortcutsHintLabel.leadingAnchor.constraint(equalTo: shortcutsContentView.leadingAnchor, constant: 20),
-            shortcutsHintLabel.trailingAnchor.constraint(equalTo: shortcutsContentView.trailingAnchor, constant: -20),
-            shortcutsHintLabel.topAnchor.constraint(equalTo: shortcutsContentView.topAnchor, constant: 18),
+            shortcutsHintLabel.leadingAnchor.constraint(equalTo: shortcutsContentView.leadingAnchor, constant: 32),
+            shortcutsHintLabel.trailingAnchor.constraint(equalTo: shortcutsContentView.trailingAnchor, constant: -32),
+            shortcutsHintLabel.topAnchor.constraint(equalTo: shortcutsContentView.topAnchor, constant: 16),
 
             shortcutsErrorLabel.leadingAnchor.constraint(equalTo: shortcutsHintLabel.leadingAnchor),
             shortcutsErrorLabel.trailingAnchor.constraint(equalTo: shortcutsHintLabel.trailingAnchor),
             shortcutsErrorLabel.topAnchor.constraint(equalTo: shortcutsHintLabel.bottomAnchor, constant: 8),
 
-            shortcutsStackView.leadingAnchor.constraint(equalTo: shortcutsContentView.leadingAnchor, constant: 20),
-            shortcutsStackView.trailingAnchor.constraint(equalTo: shortcutsContentView.trailingAnchor, constant: -20),
-            shortcutsStackView.topAnchor.constraint(equalTo: shortcutsErrorLabel.bottomAnchor, constant: 14),
+            shortcutsStackView.leadingAnchor.constraint(equalTo: shortcutsContentView.leadingAnchor, constant: 32),
+            shortcutsStackView.trailingAnchor.constraint(equalTo: shortcutsContentView.trailingAnchor, constant: -32),
+            shortcutsStackView.topAnchor.constraint(equalTo: shortcutsErrorLabel.bottomAnchor, constant: 12),
             shortcutsStackView.bottomAnchor.constraint(equalTo: shortcutsContentView.bottomAnchor, constant: -20),
-            shortcutsStackView.widthAnchor.constraint(equalTo: shortcutsContentView.widthAnchor, constant: -40),
+            shortcutsStackView.widthAnchor.constraint(equalTo: shortcutsContentView.widthAnchor, constant: -64),
         ])
 
+        shortcutsScrollView.identifier = NSUserInterfaceItemIdentifier("shortcutsScrollView")
         shortcutsScrollView.drawsBackground = false
         shortcutsScrollView.borderType = .noBorder
         shortcutsScrollView.hasHorizontalScroller = false
@@ -1152,61 +1187,78 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
     private func makeShortcutRow(for command: ShortcutCommand) -> NSView {
         let row = NSView()
         row.translatesAutoresizingMaskIntoConstraints = false
+        row.identifier = NSUserInterfaceItemIdentifier("shortcutRow.\(command.rawValue)")
 
         let titleLabel = NSTextField(labelWithString: command.menuTitle)
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let captureButton = ShortcutCaptureButton(frame: .zero)
         captureButton.translatesAutoresizingMaskIntoConstraints = false
+        captureButton.identifier = NSUserInterfaceItemIdentifier("shortcutCapture.\(command.rawValue)")
         captureButton.onShortcutCaptured = { [weak self] shortcut in
             self?.updateShortcut(shortcut, for: command)
         }
 
         let defaultLabel = NSTextField(labelWithString: "")
-        defaultLabel.font = .systemFont(ofSize: 11)
+        defaultLabel.font = .systemFont(ofSize: 10.5)
         defaultLabel.textColor = .secondaryLabelColor
+        defaultLabel.lineBreakMode = .byTruncatingTail
+        defaultLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         defaultLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let clearButton = NSButton(title: "Clear", target: self, action: #selector(clearShortcut(_:)))
         clearButton.controlSize = .small
-        clearButton.bezelStyle = .rounded
+        clearButton.bezelStyle = .inline
         clearButton.translatesAutoresizingMaskIntoConstraints = false
         clearButton.identifier = NSUserInterfaceItemIdentifier(command.rawValue)
 
-        let restoreButton = NSButton(title: "Restore Default", target: self, action: #selector(restoreShortcutDefault(_:)))
+        let restoreButton = NSButton(title: "Reset", target: self, action: #selector(restoreShortcutDefault(_:)))
         restoreButton.controlSize = .small
-        restoreButton.bezelStyle = .rounded
+        restoreButton.bezelStyle = .inline
+        restoreButton.toolTip = "Restore Default"
         restoreButton.translatesAutoresizingMaskIntoConstraints = false
         restoreButton.identifier = NSUserInterfaceItemIdentifier(command.rawValue)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
 
         row.addSubview(titleLabel)
         row.addSubview(captureButton)
         row.addSubview(defaultLabel)
         row.addSubview(clearButton)
         row.addSubview(restoreButton)
+        row.addSubview(separator)
 
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-            titleLabel.topAnchor.constraint(equalTo: row.topAnchor),
-            titleLabel.widthAnchor.constraint(equalToConstant: 220),
+            titleLabel.topAnchor.constraint(equalTo: row.topAnchor, constant: 5),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: captureButton.leadingAnchor, constant: -16),
 
-            captureButton.leadingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 12),
-            captureButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
-            captureButton.widthAnchor.constraint(equalToConstant: 128),
+            defaultLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            defaultLabel.trailingAnchor.constraint(lessThanOrEqualTo: captureButton.leadingAnchor, constant: -16),
+            defaultLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1),
 
-            defaultLabel.leadingAnchor.constraint(equalTo: captureButton.trailingAnchor, constant: 12),
-            defaultLabel.centerYAnchor.constraint(equalTo: captureButton.centerYAnchor),
-            defaultLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            captureButton.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor, constant: -8),
+            captureButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            captureButton.widthAnchor.constraint(equalToConstant: 116),
 
             restoreButton.trailingAnchor.constraint(equalTo: row.trailingAnchor),
-            restoreButton.centerYAnchor.constraint(equalTo: captureButton.centerYAnchor),
+            restoreButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            restoreButton.widthAnchor.constraint(equalToConstant: 52),
 
             clearButton.trailingAnchor.constraint(equalTo: restoreButton.leadingAnchor, constant: -8),
-            clearButton.centerYAnchor.constraint(equalTo: restoreButton.centerYAnchor),
+            clearButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            clearButton.widthAnchor.constraint(equalToConstant: 44),
 
-            row.bottomAnchor.constraint(equalTo: titleLabel.bottomAnchor),
-            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 24),
+            separator.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            separator.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+
+            row.heightAnchor.constraint(equalToConstant: 44),
         ])
 
         shortcutButtons[command] = captureButton

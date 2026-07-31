@@ -4,9 +4,14 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-01
+
 ### Chrome / Layout
 - Stabilize left/right sidebar on/off: store visibility is the single source of truth; one chrome pass collapses/expands, pins preferred widths so the center reader always gets the remainder (no overlay), ignores reverse split sync during programmatic apply, and reflows fit-width/fit-height PDF to the new center size.
 - Add a Notion-style floating outline when the semantic Outline pane is hidden: compact heading marks sit on the reader edge, hover opens the existing full outline as an overlay, either vertical edge resizes symmetrically around the center and remembers height per window, General / `layout.floating_outline_height` sets the global default, clicks keep established navigation, and empty outlines stay hidden.
+
+### Settings
+- Keep General, Library, and Shortcuts at one compact 680 pt width so page switching never shifts the window horizontally; group General by responsibility and compress shortcut rows into aligned title/default and capture/action areas without horizontal scrolling.
 
 ### Find
 - Fix find-next navigation: `cmd+g` / repeated Enter now advance matches. Search list keeps a stable selection key across store reloads, same-session activate is skipped, and find shortcuts still fire while the find-bar field editor is focused.
