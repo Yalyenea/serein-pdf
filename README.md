@@ -55,7 +55,7 @@ site for showcase, download notes, and compact docs.
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets
 - Highlights can carry comments in the right sidebar, and Markdown export is page-grouped as snippet + comment for note-taking
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
-- Settings resizes to fit the current page, so Shortcuts gets a larger window without making General oversized
+- Settings keeps one compact 680 pt width across General, Library, and Shortcuts; page height may adapt, while shortcut rows keep defaults and actions aligned without horizontal scrolling
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) seamless viewport-fit grid (no nested panel); zoom for manual size; click a page to jump
 - Auto-update from GitHub Releases (check on launch + **Serein → Check for Updates…**); private repos need `[updates] github_token` in config.toml
