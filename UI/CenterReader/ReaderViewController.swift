@@ -225,12 +225,12 @@ final class ReaderViewController: NSViewController {
     private var isApplyingStoreState = false
     private var isApplyingProgrammaticScale = false
     private var isApplyingHighlightSelection = false
-    /// Reader-owned history for Cmd+[ / ]. PDFKit's stack is incomplete for some
-    /// paths and was wiped by store re-`go(to:)` after the first step; we record
-    /// every real page change and fall back to PDFKit when our stack is empty.
+    /// Owned Cmd+[ / ] history. PDFKit's stack is wiped by store re-`go(to:)` and
+    /// misses some paths; we record intentional jumps and external page changes.
     private var navigationBackStack: [ReadingPosition] = []
     private var navigationForwardStack: [ReadingPosition] = []
-    private var isNavigatingHistory = false
+    private var historyNavigationEpoch = 0
+    private var isNavigatingHistory: Bool { historyNavigationEpoch != 0 }
     private var appearanceObservation: NSKeyValueObservation?
     nonisolated(unsafe) private var leftMouseDownMonitor: Any?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
@@ -671,57 +671,23 @@ final class ReaderViewController: NSViewController {
     }
 
     func navigateBack() {
-        if let target = navigationBackStack.popLast() {
-            if let current = historyAnchorPosition() {
-                navigationForwardStack.append(current)
-            }
-            beginHistoryNavigation()
-            applyHistoryPosition(target)
-            endHistoryNavigation()
-            return
+        guard let target = navigationBackStack.popLast() else { return }
+        if let current = historyAnchorPosition() {
+            navigationForwardStack.append(current)
         }
-        guard pdfView.canGoBack else { return }
-        playPDFKitHistory { pdfView.goBack(nil) }
+        playOwnedHistory(to: target)
     }
 
     func navigateForward() {
-        if let target = navigationForwardStack.popLast() {
-            if let current = historyAnchorPosition() {
-                navigationBackStack.append(current)
-            }
-            beginHistoryNavigation()
-            applyHistoryPosition(target)
-            endHistoryNavigation()
-            return
+        guard let target = navigationForwardStack.popLast() else { return }
+        if let current = historyAnchorPosition() {
+            navigationBackStack.append(current)
         }
-        guard pdfView.canGoForward else { return }
-        playPDFKitHistory { pdfView.goForward(nil) }
+        playOwnedHistory(to: target)
     }
 
-    private func beginHistoryNavigation() {
-        isNavigatingHistory = true
-    }
-
-    /// Keep the flag through deferred PDFKit page-change notifications so they
-    /// cannot clear the forward stack right after Cmd+[.
-    private func endHistoryNavigation() {
-        DispatchQueue.main.async { [weak self] in
-            self?.isNavigatingHistory = false
-        }
-    }
-
-    var canGoBack: Bool {
-        navigationBackStack.isEmpty == false || pdfView.canGoBack
-    }
-
-    var canGoForward: Bool {
-        // Prefer our stack for enablement; PDFKit alone often stays true after we
-        // already branched away with a new jump.
-        if navigationForwardStack.isEmpty == false { return true }
-        // Only fall back to PDFKit when we have no owned back stack either
-        // (pure PDFKit-only navigation session).
-        return navigationBackStack.isEmpty && pdfView.canGoForward
-    }
+    var canGoBack: Bool { navigationBackStack.isEmpty == false }
+    var canGoForward: Bool { navigationForwardStack.isEmpty == false }
 
     /// Test seam: owned history page indices (back stack, oldest → newest).
     var testingNavigationBackPageIndices: [Int] { navigationBackStack.map(\.pageIndex) }
@@ -741,17 +707,17 @@ final class ReaderViewController: NSViewController {
               let page = document.page(at: pageIndex) else { return false }
 
         let bounds = page.bounds(for: pdfView.displayBox)
-        let targetPosition = ReadingPosition(
+        let target = ReadingPosition(
             pageIndex: pageIndex,
             point: NSPoint(x: bounds.minX, y: bounds.maxY)
         )
         if let current = historyAnchorPosition(),
-           readingPosition(current, differsFrom: targetPosition) == false {
+           readingPosition(current, differsFrom: target) == false {
             return true
         }
 
         recordNavigationHistoryBeforeJump()
-        applyProgrammaticDestination(page: page, point: targetPosition.point, storePosition: targetPosition)
+        applyProgrammaticDestination(page: page, point: target.point, storePosition: target)
         return true
     }
 
@@ -759,34 +725,58 @@ final class ReaderViewController: NSViewController {
         if let displayedReadingPosition {
             return displayedReadingPosition
         }
-        return settledHistoryPosition()
+        guard let page = pdfView.currentPage,
+              let document = pdfView.document else { return nil }
+        let bounds = page.bounds(for: pdfView.displayBox)
+        return ReadingPosition(
+            pageIndex: document.index(for: page),
+            point: NSPoint(x: bounds.minX, y: bounds.maxY)
+        )
     }
 
     private func recordNavigationHistoryBeforeJump() {
-        // Intentional jumps must always record, even if a prior history step still
-        // has isNavigatingHistory set until the next runloop (deferred PDFKit events).
+        // Always record intentional jumps (even while a prior history epoch is
+        // still open for deferred PDFKit page-change events).
         guard let current = historyAnchorPosition() else { return }
         pushBackHistory(current)
-        navigationForwardStack.removeAll()
+        navigationForwardStack.removeAll(keepingCapacity: true)
     }
 
     private func pushBackHistory(_ position: ReadingPosition) {
         if let last = navigationBackStack.last,
-           readingPosition(last, differsFrom: position) == false {
+           last.pageIndex == position.pageIndex {
+            // Same page: keep the newer point by replacing the tip.
+            navigationBackStack[navigationBackStack.count - 1] = position
             return
         }
         navigationBackStack.append(position)
         if navigationBackStack.count > 100 {
-            navigationBackStack.removeFirst(navigationBackStack.count - 100)
+            navigationBackStack.removeFirst()
         }
     }
 
-    private func applyHistoryPosition(_ position: ReadingPosition) {
+    private func playOwnedHistory(to position: ReadingPosition) {
         guard let document = pdfView.document,
               position.pageIndex >= 0,
               position.pageIndex < document.pageCount,
               let page = document.page(at: position.pageIndex) else { return }
+        let epoch = beginHistoryNavigation()
         applyProgrammaticDestination(page: page, point: position.point, storePosition: position)
+        endHistoryNavigation(epoch)
+    }
+
+    private func beginHistoryNavigation() -> Int {
+        historyNavigationEpoch += 1
+        return historyNavigationEpoch
+    }
+
+    /// Hold the epoch through deferred PDFKit page-change notifications so they
+    /// cannot clear the forward stack right after Cmd+[.
+    private func endHistoryNavigation(_ epoch: Int) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.historyNavigationEpoch == epoch else { return }
+            self.historyNavigationEpoch = 0
+        }
     }
 
     private func applyProgrammaticDestination(
@@ -798,6 +788,7 @@ final class ReaderViewController: NSViewController {
         // Suppress PDFViewPageChanged during jump: at go(to:) time the clipView
         // hasn't updated yet, so currentReadingPosition() would capture stale
         // coordinates and write them back to the store, causing a rollback.
+        let wasApplying = isApplyingStoreState
         isApplyingStoreState = true
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0
@@ -809,10 +800,11 @@ final class ReaderViewController: NSViewController {
         syncPDFMarginBackgroundAfterPDFKitLayout()
         recenterDocumentViewIfNeeded()
         stabilizePDFScrollPosition()
-        isApplyingStoreState = false
+        isApplyingStoreState = wasApplying
 
         displayedReadingPosition = storePosition
-        if let session = targetSession(),
+        if wasApplying == false,
+           let session = targetSession(),
            session.id == displayedSessionID {
             documentStore.updateReadingPosition(
                 storePosition,
@@ -822,58 +814,9 @@ final class ReaderViewController: NSViewController {
         }
     }
 
-    /// Run PDFKit history when our stack is empty (thumbnail / link paths PDFKit saw).
-    private func playPDFKitHistory(_ move: () -> Void) {
-        beginHistoryNavigation()
-        isApplyingStoreState = true
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            context.allowsImplicitAnimation = false
-            move()
-        }
-        pdfView.layoutDocumentView()
-        pdfView.layoutSubtreeIfNeeded()
-        syncPDFMarginBackgroundAfterPDFKitLayout()
-        recenterDocumentViewIfNeeded()
-        stabilizePDFScrollPosition()
-        isApplyingStoreState = false
-
-        if let position = settledHistoryPosition() {
-            displayedReadingPosition = position
-            if let session = targetSession(), session.id == displayedSessionID {
-                documentStore.updateReadingPosition(
-                    position,
-                    scaleFactor: pdfView.scaleFactor,
-                    for: session.id
-                )
-            }
-        }
-        endHistoryNavigation()
-    }
-
-    private func settledHistoryPosition() -> ReadingPosition? {
-        if let destination = pdfView.currentDestination,
-           let page = destination.page,
-           let document = pdfView.document {
-            return ReadingPosition(
-                pageIndex: document.index(for: page),
-                point: destination.point
-            )
-        }
-        guard let page = pdfView.currentPage,
-              let document = pdfView.document else {
-            return currentReadingPosition()
-        }
-        let bounds = page.bounds(for: pdfView.displayBox)
-        return ReadingPosition(
-            pageIndex: document.index(for: page),
-            point: NSPoint(x: bounds.minX, y: bounds.maxY)
-        )
-    }
-
     private func clearNavigationHistory() {
-        navigationBackStack.removeAll()
-        navigationForwardStack.removeAll()
+        navigationBackStack.removeAll(keepingCapacity: true)
+        navigationForwardStack.removeAll(keepingCapacity: true)
     }
 
     @discardableResult
@@ -1353,25 +1296,20 @@ final class ReaderViewController: NSViewController {
               session.id == displayedSessionID else { return }
 
         // Prefer current page over viewport sample so thumbnail / link jumps record cleanly.
-        let position: ReadingPosition
-        if let page = pdfView.currentPage,
-           let document = pdfView.document {
-            let bounds = page.bounds(for: pdfView.displayBox)
-            position = ReadingPosition(
-                pageIndex: document.index(for: page),
-                point: NSPoint(x: bounds.minX, y: bounds.maxY)
-            )
-        } else if let sampled = currentReadingPosition() {
-            position = sampled
-        } else {
-            return
-        }
+        guard let page = pdfView.currentPage,
+              let document = pdfView.document else { return }
+        let bounds = page.bounds(for: pdfView.displayBox)
+        let position = ReadingPosition(
+            pageIndex: document.index(for: page),
+            point: NSPoint(x: bounds.minX, y: bounds.maxY)
+        )
 
         // External navigations (thumbnail, in-PDF link) bypass jumpToPage — record here.
+        // Continuous scroll also lands here; stack is capped at 100.
         if let previous = displayedReadingPosition,
            previous.pageIndex != position.pageIndex {
             pushBackHistory(previous)
-            navigationForwardStack.removeAll()
+            navigationForwardStack.removeAll(keepingCapacity: true)
         }
 
         displayedReadingPosition = position
@@ -1769,13 +1707,11 @@ final class ReaderViewController: NSViewController {
         if displayedReadingPosition != nil {
             recordNavigationHistoryBeforeJump()
         }
-
-        let destination = PDFDestination(page: page, at: readingPosition.point)
-        pdfView.go(to: destination)
-        displayedReadingPosition = readingPosition
-        pdfView.layoutDocumentView()
-        pdfView.layoutSubtreeIfNeeded()
-        recenterDocumentViewIfNeeded()
+        applyProgrammaticDestination(
+            page: page,
+            point: readingPosition.point,
+            storePosition: readingPosition
+        )
     }
 
     private func clampedReadingPosition(

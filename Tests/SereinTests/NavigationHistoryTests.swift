@@ -108,7 +108,7 @@ final class NavigationHistoryTests: XCTestCase {
 
         reader.targetSessionID = second.id
         reader.view.layoutSubtreeIfNeeded()
-        // Own stack is cleared; ignore residual PDFKit canGoBack on the new doc.
+        XCTAssertFalse(reader.canGoBack)
         XCTAssertFalse(reader.canGoForward)
     }
 
