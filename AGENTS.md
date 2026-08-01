@@ -15,6 +15,7 @@ Native macOS PDF reader.
 - using justfile for make
 - Track execution in [TASKS.md](TASKS.md).
 - Keep docs in sync when scope or behavior changes.
+- Multi-theme expansion plan: [docs/theme-presets-plan.md](docs/theme-presets-plan.md).
 
 ## Product Rules
 
