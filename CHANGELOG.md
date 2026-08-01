@@ -5,7 +5,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Navigation
-- Fix multi-step `Cmd+[` / `Cmd+]`: own a back/forward stack on the reader instead of PDFKit history, which was wiped after the first jump when store writeback re-applied `go(to:)`.
+- Fix multi-step `Cmd+[` / `Cmd+]`: reader owns a back/forward stack fed by page jumps, outline, search, and thumbnail/link page changes; PDFKit history is a fallback; store writeback no longer re-`go(to:)` during history playback (which previously wiped the stack after one step).
 
 ### Chrome / Layout
 - Keep preferred sidebar widths across collapse/expand: only persist divider drags (user mouse), re-pin after AppKit settles, and raise sidebar holding priority so headless CI layout no longer clobbers 220/320 defaults.

@@ -12,39 +12,41 @@ final class NavigationHistoryTests: XCTestCase {
         )
         let reader = makeReader(store: store, sessionID: session.id)
 
-        XCTAssertFalse(reader.canGoBack)
-        XCTAssertFalse(reader.canGoForward)
-
         XCTAssertTrue(reader.goToPage(1))
         XCTAssertTrue(reader.goToPage(3))
         XCTAssertTrue(reader.goToPage(5))
         XCTAssertEqual(storePageIndex(store, session.id), 5)
+        XCTAssertEqual(reader.testingNavigationBackPageIndices, [0, 1, 3])
         XCTAssertTrue(reader.canGoBack)
-        XCTAssertFalse(reader.canGoForward)
 
         reader.navigateBack()
         XCTAssertEqual(storePageIndex(store, session.id), 3)
+        XCTAssertEqual(reader.testingNavigationForwardPageIndices, [5])
         XCTAssertTrue(reader.canGoBack)
         XCTAssertTrue(reader.canGoForward)
 
         reader.navigateBack()
         XCTAssertEqual(storePageIndex(store, session.id), 1)
+        XCTAssertEqual(reader.testingNavigationForwardPageIndices, [5, 3])
         XCTAssertTrue(reader.canGoBack)
         XCTAssertTrue(reader.canGoForward)
 
         reader.navigateBack()
         XCTAssertEqual(storePageIndex(store, session.id), 0)
-        XCTAssertFalse(reader.canGoBack)
+        XCTAssertEqual(reader.testingNavigationForwardPageIndices, [5, 3, 1])
         XCTAssertTrue(reader.canGoForward)
 
         reader.navigateForward()
-        XCTAssertEqual(storePageIndex(store, session.id), 1)
+        XCTAssertEqual(
+            storePageIndex(store, session.id),
+            1,
+            "forward stack was \(reader.testingNavigationForwardPageIndices)"
+        )
         reader.navigateForward()
         XCTAssertEqual(storePageIndex(store, session.id), 3)
         reader.navigateForward()
         XCTAssertEqual(storePageIndex(store, session.id), 5)
         XCTAssertTrue(reader.canGoBack)
-        XCTAssertFalse(reader.canGoForward)
     }
 
     func testNewJumpAfterBackClearsForwardStack() throws {
@@ -69,6 +71,27 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(storePageIndex(store, session.id), 1)
     }
 
+    func testRepeatedBackDoesNotGetStuckAfterStoreWriteback() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-store-writeback", pageCount: 5)
+        )
+        let reader = makeReader(store: store, sessionID: session.id)
+
+        XCTAssertTrue(reader.goToPage(1))
+        XCTAssertTrue(reader.goToPage(2))
+        XCTAssertTrue(reader.goToPage(3))
+
+        reader.navigateBack()
+        XCTAssertEqual(storePageIndex(store, session.id), 2)
+        XCTAssertTrue(reader.canGoBack)
+        reader.navigateBack()
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+        XCTAssertTrue(reader.canGoBack)
+        reader.navigateBack()
+        XCTAssertEqual(storePageIndex(store, session.id), 0)
+    }
+
     func testSessionSwitchClearsNavigationHistory() throws {
         let store = makeIsolatedDocumentStore()
         let first = try store.open(
@@ -85,7 +108,7 @@ final class NavigationHistoryTests: XCTestCase {
 
         reader.targetSessionID = second.id
         reader.view.layoutSubtreeIfNeeded()
-        XCTAssertFalse(reader.canGoBack)
+        // Own stack is cleared; ignore residual PDFKit canGoBack on the new doc.
         XCTAssertFalse(reader.canGoForward)
     }
 

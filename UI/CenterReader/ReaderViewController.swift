@@ -225,8 +225,9 @@ final class ReaderViewController: NSViewController {
     private var isApplyingStoreState = false
     private var isApplyingProgrammaticScale = false
     private var isApplyingHighlightSelection = false
-    /// App-owned history — PDFKit's goBack/goForward stack is cleared by store
-    /// re-apply `go(to:)` after the first jump, so multi-step Cmd+[ / ] needs ours.
+    /// Reader-owned history for Cmd+[ / ]. PDFKit's stack is incomplete for some
+    /// paths and was wiped by store re-`go(to:)` after the first step; we record
+    /// every real page change and fall back to PDFKit when our stack is empty.
     private var navigationBackStack: [ReadingPosition] = []
     private var navigationForwardStack: [ReadingPosition] = []
     private var isNavigatingHistory = false
@@ -670,27 +671,62 @@ final class ReaderViewController: NSViewController {
     }
 
     func navigateBack() {
-        guard let target = navigationBackStack.popLast() else { return }
-        if let current = historyAnchorPosition() {
-            navigationForwardStack.append(current)
+        if let target = navigationBackStack.popLast() {
+            if let current = historyAnchorPosition() {
+                navigationForwardStack.append(current)
+            }
+            beginHistoryNavigation()
+            applyHistoryPosition(target)
+            endHistoryNavigation()
+            return
         }
-        isNavigatingHistory = true
-        defer { isNavigatingHistory = false }
-        applyHistoryPosition(target)
+        guard pdfView.canGoBack else { return }
+        playPDFKitHistory { pdfView.goBack(nil) }
     }
 
     func navigateForward() {
-        guard let target = navigationForwardStack.popLast() else { return }
-        if let current = historyAnchorPosition() {
-            navigationBackStack.append(current)
+        if let target = navigationForwardStack.popLast() {
+            if let current = historyAnchorPosition() {
+                navigationBackStack.append(current)
+            }
+            beginHistoryNavigation()
+            applyHistoryPosition(target)
+            endHistoryNavigation()
+            return
         }
-        isNavigatingHistory = true
-        defer { isNavigatingHistory = false }
-        applyHistoryPosition(target)
+        guard pdfView.canGoForward else { return }
+        playPDFKitHistory { pdfView.goForward(nil) }
     }
 
-    var canGoBack: Bool { navigationBackStack.isEmpty == false }
-    var canGoForward: Bool { navigationForwardStack.isEmpty == false }
+    private func beginHistoryNavigation() {
+        isNavigatingHistory = true
+    }
+
+    /// Keep the flag through deferred PDFKit page-change notifications so they
+    /// cannot clear the forward stack right after Cmd+[.
+    private func endHistoryNavigation() {
+        DispatchQueue.main.async { [weak self] in
+            self?.isNavigatingHistory = false
+        }
+    }
+
+    var canGoBack: Bool {
+        navigationBackStack.isEmpty == false || pdfView.canGoBack
+    }
+
+    var canGoForward: Bool {
+        // Prefer our stack for enablement; PDFKit alone often stays true after we
+        // already branched away with a new jump.
+        if navigationForwardStack.isEmpty == false { return true }
+        // Only fall back to PDFKit when we have no owned back stack either
+        // (pure PDFKit-only navigation session).
+        return navigationBackStack.isEmpty && pdfView.canGoForward
+    }
+
+    /// Test seam: owned history page indices (back stack, oldest → newest).
+    var testingNavigationBackPageIndices: [Int] { navigationBackStack.map(\.pageIndex) }
+    /// Test seam: owned history page indices (forward stack, nearest → furthest).
+    var testingNavigationForwardPageIndices: [Int] { navigationForwardStack.map(\.pageIndex) }
 
     @discardableResult
     func goToPage(_ pageIndex: Int) -> Bool {
@@ -709,7 +745,6 @@ final class ReaderViewController: NSViewController {
             pageIndex: pageIndex,
             point: NSPoint(x: bounds.minX, y: bounds.maxY)
         )
-        // No-op jump: keep history untouched.
         if let current = historyAnchorPosition(),
            readingPosition(current, differsFrom: targetPosition) == false {
             return true
@@ -720,31 +755,30 @@ final class ReaderViewController: NSViewController {
         return true
     }
 
-    /// Stable anchor for history: prefer the last applied position, then PDFKit page.
-    /// Avoid `currentReadingPosition()` here — viewport sampling can lag right after jumps.
     private func historyAnchorPosition() -> ReadingPosition? {
         if let displayedReadingPosition {
             return displayedReadingPosition
         }
-        guard let page = pdfView.currentPage,
-              let document = pdfView.document else { return nil }
-        let bounds = page.bounds(for: pdfView.displayBox)
-        return ReadingPosition(
-            pageIndex: document.index(for: page),
-            point: NSPoint(x: bounds.minX, y: bounds.maxY)
-        )
+        return settledHistoryPosition()
     }
 
     private func recordNavigationHistoryBeforeJump() {
-        guard isNavigatingHistory == false,
-              let current = historyAnchorPosition() else { return }
-        if let last = navigationBackStack.last,
-           readingPosition(last, differsFrom: current) == false {
-            // Same as last entry — avoid stacking duplicates from rapid re-jumps.
-        } else {
-            navigationBackStack.append(current)
-        }
+        // Intentional jumps must always record, even if a prior history step still
+        // has isNavigatingHistory set until the next runloop (deferred PDFKit events).
+        guard let current = historyAnchorPosition() else { return }
+        pushBackHistory(current)
         navigationForwardStack.removeAll()
+    }
+
+    private func pushBackHistory(_ position: ReadingPosition) {
+        if let last = navigationBackStack.last,
+           readingPosition(last, differsFrom: position) == false {
+            return
+        }
+        navigationBackStack.append(position)
+        if navigationBackStack.count > 100 {
+            navigationBackStack.removeFirst(navigationBackStack.count - 100)
+        }
     }
 
     private func applyHistoryPosition(_ position: ReadingPosition) {
@@ -786,6 +820,55 @@ final class ReaderViewController: NSViewController {
                 for: session.id
             )
         }
+    }
+
+    /// Run PDFKit history when our stack is empty (thumbnail / link paths PDFKit saw).
+    private func playPDFKitHistory(_ move: () -> Void) {
+        beginHistoryNavigation()
+        isApplyingStoreState = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            move()
+        }
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+        syncPDFMarginBackgroundAfterPDFKitLayout()
+        recenterDocumentViewIfNeeded()
+        stabilizePDFScrollPosition()
+        isApplyingStoreState = false
+
+        if let position = settledHistoryPosition() {
+            displayedReadingPosition = position
+            if let session = targetSession(), session.id == displayedSessionID {
+                documentStore.updateReadingPosition(
+                    position,
+                    scaleFactor: pdfView.scaleFactor,
+                    for: session.id
+                )
+            }
+        }
+        endHistoryNavigation()
+    }
+
+    private func settledHistoryPosition() -> ReadingPosition? {
+        if let destination = pdfView.currentDestination,
+           let page = destination.page,
+           let document = pdfView.document {
+            return ReadingPosition(
+                pageIndex: document.index(for: page),
+                point: destination.point
+            )
+        }
+        guard let page = pdfView.currentPage,
+              let document = pdfView.document else {
+            return currentReadingPosition()
+        }
+        let bounds = page.bounds(for: pdfView.displayBox)
+        return ReadingPosition(
+            pageIndex: document.index(for: page),
+            point: NSPoint(x: bounds.minX, y: bounds.maxY)
+        )
     }
 
     private func clearNavigationHistory() {
@@ -1245,6 +1328,14 @@ final class ReaderViewController: NSViewController {
         // Store notifications are synchronous; do not sample PDFKit while a
         // programmatic document/viewport restore is still settling.
         guard isApplyingStoreState == false else { return }
+        // Cmd+[ / ] already moved the view and set displayedReadingPosition to the
+        // intentional target. Do not sample lagging live geometry over that target.
+        if isNavigatingHistory {
+            if notification.isOnlyReadingPositionChange == false {
+                syncFindBarStatus()
+            }
+            return
+        }
         if syncDisplayedStateWithoutRefreshIfPossible() == false {
             refreshDisplayedDocument()
         }
@@ -1257,10 +1348,33 @@ final class ReaderViewController: NSViewController {
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
         guard isApplyingStoreState == false,
+              isNavigatingHistory == false,
               let session = targetSession(),
-              session.id == displayedSessionID,
-              let position = currentReadingPosition() else { return }
+              session.id == displayedSessionID else { return }
 
+        // Prefer current page over viewport sample so thumbnail / link jumps record cleanly.
+        let position: ReadingPosition
+        if let page = pdfView.currentPage,
+           let document = pdfView.document {
+            let bounds = page.bounds(for: pdfView.displayBox)
+            position = ReadingPosition(
+                pageIndex: document.index(for: page),
+                point: NSPoint(x: bounds.minX, y: bounds.maxY)
+            )
+        } else if let sampled = currentReadingPosition() {
+            position = sampled
+        } else {
+            return
+        }
+
+        // External navigations (thumbnail, in-PDF link) bypass jumpToPage — record here.
+        if let previous = displayedReadingPosition,
+           previous.pageIndex != position.pageIndex {
+            pushBackHistory(previous)
+            navigationForwardStack.removeAll()
+        }
+
+        displayedReadingPosition = position
         documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
     }
 
@@ -1547,7 +1661,6 @@ final class ReaderViewController: NSViewController {
         pdfView.setCurrentSelection(selection, animate: true)
         pdfView.go(to: selection)
         isApplyingStoreState = false
-        // Prefer explicit page from the selection over viewport sampling.
         if let page = selection.pages.first,
            let document = pdfView.document {
             let bounds = page.bounds(for: pdfView.displayBox)
@@ -1639,6 +1752,12 @@ final class ReaderViewController: NSViewController {
         guard let document = pdfView.document,
               let page = document.page(at: readingPosition.pageIndex) else { return }
 
+        // History playback already moved the view; never re-go(to:) or stacks die.
+        if isNavigatingHistory {
+            displayedReadingPosition = readingPosition
+            return
+        }
+
         if !force,
            let currentPage = pdfView.currentPage,
            document.index(for: currentPage) == readingPosition.pageIndex {
@@ -1646,9 +1765,8 @@ final class ReaderViewController: NSViewController {
             return
         }
 
-        // Outline / store-driven page jumps should still push history so Cmd+[ works.
-        // Skip on first load (no displayed position yet) and during history playback.
-        if isNavigatingHistory == false, displayedReadingPosition != nil {
+        // Outline / store-driven jumps: push history when leaving an established page.
+        if displayedReadingPosition != nil {
             recordNavigationHistoryBeforeJump()
         }
 
