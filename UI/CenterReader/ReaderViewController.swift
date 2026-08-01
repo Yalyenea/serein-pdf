@@ -696,11 +696,11 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func goToPage(_ pageIndex: Int) -> Bool {
-        jumpToPage(pageIndex)
+        jumpToPage(pageIndex, recordHistory: true)
     }
 
     @discardableResult
-    private func jumpToPage(_ pageIndex: Int) -> Bool {
+    private func jumpToPage(_ pageIndex: Int, recordHistory: Bool) -> Bool {
         guard let document = pdfView.document,
               pageIndex >= 0,
               pageIndex < document.pageCount,
@@ -716,7 +716,9 @@ final class ReaderViewController: NSViewController {
             return true
         }
 
-        recordNavigationHistoryBeforeJump()
+        if recordHistory {
+            recordNavigationHistoryBeforeJump()
+        }
         applyProgrammaticDestination(page: page, point: target.point, storePosition: target)
         return true
     }
@@ -832,10 +834,18 @@ final class ReaderViewController: NSViewController {
         let targetPageIndex = min(max(currentPageIndex + direction * step, 0), document.pageCount - 1)
         guard targetPageIndex != currentPageIndex else { return false }
 
-        return jumpToPage(targetPageIndex)
+        // Sequential page-turn is not a history stop (same as continuous scroll).
+        return jumpToPage(targetPageIndex, recordHistory: false)
     }
 
     private func currentPageIndexForNavigation(in document: PDFDocument) -> Int? {
+        // Prefer the intentional displayed page over viewport sampling (can lag
+        // right after a jump, especially in headless tests).
+        if let displayed = displayedReadingPosition,
+           displayed.pageIndex >= 0,
+           displayed.pageIndex < document.pageCount {
+            return displayed.pageIndex
+        }
         if let position = currentReadingPosition(),
            position.pageIndex >= 0,
            position.pageIndex < document.pageCount {
@@ -994,7 +1004,7 @@ final class ReaderViewController: NSViewController {
 
     private func handleOverviewPageSelected(_ pageIndex: Int) {
         guard pdfView.document?.page(at: pageIndex) != nil else { return }
-        _ = jumpToPage(pageIndex)
+        _ = jumpToPage(pageIndex, recordHistory: true)
         setAllPagesOverviewActive(false)
     }
 
@@ -1304,12 +1314,14 @@ final class ReaderViewController: NSViewController {
             point: NSPoint(x: bounds.minX, y: bounds.maxY)
         )
 
-        // External navigations (thumbnail, in-PDF link) bypass jumpToPage — record here.
-        // Continuous scroll also lands here; stack is capped at 100.
-        if let previous = displayedReadingPosition,
-           previous.pageIndex != position.pageIndex {
-            pushBackHistory(previous)
-            navigationForwardStack.removeAll(keepingCapacity: true)
+        // Thumbnail / in-PDF links that skip pages: record. Continuous scroll and
+        // sequential page-turn advance one (or two-up step) page at a time — skip.
+        if let previous = displayedReadingPosition {
+            let delta = abs(previous.pageIndex - position.pageIndex)
+            if delta > 1 {
+                pushBackHistory(previous)
+                navigationForwardStack.removeAll(keepingCapacity: true)
+            }
         }
 
         displayedReadingPosition = position
@@ -1637,7 +1649,7 @@ final class ReaderViewController: NSViewController {
         }
 
         guard pdfView.document?.page(at: highlight.pageIndex) != nil else { return }
-        _ = jumpToPage(highlight.pageIndex)
+        _ = jumpToPage(highlight.pageIndex, recordHistory: true)
     }
 
     private func applyDisplayModeIfNeeded(_ session: DocumentSession) {

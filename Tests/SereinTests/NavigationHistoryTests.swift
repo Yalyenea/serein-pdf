@@ -112,6 +112,69 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertFalse(reader.canGoForward)
     }
 
+    func testSequentialPageTurnsDoNotRecordHistory() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-seq-turns", pageCount: 6)
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        let reader = makeReader(store: store, sessionID: session.id)
+
+        XCTAssertTrue(reader.goToPage(2))
+        XCTAssertEqual(reader.testingNavigationBackPageIndices, [0])
+
+        // goToNextPage uses sequential turnPage — must not push history.
+        XCTAssertTrue(reader.goToNextPage(), "next from page 2")
+        XCTAssertEqual(storePageIndex(store, session.id), 3)
+        XCTAssertTrue(reader.goToNextPage(), "next from page 3")
+        XCTAssertEqual(storePageIndex(store, session.id), 4)
+        XCTAssertEqual(reader.testingNavigationBackPageIndices, [0])
+        XCTAssertFalse(reader.canGoForward)
+
+        // Non-adjacent jump still records.
+        XCTAssertTrue(reader.goToPage(1))
+        XCTAssertEqual(reader.testingNavigationBackPageIndices, [0, 4])
+    }
+
+    func testAdjacentPageChangeFromScrollDoesNotRecordHistory() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-scroll", pageCount: 5)
+        )
+        let reader = makeReader(store: store, sessionID: session.id)
+
+        XCTAssertTrue(reader.goToPage(2))
+        let backBefore = reader.testingNavigationBackPageIndices
+
+        // Simulate continuous-scroll page step: only update via page-change path.
+        let document = try XCTUnwrap(reader.pdfView.document)
+        let page = try XCTUnwrap(document.page(at: 3))
+        reader.pdfView.go(to: page)
+        // Allow PDFViewPageChanged to run.
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        XCTAssertEqual(reader.testingNavigationBackPageIndices, backBefore)
+    }
+
+    func testNonAdjacentPageChangeRecordsHistory() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-skip", pageCount: 8)
+        )
+        let reader = makeReader(store: store, sessionID: session.id)
+
+        XCTAssertTrue(reader.goToPage(1))
+        XCTAssertEqual(reader.testingNavigationBackPageIndices, [0])
+
+        // Simulate thumbnail / link skip (delta > 1) via raw PDFView navigation.
+        let document = try XCTUnwrap(reader.pdfView.document)
+        let page = try XCTUnwrap(document.page(at: 5))
+        reader.pdfView.go(to: page)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        XCTAssertEqual(reader.testingNavigationBackPageIndices, [0, 1])
+    }
+
     private func makeReader(store: DocumentStore, sessionID: UUID) -> ReaderViewController {
         let reader = ReaderViewController(documentStore: store, windowID: store.defaultWindowID)
         reader.targetSessionID = sessionID

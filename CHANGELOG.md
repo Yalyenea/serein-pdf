@@ -5,7 +5,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Navigation
-- Fix multi-step `Cmd+[` / `Cmd+]`: single owned back/forward stack fed by page jumps, outline, search, and thumbnail/link page changes; history playback never re-`go(to:)` from store writeback (which previously wiped the stack after one step).
+- Fix multi-step `Cmd+[` / `Cmd+]`: single owned back/forward stack for intentional jumps (outline, search, go-to-page, non-adjacent thumbnail/link); continuous scroll and sequential page-turn do not flood the stack; history playback never re-`go(to:)` from store writeback.
 
 ### Chrome / Layout
 - Keep preferred sidebar widths across collapse/expand: only persist divider drags (user mouse), re-pin after AppKit settles, and raise sidebar holding priority so headless CI layout no longer clobbers 220/320 defaults.
