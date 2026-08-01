@@ -69,8 +69,10 @@ final class SplitViewController: NSSplitViewController {
         splitView.wantsLayer = true
         applyChromeColors()
 
+        // Sidebars must out-hold the center so preferred widths survive AppKit
+        // redistribution after collapse/expand (headless CI is especially aggressive).
         let sidebarHoldingPriority = NSLayoutConstraint.Priority(
-            rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue + 10
+            rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue + 40
         )
 
         tabsSidebarItem = NSSplitViewItem(viewController: verticalTabsViewController)
@@ -109,7 +111,11 @@ final class SplitViewController: NSSplitViewController {
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
         syncSidebarVisibilityFromSplitView()
-        guard isApplyingSidebarWidths == false,
+        // Ignore programmatic chrome pin/collapse. Also ignore simultaneous multi-pane
+        // redistribution (common on headless CI) which would clobber preferred widths.
+        // A real divider drag (or test setPosition on one divider) changes only one side.
+        guard isApplyingChromeLayout == false,
+              isApplyingSidebarWidths == false,
               hasAppliedSidebarWidths else { return }
 
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
@@ -122,12 +128,13 @@ final class SplitViewController: NSSplitViewController {
         let rightWidth = rightItem?.isCollapsed == true
             ? storedWidths.right
             : splitView.arrangedSubviews[safe: 2]?.frame.width ?? storedWidths.right
-        guard sidebarWidthChangedMeaningfully(current: leftWidth, stored: storedWidths.left) ||
-                sidebarWidthChangedMeaningfully(current: rightWidth, stored: storedWidths.right) else { return }
+        let leftChanged = sidebarWidthChangedMeaningfully(current: leftWidth, stored: storedWidths.left)
+        let rightChanged = sidebarWidthChangedMeaningfully(current: rightWidth, stored: storedWidths.right)
+        guard leftChanged != rightChanged else { return }
 
         documentStore.updateSidebarWidths(
-            left: leftWidth,
-            right: rightWidth,
+            left: leftChanged ? leftWidth : storedWidths.left,
+            right: rightChanged ? rightWidth : storedWidths.right,
             in: windowID
         )
     }
@@ -228,8 +235,12 @@ final class SplitViewController: NSSplitViewController {
         applySidebarWidthsForWindow()
 
         if forceWidthReapply {
+            // Collapse/expand + first pin can still redistribute under AppKit layout.
+            // Re-pin after settling so preferred widths stick (especially headless CI).
             splitView.layoutSubtreeIfNeeded()
             view.layoutSubtreeIfNeeded()
+            hasAppliedSidebarWidths = false
+            applySidebarWidthsForWindow()
             readerWorkspaceViewController.reflowReadersForChromeLayoutChange()
         }
 
@@ -288,7 +299,9 @@ final class SplitViewController: NSSplitViewController {
             ? min(max(preferredWidths.right, layout.rightSidebarMinWidth), layout.rightSidebarMaxWidth)
             : nil
         let total = splitView.bounds.width
+        let dividerCount = CGFloat((leftIsVisible ? 1 : 0) + (rightIsVisible ? 1 : 0))
         let requiredWidth = (targetLeft ?? 0) + (targetRight ?? 0) + centerItem.minimumThickness
+            + splitView.dividerThickness * dividerCount
         guard total >= requiredWidth else {
             hasAppliedSidebarWidths = false
             return
@@ -312,6 +325,16 @@ final class SplitViewController: NSSplitViewController {
             splitView.setPosition(targetLeft, ofDividerAt: 0)
         }
         if let targetRight {
+            splitView.setPosition(total - targetRight, ofDividerAt: 1)
+        }
+        splitView.layoutSubtreeIfNeeded()
+
+        // Second pass if AppKit nudged a divider during the first pair of sets.
+        let settled = currentSidebarWidths()
+        if let targetLeft, widthsMatch(settled.left, targetWidth: targetLeft) == false {
+            splitView.setPosition(targetLeft, ofDividerAt: 0)
+        }
+        if let targetRight, widthsMatch(settled.right, targetWidth: targetRight) == false {
             splitView.setPosition(total - targetRight, ofDividerAt: 1)
         }
 
