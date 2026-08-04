@@ -198,7 +198,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         tableView.dataSource = self
         tableView.target = self
         tableView.action = #selector(handleRowAction(_:))
-        tableView.doubleAction = #selector(handleRowAction(_:))
+        tableView.doubleAction = #selector(ignoreDoubleClick(_:))
 
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -362,6 +362,11 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         guard let group = selectedGroup() else { return }
         currentGroupID = group.groupID
         onActivateHighlight?(group)
+    }
+
+    @objc
+    private func ignoreDoubleClick(_ sender: Any?) {
+        // The first click already activated the selected highlight.
     }
 
     @objc

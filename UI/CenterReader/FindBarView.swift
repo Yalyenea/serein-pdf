@@ -40,6 +40,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     private let nextButton = NSButton(title: "↓", target: nil, action: nil)
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let divider = NSBox()
+    private var selectedMatchIndex: Int?
+    private var keyboardSelectionRequested = false
 
     var query: String {
         queryField.stringValue
@@ -173,14 +175,19 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
     func setQuery(_ text: String) {
         queryField.stringValue = text
+        selectedMatchIndex = nil
+        keyboardSelectionRequested = false
     }
 
     func setScope(_ scope: SearchScope) {
         scopeControl.selectedSegment = scope == .allOpen ? 1 : 0
         queryField.placeholderString = scope.placeholder
+        selectedMatchIndex = nil
+        keyboardSelectionRequested = false
     }
 
     func setStatus(matchIndex: Int?, totalMatches: Int) {
+        selectedMatchIndex = totalMatches > 0 ? matchIndex : nil
         if queryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             statusLabel.stringValue = ""
         } else if totalMatches == 0 {
@@ -196,18 +203,33 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
     func controlTextDidChange(_ obj: Notification) {
         statusLabel.stringValue = ""
+        selectedMatchIndex = nil
+        keyboardSelectionRequested = false
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
         case #selector(NSResponder.moveUp(_:)):
+            keyboardSelectionRequested = true
             delegate?.findBarRequestsSelectPrevious(self)
+            if selectedMatchIndex == nil {
+                keyboardSelectionRequested = false
+            }
             return true
         case #selector(NSResponder.moveDown(_:)):
+            keyboardSelectionRequested = true
             delegate?.findBarRequestsSelectNext(self)
+            if selectedMatchIndex == nil {
+                keyboardSelectionRequested = false
+            }
             return true
         case #selector(NSResponder.insertNewline(_:)):
-            delegate?.findBar(self, didSubmitQuery: queryField.stringValue, scope: scope)
+            if keyboardSelectionRequested, selectedMatchIndex != nil {
+                delegate?.findBarRequestsActivateSelection(self)
+                keyboardSelectionRequested = false
+            } else {
+                delegate?.findBar(self, didSubmitQuery: queryField.stringValue, scope: scope)
+            }
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             delegate?.findBarRequestsClose(self)
@@ -238,6 +260,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     private func handleScopeChanged() {
         let scope = scope
         queryField.placeholderString = scope.placeholder
+        selectedMatchIndex = nil
+        keyboardSelectionRequested = false
         let trimmed = queryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else {
             statusLabel.stringValue = ""

@@ -52,6 +52,20 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSession?.title, "single")
     }
 
+    func testLoadingNewDocumentResolvesInitialPositionToActualPageTop() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "initial-page-top"))
+        let document = try store.pdfDocument(for: session.id)
+        let firstPage = try XCTUnwrap(document.page(at: 0))
+        let expected = ReadingPosition.pageTop(
+            pageIndex: 0,
+            pageBounds: firstPage.bounds(for: .cropBox)
+        )
+
+        XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, expected)
+        XCTAssertNotEqual(expected.point, .zero)
+    }
+
     func testNewBlankTabCreatesActiveUntitledSessionWithoutRecentFile() throws {
         let store = makeStore()
 
@@ -256,16 +270,37 @@ final class DocumentStoreTests: XCTestCase {
         )
         XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
 
+        let firstDocument = try store.pdfDocument(for: sessions[0].id)
+        let secondDocument = try store.pdfDocument(for: sessions[1].id)
+        let firstLastPage = try XCTUnwrap(firstDocument.page(at: 1))
+        let secondFirstPage = try XCTUnwrap(secondDocument.page(at: 0))
+        let forwardPosition = ReadingPosition.pageTop(
+            pageIndex: 0,
+            pageBounds: secondFirstPage.bounds(for: .cropBox)
+        )
+        let backwardPosition = ReadingPosition.pageBottom(
+            pageIndex: 1,
+            pageBounds: firstLastPage.bounds(for: .cropBox)
+        )
+
         XCTAssertEqual(
             store.continuousReadingTarget(from: sessions[0].id, direction: 1, in: store.defaultWindowID),
-            ContinuousReadingTarget(sessionID: sessions[1].id, pageIndex: 0)
+            ContinuousReadingTarget(sessionID: sessions[1].id, readingPosition: forwardPosition)
         )
         XCTAssertEqual(
             store.continuousReadingTarget(from: sessions[1].id, direction: -1, in: store.defaultWindowID),
-            ContinuousReadingTarget(sessionID: sessions[0].id, pageIndex: 1)
+            ContinuousReadingTarget(sessionID: sessions[0].id, readingPosition: backwardPosition)
         )
         XCTAssertNil(store.continuousReadingTarget(from: sessions[0].id, direction: -1, in: store.defaultWindowID))
         XCTAssertNil(store.continuousReadingTarget(from: sessions[1].id, direction: 1, in: store.defaultWindowID))
+
+        let roots = store.outlineTreeForSidebar(in: store.defaultWindowID)
+        XCTAssertEqual(roots.map(\.destinationPoint), [
+            firstDocument.page(at: 0).map {
+                ReadingPosition.pageTop(pageIndex: 0, pageBounds: $0.bounds(for: .cropBox)).point
+            },
+            forwardPosition.point,
+        ])
     }
 
     func testPDFDocumentCacheEvictsCleanBackgroundDocumentsButKeepsDirtyOnes() throws {
@@ -553,14 +588,44 @@ final class DocumentStoreTests: XCTestCase {
 
     func testUpdateCurrentPageMutatesOnlyTargetSession() throws {
         let store = makeStore()
-        let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha", pageCount: 4))
         let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
+
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 0, point: CGPoint(x: 31, y: 47)),
+            scaleFactor: 1,
+            for: first.id
+        )
 
         store.updateCurrentPage(index: 3, for: first.id)
 
+        let page = try XCTUnwrap(try store.pdfDocument(for: first.id).page(at: 3))
+        let expectedPosition = ReadingPosition.pageTop(
+            pageIndex: 3,
+            pageBounds: page.bounds(for: .cropBox)
+        )
+
         XCTAssertEqual(store.session(for: first.id)?.currentPageIndex, 3)
-        XCTAssertEqual(store.session(for: first.id)?.lastReadPosition.pageIndex, 3)
+        XCTAssertEqual(store.session(for: first.id)?.lastReadPosition, expectedPosition)
         XCTAssertEqual(store.session(for: second.id)?.currentPageIndex, 0)
+    }
+
+    func testUpdateCurrentPageResetsSamePageToActualPageTop() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "same-page-top"))
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 0, point: CGPoint(x: 20, y: 30)),
+            scaleFactor: 1,
+            for: session.id
+        )
+
+        store.updateCurrentPage(index: 0, for: session.id)
+
+        let page = try XCTUnwrap(try store.pdfDocument(for: session.id).page(at: 0))
+        XCTAssertEqual(
+            store.session(for: session.id)?.lastReadPosition,
+            ReadingPosition.pageTop(pageIndex: 0, pageBounds: page.bounds(for: .cropBox))
+        )
     }
 
     func testDefaultTabPresentationModeIsVerticalSidebar() {
@@ -755,6 +820,31 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(session.lastReadPosition, ReadingPosition(pageIndex: 2, point: CGPoint(x: 14, y: 28)))
     }
 
+    func testLoadingDocumentClampsOutOfRangePositionToActualLastPageTop() throws {
+        let url = try makeTemporaryPDF(named: "clamped-page-top", pageCount: 2)
+        let readingStateStore = InMemoryReadingStateStore()
+        readingStateStore.states[url] = PersistedReadingState(
+            url: url,
+            displayMode: .singlePageContinuous,
+            scaleMode: .manual,
+            scaleFactor: 1,
+            readingPosition: ReadingPosition(pageIndex: 99, point: CGPoint(x: 41, y: 53))
+        )
+        let store = makeStore(readingStateStore: readingStateStore)
+        let session = try store.open(documentAt: url)
+        let document = try store.pdfDocument(for: session.id)
+        let lastPage = try XCTUnwrap(document.page(at: 1))
+        let expected = ReadingPosition.pageTop(
+            pageIndex: 1,
+            pageBounds: lastPage.bounds(for: .cropBox)
+        )
+
+        XCTAssertEqual(store.session(for: session.id)?.currentPageIndex, 1)
+        XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, expected)
+        XCTAssertEqual(readingStateStore.states[url]?.readingPosition, expected)
+        XCTAssertNotEqual(expected.point, .zero)
+    }
+
     func testDisabledFitWidthConfigOverridesPersistedFitWidthMode() throws {
         let url = try makeTemporaryPDF(named: "disabled-fit-width")
         let readingStateStore = InMemoryReadingStateStore()
@@ -878,7 +968,9 @@ final class DocumentStoreTests: XCTestCase {
     func testUpdateReadingPositionPersistsScaleAndPoint() throws {
         let readingStateStore = InMemoryReadingStateStore()
         let store = makeStore(readingStateStore: readingStateStore)
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-state"))
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(named: "reading-state", pageCount: 5)
+        )
 
         store.updateReadingPosition(
             ReadingPosition(pageIndex: 4, point: CGPoint(x: 33, y: 77)),
@@ -931,7 +1023,7 @@ final class DocumentStoreTests: XCTestCase {
         let persistence = InMemoryDocumentStorePersistence()
         let readingStateStore = InMemoryReadingStateStore()
         let store = makeStore(persistence: persistence, readingStateStore: readingStateStore)
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-position-mask"))
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "reading-position-mask", pageCount: 2))
         let snapshotAfterOpen = try XCTUnwrap(persistence.state)
 
         let recorder = DocumentStoreChangeRecorder()
@@ -957,8 +1049,12 @@ final class DocumentStoreTests: XCTestCase {
     func testReadingStateRemainsIndependentAcrossSessions() throws {
         let readingStateStore = InMemoryReadingStateStore()
         let store = makeStore(readingStateStore: readingStateStore)
-        let first = try store.open(documentAt: makeTemporaryPDF(named: "first-reading-state"))
-        let second = try store.open(documentAt: makeTemporaryPDF(named: "second-reading-state"))
+        let first = try store.open(
+            documentAt: makeTemporaryPDF(named: "first-reading-state", pageCount: 2)
+        )
+        let second = try store.open(
+            documentAt: makeTemporaryPDF(named: "second-reading-state", pageCount: 7)
+        )
 
         store.setDisplayMode(.singlePage, for: first.id)
         store.updateReadingPosition(
@@ -1279,15 +1375,18 @@ final class DocumentStoreTests: XCTestCase {
                 layout: .default
             )
         )
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "zoom-pins-manual"))
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(named: "zoom-pins-manual", pageCount: 3)
+        )
         XCTAssertEqual(session.scaleMode, .fitWidth)
 
         // User zoom gesture: handlePDFViewScaleChanged calls setScaleMode(.manual, ...).
         store.setScaleMode(.manual, scaleFactor: 2.3, for: session.id)
 
         // Page turn fires updateReadingPosition, which must not resurrect fitWidth.
+        let page = try XCTUnwrap(try store.pdfDocument(for: session.id).page(at: 2))
         store.updateReadingPosition(
-            ReadingPosition(pageIndex: 2, point: .zero),
+            .pageTop(pageIndex: 2, pageBounds: page.bounds(for: .cropBox)),
             scaleFactor: 2.3,
             for: session.id
         )
@@ -1430,15 +1529,28 @@ final class DocumentStoreTests: XCTestCase {
 
     func testComparisonSessionStaysOutOfTabsAndPersistence() throws {
         let persistence = InMemoryDocumentStorePersistence()
+        let readingStateStore = InMemoryReadingStateStore()
         let store = DocumentStore(
             persistence: persistence,
-            readingStateStore: InMemoryReadingStateStore(),
+            readingStateStore: readingStateStore,
             recentFilesStore: InMemoryRecentFilesStore()
         )
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "split-internal-comparison"))
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(named: "split-internal-comparison", pageCount: 3)
+        )
         let windowID = store.defaultWindowID
         var notedURLs: [URL] = []
         store.noteRecentDocumentURL = { notedURLs.append($0) }
+
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 1, point: CGPoint(x: 23, y: 47)),
+            scaleFactor: 1.4,
+            for: session.id
+        )
+        store.setDisplayMode(.singlePage, for: session.id)
+        store.setScaleMode(.manual, scaleFactor: 1.4, for: session.id)
+        let expectedPrimaryState = try XCTUnwrap(readingStateStore.states[session.url])
+        let primarySaveCount = readingStateStore.savedStates.count
 
         store.setSplitEnabled(true, in: windowID)
         store.activate(sessionID: session.id, in: windowID, targetPane: .secondary)
@@ -1451,6 +1563,18 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(persistence.state?.windows.first?.sessionIDs, [session.id])
         XCTAssertNil(persistence.state?.windows.first?.splitState.secondarySessionID)
         XCTAssertTrue(notedURLs.isEmpty)
+
+        store.updateCurrentPage(index: 2, for: comparisonID)
+        store.setDisplayMode(.twoUp, for: comparisonID)
+        store.setScaleMode(.manual, scaleFactor: 1.8, for: comparisonID)
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 1, point: CGPoint(x: 17, y: 29)),
+            scaleFactor: 1.8,
+            for: comparisonID
+        )
+
+        XCTAssertEqual(readingStateStore.states[session.url], expectedPrimaryState)
+        XCTAssertEqual(readingStateStore.savedStates.count, primarySaveCount)
     }
 
     func testActivatingSameSessionIntoOtherPaneReusesExistingComparisonSession() throws {

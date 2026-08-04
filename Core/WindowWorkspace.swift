@@ -67,7 +67,11 @@ struct ContinuousReadingState: Equatable, Codable, Sendable {
 
 struct ContinuousReadingTarget: Equatable, Sendable {
     var sessionID: UUID
-    var pageIndex: Int
+    var readingPosition: ReadingPosition
+
+    var pageIndex: Int {
+        readingPosition.pageIndex
+    }
 }
 
 struct ReaderSplitPair: Equatable, Sendable {

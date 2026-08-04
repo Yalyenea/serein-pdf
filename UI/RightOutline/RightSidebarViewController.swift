@@ -7,6 +7,23 @@ private final class CollapsibleContainerView: SidebarMaterialView {
     }
 }
 
+/// Captures the reader origin before PDFKit handles a Pages-sidebar click.
+/// PDFThumbnailView otherwise changes the PDFView directly, leaving no reliable
+/// way to distinguish the click from ordinary scrolling after the fact.
+final class NavigationTrackingPDFThumbnailView: PDFThumbnailView {
+    var onWillNavigate: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        notifyWillNavigate()
+        super.mouseDown(with: event)
+    }
+
+    func notifyWillNavigate() {
+        onWillNavigate?()
+    }
+
+}
+
 final class RightSidebarViewController: NSViewController {
     private static let contentInset: CGFloat = 8
     let documentStore: DocumentStore
@@ -17,7 +34,8 @@ final class RightSidebarViewController: NSViewController {
     var onActivateSearchMatch: ((SearchSidebarMatch) -> Void)?
     var onSearchSelectionDidChange: ((Int?, Int) -> Void)?
     var onActivateAnnotation: ((DocumentHighlightGroup) -> Void)?
-    private let thumbnailView = PDFThumbnailView()
+    var onWillNavigateFromPages: (() -> Void)?
+    private let thumbnailView = NavigationTrackingPDFThumbnailView()
     private let modeSegmented = NSSegmentedControl()
     private var lastAppliedThumbnailWidth: CGFloat = 0
     private var lastAppliedThumbnailColumns: Int = 1
@@ -67,6 +85,9 @@ final class RightSidebarViewController: NSViewController {
         }
         annotationsViewController.onActivateHighlight = { [weak self] group in
             self?.onActivateAnnotation?(group)
+        }
+        thumbnailView.onWillNavigate = { [weak self] in
+            self?.onWillNavigateFromPages?()
         }
         applyMode()
     }

@@ -5,12 +5,21 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Navigation
-- Fix multi-step `Cmd+[` / `Cmd+]`: single owned back/forward stack for intentional jumps (outline, search, go-to-page, non-adjacent thumbnail/link); continuous scroll and sequential page-turn do not flood the stack; history playback never re-`go(to:)` from store writeback.
+- Make `Cmd+[` / `Cmd+]` history pane-local and session-aware: exact page points survive repeated back/forward, same-page jumps, cross-document Outline/Search navigation, and tab switches; ordinary scrolling and sequential turns do not flood history.
+- Treat Outline destinations, Pages thumbnails, PDF internal links, Search results, and annotations as explicit navigation intents; route internal GoTo links through the centered reader path from the first click, preserve precise destination points, and avoid duplicate single/double-click jumps.
+- Persist ordinary wheel/trackpad viewport changes, restore exact anchors after display-mode reflow, and keep new/clamped pages on their real PDF top instead of the PDF-coordinate origin.
+- Fix document edges and reading boundaries: `G` reaches the real document bottom, non-continuous half-page commands finish the current PDF before crossing a continuous-reading group, backward transitions land at the previous bottom, and odd/even Two-Up spreads stop correctly.
+- Keep fit-width active and recompute scale when a page turn changes page shape.
+
+### Find
+- After choosing a result with the Find bar arrow keys, `Enter` activates that exact selection before repeated-submit navigation resumes.
 
 ### Chrome / Layout
 - Keep preferred sidebar widths across collapse/expand: only persist divider drags (user mouse), re-pin after AppKit settles, and raise sidebar holding priority so headless CI layout no longer clobbers 220/320 defaults.
 
 ### Reliability
+- Keep same-PDF comparison sessions out of URL-level reading-state persistence, and persist true reading-state LRU order across launches without losing the legacy dictionary format.
+- Replace navigation false-green tests with real PDFView page, selection, viewport, cross-session, four-mode, odd/even spread, and top/bottom boundary assertions.
 - Stabilize sidebar toggle layout tests for CI: pin default window size, wait for settled widths, assert store preferred widths survive programmatic toggles.
 
 ## [0.6.0] - 2026-08-01

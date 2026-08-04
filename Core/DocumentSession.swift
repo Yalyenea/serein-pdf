@@ -44,6 +44,7 @@ struct DocumentSession {
     var scaleMode: ReaderScaleMode
     var zoomScale: CGFloat
     var lastReadPosition: ReadingPosition
+    var needsInitialReadingPosition: Bool
     var outlineTree: [OutlineNode]
     var isOutlineLoaded: Bool
     var isDirty: Bool
@@ -69,7 +70,7 @@ struct DocumentSession {
         displayMode: ReaderDisplayMode = .singlePageContinuous,
         scaleMode: ReaderScaleMode = .fitWidth,
         zoomScale: CGFloat = 1.0,
-        lastReadPosition: ReadingPosition = .zero,
+        lastReadPosition: ReadingPosition? = nil,
         outlineTree: [OutlineNode] = [],
         isOutlineLoaded: Bool = false,
         isDirty: Bool = false,
@@ -90,7 +91,8 @@ struct DocumentSession {
         self.displayMode = displayMode
         self.scaleMode = scaleMode
         self.zoomScale = zoomScale
-        self.lastReadPosition = lastReadPosition
+        self.lastReadPosition = lastReadPosition ?? .zero
+        needsInitialReadingPosition = isBlank == false && lastReadPosition == nil
         self.outlineTree = outlineTree
         self.isOutlineLoaded = isOutlineLoaded
         self.isDirty = isDirty

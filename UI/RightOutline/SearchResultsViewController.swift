@@ -117,7 +117,9 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         tableView.selectionHighlightStyle = .regular
         tableView.delegate = self
         tableView.dataSource = self
-        tableView.doubleAction = #selector(handleDoubleClick(_:))
+        tableView.target = self
+        tableView.action = #selector(handleRowAction(_:))
+        tableView.doubleAction = #selector(ignoreDoubleClick(_:))
 
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -205,8 +207,13 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     }
 
     @objc
-    private func handleDoubleClick(_ sender: Any?) {
+    private func handleRowAction(_ sender: Any?) {
         _ = activateSelectedMatch()
+    }
+
+    @objc
+    private func ignoreDoubleClick(_ sender: Any?) {
+        // The first click already activated the selected match.
     }
 
     private func rebuildRows() {

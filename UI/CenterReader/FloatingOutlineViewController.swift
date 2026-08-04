@@ -168,6 +168,10 @@ final class FloatingOutlineViewController: NSViewController {
     private var lastReportedSize: NSSize?
 
     var preferredSizeDidChange: ((NSSize) -> Void)?
+    var onNavigationRequested: ((OutlineNavigationRequest) -> Void)? {
+        get { outlineViewController.onNavigationRequested }
+        set { outlineViewController.onNavigationRequested = newValue }
+    }
 
     var preferredSize: NSSize {
         if isExpanded {

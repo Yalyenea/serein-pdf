@@ -12,9 +12,11 @@ enum OutlineExtractor {
     }
 
     private static func extractNode(from outline: PDFOutline, in document: PDFDocument) -> OutlineNode {
-        OutlineNode(
+        let destination = navigationDestination(for: outline, in: document)
+        return OutlineNode(
             title: outline.label ?? "",
-            pageIndex: pageIndex(for: outline, in: document),
+            pageIndex: destination?.pageIndex,
+            destinationPoint: destination?.point,
             children: (0..<outline.numberOfChildren).compactMap { index in
                 guard let child = outline.child(at: index) else { return nil }
                 return extractNode(from: child, in: document)
@@ -22,14 +24,24 @@ enum OutlineExtractor {
         )
     }
 
-    private static func pageIndex(for outline: PDFOutline, in document: PDFDocument) -> Int? {
-        if let page = outline.destination?.page {
-            return document.index(for: page)
+    private static func navigationDestination(
+        for outline: PDFOutline,
+        in document: PDFDocument
+    ) -> ReadingPosition? {
+        if let destination = outline.destination,
+           let page = destination.page {
+            return ReadingPosition(
+                pageIndex: document.index(for: page),
+                point: destination.point
+            )
         }
 
         if let action = outline.action as? PDFActionGoTo,
            let page = action.destination.page {
-            return document.index(for: page)
+            return ReadingPosition(
+                pageIndex: document.index(for: page),
+                point: action.destination.point
+            )
         }
 
         return nil

@@ -26,6 +26,7 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
     static let maxEntries = 500
     static let debounceInterval: TimeInterval = 0.75
     static let stateKey = "Serein.ReadingState"
+    static let lruKey = "Serein.ReadingState.LRU"
 
     private static let logger = Logger(subsystem: "local.yfff.Serein", category: "ReadingStateStore")
 
@@ -60,7 +61,11 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
         try ensureCacheLoaded()
         let key = url.absoluteString
         guard let state = cache[key] else { return nil }
-        touchLRU(key)
+        if lruOrder.last != key {
+            touchLRU(key)
+            isDirty = true
+            scheduleFlush()
+        }
         return state
     }
 
@@ -85,14 +90,32 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
         if let data = userDefaults.data(forKey: Self.stateKey) {
             let decoded = try JSONDecoder().decode([String: PersistedReadingState].self, from: data)
             cache = decoded
-            lruOrder = Array(decoded.keys)
+            let persistedOrder: [String]
+            if let lruData = userDefaults.data(forKey: Self.lruKey) {
+                persistedOrder = try JSONDecoder().decode([String].self, from: lruData)
+            } else {
+                // One-time migration from the original dictionary-only format.
+                persistedOrder = decoded.keys.sorted()
+            }
+            lruOrder = normalizedLRUOrder(persistedOrder, cacheKeys: Set(decoded.keys))
+            let needsMigration = userDefaults.data(forKey: Self.lruKey) == nil && decoded.isEmpty == false
+            let needsNormalization = lruOrder != persistedOrder
             if lruOrder.count > maxEntries {
                 pruneIfNeeded()
+            }
+            if needsMigration || needsNormalization || isDirty {
                 try writeCacheToUserDefaults()
                 isDirty = false
             }
         }
         isCacheLoaded = true
+    }
+
+    private func normalizedLRUOrder(_ order: [String], cacheKeys: Set<String>) -> [String] {
+        var seen: Set<String> = []
+        let knownOrder = order.filter { cacheKeys.contains($0) && seen.insert($0).inserted }
+        let missingKeys = cacheKeys.subtracting(seen).sorted()
+        return missingKeys + knownOrder
     }
 
     private func touchLRU(_ key: String) {
@@ -136,7 +159,8 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
     }
 
     private func writeCacheToUserDefaults() throws {
-        let data = try JSONEncoder().encode(cache)
-        userDefaults.set(data, forKey: Self.stateKey)
+        let encoder = JSONEncoder()
+        userDefaults.set(try encoder.encode(cache), forKey: Self.stateKey)
+        userDefaults.set(try encoder.encode(lruOrder), forKey: Self.lruKey)
     }
 }

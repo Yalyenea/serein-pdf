@@ -117,6 +117,47 @@ struct OutlineViewControllerTests {
     }
 
     @Test
+    func outlineRowsRequestExactDestinationsForSameAndDifferentPages() throws {
+        let samePagePoint = CGPoint(x: 24, y: 220)
+        let differentPagePoint = CGPoint(x: 52, y: 140)
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: makeTemporaryPDFWithOutline(
+                named: "exact-outline-navigation",
+                topLevelCount: 2,
+                outlinePoints: [samePagePoint, differentPagePoint]
+            )
+        )
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        var requests: [OutlineNavigationRequest] = []
+        controller.onNavigationRequested = { requests.append($0) }
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 260, height: 540)
+        controller.view.layoutSubtreeIfNeeded()
+        let positionBeforeClicks = store.session(for: session.id)?.lastReadPosition
+
+        let rows = outlineRows(in: controller.view)
+        #expect(rows.count == 2)
+        rows[0].performPrimaryAction()
+        rows[1].performPrimaryAction()
+
+        #expect(requests == [
+            OutlineNavigationRequest(
+                sessionID: session.id,
+                position: ReadingPosition(pageIndex: 0, point: samePagePoint)
+            ),
+            OutlineNavigationRequest(
+                sessionID: session.id,
+                position: ReadingPosition(pageIndex: 1, point: differentPagePoint)
+            ),
+        ])
+        #expect(store.session(for: session.id)?.lastReadPosition == positionBeforeClicks)
+    }
+
+    @Test
     func outlinePaneHidesScrollersAndDisablesHorizontalScroll() {
         let store = makeIsolatedDocumentStore()
         let controller = OutlineViewController(
@@ -297,6 +338,42 @@ struct OutlineViewControllerTests {
         #expect(rows[3].node.isDocumentRoot)
         #expect(rows[3].node.sourceSessionID == sessions[1].id)
     }
+
+    @Test
+    func continuousReadingOutlineRequestKeepsSourceSessionAndExactPoint() throws {
+        let targetPoint = CGPoint(x: 42, y: 156)
+        let store = makeIsolatedDocumentStore()
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDFWithOutline(named: "continuous-request-first"),
+                makeTemporaryPDFWithOutline(
+                    named: "continuous-request-second",
+                    outlinePoints: [targetPoint]
+                ),
+            ],
+            in: store.defaultWindowID
+        )
+        #expect(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        var request: OutlineNavigationRequest?
+        controller.onNavigationRequested = { request = $0 }
+        controller.loadViewIfNeeded()
+
+        let targetRow = try #require(
+            outlineRows(in: controller.view).first {
+                $0.node.sourceSessionID == sessions[1].id && $0.node.isDocumentRoot == false
+            }
+        )
+        targetRow.performPrimaryAction()
+
+        #expect(request == OutlineNavigationRequest(
+            sessionID: sessions[1].id,
+            position: ReadingPosition(pageIndex: 0, point: targetPoint)
+        ))
+    }
 }
 
 @MainActor
@@ -305,7 +382,8 @@ private func makeTemporaryPDFWithOutline(
     outlineTitles: [String] = [],
     topLevelCount: Int = 2,
     childrenPerTopLevel: Int = 0,
-    includeChild: Bool = false
+    includeChild: Bool = false,
+    outlinePoints: [CGPoint] = []
 ) throws -> URL {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("\(name)-\(UUID().uuidString)")
@@ -330,7 +408,11 @@ private func makeTemporaryPDFWithOutline(
     for index in 0..<topLevelCount {
         let item = PDFOutline()
         item.label = index < outlineTitles.count ? outlineTitles[index] : "\(name) \(index + 1)"
-        item.destination = PDFDestination(page: document.page(at: min(index, pageCount - 1))!, at: .zero)
+        let destinationPoint = outlinePoints.indices.contains(index) ? outlinePoints[index] : .zero
+        item.destination = PDFDestination(
+            page: document.page(at: min(index, pageCount - 1))!,
+            at: destinationPoint
+        )
         if includeChild, index == 0 {
             let child = PDFOutline()
             child.label = "\(name) child"

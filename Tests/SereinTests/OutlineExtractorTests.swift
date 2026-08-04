@@ -21,14 +21,16 @@ final class OutlineExtractorTests: XCTestCase {
     func testExtractPreservesHierarchyAndPageIndices() {
         let document = makeDocument(pageCount: 3)
         let root = PDFOutline()
+        let chapterPoint = CGPoint(x: 24, y: 180)
+        let sectionPoint = CGPoint(x: 36, y: 120)
 
         let chapter = PDFOutline()
         chapter.label = "Chapter 1"
-        chapter.destination = PDFDestination(page: document.page(at: 0)!, at: .zero)
+        chapter.destination = PDFDestination(page: document.page(at: 0)!, at: chapterPoint)
 
         let section = PDFOutline()
         section.label = "Section 1.1"
-        section.destination = PDFDestination(page: document.page(at: 2)!, at: .zero)
+        section.destination = PDFDestination(page: document.page(at: 2)!, at: sectionPoint)
 
         chapter.insertChild(section, at: 0)
         root.insertChild(chapter, at: 0)
@@ -39,9 +41,29 @@ final class OutlineExtractorTests: XCTestCase {
         XCTAssertEqual(extracted.count, 1)
         XCTAssertEqual(extracted[0].title, "Chapter 1")
         XCTAssertEqual(extracted[0].pageIndex, 0)
+        XCTAssertEqual(extracted[0].destinationPoint, chapterPoint)
         XCTAssertEqual(extracted[0].children.count, 1)
         XCTAssertEqual(extracted[0].children[0].title, "Section 1.1")
         XCTAssertEqual(extracted[0].children[0].pageIndex, 2)
+        XCTAssertEqual(extracted[0].children[0].destinationPoint, sectionPoint)
+    }
+
+    func testExtractPreservesGoToActionDestinationPoint() throws {
+        let document = makeDocument(pageCount: 2)
+        let root = PDFOutline()
+        let item = PDFOutline()
+        let point = CGPoint(x: 48, y: 96)
+        item.label = "Action destination"
+        item.action = PDFActionGoTo(
+            destination: PDFDestination(page: try XCTUnwrap(document.page(at: 1)), at: point)
+        )
+        root.insertChild(item, at: 0)
+        document.outlineRoot = root
+
+        let extracted = try XCTUnwrap(OutlineExtractor.extract(from: document).first)
+
+        XCTAssertEqual(extracted.pageIndex, 1)
+        XCTAssertEqual(extracted.destinationPoint, point)
     }
 
     private func makeDocument(pageCount: Int) -> PDFDocument {

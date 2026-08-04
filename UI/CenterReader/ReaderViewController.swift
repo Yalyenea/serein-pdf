@@ -20,6 +20,16 @@ private struct PDFViewportAnchor {
     let pagePoint: NSPoint
 }
 
+private struct NavigationHistoryEntry: Equatable {
+    let sessionID: UUID
+    let position: ReadingPosition
+}
+
+private struct PendingExternalNavigation {
+    let token: Int
+    let origin: NavigationHistoryEntry
+}
+
 private final class ReaderSurfaceView: NSView {
     var onOpenURLs: (([URL]) -> Void)?
 
@@ -166,6 +176,7 @@ private final class PDFReaderClipView: NSClipView {
 
 final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
+    var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
 
     override func isAccessibilityElement() -> Bool {
         false
@@ -193,6 +204,21 @@ final class ReaderPDFView: PDFView {
         super.layoutSubtreeIfNeeded()
         onLayoutCompleted?()
     }
+
+    override func mouseDown(with event: NSEvent) {
+        if let destination = internalLinkDestination(at: event),
+           onInternalLinkNavigationRequested?(destination) == true {
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    private func internalLinkDestination(at event: NSEvent) -> PDFDestination? {
+        let pointInView = convert(event.locationInWindow, from: nil)
+        guard let page = page(for: pointInView, nearest: false) else { return nil }
+        let pointOnPage = convert(pointInView, to: page)
+        return (page.annotation(at: pointOnPage)?.action as? PDFActionGoTo)?.destination
+    }
 }
 
 final class ReaderViewController: NSViewController {
@@ -203,6 +229,7 @@ final class ReaderViewController: NSViewController {
     var onFindActionRequested: ((FindNavigationAction) -> Void)?
     var onOpenURLsRequested: (([URL]) -> Void)?
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
+    var onHistorySessionNavigationRequested: ((UUID) -> Bool)?
     private let pdfContainerView = PDFContainerView()
     private let emptyStateContainer = NSStackView()
     private let emptyStateTitleLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
@@ -227,10 +254,12 @@ final class ReaderViewController: NSViewController {
     private var isApplyingHighlightSelection = false
     /// Owned Cmd+[ / ] history. PDFKit's stack is wiped by store re-`go(to:)` and
     /// misses some paths; we record intentional jumps and external page changes.
-    private var navigationBackStack: [ReadingPosition] = []
-    private var navigationForwardStack: [ReadingPosition] = []
+    private var navigationBackStack: [NavigationHistoryEntry] = []
+    private var navigationForwardStack: [NavigationHistoryEntry] = []
     private var historyNavigationEpoch = 0
     private var isNavigatingHistory: Bool { historyNavigationEpoch != 0 }
+    private var pendingExternalNavigation: PendingExternalNavigation?
+    private var externalNavigationToken = 0
     private var appearanceObservation: NSKeyValueObservation?
     nonisolated(unsafe) private var leftMouseDownMonitor: Any?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
@@ -240,6 +269,7 @@ final class ReaderViewController: NSViewController {
     private var lastAppliedFitBoundsWidth: CGFloat = 0
     private var lastAppliedFitBoundsHeight: CGFloat = 0
     private weak var observedPDFClipView: NSClipView?
+    private var lastObservedPDFClipBounds: NSRect?
     private var isApplyingScrollClamp = false
     private var lastSubmittedSearchKey: SubmittedSearchKey?
     private var pendingAnnotationFocusToken: Int = 0
@@ -279,6 +309,9 @@ final class ReaderViewController: NSViewController {
             self?.applyThemeFilter()
             self?.pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
         }
+        pdfView.onInternalLinkNavigationRequested = { [weak self] destination in
+            self?.navigate(toInternalLink: destination) ?? false
+        }
         pdfContainerView.readingFocusOverlay.pageBoundsProvider = { [weak self] point in
             self?.readingFocusPageBounds(at: point)
         }
@@ -294,6 +327,12 @@ final class ReaderViewController: NSViewController {
             self,
             selector: #selector(handlePDFViewPageChanged),
             name: Notification.Name.PDFViewPageChanged,
+            object: pdfView
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePDFViewChangedHistory),
+            name: Notification.Name.PDFViewChangedHistory,
             object: pdfView
         )
         NotificationCenter.default.addObserver(
@@ -652,6 +691,30 @@ final class ReaderViewController: NSViewController {
     }
 
     @discardableResult
+    func goToPreviousPageBottom() -> Bool {
+        guard isAllPagesOverviewActive == false,
+              let session = targetSession(),
+              session.id == displayedSessionID,
+              let document = pdfView.document,
+              let currentPageIndex = currentPageIndexForNavigation(in: document) else { return false }
+
+        let currentStop = session.displayMode.usesTwoUpLayout
+            ? normalizedSpreadLead(currentPageIndex, pageCount: document.pageCount)
+            : currentPageIndex
+        let step = session.displayMode.usesTwoUpLayout ? 2 : 1
+        let targetPageIndex = max(currentStop - step, 0)
+        guard targetPageIndex != currentStop,
+              let page = document.page(at: targetPageIndex) else { return false }
+        return go(
+            to: .pageBottom(
+                pageIndex: targetPageIndex,
+                pageBounds: page.bounds(for: pdfView.displayBox)
+            ),
+            recordHistory: false
+        )
+    }
+
+    @discardableResult
     func scrollHalfPageDown() -> Bool {
         scrollByViewportFraction(0.5)
     }
@@ -666,37 +729,93 @@ final class ReaderViewController: NSViewController {
     }
 
     func goToLastPage() {
-        guard let pageCount = pdfView.document?.pageCount, pageCount > 0 else { return }
-        _ = goToPage(pageCount - 1)
+        guard let document = pdfView.document,
+              document.pageCount > 0,
+              let page = document.page(at: document.pageCount - 1) else { return }
+        let bounds = page.bounds(for: pdfView.displayBox)
+        _ = go(
+            to: ReadingPosition(
+                pageIndex: document.pageCount - 1,
+                point: NSPoint(x: bounds.minX, y: bounds.minY)
+            )
+        )
+        scrollToDocumentEnd()
     }
 
     func navigateBack() {
-        guard let target = navigationBackStack.popLast() else { return }
-        if let current = historyAnchorPosition() {
-            navigationForwardStack.append(current)
+        while let target = navigationBackStack.popLast() {
+            guard documentStore.session(for: target.sessionID) != nil else { continue }
+            let current = currentHistoryEntry()
+            guard playOwnedHistory(to: target) else { continue }
+            if let current, navigationForwardStack.last != current {
+                navigationForwardStack.append(current)
+            }
+            return
         }
-        playOwnedHistory(to: target)
     }
 
     func navigateForward() {
-        guard let target = navigationForwardStack.popLast() else { return }
-        if let current = historyAnchorPosition() {
-            navigationBackStack.append(current)
+        while let target = navigationForwardStack.popLast() {
+            guard documentStore.session(for: target.sessionID) != nil else { continue }
+            let current = currentHistoryEntry()
+            guard playOwnedHistory(to: target) else { continue }
+            if let current {
+                pushBackHistory(current)
+            }
+            return
         }
-        playOwnedHistory(to: target)
     }
 
-    var canGoBack: Bool { navigationBackStack.isEmpty == false }
-    var canGoForward: Bool { navigationForwardStack.isEmpty == false }
+    var canGoBack: Bool {
+        navigationBackStack.contains { documentStore.session(for: $0.sessionID) != nil }
+    }
+    var canGoForward: Bool {
+        navigationForwardStack.contains { documentStore.session(for: $0.sessionID) != nil }
+    }
 
     /// Test seam: owned history page indices (back stack, oldest → newest).
-    var testingNavigationBackPageIndices: [Int] { navigationBackStack.map(\.pageIndex) }
+    var testingNavigationBackPageIndices: [Int] { navigationBackStack.map(\.position.pageIndex) }
+    /// Test seam: owned history positions (back stack, oldest → newest).
+    var testingNavigationBackPositions: [ReadingPosition] { navigationBackStack.map(\.position) }
+    /// Test seam: owned history session IDs (back stack, oldest → newest).
+    var testingNavigationBackSessionIDs: [UUID] { navigationBackStack.map(\.sessionID) }
     /// Test seam: owned history page indices (forward stack, nearest → furthest).
-    var testingNavigationForwardPageIndices: [Int] { navigationForwardStack.map(\.pageIndex) }
+    var testingNavigationForwardPageIndices: [Int] { navigationForwardStack.map(\.position.pageIndex) }
+    /// Test seam: live PDFKit viewport anchor.
+    var testingCurrentReadingPosition: ReadingPosition? { currentReadingPosition() }
 
     @discardableResult
     func goToPage(_ pageIndex: Int) -> Bool {
         jumpToPage(pageIndex, recordHistory: true)
+    }
+
+    /// Exact navigation entry point for Outline and other page-point targets.
+    @discardableResult
+    func go(to position: ReadingPosition, recordHistory: Bool = true) -> Bool {
+        guard let document = pdfView.document,
+              position.pageIndex >= 0,
+              position.pageIndex < document.pageCount,
+              let page = document.page(at: position.pageIndex) else { return false }
+
+        if let current = historyAnchorPosition(), current == position {
+            return true
+        }
+        if recordHistory {
+            recordNavigationHistoryBeforeJump()
+        }
+        applyProgrammaticDestination(page: page, point: position.point, storePosition: position)
+        return true
+    }
+
+    private func navigate(toInternalLink destination: PDFDestination) -> Bool {
+        guard let document = pdfView.document,
+              let page = destination.page else { return false }
+        let pageIndex = document.index(for: page)
+        guard pageIndex >= 0, pageIndex < document.pageCount else { return false }
+        return go(
+            to: ReadingPosition(pageIndex: pageIndex, point: destination.point),
+            recordHistory: true
+        )
     }
 
     @discardableResult
@@ -711,21 +830,17 @@ final class ReaderViewController: NSViewController {
             pageIndex: pageIndex,
             point: NSPoint(x: bounds.minX, y: bounds.maxY)
         )
-        if let current = historyAnchorPosition(),
-           readingPosition(current, differsFrom: target) == false {
-            return true
-        }
-
-        if recordHistory {
-            recordNavigationHistoryBeforeJump()
-        }
-        applyProgrammaticDestination(page: page, point: target.point, storePosition: target)
-        return true
+        return go(to: target, recordHistory: recordHistory)
     }
 
     private func historyAnchorPosition() -> ReadingPosition? {
-        if let displayedReadingPosition {
-            return displayedReadingPosition
+        // Clip-bounds tracking keeps this exact for user scrolling, while
+        // programmatic navigation pins the intentional point before PDFKit settles.
+        if let displayed = displayedReadingPosition {
+            return displayed
+        }
+        if let live = currentReadingPosition() {
+            return live
         }
         guard let page = pdfView.currentPage,
               let document = pdfView.document else { return nil }
@@ -739,32 +854,94 @@ final class ReaderViewController: NSViewController {
     private func recordNavigationHistoryBeforeJump() {
         // Always record intentional jumps (even while a prior history epoch is
         // still open for deferred PDFKit page-change events).
-        guard let current = historyAnchorPosition() else { return }
+        guard let current = currentHistoryEntry() else { return }
         pushBackHistory(current)
         navigationForwardStack.removeAll(keepingCapacity: true)
     }
 
-    private func pushBackHistory(_ position: ReadingPosition) {
-        if let last = navigationBackStack.last,
-           last.pageIndex == position.pageIndex {
-            // Same page: keep the newer point by replacing the tip.
-            navigationBackStack[navigationBackStack.count - 1] = position
-            return
+    /// Records the current session + exact viewport before a known cross-session
+    /// destination replaces this pane.
+    func recordCurrentPositionForNavigation() {
+        recordNavigationHistoryBeforeJump()
+    }
+
+    /// Begins a native Pages / PDF link navigation. The origin is committed only
+    /// after PDFKit reports a genuinely different page-point target.
+    func beginExternalNavigation() {
+        guard isNavigatingHistory == false,
+              let origin = currentHistoryEntry() else { return }
+        externalNavigationToken += 1
+        pendingExternalNavigation = PendingExternalNavigation(
+            token: externalNavigationToken,
+            origin: origin
+        )
+        commitExternalNavigation()
+    }
+
+    /// Completes the native navigation after `super.mouseDown`; defer one turn so
+    /// PDFKit can settle same-page destinations before comparing exact points.
+    func commitExternalNavigation() {
+        guard let pendingExternalNavigation else { return }
+        let token = pendingExternalNavigation.token
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.completeExternalNavigation(token: token, target: self.liveHistoryEntry())
         }
-        navigationBackStack.append(position)
+    }
+
+    private func completeExternalNavigation(
+        token: Int? = nil,
+        target: NavigationHistoryEntry?
+    ) {
+        guard let pending = pendingExternalNavigation,
+              token == nil || pending.token == token else { return }
+        pendingExternalNavigation = nil
+        guard let target, target != pending.origin else { return }
+        pushBackHistory(pending.origin)
+        navigationForwardStack.removeAll(keepingCapacity: true)
+    }
+
+    private func currentHistoryEntry() -> NavigationHistoryEntry? {
+        guard let sessionID = displayedSessionID,
+              let position = historyAnchorPosition() else { return nil }
+        return NavigationHistoryEntry(sessionID: sessionID, position: position)
+    }
+
+    private func liveHistoryEntry() -> NavigationHistoryEntry? {
+        guard let sessionID = displayedSessionID,
+              let position = currentReadingPosition() else { return nil }
+        return NavigationHistoryEntry(sessionID: sessionID, position: position)
+    }
+
+    private func pushBackHistory(_ entry: NavigationHistoryEntry) {
+        // Same-page points are distinct history stops; only an exact entry is duplicate.
+        guard navigationBackStack.last != entry else { return }
+        navigationBackStack.append(entry)
         if navigationBackStack.count > 100 {
             navigationBackStack.removeFirst()
         }
     }
 
-    private func playOwnedHistory(to position: ReadingPosition) {
-        guard let document = pdfView.document,
-              position.pageIndex >= 0,
-              position.pageIndex < document.pageCount,
-              let page = document.page(at: position.pageIndex) else { return }
+    @discardableResult
+    private func playOwnedHistory(to entry: NavigationHistoryEntry) -> Bool {
+        guard documentStore.session(for: entry.sessionID) != nil else { return false }
         let epoch = beginHistoryNavigation()
-        applyProgrammaticDestination(page: page, point: position.point, storePosition: position)
-        endHistoryNavigation(epoch)
+        defer { endHistoryNavigation(epoch) }
+
+        if displayedSessionID != entry.sessionID {
+            guard onHistorySessionNavigationRequested?(entry.sessionID) == true,
+                  displayedSessionID == entry.sessionID else { return false }
+        }
+        guard let document = pdfView.document,
+              entry.position.pageIndex >= 0,
+              entry.position.pageIndex < document.pageCount,
+              let page = document.page(at: entry.position.pageIndex) else { return false }
+        applyProgrammaticDestination(
+            page: page,
+            point: entry.position.point,
+            storePosition: entry.position
+        )
+        return true
     }
 
     private func beginHistoryNavigation() -> Int {
@@ -801,6 +978,11 @@ final class ReaderViewController: NSViewController {
         pdfView.layoutSubtreeIfNeeded()
         syncPDFMarginBackgroundAfterPDFKitLayout()
         recenterDocumentViewIfNeeded()
+        restoreTopLeadingReadingPosition(page: page, point: point)
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+        recenterDocumentViewIfNeeded()
+        restoreTopLeadingReadingPosition(page: page, point: point)
         stabilizePDFScrollPosition()
         isApplyingStoreState = wasApplying
 
@@ -808,17 +990,22 @@ final class ReaderViewController: NSViewController {
         if wasApplying == false,
            let session = targetSession(),
            session.id == displayedSessionID {
+            switch session.scaleMode {
+            case .fitWidth:
+                pendingFitWidthSessionID = session.id
+                lastAppliedFitBoundsWidth = -1
+            case .fitHeight:
+                pendingFitHeightSessionID = session.id
+                lastAppliedFitBoundsHeight = -1
+            case .manual:
+                break
+            }
             documentStore.updateReadingPosition(
                 storePosition,
                 scaleFactor: pdfView.scaleFactor,
                 for: session.id
             )
         }
-    }
-
-    private func clearNavigationHistory() {
-        navigationBackStack.removeAll(keepingCapacity: true)
-        navigationForwardStack.removeAll(keepingCapacity: true)
     }
 
     @discardableResult
@@ -830,12 +1017,26 @@ final class ReaderViewController: NSViewController {
               let document = pdfView.document,
               let currentPageIndex = currentPageIndexForNavigation(in: document) else { return false }
 
-        let step = session.displayMode.usesTwoUpLayout ? 2 : 1
-        let targetPageIndex = min(max(currentPageIndex + direction * step, 0), document.pageCount - 1)
-        guard targetPageIndex != currentPageIndex else { return false }
+        let currentStop: Int
+        let targetPageIndex: Int
+        if session.displayMode.usesTwoUpLayout {
+            currentStop = normalizedSpreadLead(currentPageIndex, pageCount: document.pageCount)
+            let lastSpreadLead = normalizedSpreadLead(document.pageCount - 1, pageCount: document.pageCount)
+            targetPageIndex = min(max(currentStop + direction * 2, 0), lastSpreadLead)
+        } else {
+            currentStop = currentPageIndex
+            targetPageIndex = min(max(currentPageIndex + direction, 0), document.pageCount - 1)
+        }
+        guard targetPageIndex != currentStop else { return false }
 
         // Sequential page-turn is not a history stop (same as continuous scroll).
         return jumpToPage(targetPageIndex, recordHistory: false)
+    }
+
+    private func normalizedSpreadLead(_ pageIndex: Int, pageCount: Int) -> Int {
+        guard pageCount > 0 else { return 0 }
+        let clamped = min(max(pageIndex, 0), pageCount - 1)
+        return clamped.isMultiple(of: 2) ? clamped : clamped - 1
     }
 
     private func currentPageIndexForNavigation(in document: PDFDocument) -> Int? {
@@ -857,6 +1058,11 @@ final class ReaderViewController: NSViewController {
     }
 
     var currentPageCount: Int { pdfView.document?.pageCount ?? 0 }
+
+    var usesContinuousScrolling: Bool {
+        guard let mode = targetSession()?.displayMode else { return false }
+        return mode == .singlePageContinuous || mode == .twoUpContinuous
+    }
 
     var isAllPagesOverviewActive: Bool {
         !overviewGridView.isHidden
@@ -1305,32 +1511,38 @@ final class ReaderViewController: NSViewController {
               let session = targetSession(),
               session.id == displayedSessionID else { return }
 
-        // Prefer current page over viewport sample so thumbnail / link jumps record cleanly.
         guard let page = pdfView.currentPage,
               let document = pdfView.document else { return }
-        let bounds = page.bounds(for: pdfView.displayBox)
-        let position = ReadingPosition(
-            pageIndex: document.index(for: page),
-            point: NSPoint(x: bounds.minX, y: bounds.maxY)
-        )
-
-        // Thumbnail / in-PDF links that skip pages: record. Continuous scroll and
-        // sequential page-turn advance one (or two-up step) page at a time — skip.
-        if let previous = displayedReadingPosition {
-            let delta = abs(previous.pageIndex - position.pageIndex)
-            if delta > 1 {
-                pushBackHistory(previous)
-                navigationForwardStack.removeAll(keepingCapacity: true)
-            }
+        let pageIndex = document.index(for: page)
+        // Keep mid-page scroll in continuous mode (page taller than viewport).
+        let position: ReadingPosition
+        if let live = currentReadingPosition(), live.pageIndex == pageIndex {
+            position = live
+        } else {
+            let bounds = page.bounds(for: pdfView.displayBox)
+            position = ReadingPosition(
+                pageIndex: pageIndex,
+                point: NSPoint(x: bounds.minX, y: bounds.maxY)
+            )
         }
 
         displayedReadingPosition = position
         documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        completeExternalNavigation(
+            target: NavigationHistoryEntry(sessionID: session.id, position: position)
+        )
+    }
+
+    @objc
+    private func handlePDFViewChangedHistory(_ notification: Notification) {
+        guard pendingExternalNavigation != nil else { return }
+        commitExternalNavigation()
     }
 
     @objc
     private func handlePDFViewScaleChanged(_ notification: Notification) {
         guard isApplyingProgrammaticScale == false,
+              isApplyingStoreState == false,
               let session = targetSession(),
               session.id == displayedSessionID else { return }
 
@@ -1402,7 +1614,6 @@ final class ReaderViewController: NSViewController {
             displayedReadingPosition = nil
             displayedDisplayMode = nil
             displayedScaleMode = nil
-            clearNavigationHistory()
             pdfView.highlightedSelections = nil
             pdfView.currentSelection = nil
             hideSwitchTitleToast(immediately: true)
@@ -1418,7 +1629,6 @@ final class ReaderViewController: NSViewController {
             displayedReadingPosition = nil
             displayedDisplayMode = nil
             displayedScaleMode = nil
-            clearNavigationHistory()
             pdfView.highlightedSelections = nil
             pdfView.currentSelection = nil
             hideSwitchTitleToast(immediately: true)
@@ -1455,12 +1665,14 @@ final class ReaderViewController: NSViewController {
             displayedReadingPosition = nil
             displayedDisplayMode = nil
             displayedScaleMode = nil
-            clearNavigationHistory()
         }
 
-        applyDisplayModeIfNeeded(refreshedSession)
+        let displayModeChanged = applyDisplayModeIfNeeded(refreshedSession)
         applyScaleIfNeeded(refreshedSession)
-        applyReadingPositionIfNeeded(targetReadingPosition, force: documentChanged)
+        applyReadingPositionIfNeeded(
+            targetReadingPosition,
+            force: documentChanged || displayModeChanged
+        )
         if let reloadedLivePosition,
            reloadedLivePosition != refreshedSession.lastReadPosition {
             documentStore.updateReadingPosition(
@@ -1605,19 +1817,29 @@ final class ReaderViewController: NSViewController {
         pdfView.currentSelection = nil
     }
 
-    func go(to selection: PDFSelection) {
-        recordNavigationHistoryBeforeJump()
+    func go(to selection: PDFSelection, recordHistory: Bool = true) {
+        let targetPosition: ReadingPosition?
+        if let page = selection.pages.first, let document = pdfView.document {
+            let bounds = selection.bounds(for: page)
+            targetPosition = ReadingPosition(
+                pageIndex: document.index(for: page),
+                point: NSPoint(x: bounds.minX, y: bounds.maxY)
+            )
+        } else {
+            targetPosition = nil
+        }
+        if let targetPosition, displayedReadingPosition == targetPosition {
+            pdfView.setCurrentSelection(selection, animate: false)
+            return
+        }
+        if recordHistory {
+            recordNavigationHistoryBeforeJump()
+        }
         isApplyingStoreState = true
         pdfView.setCurrentSelection(selection, animate: true)
         pdfView.go(to: selection)
         isApplyingStoreState = false
-        if let page = selection.pages.first,
-           let document = pdfView.document {
-            let bounds = page.bounds(for: pdfView.displayBox)
-            let position = ReadingPosition(
-                pageIndex: document.index(for: page),
-                point: NSPoint(x: bounds.minX, y: bounds.maxY)
-            )
+        if let position = targetPosition {
             displayedReadingPosition = position
             if let session = targetSession(), session.id == displayedSessionID {
                 documentStore.updateReadingPosition(
@@ -1652,8 +1874,9 @@ final class ReaderViewController: NSViewController {
         _ = jumpToPage(highlight.pageIndex, recordHistory: true)
     }
 
-    private func applyDisplayModeIfNeeded(_ session: DocumentSession) {
-        guard displayedDisplayMode != session.displayMode else { return }
+    @discardableResult
+    private func applyDisplayModeIfNeeded(_ session: DocumentSession) -> Bool {
+        guard displayedDisplayMode != session.displayMode else { return false }
 
         pdfView.displayDirection = .vertical
         pdfView.displayMode = session.displayMode.pdfDisplayMode
@@ -1662,6 +1885,7 @@ final class ReaderViewController: NSViewController {
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
         recenterDocumentViewIfNeeded()
+        return true
     }
 
     private func applyScaleIfNeeded(_ session: DocumentSession) {
@@ -1702,23 +1926,6 @@ final class ReaderViewController: NSViewController {
         guard let document = pdfView.document,
               let page = document.page(at: readingPosition.pageIndex) else { return }
 
-        // History playback already moved the view; never re-go(to:) or stacks die.
-        if isNavigatingHistory {
-            displayedReadingPosition = readingPosition
-            return
-        }
-
-        if !force,
-           let currentPage = pdfView.currentPage,
-           document.index(for: currentPage) == readingPosition.pageIndex {
-            displayedReadingPosition = readingPosition
-            return
-        }
-
-        // Outline / store-driven jumps: push history when leaving an established page.
-        if displayedReadingPosition != nil {
-            recordNavigationHistoryBeforeJump()
-        }
         applyProgrammaticDestination(
             page: page,
             point: readingPosition.point,
@@ -1732,9 +1939,13 @@ final class ReaderViewController: NSViewController {
     ) -> ReadingPosition? {
         guard document.pageCount > 0 else { return nil }
         let pageIndex = min(max(readingPosition.pageIndex, 0), document.pageCount - 1)
-        return ReadingPosition(
+        guard let page = document.page(at: pageIndex) else { return nil }
+        if pageIndex == readingPosition.pageIndex {
+            return ReadingPosition(pageIndex: pageIndex, point: readingPosition.point)
+        }
+        return .pageTop(
             pageIndex: pageIndex,
-            point: pageIndex == readingPosition.pageIndex ? readingPosition.point : .zero
+            pageBounds: page.bounds(for: pdfView.displayBox)
         )
     }
 
@@ -1889,8 +2100,10 @@ final class ReaderViewController: NSViewController {
 
         guard let page = pdfView.currentPage,
               let document = pdfView.document else { return nil }
-
-        return ReadingPosition(pageIndex: document.index(for: page), point: .zero)
+        return .pageTop(
+            pageIndex: document.index(for: page),
+            pageBounds: page.bounds(for: pdfView.displayBox)
+        )
     }
 
     private func visibleReadingPosition() -> ReadingPosition? {
@@ -1921,23 +2134,12 @@ final class ReaderViewController: NSViewController {
         syncPDFMarginBackgroundAfterPDFKitLayout()
 
         var targetBounds = clipView.bounds
-        targetBounds.origin.y -= clipView.bounds.height * fraction
+        targetBounds.origin.y += clipView.bounds.height * fraction
         targetBounds = clipView.constrainBoundsRect(targetBounds)
         guard abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return false }
 
         clipView.scroll(to: targetBounds.origin)
         scrollView.reflectScrolledClipView(clipView)
-
-        guard let session = targetSession(),
-              session.id == displayedSessionID,
-              let document = pdfView.document,
-              let anchor = captureViewportAnchor() else { return true }
-
-        documentStore.updateReadingPosition(
-            ReadingPosition(pageIndex: document.index(for: anchor.page), point: anchor.pagePoint),
-            scaleFactor: pdfView.scaleFactor,
-            for: session.id
-        )
         return true
     }
 
@@ -1980,6 +2182,7 @@ final class ReaderViewController: NSViewController {
                 )
             }
             observedPDFClipView = clipView
+            lastObservedPDFClipBounds = clipView.bounds
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(handlePDFClipViewBoundsDidChange),
@@ -2019,9 +2222,35 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFClipViewBoundsDidChange(_ notification: Notification) {
+        guard let clipView = notification.object as? NSClipView else { return }
+        let previousBounds = lastObservedPDFClipBounds
+        lastObservedPDFClipBounds = clipView.bounds
         guard isApplyingScrollClamp == false else { return }
         recenterDocumentViewIfNeeded()
         pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
+
+        guard isApplyingStoreState == false,
+              isNavigatingHistory == false,
+              let previousBounds,
+              abs(previousBounds.width - clipView.bounds.width) <= 0.5,
+              abs(previousBounds.height - clipView.bounds.height) <= 0.5,
+              abs(previousBounds.origin.x - clipView.bounds.origin.x) > 0.5
+                || abs(previousBounds.origin.y - clipView.bounds.origin.y) > 0.5,
+              let session = targetSession(),
+              session.id == displayedSessionID,
+              let currentPage = pdfView.currentPage,
+              let document = pdfView.document,
+              let position = currentReadingPosition() else { return }
+        guard position.pageIndex == document.index(for: currentPage) else { return }
+        displayedReadingPosition = position
+        documentStore.updateReadingPosition(
+            position,
+            scaleFactor: pdfView.scaleFactor,
+            for: session.id
+        )
+        completeExternalNavigation(
+            target: NavigationHistoryEntry(sessionID: session.id, position: position)
+        )
     }
 
     private func pdfClipView() -> NSClipView? {
@@ -2171,6 +2400,35 @@ final class ReaderViewController: NSViewController {
         scrollView.reflectScrolledClipView(clipView)
     }
 
+    private func scrollToDocumentEnd() {
+        guard let scrollView = pdfScrollView(),
+              let clipView = pdfClipView(),
+              let documentView = pdfDocumentView(),
+              let session = targetSession(),
+              let document = pdfView.document,
+              document.pageCount > 0,
+              let page = document.page(at: document.pageCount - 1) else { return }
+        let bounds = page.bounds(for: pdfView.displayBox)
+        let position = ReadingPosition.pageBottom(
+            pageIndex: document.pageCount - 1,
+            pageBounds: bounds
+        )
+        let proposed = NSRect(
+            x: clipView.bounds.origin.x,
+            y: documentView.bounds.maxY,
+            width: clipView.bounds.width,
+            height: clipView.bounds.height
+        )
+        let target = clipView.constrainBoundsRect(proposed)
+        let wasApplying = isApplyingStoreState
+        isApplyingStoreState = true
+        clipView.scroll(to: target.origin)
+        scrollView.reflectScrolledClipView(clipView)
+        isApplyingStoreState = wasApplying
+        displayedReadingPosition = position
+        documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+    }
+
     private func captureViewportAnchor() -> PDFViewportAnchor? {
         guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
         let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
@@ -2195,6 +2453,28 @@ final class ReaderViewController: NSViewController {
         )
         guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > 0.5 ||
                 abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
+        isApplyingScrollClamp = true
+        clipView.scroll(to: targetBounds.origin)
+        scrollView.reflectScrolledClipView(clipView)
+        isApplyingScrollClamp = false
+    }
+
+    private func restoreTopLeadingReadingPosition(page: PDFPage, point: NSPoint) {
+        guard let scrollView = pdfScrollView(),
+              let clipView = pdfClipView(),
+              let documentView = pdfDocumentView() else { return }
+
+        let pointInPDF = pdfView.convert(point, from: page)
+        let pointInDocument = documentView.convert(pointInPDF, from: pdfView)
+        let desiredOrigin = NSPoint(
+            x: pointInDocument.x - 1,
+            y: pointInDocument.y - clipView.bounds.height + 1
+        )
+        let targetBounds = clipView.constrainBoundsRect(
+            NSRect(origin: desiredOrigin, size: clipView.bounds.size)
+        )
+        guard abs(targetBounds.origin.x - clipView.bounds.origin.x) > 0.5
+                || abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return }
         isApplyingScrollClamp = true
         clipView.scroll(to: targetBounds.origin)
         scrollView.reflectScrolledClipView(clipView)

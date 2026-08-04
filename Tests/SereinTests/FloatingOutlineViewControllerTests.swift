@@ -176,13 +176,18 @@ struct FloatingOutlineViewControllerTests {
         #expect(abs(splitController.readerViewController.pdfView.scaleFactor - scaleBefore) < 0.001)
 
         let outlineController = floatingOutline.testingOutlineViewController
+        var request: OutlineNavigationRequest?
+        floatingOutline.onNavigationRequested = { request = $0 }
         outlineController.view.frame = NSRect(x: 0, y: 0, width: 292, height: 360)
         outlineController.view.layoutSubtreeIfNeeded()
         let rows = floatingOutlineRows(in: outlineController.view)
         #expect(rows.count == 3)
 
         rows[2].performPrimaryAction()
-        #expect(store.session(for: session.id)?.currentPageIndex == 2)
+        #expect(request == OutlineNavigationRequest(
+            sessionID: session.id,
+            position: ReadingPosition(pageIndex: 2, point: CGPoint(x: 30, y: 170))
+        ))
     }
 
     @Test
@@ -278,6 +283,8 @@ struct FloatingOutlineViewControllerTests {
         controller.testingSetHovered(true)
 
         let outlineController = controller.testingOutlineViewController
+        var request: OutlineNavigationRequest?
+        controller.onNavigationRequested = { request = $0 }
         outlineController.view.frame = NSRect(x: 0, y: 0, width: 292, height: 420)
         outlineController.view.layoutSubtreeIfNeeded()
         let rows = floatingOutlineRows(in: outlineController.view)
@@ -285,8 +292,10 @@ struct FloatingOutlineViewControllerTests {
 
         rows[6].performPrimaryAction()
 
-        #expect(store.activeSessionID(in: store.defaultWindowID) == sessions[1].id)
-        #expect(store.session(for: sessions[1].id)?.currentPageIndex == 1)
+        #expect(request == OutlineNavigationRequest(
+            sessionID: sessions[1].id,
+            position: ReadingPosition(pageIndex: 1, point: CGPoint(x: 20, y: 190))
+        ))
     }
 }
 
@@ -299,14 +308,14 @@ private func makeFloatingOutlinePDF(named name: String) throws -> URL {
     let root = PDFOutline()
     let first = PDFOutline()
     first.label = "Introduction"
-    first.destination = PDFDestination(page: document.page(at: 0)!, at: .zero)
+    first.destination = PDFDestination(page: document.page(at: 0)!, at: CGPoint(x: 10, y: 210))
     let child = PDFOutline()
     child.label = "Background"
-    child.destination = PDFDestination(page: document.page(at: 1)!, at: .zero)
+    child.destination = PDFDestination(page: document.page(at: 1)!, at: CGPoint(x: 20, y: 190))
     first.insertChild(child, at: 0)
     let second = PDFOutline()
     second.label = "Conclusion"
-    second.destination = PDFDestination(page: document.page(at: 2)!, at: .zero)
+    second.destination = PDFDestination(page: document.page(at: 2)!, at: CGPoint(x: 30, y: 170))
     root.insertChild(first, at: 0)
     root.insertChild(second, at: 1)
     document.outlineRoot = root

@@ -16,6 +16,7 @@ final class TestInMemoryDocumentStorePersistence: DocumentStorePersistence {
 
 final class TestInMemoryReadingStateStore: ReadingStateStore {
     var states: [URL: PersistedReadingState] = [:]
+    private(set) var savedStates: [PersistedReadingState] = []
 
     func loadState(for url: URL) throws -> PersistedReadingState? {
         states[url]
@@ -23,6 +24,7 @@ final class TestInMemoryReadingStateStore: ReadingStateStore {
 
     func saveState(_ state: PersistedReadingState) throws {
         states[state.url] = state
+        savedStates.append(state)
     }
 }
 

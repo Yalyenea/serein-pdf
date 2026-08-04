@@ -705,12 +705,14 @@ final class DocumentStore {
         let targetIndex = direction > 0 ? currentIndex + 1 : currentIndex - 1
         guard workspace.continuousReadingState.orderedSessionIDs.indices.contains(targetIndex) else { return nil }
         let targetSessionID = workspace.continuousReadingState.orderedSessionIDs[targetIndex]
-        if direction > 0 {
-            return ContinuousReadingTarget(sessionID: targetSessionID, pageIndex: 0)
-        }
-        guard let pageCount = pageCount(for: targetSessionID) ?? (try? pdfDocument(for: targetSessionID).pageCount),
-              pageCount > 0 else { return nil }
-        return ContinuousReadingTarget(sessionID: targetSessionID, pageIndex: pageCount - 1)
+        guard let document = try? pdfDocument(for: targetSessionID), document.pageCount > 0 else { return nil }
+        let pageIndex = direction > 0 ? 0 : document.pageCount - 1
+        guard let page = document.page(at: pageIndex) else { return nil }
+        let pageBounds = page.bounds(for: .cropBox)
+        let readingPosition = direction > 0
+            ? ReadingPosition.pageTop(pageIndex: pageIndex, pageBounds: pageBounds)
+            : ReadingPosition.pageBottom(pageIndex: pageIndex, pageBounds: pageBounds)
+        return ContinuousReadingTarget(sessionID: targetSessionID, readingPosition: readingPosition)
     }
 
     func setFocusedPane(_ pane: ReaderPane, in windowID: UUID) {
@@ -822,7 +824,7 @@ final class DocumentStore {
         touchPDFDocument(sessionID)
         sessions[sessionIndex].pageCount = document.pageCount
         sessions[sessionIndex].fileSnapshot = PDFFileSnapshot(url: url)
-        clampReadingPositionIfNeeded(for: sessionIndex, pageCount: document.pageCount)
+        clampReadingPositionIfNeeded(for: sessionIndex, in: document)
         prunePDFDocumentCache()
         return document
     }
@@ -844,10 +846,17 @@ final class DocumentStore {
         guard let workspace = windowWorkspace(for: windowID) else { return [] }
         if workspace.continuousReadingState.isEnabled {
             return workspace.continuousReadingState.orderedSessionIDs.compactMap { sessionID in
-                guard let session = session(for: sessionID) else { return nil }
+                guard let session = session(for: sessionID),
+                      let document = try? pdfDocument(for: sessionID),
+                      let firstPage = document.page(at: 0) else { return nil }
+                let firstPosition = ReadingPosition.pageTop(
+                    pageIndex: 0,
+                    pageBounds: firstPage.bounds(for: .cropBox)
+                )
                 return OutlineNode(
                     title: session.title,
-                    pageIndex: 0,
+                    pageIndex: firstPosition.pageIndex,
+                    destinationPoint: firstPosition.point,
                     children: outlineTree(for: sessionID).withSourceSessionID(sessionID),
                     sourceSessionID: sessionID,
                     isDocumentRoot: true
@@ -885,14 +894,19 @@ final class DocumentStore {
     }
 
     func updateCurrentPage(index: Int, for sessionID: UUID) {
-        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        guard sessions[sessionIndex].currentPageIndex != index else { return }
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+              let document = try? pdfDocument(for: sessionID),
+              let page = document.page(at: index) else { return }
+        let position = ReadingPosition.pageTop(
+            pageIndex: index,
+            pageBounds: page.bounds(for: .cropBox)
+        )
+        guard sessions[sessionIndex].currentPageIndex != index ||
+                sessions[sessionIndex].lastReadPosition != position else { return }
 
         sessions[sessionIndex].currentPageIndex = index
-        sessions[sessionIndex].lastReadPosition = ReadingPosition(
-            pageIndex: index,
-            point: sessions[sessionIndex].lastReadPosition.point
-        )
+        sessions[sessionIndex].lastReadPosition = position
+        sessions[sessionIndex].needsInitialReadingPosition = false
         persistReadingState(for: sessions[sessionIndex])
         notifyChange(.readingPosition)
     }
@@ -940,6 +954,7 @@ final class DocumentStore {
 
         sessions[sessionIndex].currentPageIndex = position.pageIndex
         sessions[sessionIndex].lastReadPosition = position
+        sessions[sessionIndex].needsInitialReadingPosition = false
         sessions[sessionIndex].zoomScale = scaleFactor
         persistReadingState(for: sessions[sessionIndex])
         if pageChanged || scaleChanged {
@@ -1337,7 +1352,7 @@ final class DocumentStore {
                     displayMode: restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
                     scaleMode: resolvedScaleMode(restoredState?.scaleMode),
                     zoomScale: restoredState?.scaleFactor ?? 1.0,
-                    lastReadPosition: restoredState?.readingPosition ?? .zero,
+                    lastReadPosition: restoredState?.readingPosition,
                     annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
                 )
             sessions.append(session)
@@ -1737,19 +1752,28 @@ final class DocumentStore {
         sessions[sessionIndex].fileSnapshot = snapshot
     }
 
-    private func clampReadingPositionIfNeeded(for sessionIndex: Array<DocumentSession>.Index, pageCount: Int) {
-        guard pageCount > 0 else { return }
+    private func clampReadingPositionIfNeeded(
+        for sessionIndex: Array<DocumentSession>.Index,
+        in document: PDFDocument
+    ) {
+        guard document.pageCount > 0 else { return }
         let session = sessions[sessionIndex]
-        let clampedPageIndex = min(max(session.lastReadPosition.pageIndex, 0), pageCount - 1)
-        let currentPageIndex = min(max(session.currentPageIndex, 0), pageCount - 1)
-        guard clampedPageIndex != session.lastReadPosition.pageIndex ||
+        let clampedPageIndex = min(max(session.lastReadPosition.pageIndex, 0), document.pageCount - 1)
+        let currentPageIndex = min(max(session.currentPageIndex, 0), document.pageCount - 1)
+        let needsPageTop = session.needsInitialReadingPosition ||
+            clampedPageIndex != session.lastReadPosition.pageIndex
+        guard needsPageTop ||
                 currentPageIndex != session.currentPageIndex else { return }
 
         sessions[sessionIndex].currentPageIndex = clampedPageIndex
-        sessions[sessionIndex].lastReadPosition = ReadingPosition(
-            pageIndex: clampedPageIndex,
-            point: clampedPageIndex == session.lastReadPosition.pageIndex ? session.lastReadPosition.point : .zero
-        )
+        if needsPageTop {
+            guard let page = document.page(at: clampedPageIndex) else { return }
+            sessions[sessionIndex].lastReadPosition = ReadingPosition.pageTop(
+                pageIndex: clampedPageIndex,
+                pageBounds: page.bounds(for: .cropBox)
+            )
+        }
+        sessions[sessionIndex].needsInitialReadingPosition = false
         persistReadingState(for: sessions[sessionIndex])
     }
 
@@ -1957,6 +1981,9 @@ final class DocumentStore {
         }
 
         let restoredState = seedState == nil ? try readingStateStore.loadState(for: url) : nil
+        let lastReadPosition = seedState.map {
+            $0.needsInitialReadingPosition ? nil : $0.lastReadPosition
+        } ?? restoredState?.readingPosition
         return DocumentSession(
             url: url,
             title: seedState?.title,
@@ -1965,7 +1992,7 @@ final class DocumentStore {
             displayMode: seedState?.displayMode ?? restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
             scaleMode: seedState?.scaleMode ?? resolvedScaleMode(restoredState?.scaleMode),
             zoomScale: seedState?.zoomScale ?? restoredState?.scaleFactor ?? 1.0,
-            lastReadPosition: seedState?.lastReadPosition ?? restoredState?.readingPosition ?? .zero,
+            lastReadPosition: lastReadPosition,
             outlineTree: seedState?.outlineTree ?? [],
             isOutlineLoaded: seedState?.isOutlineLoaded ?? false,
             annotationSavePolicy: seedState?.annotationSavePolicy ?? appConfiguration.annotations.autoSavePolicy,
@@ -2008,7 +2035,8 @@ final class DocumentStore {
     }
 
     private func persistReadingState(for session: DocumentSession) {
-        guard session.isBlank == false else { return }
+        guard session.isBlank == false,
+              splitComparisonSessionIDs.contains(session.id) == false else { return }
         do {
             try readingStateStore.saveState(
                 PersistedReadingState(

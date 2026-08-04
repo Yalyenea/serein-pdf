@@ -44,6 +44,36 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(controller.selectionSummary().selectedIndex, 0)
     }
 
+    func testSingleClickActivatesSelectedMatchAndHasNoDoubleAction() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "single-click-activation",
+            pages: ["needle alpha needle"]
+        )
+        _ = try store.open(documentAt: url)
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+
+        let controller = SearchResultsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
+        let matchRow = try XCTUnwrap((0..<tableView.numberOfRows).first {
+            controller.tableView(tableView, shouldSelectRow: $0)
+        })
+        var activatedMatches: [SearchSidebarMatch] = []
+        controller.onActivateMatch = { activatedMatches.append($0) }
+
+        tableView.selectRowIndexes(IndexSet(integer: matchRow), byExtendingSelection: false)
+        XCTAssertTrue(activatedMatches.isEmpty)
+        let target = try XCTUnwrap(tableView.target as? NSObject)
+        let action = try XCTUnwrap(tableView.action)
+        _ = target.perform(action, with: tableView)
+        let doubleAction = try XCTUnwrap(tableView.doubleAction)
+        _ = target.perform(doubleAction, with: tableView)
+
+        XCTAssertEqual(activatedMatches.map(\.matchIndex), [0])
+        XCTAssertNotEqual(doubleAction, action)
+    }
+
     func testSearchSelectionSurvivesStoreRefreshAndContinuesNavigation() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
@@ -247,6 +277,103 @@ final class SearchNavigationTests: XCTestCase {
         )
     }
 
+    func testSearchActivationThroughMainWindowDisplaysExactSelection() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "window-search-selection",
+            pages: ["intro page", "needle target on second page"]
+        )
+        let session = try store.open(documentAt: url)
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushSearchNavigationLayout(windowController.window)
+
+        let split = try XCTUnwrap(
+            windowController.window?.contentViewController as? SplitViewController
+        )
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        flushSearchNavigationLayout(windowController.window)
+        let match = try XCTUnwrap(
+            store.searchSections(in: store.defaultWindowID).flatMap(\.matches).first
+        )
+
+        XCTAssertTrue(split.findNextMatch())
+        flushSearchNavigationLayout(windowController.window)
+
+        try assertReader(
+            split.readerViewController,
+            displays: match,
+            in: session.id,
+            store: store
+        )
+    }
+
+    func testAllOpenSearchSwitchesDocumentAndBackRestoresPreviousReaderPosition() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        let firstURL = try makeSearchableTemporaryPDF(
+            named: "all-open-navigation-first",
+            pages: ["intro page", "needle first document"]
+        )
+        let secondURL = try makeSearchableTemporaryPDF(
+            named: "all-open-navigation-second",
+            pages: ["needle second document"]
+        )
+        let firstSession = try store.open(documentAt: firstURL)
+        let secondSession = try store.open(documentAt: secondURL)
+        store.activate(sessionID: firstSession.id, in: store.defaultWindowID)
+
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushSearchNavigationLayout(windowController.window)
+
+        let split = try XCTUnwrap(
+            windowController.window?.contentViewController as? SplitViewController
+        )
+        let reader = split.readerViewController
+        store.updateSearch(query: "needle", scope: .allOpen, in: store.defaultWindowID)
+        flushSearchNavigationLayout(windowController.window)
+        let matches = store.searchSections(in: store.defaultWindowID).flatMap(\.matches)
+        XCTAssertEqual(matches.map(\.sessionID), [firstSession.id, secondSession.id])
+        let firstMatch = try XCTUnwrap(matches.first)
+        let secondMatch = try XCTUnwrap(matches.dropFirst().first)
+
+        XCTAssertTrue(split.findNextMatch())
+        flushSearchNavigationLayout(windowController.window)
+        try assertReader(reader, displays: firstMatch, in: firstSession.id, store: store)
+
+        XCTAssertTrue(split.findNextMatch())
+        flushSearchNavigationLayout(windowController.window)
+        try assertReader(reader, displays: secondMatch, in: secondSession.id, store: store)
+        XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), secondSession.id)
+
+        let backSessionID = try XCTUnwrap(reader.testingNavigationBackSessionIDs.last)
+        let backPosition = try XCTUnwrap(reader.testingNavigationBackPositions.last)
+        XCTAssertEqual(backSessionID, firstSession.id)
+
+        windowController.navigateBack()
+        flushSearchNavigationLayout(windowController.window)
+
+        XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), firstSession.id)
+        XCTAssertEqual(reader.displayedSessionID, firstSession.id)
+        XCTAssertTrue(reader.pdfView.document === (try store.pdfDocument(for: firstSession.id)))
+        let currentPage = try XCTUnwrap(reader.pdfView.currentPage)
+        XCTAssertEqual(reader.pdfView.document?.index(for: currentPage), backPosition.pageIndex)
+        XCTAssertEqual(store.session(for: firstSession.id)?.lastReadPosition, backPosition)
+        let livePosition = try XCTUnwrap(reader.testingCurrentReadingPosition)
+        XCTAssertEqual(livePosition.pageIndex, backPosition.pageIndex)
+        let backTargetPage = try XCTUnwrap(firstMatch.selection.pages.first)
+        let backTargetBounds = firstMatch.selection.bounds(for: backTargetPage)
+        XCTAssertTrue(
+            reader.pdfView.bounds.intersects(
+                reader.pdfView.convert(backTargetBounds, from: backTargetPage)
+            )
+        )
+    }
+
     func testSelectionSurvivesActivateUnderSplitObservers() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
@@ -275,4 +402,42 @@ final class SearchNavigationTests: XCTestCase {
     private func makeSearchableTemporaryPDF(named name: String, pages: [String]) throws -> URL {
         try TestPDFFixtures.makeSearchablePDF(named: name, pages: pages)
     }
+
+    private func assertReader(
+        _ reader: ReaderViewController,
+        displays match: SearchSidebarMatch,
+        in sessionID: UUID,
+        store: DocumentStore
+    ) throws {
+        XCTAssertEqual(reader.displayedSessionID, sessionID)
+        XCTAssertTrue(reader.pdfView.document === (try store.pdfDocument(for: sessionID)))
+
+        let expectedPage = try XCTUnwrap(match.selection.pages.first)
+        let expectedBounds = match.selection.bounds(for: expectedPage)
+        let actualSelection = try XCTUnwrap(reader.pdfView.currentSelection)
+        let actualPage = try XCTUnwrap(actualSelection.pages.first)
+        XCTAssertEqual(reader.pdfView.document?.index(for: actualPage), match.pageIndex)
+        XCTAssertEqual(actualSelection.string, match.selection.string)
+        let actualBounds = actualSelection.bounds(for: actualPage)
+        XCTAssertEqual(actualBounds.minX, expectedBounds.minX, accuracy: 0.5)
+        XCTAssertEqual(actualBounds.minY, expectedBounds.minY, accuracy: 0.5)
+        XCTAssertEqual(actualBounds.width, expectedBounds.width, accuracy: 0.5)
+        XCTAssertEqual(actualBounds.height, expectedBounds.height, accuracy: 0.5)
+
+        let currentPage = try XCTUnwrap(reader.pdfView.currentPage)
+        XCTAssertEqual(reader.pdfView.document?.index(for: currentPage), match.pageIndex)
+        let expectedPosition = ReadingPosition(
+            pageIndex: match.pageIndex,
+            point: NSPoint(x: expectedBounds.minX, y: expectedBounds.maxY)
+        )
+        XCTAssertEqual(store.session(for: sessionID)?.lastReadPosition, expectedPosition)
+        XCTAssertTrue(reader.pdfView.bounds.intersects(reader.pdfView.convert(actualBounds, from: actualPage)))
+    }
+}
+
+@MainActor
+private func flushSearchNavigationLayout(_ window: NSWindow?) {
+    window?.layoutIfNeeded()
+    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+    window?.layoutIfNeeded()
 }

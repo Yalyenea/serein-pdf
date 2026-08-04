@@ -107,6 +107,15 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             guard let self else { return }
             self.documentStore.setFocusedPane(.secondary, in: self.windowID)
         }
+        primaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
+            self?.activateHistorySession(sessionID, in: .primary) ?? false
+        }
+        secondaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
+            self?.activateHistorySession(sessionID, in: .secondary) ?? false
+        }
+        floatingOutlineViewController.onNavigationRequested = { [weak self] request in
+            _ = self?.navigate(to: request)
+        }
         primaryReaderViewController.onOverviewPresentationDidChange = { [weak self] active in
             guard let self else { return }
             self.floatingOutlineViewController.setSuppressed(
@@ -267,12 +276,18 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     func scrollHalfPageDown() {
         let reader = activeReaderViewController()
         guard reader.scrollHalfPageDown() == false else { return }
+        if reader.usesContinuousScrolling == false {
+            guard reader.goToNextPage() == false else { return }
+        }
         goToContinuousReadingBoundary(direction: 1)
     }
 
     func scrollHalfPageUp() {
         let reader = activeReaderViewController()
         guard reader.scrollHalfPageUp() == false else { return }
+        if reader.usesContinuousScrolling == false {
+            guard reader.goToPreviousPageBottom() == false else { return }
+        }
         goToContinuousReadingBoundary(direction: -1)
     }
 
@@ -297,15 +312,51 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         activeReaderViewController().goToPage(pageIndex)
     }
 
+    /// Shared exact destination route for right/floating Outline and future
+    /// cross-document navigation sources.
+    @discardableResult
+    func navigate(to request: OutlineNavigationRequest) -> Bool {
+        navigate(to: request.position, in: request.sessionID)
+    }
+
+    @discardableResult
+    func navigate(to position: ReadingPosition, in sessionID: UUID) -> Bool {
+        guard documentStore.session(for: sessionID) != nil else { return false }
+        let reader = activeReaderViewController()
+        let sameSession = reader.displayedSessionID == sessionID
+        if sameSession == false {
+            reader.recordCurrentPositionForNavigation()
+            let focusedPane = documentStore.focusedPane(in: windowID)
+            let targetPane = documentStore.isSplitEnabled(in: windowID) ? focusedPane : nil
+            documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
+            guard reader.displayedSessionID == sessionID else { return false }
+        }
+        return reader.go(to: position, recordHistory: sameSession)
+    }
+
     private func goToContinuousReadingBoundary(direction: Int) {
         let focusedPane = documentStore.focusedPane(in: windowID)
         guard let sessionID = documentStore.displayedSessionID(for: focusedPane, in: windowID),
               let target = documentStore.continuousReadingTarget(from: sessionID, direction: direction, in: windowID) else {
             return
         }
-        documentStore.updateCurrentPage(index: target.pageIndex, for: target.sessionID)
+        guard let targetSession = documentStore.session(for: target.sessionID) else { return }
+        documentStore.updateReadingPosition(
+            target.readingPosition,
+            scaleFactor: targetSession.zoomScale,
+            for: target.sessionID
+        )
         let targetPane = documentStore.isSplitEnabled(in: windowID) ? focusedPane : nil
         documentStore.activate(sessionID: target.sessionID, in: windowID, targetPane: targetPane)
+    }
+
+    private func activateHistorySession(_ sessionID: UUID, in pane: ReaderPane) -> Bool {
+        guard documentStore.session(for: sessionID) != nil else { return false }
+        let targetPane = documentStore.isSplitEnabled(in: windowID) ? pane : nil
+        documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
+        return documentStore.displayedSessionID(for: pane, in: windowID) == sessionID
+            || (documentStore.isSplitEnabled(in: windowID) == false
+                && documentStore.displayedSessionID(for: .primary, in: windowID) == sessionID)
     }
 
     @discardableResult

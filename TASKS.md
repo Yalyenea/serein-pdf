@@ -104,9 +104,9 @@
 
 权威债项与路线见 [REVIEW.md](REVIEW.md)。本节只跟踪执行勾选。
 
-### 4.0.1 最近修复（main 合入）
+### 4.0.1 最近修复
 
-- [x] `Cmd+[` / `Cmd+]` 多步前进后退：reader 自持 history stack，避免 PDFKit 历史被 store 回写清掉
+- [x] 阅读跳转收口：每个 pane 以 `sessionID + ReadingPosition` 保存可反复前进/后退的精确历史；Outline / Pages / PDF link / Search / Annotations 显式入栈，PDF 内链首次跳转仍居中，普通滚动与顺序翻页不灌栈；覆盖四种模式、同页点、跨 PDF、页首/页底、单双页边界与重启持久化
 - [x] Release CI 侧栏 layout 测试：程序化 toggle 不写坏 preferred widths；测试钉死默认窗口尺寸并等待 layout 收敛
 
 

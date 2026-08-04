@@ -306,6 +306,7 @@ final class OutlineViewController: NSViewController {
 
     let documentStore: DocumentStore
     let windowID: UUID
+    var onNavigationRequested: ((OutlineNavigationRequest) -> Void)?
     private let titleLabel = NSTextField(labelWithString: "Outline")
     private let expansionToggleButton = NSButton()
     private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF with a table of contents to see it here.")
@@ -620,13 +621,19 @@ final class OutlineViewController: NSViewController {
         selectedPath = path
         updateSelectionHighlights()
 
-        guard let pageIndex = node.pageIndex else { return }
+        guard let pageIndex = node.pageIndex,
+              let destinationPoint = node.destinationPoint else { return }
         let targetSessionID = node.sourceSessionID ?? documentStore.activeSessionID(in: windowID)
         guard let targetSessionID else { return }
-        documentStore.updateCurrentPage(index: pageIndex, for: targetSessionID)
-        if documentStore.activeSessionID(in: windowID) != targetSessionID {
-            documentStore.activate(sessionID: targetSessionID, in: windowID)
-        }
+
+        let request = OutlineNavigationRequest(
+            sessionID: targetSessionID,
+            position: ReadingPosition(
+                pageIndex: pageIndex,
+                point: destinationPoint
+            )
+        )
+        onNavigationRequested?(request)
     }
 
     private func updateSelectionHighlights() {

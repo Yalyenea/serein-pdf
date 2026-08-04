@@ -5,6 +5,25 @@ import Testing
 @MainActor
 struct RightSidebarViewControllerTests {
     @Test
+    func pageThumbnailIntentForwardsThroughSidebar() throws {
+        let store = makeIsolatedDocumentStore()
+        let controller = RightSidebarViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        var callCount = 0
+        controller.onWillNavigateFromPages = { callCount += 1 }
+        controller.loadViewIfNeeded()
+        let thumbnailView = try #require(
+            findDescendant(of: NavigationTrackingPDFThumbnailView.self, in: controller.view)
+        )
+
+        thumbnailView.notifyWillNavigate()
+
+        #expect(callCount == 1)
+    }
+
+    @Test
     func loadingSidebarDoesNotEagerlyLoadAnnotationsPane() {
         let store = makeIsolatedDocumentStore()
         let controller = RightSidebarViewController(

@@ -1453,7 +1453,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func outlineSelectionNavigatesReaderToTargetPage() throws {
+    func outlineSelectionNavigatesToExactPointAndBack() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
@@ -1470,12 +1470,66 @@ struct WindowChromeTests {
             Issue.record("Failed to locate outline UI")
             return
         }
+        let origin = try #require(store.activeSession?.lastReadPosition)
+        let targetPoint = try #require(outlineRow.node.destinationPoint)
 
         outlineRow.performPrimaryAction()
         flushLayout(controller.window)
 
         let currentPageIndex = splitController.readerViewController.pdfView.currentPage.map { document.index(for: $0) }
         #expect(currentPageIndex == 1)
+        let target = ReadingPosition(pageIndex: 1, point: targetPoint)
+        #expect(store.activeSession?.lastReadPosition == target)
+        let live = try #require(splitController.readerViewController.testingCurrentReadingPosition)
+        #expect(live.pageIndex == 1)
+        #expect(abs(live.point.y - targetPoint.y) < 2)
+
+        splitController.navigateBack()
+        flushLayout(controller.window)
+        #expect(store.activeSession?.lastReadPosition == origin)
+        #expect(splitController.readerViewController.testingCurrentReadingPosition?.pageIndex == origin.pageIndex)
+    }
+
+    @Test
+    func firstInternalLinkJumpStaysCenteredInEveryDisplayMode() throws {
+        _ = NSApplication.shared
+        for mode in ReaderDisplayMode.allCases {
+            try assertInternalLinkNavigationStaysCentered(in: mode)
+        }
+    }
+
+    @Test
+    func repeatedSelectionNavigationDoesNotCreateSelfHistory() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeSelectableTemporaryPDF(
+                named: "selection-self-history",
+                text: "alpha repeated target omega"
+            )
+        )
+        flushLayout(controller.window)
+        let splitController = try #require(
+            controller.window?.contentViewController as? SplitViewController
+        )
+        let reader = splitController.readerViewController
+        let selection = try #require(
+            reader.pdfView.document?.findString("repeated target", withOptions: []).first
+        )
+
+        reader.go(to: selection)
+        flushLayout(controller.window)
+        let target = try #require(store.session(for: session.id)?.lastReadPosition)
+        let historyCount = reader.testingNavigationBackPositions.count
+
+        reader.go(to: selection)
+        flushLayout(controller.window)
+
+        #expect(reader.testingNavigationBackPositions.count == historyCount)
+        #expect(store.session(for: session.id)?.lastReadPosition == target)
+        #expect(reader.pdfView.currentSelection?.string == "repeated target")
     }
 
     @Test
@@ -1494,12 +1548,20 @@ struct WindowChromeTests {
         #expect(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
         store.activate(sessionID: sessions[0].id, in: store.defaultWindowID)
         flushLayout(controller.window)
+        let splitController = try #require(
+            controller.window?.contentViewController as? SplitViewController
+        )
 
         controller.goToNextPage()
         flushLayout(controller.window)
 
         #expect(store.activeSessionID == sessions[1].id)
         #expect(store.session(for: sessions[1].id)?.currentPageIndex == 0)
+        let nextPosition = try #require(store.session(for: sessions[1].id)?.lastReadPosition)
+        let nextDocument = try #require(splitController.readerViewController.pdfView.document)
+        let nextPage = try #require(nextDocument.page(at: 0))
+        #expect(nextPosition == .pageTop(pageIndex: 0, pageBounds: nextPage.bounds(for: PDFDisplayBox.cropBox)))
+        #expect(splitController.readerViewController.pdfView.currentPage.map { nextDocument.index(for: $0) } == 0)
     }
 
     @Test
@@ -1523,12 +1585,75 @@ struct WindowChromeTests {
         )
         #expect(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
         flushLayout(controller.window)
+        let splitController = try #require(
+            controller.window?.contentViewController as? SplitViewController
+        )
 
         controller.goToPreviousPage()
         flushLayout(controller.window)
 
         #expect(store.activeSessionID == sessions[0].id)
         #expect(store.session(for: sessions[0].id)?.currentPageIndex == 1)
+        let previousPosition = try #require(store.session(for: sessions[0].id)?.lastReadPosition)
+        let previousDocument = try #require(splitController.readerViewController.pdfView.document)
+        let previousPage = try #require(previousDocument.page(at: 1))
+        #expect(previousPosition == .pageBottom(pageIndex: 1, pageBounds: previousPage.bounds(for: PDFDisplayBox.cropBox)))
+        #expect(splitController.readerViewController.pdfView.currentPage.map { previousDocument.index(for: $0) } == 1)
+    }
+
+    @Test
+    func nonContinuousHalfPageTurnsCurrentPDFBeforeCrossingBoundary() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let sessions = try store.open(
+            documentsAt: [
+                makeTemporaryPDF(
+                    named: "half-page-boundary-first",
+                    pageSizes: [
+                        NSSize(width: 320, height: 480),
+                        NSSize(width: 320, height: 480),
+                    ]
+                ),
+                makeTemporaryPDF(
+                    named: "half-page-boundary-second",
+                    pageSizes: [NSSize(width: 320, height: 480)]
+                ),
+            ],
+            in: store.defaultWindowID
+        )
+        #expect(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        for session in sessions {
+            store.setDisplayMode(.singlePage, for: session.id)
+        }
+        store.activate(sessionID: sessions[0].id, in: store.defaultWindowID)
+        flushLayout(controller.window)
+        controller.fitReaderToPage()
+        flushLayout(controller.window)
+
+        controller.scrollHalfPageDown()
+        flushLayout(controller.window)
+        #expect(store.activeSessionID == sessions[0].id)
+        #expect(store.session(for: sessions[0].id)?.currentPageIndex == 1)
+
+        controller.scrollHalfPageDown()
+        flushLayout(controller.window)
+        #expect(store.activeSessionID == sessions[1].id)
+        #expect(store.session(for: sessions[1].id)?.currentPageIndex == 0)
+
+        controller.scrollHalfPageUp()
+        flushLayout(controller.window)
+        #expect(store.activeSessionID == sessions[0].id)
+        let firstDocument = try #require(
+            (controller.window?.contentViewController as? SplitViewController)?
+                .readerViewController.pdfView.document
+        )
+        let previousPage = try #require(firstDocument.page(at: 1))
+        #expect(
+            store.session(for: sessions[0].id)?.lastReadPosition
+                == .pageBottom(pageIndex: 1, pageBounds: previousPage.bounds(for: .cropBox))
+        )
     }
 
     @Test
@@ -2223,16 +2348,22 @@ struct WindowChromeTests {
         flushLayout(controller.window)
         let afterDownOrigin = clipView.bounds.origin.y
         let downDelta = afterDownOrigin - beforeOrigin
-        #expect(abs(downDelta) > 20)
+        #expect(downDelta > 20)
+        #expect(abs(downDelta - clipView.bounds.height * 0.5) < 3)
+        let storedAfterDown = try #require(
+            store.session(for: splitController.readerViewController.displayedSessionID ?? UUID())?.lastReadPosition
+        )
+        let liveAfterDown = try #require(reader.testingCurrentReadingPosition)
+        #expect(storedAfterDown.pageIndex == liveAfterDown.pageIndex)
+        #expect(abs(storedAfterDown.point.y - liveAfterDown.point.y) < 2)
 
         controller.scrollHalfPageUp()
         flushLayout(controller.window)
         let afterUpOrigin = clipView.bounds.origin.y
         let upStep = afterUpOrigin - afterDownOrigin
-        // Exact return can drift when store writeback re-applies the reading
-        // position; require a real reverse step, not pixel-perfect restore.
         #expect(abs(upStep) > 20)
         #expect(upStep * downDelta < 0)
+        #expect(abs(afterUpOrigin - beforeOrigin) < 3)
     }
 
     @Test
@@ -2263,9 +2394,13 @@ struct WindowChromeTests {
             return
         }
 
+        let beforeOrigin = clipView.bounds.origin.y
         controller.scrollHalfPageDown()
         flushLayout(controller.window)
         let settledDownOrigin = clipView.bounds.origin.y
+        let downDelta = settledDownOrigin - beforeOrigin
+        #expect(downDelta > 20)
+        #expect(abs(downDelta - clipView.bounds.height * 0.5) < 3)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15))
         controller.window?.layoutIfNeeded()
         let settledAgainDownOrigin = clipView.bounds.origin.y
@@ -2278,6 +2413,7 @@ struct WindowChromeTests {
         controller.window?.layoutIfNeeded()
         let settledAgainUpOrigin = clipView.bounds.origin.y
         #expect(abs(settledAgainUpOrigin - settledUpOrigin) < 1.0)
+        #expect(abs(settledUpOrigin - beforeOrigin) < 3)
     }
 
     @Test
@@ -2303,9 +2439,13 @@ struct WindowChromeTests {
             return
         }
 
+        let beforeOrigin = clipView.bounds.origin.y
         controller.scrollHalfPageDown()
         flushLayout(controller.window)
         let settledDownOrigin = clipView.bounds.origin.y
+        let downDelta = settledDownOrigin - beforeOrigin
+        #expect(downDelta > 20)
+        #expect(abs(downDelta - clipView.bounds.height * 0.5) < 3)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15))
         controller.window?.layoutIfNeeded()
         let settledAgainDownOrigin = clipView.bounds.origin.y
@@ -2568,10 +2708,12 @@ struct WindowChromeTests {
         reader.goToNextPage()
         flushLayout(controller.window)
 
-        #expect(abs(reader.pdfView.scaleFactor - originalScale) < 0.001)
+        let targetScale = try #require(fitWidthScaleExpected(for: reader.pdfView, leadPageIndex: 1))
+        #expect(abs(reader.pdfView.scaleFactor - targetScale) < 0.05)
+        #expect(abs(reader.pdfView.scaleFactor - originalScale) > 0.1)
         #expect(store.session(for: session.id)?.currentPageIndex == 1)
-        #expect(store.session(for: session.id)?.scaleMode == .manual)
-        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - originalScale) < 0.001)
+        #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - targetScale) < 0.05)
     }
 
     @Test
@@ -2611,6 +2753,9 @@ struct WindowChromeTests {
         let backingScale = controller.window?.backingScaleFactor ?? 1
 
         #expect(store.session(for: session.id)?.currentPageIndex == 3)
+        let document = try #require(reader.pdfView.document)
+        #expect(reader.pdfView.currentPage.map { document.index(for: $0) } == 3)
+        #expect(reader.testingCurrentReadingPosition?.pageIndex == 3)
         #expect(abs(afterWaitOrigin.x - settledOrigin.x) < 0.5)
         #expect(abs(afterWaitOrigin.y - settledOrigin.y) < 0.5)
         #expect(abs(afterWaitOrigin.y * backingScale - (afterWaitOrigin.y * backingScale).rounded()) < 0.001)
@@ -3171,13 +3316,13 @@ private func makeTemporaryPDFWithOutline(named name: String) throws -> URL {
     let document = PDFDocument()
 
     for index in 0..<2 {
-        let pageSize = NSSize(width: 320, height: 480)
+        let pageSize = NSSize(width: 320, height: 1200)
         let image = NSImage(size: pageSize)
         image.lockFocus()
         NSColor.white.setFill()
         NSBezierPath(rect: NSRect(origin: .zero, size: pageSize)).fill()
         NSString(string: "Outline \(index + 1)").draw(
-            in: NSRect(x: 36, y: 220, width: 200, height: 40),
+            in: NSRect(x: 36, y: 580, width: 200, height: 40),
             withAttributes: [
                 .font: NSFont.systemFont(ofSize: 24, weight: .medium),
                 .foregroundColor: NSColor.black,
@@ -3194,10 +3339,10 @@ private func makeTemporaryPDFWithOutline(named name: String) throws -> URL {
     let root = PDFOutline()
     let first = PDFOutline()
     first.label = "Page 1"
-    first.destination = PDFDestination(page: document.page(at: 0)!, at: .zero)
+    first.destination = PDFDestination(page: document.page(at: 0)!, at: NSPoint(x: 0, y: 1200))
     let second = PDFOutline()
     second.label = "Page 2"
-    second.destination = PDFDestination(page: document.page(at: 1)!, at: .zero)
+    second.destination = PDFDestination(page: document.page(at: 1)!, at: NSPoint(x: 0, y: 850))
     root.insertChild(first, at: 0)
     root.insertChild(second, at: 1)
     document.outlineRoot = root
@@ -3206,4 +3351,85 @@ private func makeTemporaryPDFWithOutline(named name: String) throws -> URL {
         throw CocoaError(.fileWriteUnknown)
     }
     return url
+}
+
+private struct InternalLinkPDFFixture {
+    let url: URL
+    let linkBounds: NSRect
+    let targetPageIndex: Int
+    let targetPoint: NSPoint
+}
+
+@MainActor
+private func makeTemporaryPDFWithInternalLink(named name: String) throws -> InternalLinkPDFFixture {
+    let root = try TestPDFFixtures.makeRootDirectory()
+    let url = root.appendingPathComponent("\(name).pdf")
+    let pageSize = NSSize(width: 600, height: 900)
+    let document = TestPDFFixtures.makeBlankDocument(pageCount: 4, pageSize: pageSize)
+    let linkBounds = NSRect(x: 72, y: 700, width: 180, height: 64)
+    let targetPageIndex = 3
+    let targetPoint = NSPoint(x: 48, y: 640)
+    guard let sourcePage = document.page(at: 0),
+          let targetPage = document.page(at: targetPageIndex) else {
+        throw CocoaError(.fileWriteUnknown)
+    }
+
+    let link = PDFAnnotation(bounds: linkBounds, forType: .link, withProperties: nil)
+    link.action = PDFActionGoTo(destination: PDFDestination(page: targetPage, at: targetPoint))
+    sourcePage.addAnnotation(link)
+    guard document.write(to: url) else {
+        throw CocoaError(.fileWriteUnknown)
+    }
+    return InternalLinkPDFFixture(
+        url: url,
+        linkBounds: linkBounds,
+        targetPageIndex: targetPageIndex,
+        targetPoint: targetPoint
+    )
+}
+
+@MainActor
+private func assertInternalLinkNavigationStaysCentered(in mode: ReaderDisplayMode) throws {
+    let store = makeIsolatedDocumentStore()
+    let controller = MainWindowController(documentStore: store)
+    defer { controller.close() }
+    let fixture = try makeTemporaryPDFWithInternalLink(named: "internal-link-\(mode.rawValue)")
+    let session = try store.open(documentAt: fixture.url)
+    store.setDisplayMode(mode, for: session.id)
+    flushLayout(controller.window)
+
+    let window = try #require(controller.window)
+    let splitController = try #require(window.contentViewController as? SplitViewController)
+    let reader = splitController.readerViewController
+    reader.fitToWidth()
+    flushLayout(window)
+    for _ in 0..<4 {
+        reader.zoomOut()
+    }
+    flushLayout(window)
+    assertDocumentVisuallyCentered(in: reader.pdfView, axes: .horizontal)
+
+    let sourcePosition = try #require(store.session(for: session.id)?.lastReadPosition)
+    let sourcePage = try #require(reader.pdfView.document?.page(at: 0))
+    let linkPointOnPage = NSPoint(x: fixture.linkBounds.midX, y: fixture.linkBounds.midY)
+    let linkPointInView = reader.pdfView.convert(linkPointOnPage, from: sourcePage)
+    let linkPointInWindow = reader.pdfView.convert(linkPointInView, to: nil)
+
+    reader.pdfView.mouseDown(with: mouseDownEvent(in: window, at: linkPointInWindow))
+    flushLayout(window)
+
+    let target = ReadingPosition(pageIndex: fixture.targetPageIndex, point: fixture.targetPoint)
+    #expect(store.session(for: session.id)?.lastReadPosition == target)
+    #expect(reader.testingNavigationBackPositions.last == sourcePosition)
+    assertDocumentVisuallyCentered(in: reader.pdfView, axes: .horizontal)
+
+    reader.navigateBack()
+    flushLayout(window)
+    #expect(store.session(for: session.id)?.lastReadPosition == sourcePosition)
+    assertDocumentVisuallyCentered(in: reader.pdfView, axes: .horizontal)
+
+    reader.navigateForward()
+    flushLayout(window)
+    #expect(store.session(for: session.id)?.lastReadPosition == target)
+    assertDocumentVisuallyCentered(in: reader.pdfView, axes: .horizontal)
 }

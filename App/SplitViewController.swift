@@ -562,6 +562,12 @@ final class SplitViewController: NSSplitViewController {
         rightSidebarViewController.onActivateSearchMatch = { [weak self] match in
             self?.activateSearchMatch(match)
         }
+        rightSidebarViewController.outlineViewController.onNavigationRequested = { [weak self] request in
+            _ = self?.readerWorkspaceViewController.navigate(to: request)
+        }
+        rightSidebarViewController.onWillNavigateFromPages = { [weak self] in
+            self?.readerWorkspaceViewController.activeReaderViewController().beginExternalNavigation()
+        }
         rightSidebarViewController.onActivateAnnotation = { [weak self] group in
             self?.activateAnnotation(group)
         }
@@ -600,10 +606,15 @@ final class SplitViewController: NSSplitViewController {
         // Skip redundant activate for same-session find-next; store notify was wiping
         // search table selection under the full chrome observer graph.
         if alreadyShowingMatch == false {
+            readerWorkspaceViewController.activeReaderViewController()
+                .recordCurrentPositionForNavigation()
             let targetPane = isSplit ? documentStore.focusedPane(in: windowID) : nil
             documentStore.activate(sessionID: match.sessionID, in: windowID, targetPane: targetPane)
         }
-        readerWorkspaceViewController.activeReaderViewController().go(to: match.selection)
+        readerWorkspaceViewController.activeReaderViewController().go(
+            to: match.selection,
+            recordHistory: alreadyShowingMatch
+        )
         syncFindStatus()
     }
 
