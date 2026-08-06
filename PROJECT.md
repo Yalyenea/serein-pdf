@@ -223,6 +223,7 @@ flowchart LR
 | `scaleMode` | `fitWidth` / `manual` |
 | `zoomScale: CGFloat` | 缩放比例 |
 | `lastReadPosition` | 页码 + 页内位置 |
+| `needsInitialReadingPosition` | 无持久化阅读位时,首次布局落到真实页顶而非 PDF 坐标原点 |
 | `outlineTree: [OutlineNode]` | 目录树 |
 | `isDirty: Bool` | 是否有未保存批注 |
 | `fileSnapshot` | 外部文件变化检测快照(mtime / size / inode) |
@@ -409,18 +410,39 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 | M14 窗口工作流交互 | ✅ | PDF 跨已有窗口菜单 / 拖拽移动、热重载实时页码、左右 / 上下分屏、侧栏空白拖窗、左右物理 Command 数字键 |
 | M15 阅读聚焦 | ✅ | `F` 鼠标跟随聚焦、`Option+F` 窗口调节、Settings 默认宽高、双栏半页模式、单路径圆角遮罩与暗色增强 |
 
-已完成细项以 commit 历史与 [TASKS.md](TASKS.md) 为准,不在本文件展开。
+已完成细项以 commit 历史、[CHANGELOG.md](CHANGELOG.md) 与 [docs/archive/](docs/archive/) 为准;活 [TASKS.md](TASKS.md) 只跟踪未完成项。
 
 ## 8. 待开发里程碑
 
+执行勾选见 [TASKS.md](TASKS.md);工程债见 [REVIEW.md](REVIEW.md)。
+
 ### 8.1 Milestone 11(长期预研):扩展生态
 
-只产出**设计决策 + 最小 PoC**,不承诺全量实现。(编号与 TASKS 对齐;旧稿曾写 M10。)
+只产出**设计决策 + 最小 PoC**,不承诺全量实现。
 
 - 扩展机制 RFC:进程内 Swift 插件 / URL scheme / 外部 CLI / WebKit 壳 的候选比较
 - PoC:若决策继续,把"导出高亮"重写为首个插件
 - Serein Extension API 草稿
 - 风险评估:沙箱、上架(若走 MAS)、维护成本;若推迟,说明"为什么现在不做"
+
+### 8.2 Milestone 12 空窗体验收尾
+
+- `M12-010`–`M12-014`:无 session 时侧栏占比 / 右栏 chrome 弱化 / 左栏层次 / 共享 empty state / 顶部留白
+- 暂缓项(`M12-D002`–`D006`)见 TASKS,有明确触发条件再开
+
+### 8.3 Milestone 13.1 网站后续
+
+- 实机截图替换占位、截图规范、release 下载说明;可选 Pages 部署与暗色主题截图
+
+### 8.4 多主题预设
+
+- 计划:[docs/theme-presets-plan.md](docs/theme-presets-plan.md)
+- 在保留 `Mode + Light Theme + Dark Theme` 的前提下,把主题从硬编码扩展为可注册 curated 预设表
+
+### 8.5 工程债(摘要)
+
+- 中期:拆 `AppDelegate` / `ReaderViewController` / `DocumentStore`;config 表驱动;OCR 异步缓存;主题并发收口
+- 产品候选:下划线批注、find 选项、outline 过滤、高亮色数字键、跨文档批注导出、URL scheme
 
 ## 9. 风险
 

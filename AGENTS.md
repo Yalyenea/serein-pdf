@@ -13,7 +13,8 @@ Native macOS PDF reader.
 
 - Read [PROJECT.md](PROJECT.md) and [README.md](README.md) before coding.
 - using justfile for make
-- Track execution in [TASKS.md](TASKS.md).
+- Track open work in [TASKS.md](TASKS.md); open debt in [REVIEW.md](REVIEW.md).
+- Completed milestone checklists live under [docs/archive/](docs/archive/) — do not re-expand them into live TASKS.
 - Keep docs in sync when scope or behavior changes.
 - Multi-theme expansion plan: [docs/theme-presets-plan.md](docs/theme-presets-plan.md).
 

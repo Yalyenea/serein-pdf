@@ -256,10 +256,12 @@ Standard macOS app/window shortcuts are available too, including `cmd+h`,
 
 | File | Role |
 |---|---|
-| [PROJECT.md](PROJECT.md) | Product scope, architecture, milestones |
-| [TASKS.md](TASKS.md) | Execution checklist (including REVIEW 5.1–5.4) |
-| [REVIEW.md](REVIEW.md) | Engineering review: highlights, debt, roadmap (`✅` / `[ ]`) |
+| [PROJECT.md](PROJECT.md) | Product scope, architecture, shortcuts, models, open milestones |
+| [TASKS.md](TASKS.md) | Live execution checklist (open items only) |
+| [REVIEW.md](REVIEW.md) | Open engineering debt and roadmap |
 | [CHANGELOG.md](CHANGELOG.md) | User-facing and engineering change log |
+| [docs/theme-presets-plan.md](docs/theme-presets-plan.md) | Multi-theme presets plan (not started) |
+| [docs/archive/](docs/archive/) | Completed milestone checklists and full 2026-06 review snapshot |
 
 ## Repo layout
 
