@@ -26,6 +26,8 @@ struct WindowChromeTests {
         let session = try store.open(documentAt: makeTemporaryPDF(named: "window-title-active"))
 
         #expect(controller.window?.title == session.title)
+        #expect(controller.window?.representedURL == session.url)
+        #expect(controller.window?.representedFilename == session.url.path)
     }
 
     @Test
@@ -39,6 +41,8 @@ struct WindowChromeTests {
         _ = store.newBlankTab()
 
         #expect(controller.window?.title == "Serein")
+        #expect(controller.window?.representedURL == nil)
+        #expect(controller.window?.representedFilename == "")
     }
 
     @Test
@@ -51,10 +55,50 @@ struct WindowChromeTests {
         let second = try store.open(documentAt: makeTemporaryPDF(named: "window-title-second"))
 
         #expect(controller.window?.title == second.title)
+        #expect(controller.window?.representedURL == second.url)
+        #expect(controller.window?.representedFilename == second.url.path)
         store.activate(sessionID: first.id, in: store.defaultWindowID)
         #expect(controller.window?.title == first.title)
+        #expect(controller.window?.representedURL == first.url)
+        #expect(controller.window?.representedFilename == first.url.path)
         store.activate(sessionID: second.id, in: store.defaultWindowID)
         #expect(controller.window?.title == second.title)
+        #expect(controller.window?.representedURL == second.url)
+        #expect(controller.window?.representedFilename == second.url.path)
+    }
+
+    @Test
+    func representedDocumentURLsStayIsolatedPerWindow() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let firstWindowID = store.defaultWindowID
+        let first = try store.open(
+            documentAt: makeTemporaryPDF(named: "represented-url-first-window"),
+            in: firstWindowID
+        )
+        let secondWindowID = store.createWindow(copyingFrom: firstWindowID)
+        let second = try store.open(
+            documentAt: makeTemporaryPDF(named: "represented-url-second-window"),
+            in: secondWindowID
+        )
+        let firstController = MainWindowController(documentStore: store, windowID: firstWindowID)
+        let secondController = MainWindowController(documentStore: store, windowID: secondWindowID)
+        defer {
+            secondController.close()
+            firstController.close()
+        }
+
+        #expect(firstController.window?.representedURL == first.url)
+        #expect(firstController.window?.representedFilename == first.url.path)
+        #expect(secondController.window?.representedURL == second.url)
+        #expect(secondController.window?.representedFilename == second.url.path)
+
+        _ = store.newBlankTab(in: secondWindowID)
+
+        #expect(firstController.window?.representedURL == first.url)
+        #expect(firstController.window?.representedFilename == first.url.path)
+        #expect(secondController.window?.representedURL == nil)
+        #expect(secondController.window?.representedFilename == "")
     }
 
     @Test
