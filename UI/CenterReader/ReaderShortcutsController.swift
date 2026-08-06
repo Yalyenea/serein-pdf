@@ -18,6 +18,10 @@ final class ReaderShortcutsController {
     private static let supplementalPlainShortcuts: [(KeyboardShortcut, ShortcutCommand)] = [
         (KeyboardShortcut(key: "c", modifiers: []), .singlePageContinuous),
     ]
+    private static let windowRoutedCommands: [ShortcutCommand] = [
+        .navigateBack,
+        .navigateForward,
+    ]
 
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]
     private let handlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
@@ -50,7 +54,24 @@ final class ReaderShortcutsController {
             return true
         }
 
+        if handleWindowRoutedShortcut(for: event) {
+            return true
+        }
+
         return handlePlainShortcut(for: event, in: window)
+    }
+
+    private func handleWindowRoutedShortcut(for event: NSEvent) -> Bool {
+        let shortcuts = shortcutsProvider()
+        let handlers = handlerProvider()
+        for command in Self.windowRoutedCommands {
+            guard let shortcut = shortcuts[command],
+                  shortcut.matches(event: event),
+                  let handler = handlers[command] else { continue }
+            handler()
+            return true
+        }
+        return false
     }
 
     private func handleFindNavigationShortcut(for event: NSEvent) -> Bool {

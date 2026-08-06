@@ -12,14 +12,20 @@ private final class CollapsibleContainerView: SidebarMaterialView {
 /// way to distinguish the click from ordinary scrolling after the fact.
 final class NavigationTrackingPDFThumbnailView: PDFThumbnailView {
     var onWillNavigate: (() -> Void)?
+    var onDidNavigate: (() -> Void)?
 
     override func mouseDown(with event: NSEvent) {
         notifyWillNavigate()
         super.mouseDown(with: event)
+        notifyDidNavigate()
     }
 
     func notifyWillNavigate() {
         onWillNavigate?()
+    }
+
+    func notifyDidNavigate() {
+        onDidNavigate?()
     }
 
 }
@@ -35,6 +41,7 @@ final class RightSidebarViewController: NSViewController {
     var onSearchSelectionDidChange: ((Int?, Int) -> Void)?
     var onActivateAnnotation: ((DocumentHighlightGroup) -> Void)?
     var onWillNavigateFromPages: (() -> Void)?
+    var onDidNavigateFromPages: (() -> Void)?
     private let thumbnailView = NavigationTrackingPDFThumbnailView()
     private let modeSegmented = NSSegmentedControl()
     private var lastAppliedThumbnailWidth: CGFloat = 0
@@ -88,6 +95,9 @@ final class RightSidebarViewController: NSViewController {
         }
         thumbnailView.onWillNavigate = { [weak self] in
             self?.onWillNavigateFromPages?()
+        }
+        thumbnailView.onDidNavigate = { [weak self] in
+            self?.onDidNavigateFromPages?()
         }
         applyMode()
     }

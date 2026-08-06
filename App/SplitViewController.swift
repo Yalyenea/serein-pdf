@@ -568,6 +568,9 @@ final class SplitViewController: NSSplitViewController {
         rightSidebarViewController.onWillNavigateFromPages = { [weak self] in
             self?.readerWorkspaceViewController.activeReaderViewController().beginExternalNavigation()
         }
+        rightSidebarViewController.onDidNavigateFromPages = { [weak self] in
+            self?.readerWorkspaceViewController.activeReaderViewController().commitExternalNavigation()
+        }
         rightSidebarViewController.onActivateAnnotation = { [weak self] group in
             self?.activateAnnotation(group)
         }

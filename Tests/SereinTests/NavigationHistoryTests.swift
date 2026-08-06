@@ -212,6 +212,33 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertNotEqual(reader.testingNavigationBackPositions.last, reader.testingCurrentReadingPosition)
     }
 
+    func testDelayedExternalNavigationKeepsOriginUntilPDFKitMoves() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(
+                named: "nav-history-delayed-external",
+                pageCount: 6
+            )
+        )
+        let reader = makeReader(store: store, sessionID: session.id)
+
+        XCTAssertTrue(reader.goToPage(1))
+        let origin = try XCTUnwrap(store.session(for: session.id)?.lastReadPosition)
+        let backCount = reader.testingNavigationBackPositions.count
+
+        reader.beginExternalNavigation()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+        XCTAssertEqual(reader.testingNavigationBackPositions.count, backCount)
+
+        let document = try XCTUnwrap(reader.pdfView.document)
+        let target = try XCTUnwrap(document.page(at: 4))
+        reader.pdfView.go(to: target)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+
+        XCTAssertEqual(reader.testingNavigationBackPositions.count, backCount + 1)
+        XCTAssertEqual(reader.testingNavigationBackPositions.last, origin)
+    }
+
     func testHistoryRestoresMidPageScrollInContinuousMode() throws {
         let store = makeIsolatedDocumentStore()
         // Page taller than the reader viewport so continuous reading needs mid-page points.
@@ -360,6 +387,41 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(reader.pdfView.currentPage.map { reader.pdfView.document?.index(for: $0) }, 3)
     }
 
+    func testHistoryTargetMovedToAnotherWindowIsUnavailable() throws {
+        let store = makeIsolatedDocumentStore()
+        let first = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-moved-first", pageCount: 4)
+        )
+        let second = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-moved-second", pageCount: 4)
+        )
+        store.activate(sessionID: first.id, in: store.defaultWindowID)
+        let workspace = makeWorkspace(store: store)
+        let reader = workspace.activeReaderViewController()
+        let secondDocument = try store.pdfDocument(for: second.id)
+        let secondPage = try XCTUnwrap(secondDocument.page(at: 2))
+        let secondPosition = ReadingPosition.pageTop(
+            pageIndex: 2,
+            pageBounds: secondPage.bounds(for: reader.pdfView.displayBox)
+        )
+
+        XCTAssertTrue(workspace.navigate(to: secondPosition, in: second.id))
+        XCTAssertTrue(reader.canGoBack)
+
+        let destinationWindowID = store.createWindow(copyingFrom: store.defaultWindowID)
+        XCTAssertTrue(
+            store.moveSession(
+                first.id,
+                from: store.defaultWindowID,
+                to: destinationWindowID
+            )
+        )
+
+        XCTAssertFalse(reader.canGoBack)
+        reader.navigateBack()
+        XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), second.id)
+    }
+
     func testSplitPaneHistoriesNavigateIndependently() throws {
         let store = makeIsolatedDocumentStore()
         let first = try store.open(
@@ -392,6 +454,46 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(store.session(for: first.id)?.currentPageIndex, 0)
         XCTAssertEqual(store.session(for: second.id)?.currentPageIndex, 0)
         XCTAssertEqual(primary.pdfView.currentPage.map { primary.pdfView.document?.index(for: $0) }, 0)
+    }
+
+    func testSplitHistoryPlaybackAcceptsComparisonSessionIdentity() throws {
+        let store = makeIsolatedDocumentStore()
+        let first = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-clone-first", pageCount: 5)
+        )
+        let second = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-history-clone-second", pageCount: 5)
+        )
+        let workspace = makeWorkspace(store: store)
+        let primary = workspace.primaryReaderViewController
+
+        XCTAssertEqual(primary.displayedSessionID, second.id)
+        XCTAssertTrue(primary.goToPage(1))
+        XCTAssertTrue(primary.goToPage(2))
+        let expectedTarget = try XCTUnwrap(primary.testingNavigationBackPositions.last)
+
+        store.setSplitEnabled(true, in: store.defaultWindowID)
+        store.activate(sessionID: first.id, in: store.defaultWindowID, targetPane: .primary)
+        store.activate(sessionID: second.id, in: store.defaultWindowID, targetPane: .secondary)
+        store.setFocusedPane(.primary, in: store.defaultWindowID)
+        workspace.view.layoutSubtreeIfNeeded()
+
+        primary.navigateBack()
+
+        let playbackSessionID = try XCTUnwrap(primary.displayedSessionID)
+        XCTAssertNotEqual(playbackSessionID, second.id)
+        XCTAssertEqual(store.session(for: playbackSessionID)?.url, second.url)
+        XCTAssertEqual(store.session(for: playbackSessionID)?.lastReadPosition, expectedTarget)
+        XCTAssertTrue(primary.canGoForward)
+
+        primary.navigateForward()
+        XCTAssertEqual(primary.displayedSessionID, first.id)
+        primary.navigateBack()
+
+        let replaySessionID = try XCTUnwrap(primary.displayedSessionID)
+        XCTAssertEqual(store.session(for: replaySessionID)?.url, second.url)
+        XCTAssertEqual(store.session(for: replaySessionID)?.lastReadPosition, expectedTarget)
+        XCTAssertTrue(primary.canGoForward)
     }
 
     func testDisplayModeSwitchesRestoreExactAnchorInAllFourModes() throws {

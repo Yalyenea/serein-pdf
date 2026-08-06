@@ -11,16 +11,18 @@ struct RightSidebarViewControllerTests {
             documentStore: store,
             windowID: store.defaultWindowID
         )
-        var callCount = 0
-        controller.onWillNavigateFromPages = { callCount += 1 }
+        var phases: [String] = []
+        controller.onWillNavigateFromPages = { phases.append("will") }
+        controller.onDidNavigateFromPages = { phases.append("did") }
         controller.loadViewIfNeeded()
         let thumbnailView = try #require(
             findDescendant(of: NavigationTrackingPDFThumbnailView.self, in: controller.view)
         )
 
         thumbnailView.notifyWillNavigate()
+        thumbnailView.notifyDidNavigate()
 
-        #expect(callCount == 1)
+        #expect(phases == ["will", "did"])
     }
 
     @Test

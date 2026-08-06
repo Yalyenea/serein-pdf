@@ -108,10 +108,12 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             self.documentStore.setFocusedPane(.secondary, in: self.windowID)
         }
         primaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
-            self?.activateHistorySession(sessionID, in: .primary) ?? false
+            guard let self else { return nil }
+            return self.activateHistorySession(sessionID, in: .primary)
         }
         secondaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
-            self?.activateHistorySession(sessionID, in: .secondary) ?? false
+            guard let self else { return nil }
+            return self.activateHistorySession(sessionID, in: .secondary)
         }
         floatingOutlineViewController.onNavigationRequested = { [weak self] request in
             _ = self?.navigate(to: request)
@@ -350,13 +352,18 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         documentStore.activate(sessionID: target.sessionID, in: windowID, targetPane: targetPane)
     }
 
-    private func activateHistorySession(_ sessionID: UUID, in pane: ReaderPane) -> Bool {
-        guard documentStore.session(for: sessionID) != nil else { return false }
+    private func activateHistorySession(_ sessionID: UUID, in pane: ReaderPane) -> UUID? {
+        guard let requestedSession = documentStore.session(for: sessionID),
+              let workspace = documentStore.windowWorkspace(for: windowID),
+              workspace.sessionIDs.contains(sessionID)
+                || workspace.primarySessionID == sessionID
+                || workspace.secondarySessionID == sessionID else { return nil }
         let targetPane = documentStore.isSplitEnabled(in: windowID) ? pane : nil
         documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
-        return documentStore.displayedSessionID(for: pane, in: windowID) == sessionID
-            || (documentStore.isSplitEnabled(in: windowID) == false
-                && documentStore.displayedSessionID(for: .primary, in: windowID) == sessionID)
+        let resolvedPane: ReaderPane = documentStore.isSplitEnabled(in: windowID) ? pane : .primary
+        guard let resolvedSessionID = documentStore.displayedSessionID(for: resolvedPane, in: windowID),
+              documentStore.session(for: resolvedSessionID)?.url == requestedSession.url else { return nil }
+        return resolvedSessionID
     }
 
     @discardableResult

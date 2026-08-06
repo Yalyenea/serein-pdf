@@ -229,7 +229,7 @@ final class ReaderViewController: NSViewController {
     var onFindActionRequested: ((FindNavigationAction) -> Void)?
     var onOpenURLsRequested: (([URL]) -> Void)?
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
-    var onHistorySessionNavigationRequested: ((UUID) -> Bool)?
+    var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
     private let pdfContainerView = PDFContainerView()
     private let emptyStateContainer = NSStackView()
     private let emptyStateTitleLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
@@ -327,12 +327,6 @@ final class ReaderViewController: NSViewController {
             self,
             selector: #selector(handlePDFViewPageChanged),
             name: Notification.Name.PDFViewPageChanged,
-            object: pdfView
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handlePDFViewChangedHistory),
-            name: Notification.Name.PDFViewChangedHistory,
             object: pdfView
         )
         NotificationCenter.default.addObserver(
@@ -743,10 +737,14 @@ final class ReaderViewController: NSViewController {
     }
 
     func navigateBack() {
-        while let target = navigationBackStack.popLast() {
-            guard documentStore.session(for: target.sessionID) != nil else { continue }
+        while let target = navigationBackStack.last {
+            guard isHistoryEntryAvailable(target) else {
+                navigationBackStack.removeLast()
+                continue
+            }
             let current = currentHistoryEntry()
-            guard playOwnedHistory(to: target) else { continue }
+            guard playOwnedHistory(to: target) else { return }
+            navigationBackStack.removeLast()
             if let current, navigationForwardStack.last != current {
                 navigationForwardStack.append(current)
             }
@@ -755,10 +753,14 @@ final class ReaderViewController: NSViewController {
     }
 
     func navigateForward() {
-        while let target = navigationForwardStack.popLast() {
-            guard documentStore.session(for: target.sessionID) != nil else { continue }
+        while let target = navigationForwardStack.last {
+            guard isHistoryEntryAvailable(target) else {
+                navigationForwardStack.removeLast()
+                continue
+            }
             let current = currentHistoryEntry()
-            guard playOwnedHistory(to: target) else { continue }
+            guard playOwnedHistory(to: target) else { return }
+            navigationForwardStack.removeLast()
             if let current {
                 pushBackHistory(current)
             }
@@ -767,10 +769,10 @@ final class ReaderViewController: NSViewController {
     }
 
     var canGoBack: Bool {
-        navigationBackStack.contains { documentStore.session(for: $0.sessionID) != nil }
+        navigationBackStack.contains(where: isHistoryEntryAvailable)
     }
     var canGoForward: Bool {
-        navigationForwardStack.contains { documentStore.session(for: $0.sessionID) != nil }
+        navigationForwardStack.contains(where: isHistoryEntryAvailable)
     }
 
     /// Test seam: owned history page indices (back stack, oldest → newest).
@@ -875,7 +877,6 @@ final class ReaderViewController: NSViewController {
             token: externalNavigationToken,
             origin: origin
         )
-        commitExternalNavigation()
     }
 
     /// Completes the native navigation after `super.mouseDown`; defer one turn so
@@ -904,13 +905,29 @@ final class ReaderViewController: NSViewController {
     private func currentHistoryEntry() -> NavigationHistoryEntry? {
         guard let sessionID = displayedSessionID,
               let position = historyAnchorPosition() else { return nil }
-        return NavigationHistoryEntry(sessionID: sessionID, position: position)
+        return NavigationHistoryEntry(
+            sessionID: historySessionID(for: sessionID),
+            position: position
+        )
     }
 
     private func liveHistoryEntry() -> NavigationHistoryEntry? {
         guard let sessionID = displayedSessionID,
               let position = currentReadingPosition() else { return nil }
-        return NavigationHistoryEntry(sessionID: sessionID, position: position)
+        return NavigationHistoryEntry(
+            sessionID: historySessionID(for: sessionID),
+            position: position
+        )
+    }
+
+    private func historySessionID(for displayedSessionID: UUID) -> UUID {
+        guard let displayedSession = documentStore.session(for: displayedSessionID),
+              let workspace = documentStore.windowWorkspace(for: windowID) else {
+            return displayedSessionID
+        }
+        return workspace.sessionIDs.first { sessionID in
+            documentStore.session(for: sessionID)?.url == displayedSession.url
+        } ?? displayedSessionID
     }
 
     private func pushBackHistory(_ entry: NavigationHistoryEntry) {
@@ -922,17 +939,28 @@ final class ReaderViewController: NSViewController {
         }
     }
 
+    private func isHistoryEntryAvailable(_ entry: NavigationHistoryEntry) -> Bool {
+        guard documentStore.session(for: entry.sessionID) != nil,
+              let workspace = documentStore.windowWorkspace(for: windowID) else { return false }
+        return workspace.sessionIDs.contains(entry.sessionID)
+            || workspace.primarySessionID == entry.sessionID
+            || workspace.secondarySessionID == entry.sessionID
+    }
+
     @discardableResult
     private func playOwnedHistory(to entry: NavigationHistoryEntry) -> Bool {
-        guard documentStore.session(for: entry.sessionID) != nil else { return false }
+        guard isHistoryEntryAvailable(entry) else { return false }
         let epoch = beginHistoryNavigation()
         defer { endHistoryNavigation(epoch) }
 
+        var playbackSessionID = entry.sessionID
         if displayedSessionID != entry.sessionID {
-            guard onHistorySessionNavigationRequested?(entry.sessionID) == true,
-                  displayedSessionID == entry.sessionID else { return false }
+            guard let resolvedSessionID = onHistorySessionNavigationRequested?(entry.sessionID),
+                  displayedSessionID == resolvedSessionID else { return false }
+            playbackSessionID = resolvedSessionID
         }
-        guard let document = pdfView.document,
+        guard documentStore.session(for: playbackSessionID) != nil,
+              let document = pdfView.document,
               entry.position.pageIndex >= 0,
               entry.position.pageIndex < document.pageCount,
               let page = document.page(at: entry.position.pageIndex) else { return false }
@@ -1531,12 +1559,6 @@ final class ReaderViewController: NSViewController {
         completeExternalNavigation(
             target: NavigationHistoryEntry(sessionID: session.id, position: position)
         )
-    }
-
-    @objc
-    private func handlePDFViewChangedHistory(_ notification: Notification) {
-        guard pendingExternalNavigation != nil else { return }
-        commitExternalNavigation()
     }
 
     @objc

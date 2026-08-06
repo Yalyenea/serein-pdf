@@ -266,6 +266,45 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(handledEvents, ["o"])
     }
 
+    func testReaderWindowRoutesNavigationShortcutsWithoutMenuState() {
+        let window = ReaderShortcutWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [
+                    .navigateBack: KeyboardShortcut(key: "[", modifiers: [.command]),
+                    .navigateForward: KeyboardShortcut(key: "]", modifiers: [.command]),
+                ]
+            },
+            handlerProvider: {
+                [
+                    .navigateBack: { triggeredCommands.append(.navigateBack) },
+                    .navigateForward: { triggeredCommands.append(.navigateForward) },
+                ]
+            }
+        )
+        window.plainShortcutHandler = { event, window in
+            controller.handleShortcutEvent(for: event, in: window)
+        }
+
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: makeKeyEvent(characters: "[", modifiers: [.command])
+            )
+        )
+        XCTAssertTrue(
+            window.performKeyEquivalent(
+                with: makeKeyEvent(characters: "]", modifiers: [.command])
+            )
+        )
+        XCTAssertEqual(triggeredCommands, [.navigateBack, .navigateForward])
+    }
+
     func testReaderWindowRoutesOnlyLeftCommandOneThroughThreeToNumberedTabs() {
         let window = ReaderShortcutWindow(
             contentRect: .init(x: 0, y: 0, width: 400, height: 300),

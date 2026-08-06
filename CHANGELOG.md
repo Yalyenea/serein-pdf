@@ -8,6 +8,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Slim live docs for next-step work: `TASKS.md` and `REVIEW.md` keep only open items; completed milestone checklists and the full 2026-06 review snapshot move to `docs/archive/`; `PROJECT.md` pending-milestone section now covers M12 empty-state, M13.1 site follow-up, multi-theme presets, and engineering debt pointers.
 
 ### Navigation
+- Stabilize real Back/Forward input and playback: `Cmd+[` / `Cmd+]` no longer depends on stale menu enablement, Pages keeps its origin until PDFKit finishes navigating, and split comparison panes replay canonical document history without consuming failed entries.
 - Make `Cmd+[` / `Cmd+]` history pane-local and session-aware: exact page points survive repeated back/forward, same-page jumps, cross-document Outline/Search navigation, and tab switches; ordinary scrolling and sequential turns do not flood history.
 - Treat Outline destinations, Pages thumbnails, PDF internal links, Search results, and annotations as explicit navigation intents; route internal GoTo links through the centered reader path from the first click, preserve precise destination points, and avoid duplicate single/double-click jumps.
 - Persist ordinary wheel/trackpad viewport changes, restore exact anchors after display-mode reflow, and keep new/clamped pages on their real PDF top instead of the PDF-coordinate origin.
