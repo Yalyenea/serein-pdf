@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var appConfiguration: AppConfiguration = .default
     private var configStore: AppConfigurationStore?
     private var appearanceObservation: NSKeyValueObservation?
+    private(set) var temporaryAppearanceMode: AppearanceMode?
     private var readerShortcutsController: ReaderShortcutsController?
     private var recentFilesPaletteController: RecentFilesPaletteController?
     private var libraryPaletteController: PDFLibraryPaletteController?
@@ -487,6 +488,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     func openDocument(_ sender: Any?) {
         mainWindowController?.hideFindBar()
         let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
+        presentOpenPanel(preferredWindowID: targetWindowID)
+    }
+
+    private func presentOpenPanel(preferredWindowID targetWindowID: UUID) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]
         panel.canChooseFiles = true
@@ -1488,11 +1493,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
-    private func toggleNightMode(_ sender: Any?) {
+    func toggleNightMode(_ sender: Any?) {
         let currentIsDark = (NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
-        var updatedConfiguration = appConfiguration
-        updatedConfiguration.appearance.mode = appConfiguration.appearance.mode.toggled(currentIsDark: currentIsDark)
-        applyUpdatedConfiguration(updatedConfiguration)
+        toggleTemporaryAppearanceMode(currentIsDark: currentIsDark)
+        applyApplicationAppearance()
+    }
+
+    var persistentAppearanceMode: AppearanceMode {
+        appConfiguration.appearance.mode
+    }
+
+    func toggleTemporaryAppearanceMode(currentIsDark: Bool) {
+        temporaryAppearanceMode = temporaryAppearanceMode == nil
+            ? appConfiguration.appearance.mode.toggled(currentIsDark: currentIsDark)
+            : nil
     }
 
     @objc
@@ -2024,6 +2038,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let previousConfiguration = appConfiguration
         var newConfiguration = configuration
         let libraryFoldersChanged = previousConfiguration.library.folderURLs != newConfiguration.library.folderURLs
+        let appearanceModeChanged = previousConfiguration.appearance.mode != newConfiguration.appearance.mode
         newConfiguration.access = securityScopedAccessController.sync(access: newConfiguration.access)
 
         if previousConfiguration.layout.sidebarsSwapped != newConfiguration.layout.sidebarsSwapped {
@@ -2035,9 +2050,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         do {
             try configStore.save(newConfiguration)
             appConfiguration = newConfiguration
+            if appearanceModeChanged {
+                temporaryAppearanceMode = nil
+            }
             applyApplicationAppearance()
             refreshMenuShortcuts()
             documentStore.updateAppConfiguration(newConfiguration)
+            settingsWindowController?.sync(configuration: newConfiguration)
             if libraryFoldersChanged {
                 libraryPaletteController?.invalidateCatalogCache()
             }
@@ -2056,13 +2075,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             light: appConfiguration.appearance.lightTheme,
             dark: appConfiguration.appearance.darkTheme
         )
-        NSApp.appearance = appConfiguration.appearance.mode.appAppearance
+        let effectiveMode = temporaryAppearanceMode ?? appConfiguration.appearance.mode
+        NSApp.appearance = effectiveMode.appAppearance
         mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
-        settingsWindowController?.window?.appearance = appConfiguration.appearance.mode.appAppearance
+        settingsWindowController?.window?.appearance = effectiveMode.appAppearance
     }
 
     private func refreshThemeChromeIfFollowingSystem() {
-        guard appConfiguration.appearance.mode == .system else { return }
+        guard temporaryAppearanceMode == nil,
+              appConfiguration.appearance.mode == .system else { return }
         mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
         settingsWindowController?.window?.appearance = nil
     }

@@ -42,7 +42,7 @@ site for showcase, download notes, and compact docs.
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
 - Blank space in the document sidebar drags the current window while tabs, close buttons, scrolling, and the divider keep their own interactions
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
-- Settings General can edit the default left and right sidebar widths and native material sidebar opacity
+- Settings General can edit the default left and right sidebar widths; the legacy opacity key remains config-only for compatibility
 - Theme controls now split into `Mode`, `Light Theme`, and `Dark Theme`
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
@@ -139,7 +139,7 @@ right_sidebar_max_width = 720
 floating_outline_height = 360 # 180–720 pt; default expanded height
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
-sidebar_opacity = 0.48
+sidebar_opacity = 0.48 # legacy compatibility; solid sidebars ignore this value
 
 [library]
 folders = ["/Users/your-name/Documents/Papers"]
@@ -176,6 +176,8 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
   dark, without changing the mode model.
 - `sidebars_swapped = true` flips the left and right panes — window-level widths
   travel with the panes so your narrow tabs pane stays narrow after the swap.
+- Empty pages and blank tabs stay visually blank; PDF loading errors still show
+  in the center reader.
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
@@ -201,7 +203,7 @@ Defined in `[shortcuts]` above. Highlights:
 |---|---|
 | Highlight selection / enter highlight mode | `a` |
 | Exit highlight mode | `esc` |
-| Toggle light / dark mode | `i` |
+| Temporarily toggle light / dark mode without changing settings | `i` |
 | Switch current theme | `cmd+k`, then `cmd+t` |
 | Refresh PDF Library index | `cmd+k`, then `cmd+r` |
 | Open Library settings | `cmd+k`, then `cmd+l` |

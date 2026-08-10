@@ -43,6 +43,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.toolbarStyle = .unifiedCompact
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         window.backgroundColor = SplitViewController.splitBackgroundColor
         window.isReleasedWhenClosed = false
         window.isRestorable = false

@@ -19,6 +19,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 - After choosing a result with the Find bar arrow keys, `Enter` activates that exact selection before repeated-submit navigation resumes.
 
 ### Chrome / Layout
+- Empty windows and blank tabs keep a pure blank center reader (no onboarding / shortcut cheatsheet); loading errors still surface there. Side panes stay blank without instructional empty copy.
+- Hide left/right sidebar split dividers while retaining AppKit's normal one-point layout geometry and expanded drag targets.
+- Remove residual “seam” between panes: sidebars paint a solid `readerBackdrop` surface (no sidebar vibrancy), normal light/dark chrome unifies split/pane with the reader, the titlebar separator is disabled, and the obsolete opacity control is removed while its config key remains readable.
 - Keep preferred sidebar widths across collapse/expand: only persist divider drags (user mouse), re-pin after AppKit settles, and raise sidebar holding priority so headless CI layout no longer clobbers 220/320 defaults.
 
 ### Reliability

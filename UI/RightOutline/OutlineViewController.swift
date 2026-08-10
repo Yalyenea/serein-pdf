@@ -309,7 +309,7 @@ final class OutlineViewController: NSViewController {
     var onNavigationRequested: ((OutlineNavigationRequest) -> Void)?
     private let titleLabel = NSTextField(labelWithString: "Outline")
     private let expansionToggleButton = NSButton()
-    private let emptyStateLabel = NSTextField(labelWithString: "Open a PDF with a table of contents to see it here.")
+    private let emptyStateLabel = NSTextField(labelWithString: "")
     private let scrollView = OutlineScrollView()
     private let outlineDocumentView = OutlineDocumentView()
     private let rowsContainerView = OutlineRowsContainerView()
@@ -498,14 +498,7 @@ final class OutlineViewController: NSViewController {
         renderOutlineRows()
 
         let isEmpty = nodes.isEmpty
-        if session == nil {
-            emptyStateLabel.stringValue = "Open a PDF to inspect its outline."
-        } else if documentStore.isContinuousReadingEnabled(in: windowID) {
-            emptyStateLabel.stringValue = "No outline in this continuous group."
-        } else {
-            emptyStateLabel.stringValue = "This PDF has no outline."
-        }
-        emptyStateLabel.isHidden = !isEmpty
+        emptyStateLabel.isHidden = true
         scrollView.isHidden = isEmpty
         updateExpansionToggleButton()
     }

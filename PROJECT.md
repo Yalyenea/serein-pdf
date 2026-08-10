@@ -98,7 +98,7 @@ flowchart LR
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
-| 侧栏外观 | 左右侧栏使用 native `NSVisualEffectView.sidebar` material;`layout.sidebarOpacity` 控制 tint 强度;文档侧栏空白背景可拖窗,不抢 tab / close / divider / scroll 事件 |
+| 侧栏外观 | 左右侧栏与中栏共用 `readerBackdrop` 实色平面(无 vibrancy 缝、无分割线);`layout.sidebarOpacity` 仅保留配置兼容,Settings 不再暴露无效控件;文档侧栏空白背景可拖窗,不抢 tab / close / scroll 事件 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
 
@@ -128,7 +128,7 @@ flowchart LR
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
 - 阅读聚焦使用单一圆角矩形镂空与统一外围压暗,禁止多方向渐变拼接;轻描边 / 阴影只强化焦点边界,不得污染框内文字
-- 空窗 / 空白 tab 时由中栏承担唯一打开引导:主文案 + `⌘O` / 最近文件快捷键提示 + 拖放 PDF;左右侧栏不重复铺陈
+- 空窗 / 空白 tab 时中栏保持纯空白(无 onboarding / 快捷键速览);加载错误仍单独显示
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
 ### 4.3 快捷键总表
@@ -159,7 +159,7 @@ flowchart LR
 - Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
 - `F`:开启 / 关闭鼠标跟随阅读聚焦;遮罩按真实 PDF 页宽定位且不阻断选择、链接、拖拽与滚动
 - `Option+F`:调整当前窗口聚焦宽度(Page / Column / Custom)与高度;默认值在 Settings General 或 `[reader]` 配置
-- `I`:切换 light / dark mode,并保留各自已选 theme
+- `I`:仅在本次运行中临时切换 light / dark mode,不改配置;再次按下或在 Settings 明确修改 Mode 后恢复持久化设置,并保留各自已选 theme
 - `Cmd+K` → `Cmd+T`:切换当前外观侧的 theme(亮色切 `normal` / `rose_pine_dawn`,暗色切 `normal` / `rose_pine_moon`)
 - `Cmd+K` → `Cmd+O`:从配置的 PDF 库文件夹扫描并打开二级库浏览面板
 - `Cmd+K` → `Cmd+R`:刷新并重扫 PDF 库索引

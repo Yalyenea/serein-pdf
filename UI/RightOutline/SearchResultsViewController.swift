@@ -62,7 +62,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     private let scrollView = NSScrollView()
     private let tableView = NSTableView()
     private let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SearchResultColumn"))
-    private let emptyStateLabel = NSTextField(labelWithString: "Type in the find bar to preview matches here.")
+    private let emptyStateLabel = NSTextField(labelWithString: "")
     private var rows: [SearchResultsRow] = []
     /// Survives `reloadData` / store churn better than `tableView.selectedRow` alone.
     private var selectedMatchKey: SearchSelectionKey?
@@ -225,7 +225,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
             [SearchResultsRow.section(section.title)] + section.matches.map { .match($0) }
         }
         tableView.reloadData()
-        emptyStateLabel.isHidden = rows.isEmpty == false
+        emptyStateLabel.isHidden = true
 
         if let previousSelection,
            let row = rowIndex(for: previousSelection) {

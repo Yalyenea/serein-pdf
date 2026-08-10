@@ -131,7 +131,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     private let scrollView = NSScrollView()
     private let tableView = NSTableView()
     private let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("AnnotationColumn"))
-    private let emptyStateLabel = NSTextField(labelWithString: "Highlights will appear here once you annotate the PDF.")
+    private let emptyStateLabel = NSTextField(labelWithString: "")
     private let detailContainer = NSView()
     private let detailDivider = NSBox()
     private let snippetLabel = NSTextField(wrappingLabelWithString: "")
@@ -448,7 +448,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         tableView.reloadData()
 
         let isEmpty = rows.isEmpty
-        emptyStateLabel.isHidden = !isEmpty
+        emptyStateLabel.isHidden = true
         scrollView.isHidden = isEmpty
         detailDivider.isHidden = isEmpty
         detailContainer.isHidden = isEmpty

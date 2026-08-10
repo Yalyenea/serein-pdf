@@ -305,6 +305,27 @@ struct WindowChromeTests {
     }
 
     @Test
+    func nightModeShortcutUsesOnlyRuntimeAppearanceOverride() {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        app.appearance = NSAppearance(named: .aqua)
+        defer { app.appearance = previousAppearance }
+
+        let delegate = AppDelegate()
+        let persistentMode = delegate.persistentAppearanceMode
+
+        #expect(delegate.temporaryAppearanceMode == nil)
+        delegate.toggleNightMode(nil)
+        #expect(delegate.temporaryAppearanceMode == .dark)
+        #expect(delegate.persistentAppearanceMode == persistentMode)
+        #expect(app.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+
+        delegate.toggleNightMode(nil)
+        #expect(delegate.temporaryAppearanceMode == nil)
+        #expect(delegate.persistentAppearanceMode == persistentMode)
+    }
+
+    @Test
     func readerHidesPDFKitDocumentTreeFromAccessibilityInspection() {
         _ = NSApplication.shared
         let controller = ReaderViewController(documentStore: makeIsolatedDocumentStore())
@@ -604,6 +625,8 @@ struct WindowChromeTests {
         #expect(reader.pdfView.pageShadowsEnabled == false)
         let leftMaterial = try #require(splitController.verticalTabsViewController.view as? SidebarMaterialView)
         let rightMaterial = try #require(splitController.rightSidebarViewController.view as? SidebarMaterialView)
+        #expect(leftMaterial.material == .contentBackground)
+        #expect(rightMaterial.material == .contentBackground)
         #expect(leftMaterial.blendingMode == .withinWindow)
         #expect(rightMaterial.blendingMode == .withinWindow)
         #expect(abs(leftMaterial.tintAlpha - 1) < 0.01)
@@ -1898,25 +1921,14 @@ struct WindowChromeTests {
     }
 
     @Test
-    func settingsWindowCanEditSidebarOpacity() throws {
+    func settingsWindowDoesNotExposeLegacySidebarOpacity() throws {
         _ = NSApplication.shared
-        var publishedConfigurations: [AppConfiguration] = []
-        let controller = SettingsWindowController(configuration: .default) { configuration in
-            publishedConfigurations.append(configuration)
-        }
+        let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
-        let opacitySlider = try #require(slider(identifier: "sidebarOpacitySlider", in: contentView))
-        opacitySlider.doubleValue = 0.55
-
-        let action = try #require(opacitySlider.action)
-        let target = try #require(opacitySlider.target)
-        NSApp.sendAction(action, to: target, from: opacitySlider)
-
-        let updatedConfiguration = try #require(publishedConfigurations.last)
-        #expect(abs(updatedConfiguration.layout.sidebarOpacity - 0.55) < 0.001)
-        #expect(textField(identifier: "sidebarOpacityValueLabel", in: contentView)?.stringValue == "55%")
+        #expect(slider(identifier: "sidebarOpacitySlider", in: contentView) == nil)
+        #expect(textField(identifier: "sidebarOpacityValueLabel", in: contentView) == nil)
     }
 
     @Test
@@ -1995,7 +2007,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func sidebarOpacityAppliesToLoadedSidebarSurfacesAndRefreshes() throws {
+    func legacySidebarOpacityDoesNotMakeSidebarSurfacesTranslucent() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
         NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
@@ -2016,12 +2028,13 @@ struct WindowChromeTests {
         let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
         let leftMaterial = try #require(splitController.verticalTabsViewController.view as? SidebarMaterialView)
         let rightMaterial = try #require(splitController.rightSidebarViewController.view as? SidebarMaterialView)
-        #expect(leftMaterial.material == .sidebar)
-        #expect(leftMaterial.blendingMode == .behindWindow)
-        #expect(abs(leftMaterial.tintAlpha - 0.44) < 0.01)
-        #expect(rightMaterial.material == .sidebar)
-        #expect(rightMaterial.blendingMode == .behindWindow)
-        #expect(abs(rightMaterial.tintAlpha - 0.44) < 0.01)
+        // Seamless chrome: solid reader-matched surface (opacity no longer opens a glass seam).
+        #expect(leftMaterial.material == .contentBackground)
+        #expect(leftMaterial.blendingMode == .withinWindow)
+        #expect(abs(leftMaterial.tintAlpha - 1) < 0.01)
+        #expect(rightMaterial.material == .contentBackground)
+        #expect(rightMaterial.blendingMode == .withinWindow)
+        #expect(abs(rightMaterial.tintAlpha - 1) < 0.01)
 
         store.setRightSidebarMode(.search, in: controller.windowID)
         store.setRightSidebarMode(.annotations, in: controller.windowID)
@@ -2035,8 +2048,8 @@ struct WindowChromeTests {
         store.updateAppConfiguration(configuration)
         flushLayout(controller.window)
 
-        #expect(abs(leftMaterial.tintAlpha - 0.72) < 0.01)
-        #expect(abs(rightMaterial.tintAlpha - 0.72) < 0.01)
+        #expect(abs(leftMaterial.tintAlpha - 1) < 0.01)
+        #expect(abs(rightMaterial.tintAlpha - 1) < 0.01)
         let refreshedTableAlphas = tableViews(in: splitController.rightSidebarViewController.view)
             .map(\.backgroundColor.alphaComponent)
         #expect(refreshedTableAlphas.allSatisfy { abs($0) < 0.01 })
@@ -2832,6 +2845,7 @@ struct WindowChromeTests {
 
         let fitScale = reader.pdfView.scaleFactor
         let manualScale = min(fitScale * 1.2, reader.pdfView.maxScaleFactor)
+        reader.testingBeginUserMagnification()
         reader.pdfView.scaleFactor = manualScale
         flushLayout(controller.window)
 
@@ -2991,7 +3005,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func emptyReaderShowsOnboardingHintWhenNoDocumentIsOpen() {
+    func emptyReaderStaysBlankWhenNoDocumentIsOpen() {
         _ = NSApplication.shared
         let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
         defer { controller.close() }
@@ -3003,15 +3017,13 @@ struct WindowChromeTests {
         }
 
         let reader = splitController.readerViewController
-        #expect(reader.testingEmptyStateIsVisible)
-        #expect(reader.testingEmptyStateTitle == "Open a PDF to start reading.")
-        #expect(reader.testingEmptyStateHintIsVisible)
-        #expect(reader.testingEmptyStateHint.contains("⌘O to open"))
-        #expect(reader.testingEmptyStateHint.contains("drop PDF here"))
+        #expect(reader.testingEmptyStateIsVisible == false)
+        #expect(reader.testingEmptyStateError == nil)
+        #expect(reader.testingPDFViewIsHidden)
     }
 
     @Test
-    func emptyReaderHidesOnboardingWhenDocumentOpens() throws {
+    func emptyReaderShowsPDFWhenDocumentOpens() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
@@ -3026,10 +3038,11 @@ struct WindowChromeTests {
 
         let reader = splitController.readerViewController
         #expect(reader.testingEmptyStateIsVisible == false)
+        #expect(reader.testingPDFViewIsHidden == false)
     }
 
     @Test
-    func blankTabShowsOnboardingHintWithoutErrorDetails() throws {
+    func blankTabStaysBlankWithoutErrorDetails() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
@@ -3043,9 +3056,9 @@ struct WindowChromeTests {
         }
 
         let reader = splitController.readerViewController
-        #expect(reader.testingEmptyStateIsVisible)
-        #expect(reader.testingEmptyStateHintIsVisible)
-        #expect(reader.testingEmptyStateHint.contains("for recent"))
+        #expect(reader.testingEmptyStateIsVisible == false)
+        #expect(reader.testingEmptyStateError == nil)
+        #expect(reader.testingPDFViewIsHidden)
     }
 }
 

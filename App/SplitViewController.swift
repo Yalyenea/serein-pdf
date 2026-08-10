@@ -1,5 +1,12 @@
 import AppKit
 
+/// Keeps native divider geometry and hit testing without drawing a seam.
+private final class SeamlessSplitView: NSSplitView {
+    override var dividerThickness: CGFloat { 1 }
+
+    override func drawDivider(in rect: NSRect) {}
+}
+
 final class SplitViewController: NSSplitViewController {
     private static let legacyAutosaveNames = [
         "MainSplitView",
@@ -37,6 +44,7 @@ final class SplitViewController: NSSplitViewController {
         rightSidebarViewController = RightSidebarViewController(documentStore: documentStore, windowID: windowID)
         titlebarTabsController = TitlebarTabsController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
+        splitView = SeamlessSplitView()
         wireInteractions()
         rightSidebarViewController.configure(pdfView: readerWorkspaceViewController.activeReaderViewController().pdfView)
     }
@@ -50,7 +58,8 @@ final class SplitViewController: NSSplitViewController {
         self.init(documentStore: documentStore, windowID: documentStore.defaultWindowID)
     }
 
-    static let splitBackgroundColor: NSColor = NightModeStyle.splitBackgroundColor
+    /// Shared window/chrome plane — matches reader backdrop for seamless panes.
+    static let splitBackgroundColor: NSColor = NightModeStyle.readerBackdropColor
 
     static let dividerBackgroundColor: NSColor = NightModeStyle.chromeDividerColor
 
@@ -145,20 +154,23 @@ final class SplitViewController: NSSplitViewController {
         forDrawnRect drawnRect: NSRect,
         ofDividerAt dividerIndex: Int
     ) -> NSRect {
-        let padding: CGFloat = 10
+        // Dividers are visually hidden; keep a generous drag hit-target.
+        let hit: CGFloat = 8
         if splitView.isVertical {
+            let midX = drawnRect.isEmpty ? proposedEffectiveRect.midX : drawnRect.midX
             return NSRect(
-                x: drawnRect.minX - padding,
+                x: midX - hit,
                 y: 0,
-                width: drawnRect.width + padding * 2,
+                width: hit * 2,
                 height: splitView.bounds.height
             )
         }
+        let midY = drawnRect.isEmpty ? proposedEffectiveRect.midY : drawnRect.midY
         return NSRect(
             x: 0,
-            y: drawnRect.minY - padding,
+            y: midY - hit,
             width: splitView.bounds.width,
-            height: drawnRect.height + padding * 2
+            height: hit * 2
         )
     }
 
@@ -528,8 +540,9 @@ final class SplitViewController: NSSplitViewController {
 
     private func applyChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = Self.splitBackgroundColor.cgColor
-            splitView.layer?.backgroundColor = Self.dividerBackgroundColor.cgColor
+            let background = Self.splitBackgroundColor.cgColor
+            view.layer?.backgroundColor = background
+            splitView.layer?.backgroundColor = background
         }
     }
 

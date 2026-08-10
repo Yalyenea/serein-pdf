@@ -50,8 +50,7 @@ final class VerticalTabsViewController: NSViewController {
     var onAlternateSessionActivationRequested: ((UUID) -> Void)?
     var onOpenRecentURLRequested: ((URL) -> Void)?
     private let countLabel = NSTextField(labelWithString: "0 open")
-    private let emptyStateLabel = NSTextField(
-        labelWithString: "Open multiple PDFs and switch them here.")
+    private let emptyStateLabel = NSTextField(labelWithString: "")
     private let listStackView = NSStackView()
     private let recentSectionContainer = NSStackView()
     private let recentTitleLabel = NSTextField(labelWithString: "Recent PDFs")
@@ -98,7 +97,7 @@ final class VerticalTabsViewController: NSViewController {
         container.onMoveTab = { [weak self] payload in
             self?.handleDroppedTab(payload) == true
         }
-        container.applyTint(opacity: documentStore.appConfiguration.layout.sidebarOpacity)
+        container.applySurface()
         container.allowsWindowDragFromBackground = true
         container.layer?.masksToBounds = true
 
@@ -179,9 +178,7 @@ final class VerticalTabsViewController: NSViewController {
 
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            (view as? SidebarMaterialView)?.applyTint(
-                opacity: documentStore.appConfiguration.layout.sidebarOpacity
-            )
+            (view as? SidebarMaterialView)?.applySurface()
             countLabel.textColor = NightModeStyle.secondaryTextColor
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
             recentTitleLabel.textColor = NightModeStyle.tertiaryTextColor
@@ -204,7 +201,7 @@ final class VerticalTabsViewController: NSViewController {
     private func applyEmptyState() {
         let noSessions = documentStore.sessions(in: windowID).isEmpty
         listStackView.isHidden = noSessions
-        emptyStateLabel.isHidden = !noSessions
+        emptyStateLabel.isHidden = true
     }
 
     private func rebuildList() {

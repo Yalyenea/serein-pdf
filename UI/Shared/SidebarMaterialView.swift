@@ -43,18 +43,27 @@ class SidebarMaterialView: NSVisualEffectView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func applyTint(opacity: CGFloat) {
-        let clampedOpacity = min(max(opacity, 0), 1)
-        let isOpaque = NightModeStyle.usesOpaqueSidebar(for: effectiveAppearance)
-        blendingMode = isOpaque ? .withinWindow : .behindWindow
-        tintView.layer?.backgroundColor = PlaceholderViewController.paneBackgroundColor(
-            opacity: isOpaque ? 1 : clampedOpacity
-        ).cgColor
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applySurface()
+    }
+
+    /// Paints a solid reader-matched surface so left/center/right read as one plane.
+    func applySurface() {
+        // contentBackground + full opaque fill suppresses sidebar vibrancy seams.
+        material = .contentBackground
+        blendingMode = .withinWindow
+        state = .active
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let surface = NightModeStyle.readerBackdropColor
+            layer?.backgroundColor = surface.cgColor
+            tintView.layer?.backgroundColor = surface.cgColor
+        }
     }
 
     private func configureMaterial() {
-        material = .sidebar
-        blendingMode = .behindWindow
+        material = .contentBackground
+        blendingMode = .withinWindow
         state = .active
         wantsLayer = true
         layer?.masksToBounds = true
@@ -69,6 +78,7 @@ class SidebarMaterialView: NSVisualEffectView {
             tintView.topAnchor.constraint(equalTo: topAnchor),
             tintView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        applySurface()
     }
 }
 

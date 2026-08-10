@@ -1,7 +1,8 @@
 import AppKit
 
 class PlaceholderViewController: NSViewController {
-    static let paneBackgroundColor: NSColor = NightModeStyle.paneBackgroundColor
+    /// Matches the reader surface so chrome panes stay continuous.
+    static let paneBackgroundColor: NSColor = NightModeStyle.readerBackdropColor
 
     static func paneBackgroundColor(opacity: CGFloat) -> NSColor {
         paneBackgroundColor.withAlphaComponent(opacity)

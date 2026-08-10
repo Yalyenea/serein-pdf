@@ -108,7 +108,7 @@ final class RightSidebarViewController: NSViewController {
 
     override func loadView() {
         let container = CollapsibleContainerView()
-        container.applyTint(opacity: documentStore.appConfiguration.layout.sidebarOpacity)
+        container.applySurface()
         container.layer?.masksToBounds = true
 
         modeSegmented.segmentCount = 4
@@ -263,9 +263,7 @@ final class RightSidebarViewController: NSViewController {
 
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            (view as? SidebarMaterialView)?.applyTint(
-                opacity: documentStore.appConfiguration.layout.sidebarOpacity
-            )
+            (view as? SidebarMaterialView)?.applySurface()
         }
         outlineViewController.refreshChromeColors()
         searchResultsViewController.refreshChromeColors()

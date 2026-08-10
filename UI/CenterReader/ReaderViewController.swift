@@ -177,6 +177,7 @@ private final class PDFReaderClipView: NSClipView {
 final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
     var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
+    var onUserMagnificationRequested: (() -> Void)?
 
     override func isAccessibilityElement() -> Bool {
         false
@@ -213,6 +214,11 @@ final class ReaderPDFView: PDFView {
         super.mouseDown(with: event)
     }
 
+    override func magnify(with event: NSEvent) {
+        onUserMagnificationRequested?()
+        super.magnify(with: event)
+    }
+
     private func internalLinkDestination(at event: NSEvent) -> PDFDestination? {
         let pointInView = convert(event.locationInWindow, from: nil)
         guard let page = page(for: pointInView, nearest: false) else { return nil }
@@ -232,8 +238,7 @@ final class ReaderViewController: NSViewController {
     var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
     private let pdfContainerView = PDFContainerView()
     private let emptyStateContainer = NSStackView()
-    private let emptyStateTitleLabel = NSTextField(labelWithString: "Open a PDF to start reading.")
-    private let emptyStateHintLabel = NSTextField(labelWithString: "")
+    private let emptyStateErrorLabel = NSTextField(wrappingLabelWithString: "")
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
     private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
@@ -311,6 +316,9 @@ final class ReaderViewController: NSViewController {
         }
         pdfView.onInternalLinkNavigationRequested = { [weak self] destination in
             self?.navigate(toInternalLink: destination) ?? false
+        }
+        pdfView.onUserMagnificationRequested = { [weak self] in
+            self?.beginUserMagnification()
         }
         pdfContainerView.readingFocusOverlay.pageBoundsProvider = { [weak self] point in
             self?.readingFocusPageBounds(at: point)
@@ -409,6 +417,12 @@ final class ReaderViewController: NSViewController {
             return
         }
 
+        // The outer PDFView can receive its final split-pane width before its
+        // internal clip/document views do. Fit against the settled clip width.
+        pdfView.layoutSubtreeIfNeeded()
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+
         switch session.scaleMode {
         case .fitWidth:
             pendingFitWidthSessionID = nil
@@ -457,25 +471,18 @@ final class ReaderViewController: NSViewController {
         pdfView.displaysPageBreaks = true
         pdfView.pageShadowsEnabled = false
 
-        emptyStateTitleLabel.font = .systemFont(ofSize: 18, weight: .medium)
-        emptyStateTitleLabel.textColor = NightModeStyle.secondaryTextColor
-        emptyStateTitleLabel.alignment = .center
-        emptyStateTitleLabel.maximumNumberOfLines = 0
-        emptyStateTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        emptyStateHintLabel.font = .systemFont(ofSize: 12)
-        emptyStateHintLabel.textColor = NightModeStyle.tertiaryTextColor
-        emptyStateHintLabel.alignment = .center
-        emptyStateHintLabel.maximumNumberOfLines = 0
-        emptyStateHintLabel.stringValue = emptyStateHintText()
-        emptyStateHintLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        emptyStateErrorLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        emptyStateErrorLabel.textColor = NightModeStyle.secondaryTextColor
+        emptyStateErrorLabel.alignment = .center
+        emptyStateErrorLabel.maximumNumberOfLines = 0
+        emptyStateErrorLabel.isHidden = true
+        emptyStateErrorLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         emptyStateContainer.orientation = .vertical
         emptyStateContainer.alignment = .centerX
         emptyStateContainer.spacing = 8
         emptyStateContainer.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateContainer.addArrangedSubview(emptyStateTitleLabel)
-        emptyStateContainer.addArrangedSubview(emptyStateHintLabel)
+        emptyStateContainer.addArrangedSubview(emptyStateErrorLabel)
 
         highlightModeIndicator.translatesAutoresizingMaskIntoConstraints = false
         highlightModeIndicator.orientation = .horizontal
@@ -1568,12 +1575,40 @@ final class ReaderViewController: NSViewController {
               let session = targetSession(),
               session.id == displayedSessionID else { return }
 
-        // User-driven zoom always exits fit-width and pins the chosen scale.
+        // PDFKit uses the same notification for user zoom and layout-driven scale
+        // changes. Explicit zoom commands and magnify(with:) enter manual mode;
+        // geometry changes keep the requested fit mode and settle on the next layout.
+        switch session.scaleMode {
+        case .fitWidth:
+            pendingFitWidthSessionID = session.id
+            lastAppliedFitBoundsWidth = -1
+            view.needsLayout = true
+            return
+        case .fitHeight:
+            pendingFitHeightSessionID = session.id
+            lastAppliedFitBoundsHeight = -1
+            view.needsLayout = true
+            return
+        case .manual:
+            break
+        }
+
         documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
 
         if let position = currentReadingPosition() {
             documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
         }
+    }
+
+    private func beginUserMagnification() {
+        guard let session = targetSession(),
+              session.id == displayedSessionID else { return }
+        pendingFitWidthSessionID = nil
+        pendingFitHeightSessionID = nil
+        lastAppliedFitBoundsWidth = 0
+        lastAppliedFitBoundsHeight = 0
+        displayedScaleMode = .manual
+        documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
     }
 
     @objc
@@ -1601,27 +1636,24 @@ final class ReaderViewController: NSViewController {
         onFocusRequested?()
     }
 
-    private func emptyStateHintText() -> String {
-        let recentShortcut = documentStore.appConfiguration.shortcuts.bindings[.showRecentFilesPalette]?.displayString
-            ?? "⌘⇧Space"
-        return "⌘O to open · \(recentShortcut) for recent · drop PDF here"
-    }
-
     private func showDefaultEmptyState() {
-        emptyStateTitleLabel.stringValue = "Open a PDF to start reading."
-        emptyStateHintLabel.stringValue = emptyStateHintText()
-        emptyStateHintLabel.isHidden = false
-        setEmptyStateVisible(true)
+        emptyStateErrorLabel.stringValue = ""
+        emptyStateErrorLabel.isHidden = true
+        emptyStateContainer.isHidden = true
+        pdfView.isHidden = true
     }
 
     private func showErrorEmptyState(_ message: String) {
-        emptyStateTitleLabel.stringValue = message
-        emptyStateHintLabel.isHidden = true
+        emptyStateErrorLabel.stringValue = message
+        emptyStateErrorLabel.isHidden = false
         setEmptyStateVisible(true)
     }
 
     private func setEmptyStateVisible(_ visible: Bool) {
         emptyStateContainer.isHidden = !visible
+        if visible {
+            pdfView.isHidden = true
+        }
     }
 
     private func refreshDisplayedDocument() {
@@ -1757,21 +1789,13 @@ final class ReaderViewController: NSViewController {
             if abs(liveScale - targetScaleFactor) <= 0.001 {
                 return .fitHeight
             }
-
-            let fitHeightLayoutIsStable =
-                pendingFitHeightSessionID != session.id &&
-                abs(pdfView.bounds.height - lastAppliedFitBoundsHeight) <= 0.5
-            return fitHeightLayoutIsStable ? .manual : nil
+            return nil
         case .fitWidth:
             guard let targetScaleFactor = fitWidthScaleFactor(for: session) else { return nil }
             if abs(liveScale - targetScaleFactor) <= 0.001 {
                 return .fitWidth
             }
-
-            let fitWidthLayoutIsStable =
-                pendingFitWidthSessionID != session.id &&
-                abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) <= 0.5
-            return fitWidthLayoutIsStable ? .manual : nil
+            return nil
         }
     }
 
@@ -2539,12 +2563,11 @@ final class ReaderViewController: NSViewController {
             view.layer?.backgroundColor = pageBackground.cgColor
             pdfView.backgroundColor = .clear
             pdfView.layer?.backgroundColor = NSColor.clear.cgColor
-            emptyStateTitleLabel.textColor = NightModeStyle.secondaryTextColor
-            emptyStateHintLabel.textColor = NightModeStyle.tertiaryTextColor
             highlightModeLabel.textColor = NightModeStyle.secondaryTextColor
+            emptyStateErrorLabel.textColor = NightModeStyle.secondaryTextColor
         }
         applyOverviewSurfaceAppearance()
-        if emptyStateContainer.isHidden {
+        if emptyStateContainer.isHidden, pdfView.document != nil {
             pdfView.isHidden = false
         }
         pdfContainerView.setNightModeEnabled(isNightModeEnabled)
@@ -2675,16 +2698,16 @@ extension ReaderViewController {
         emptyStateContainer.isHidden == false
     }
 
-    var testingEmptyStateTitle: String {
-        emptyStateTitleLabel.stringValue
+    var testingEmptyStateError: String? {
+        emptyStateErrorLabel.isHidden ? nil : emptyStateErrorLabel.stringValue
     }
 
-    var testingEmptyStateHint: String {
-        emptyStateHintLabel.stringValue
+    var testingPDFViewIsHidden: Bool {
+        pdfView.isHidden
     }
 
-    var testingEmptyStateHintIsVisible: Bool {
-        emptyStateHintLabel.isHidden == false
+    func testingBeginUserMagnification() {
+        beginUserMagnification()
     }
 
     var testingReadingFocusIsEnabled: Bool {

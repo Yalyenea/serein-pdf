@@ -247,14 +247,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
     private let leftSidebarWidthStepper = NSStepper()
     private let rightSidebarWidthField = NSTextField()
     private let rightSidebarWidthStepper = NSStepper()
-    private let sidebarOpacitySlider = NSSlider(
-        value: Double(AppConfiguration.default.layout.sidebarOpacity),
-        minValue: 0.05,
-        maxValue: 0.9,
-        target: nil,
-        action: nil
-    )
-    private let sidebarOpacityValueLabel = NSTextField(labelWithString: "48%")
     private let floatingOutlineHeightSlider = NSSlider(
         value: Double(AppConfiguration.default.layout.floatingOutlineHeight),
         minValue: Double(AppConfiguration.Layout.minimumFloatingOutlineHeight),
@@ -400,7 +392,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
         applySidebarWidthControls(configuration.layout)
-        applySidebarOpacityControls(configuration.layout)
         applyFloatingOutlineHeightControls(configuration.layout)
         showRecentInSidebarCheckbox.state = configuration.layout.showRecentFilesInSidebar ? .on : .off
         autoCheckUpdatesCheckbox.state = configuration.updates.autoCheck ? .on : .off
@@ -469,7 +460,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             minWidth: updatedConfiguration.layout.rightSidebarMinWidth,
             maxWidth: updatedConfiguration.layout.rightSidebarMaxWidth
         )
-        updatedConfiguration.layout.sidebarOpacity = normalizedSidebarOpacity(from: sidebarOpacitySlider)
         updatedConfiguration.layout.floatingOutlineHeight = normalizedFloatingOutlineHeight(
             from: floatingOutlineHeightSlider
         )
@@ -489,15 +479,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         default:
             return
         }
-        handleGeneralControlChanged(sender)
-    }
-
-    @objc
-    private func handleSidebarOpacitySliderChanged(_ sender: NSSlider) {
-        guard isApplyingConfiguration == false else { return }
-        sidebarOpacityValueLabel.stringValue = sidebarOpacityDisplayString(
-            normalizedSidebarOpacity(from: sender)
-        )
         handleGeneralControlChanged(sender)
     }
 
@@ -611,19 +592,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             maxWidth: configuration.layout.rightSidebarMaxWidth
         )
 
-        sidebarOpacitySlider.translatesAutoresizingMaskIntoConstraints = false
-        sidebarOpacitySlider.identifier = NSUserInterfaceItemIdentifier("sidebarOpacitySlider")
-        sidebarOpacitySlider.controlSize = .small
-        sidebarOpacitySlider.isContinuous = true
-        sidebarOpacitySlider.target = self
-        sidebarOpacitySlider.action = #selector(handleSidebarOpacitySliderChanged(_:))
-
-        sidebarOpacityValueLabel.translatesAutoresizingMaskIntoConstraints = false
-        sidebarOpacityValueLabel.identifier = NSUserInterfaceItemIdentifier("sidebarOpacityValueLabel")
-        sidebarOpacityValueLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        sidebarOpacityValueLabel.textColor = .secondaryLabelColor
-        sidebarOpacityValueLabel.alignment = .right
-
         floatingOutlineHeightSlider.translatesAutoresizingMaskIntoConstraints = false
         floatingOutlineHeightSlider.identifier = NSUserInterfaceItemIdentifier("floatingOutlineHeightSlider")
         floatingOutlineHeightSlider.controlSize = .small
@@ -665,7 +633,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         layoutOptionsStack.translatesAutoresizingMaskIntoConstraints = false
 
         let sidebarDefaultsStack = makeSidebarDefaultsStack()
-        let sidebarOpacityStack = makeSidebarOpacityStack()
         let floatingOutlineHeightStack = makeFloatingOutlineHeightStack()
         let readingFocusWidthStack = makeReadingFocusSliderStack(
             leadingControl: readingFocusWidthPopUp,
@@ -692,7 +659,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         ])
         let layoutGrid = makeSettingsGrid([
             [makeRowLabel("Sidebar Widths"), sidebarDefaultsStack],
-            [makeRowLabel("Sidebar Opacity"), sidebarOpacityStack],
             [makeRowLabel("Floating Outline Height"), floatingOutlineHeightStack],
             [makeRowLabel("Layout"), layoutOptionsStack],
         ])
@@ -813,21 +779,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         return row
     }
 
-    private func makeSidebarOpacityStack() -> NSStackView {
-        let stack = NSStackView(views: [sidebarOpacitySlider, sidebarOpacityValueLabel])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            sidebarOpacitySlider.widthAnchor.constraint(equalToConstant: 180),
-            sidebarOpacityValueLabel.widthAnchor.constraint(equalToConstant: 44),
-        ])
-
-        return stack
-    }
-
     private func makeFloatingOutlineHeightStack() -> NSStackView {
         let stack = NSStackView(views: [floatingOutlineHeightSlider, floatingOutlineHeightValueLabel])
         stack.orientation = .horizontal
@@ -882,11 +833,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         rightSidebarWidthStepper.doubleValue = Double(layout.rightSidebarWidth)
     }
 
-    private func applySidebarOpacityControls(_ layout: AppConfiguration.Layout) {
-        sidebarOpacitySlider.doubleValue = Double(layout.sidebarOpacity)
-        sidebarOpacityValueLabel.stringValue = sidebarOpacityDisplayString(layout.sidebarOpacity)
-    }
-
     private func applyFloatingOutlineHeightControls(_ layout: AppConfiguration.Layout) {
         floatingOutlineHeightSlider.doubleValue = Double(layout.floatingOutlineHeight)
         floatingOutlineHeightValueLabel.stringValue = floatingOutlineHeightDisplayString(
@@ -903,14 +849,6 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
 
     private func normalizedSidebarWidth(from field: NSTextField, minWidth: CGFloat, maxWidth: CGFloat) -> CGFloat {
         min(max(CGFloat(field.doubleValue.rounded()), minWidth), maxWidth)
-    }
-
-    private func normalizedSidebarOpacity(from slider: NSSlider) -> CGFloat {
-        min(max(CGFloat(slider.doubleValue), CGFloat(slider.minValue)), CGFloat(slider.maxValue))
-    }
-
-    private func sidebarOpacityDisplayString(_ value: CGFloat) -> String {
-        "\(Int((value * 100).rounded()))%"
     }
 
     private func normalizedFloatingOutlineHeight(from slider: NSSlider) -> CGFloat {

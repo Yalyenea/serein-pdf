@@ -146,7 +146,7 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
     }
 
-    func testEmptyStateUsesSameContentBandAsResultsList() throws {
+    func testEmptySearchStateStaysBlankWithoutInstructionalCopy() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "empty-state-inset",
@@ -159,36 +159,17 @@ final class SearchNavigationTests: XCTestCase {
         controller.view.frame = NSRect(x: 0, y: 0, width: 320, height: 540)
         controller.view.layoutSubtreeIfNeeded()
 
-        let scrollView = try XCTUnwrap(findDescendant(of: NSScrollView.self, in: controller.view))
         let emptyLabel = try XCTUnwrap(
             controller.view.subviews.first { $0.identifier?.rawValue == "searchEmptyStateLabel" } as? NSTextField
         )
 
-        XCTAssertFalse(emptyLabel.isHidden)
-        XCTAssertFalse(scrollView.isHidden)
-        let layoutConstraints = controller.view.constraints + emptyLabel.constraints + scrollView.constraints
-        XCTAssertTrue(
-            layoutConstraints.contains {
-                ($0.firstItem as? NSView) === emptyLabel &&
-                    $0.firstAttribute == .leading &&
-                    ($0.secondItem as? NSView) === scrollView &&
-                    $0.secondAttribute == .leading
-            }
-        )
-        XCTAssertTrue(
-            layoutConstraints.contains {
-                ($0.firstItem as? NSView) === emptyLabel &&
-                    $0.firstAttribute == .trailing &&
-                    ($0.secondItem as? NSView) === scrollView &&
-                    $0.secondAttribute == .trailing
-            }
-        )
+        XCTAssertTrue(emptyLabel.isHidden)
+        XCTAssertTrue(emptyLabel.stringValue.isEmpty)
 
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
         controller.view.layoutSubtreeIfNeeded()
 
         XCTAssertTrue(emptyLabel.isHidden)
-        XCTAssertFalse(scrollView.isHidden)
         XCTAssertGreaterThan(controller.selectionSummary().totalMatches, 0)
     }
 
