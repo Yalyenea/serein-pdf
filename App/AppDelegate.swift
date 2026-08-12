@@ -115,6 +115,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             },
             supplementalHandlerProvider: { [weak self] in
                 self?.supplementalShortcutHandlerMap() ?? [:]
+            },
+            isHighlightModeEnabledProvider: { [weak self] window in
+                guard let self else { return false }
+                return self.mainWindowControllers.values.first {
+                    $0.window === window
+                }?.isHighlightModeEnabled == true
             }
         )
 
@@ -343,6 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
         let map: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] = [
             .highlightSelection: { [weak self] in self?.highlightSelection(nil) },
+            .addComment: { [weak self] in self?.addOrEditComment(nil) },
             .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
             .toggleReadingFocus: { [weak self] in self?.toggleReadingFocusModeAction(nil) },
@@ -691,6 +698,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             keyEquivalent: ""
         )
         exportHighlightsItem.target = self
+        let exportAllOpenHighlightsItem = NSMenuItem(
+            title: "Export All Open Highlights…",
+            action: #selector(exportAllOpenHighlights(_:)),
+            keyEquivalent: ""
+        )
+        exportAllOpenHighlightsItem.target = self
         let copyHighlightsMarkdownItem = makeConfiguredMenuItem(
             title: ShortcutCommand.copyHighlightsMarkdown.menuTitle,
             command: .copyHighlightsMarkdown,
@@ -731,6 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             shareDocumentItem,
             exportCleanCopyItem,
             exportHighlightsItem,
+            exportAllOpenHighlightsItem,
             copyHighlightsMarkdownItem,
             .separator(),
             closeItem,
@@ -821,6 +835,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 title: "Highlight Selection or Enter Highlight Mode",
                 command: .highlightSelection,
                 action: #selector(highlightSelection(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.addComment.menuTitle,
+                command: .addComment,
+                action: #selector(addOrEditComment(_:))
             ),
             makeConfiguredMenuItem(
                 title: "Exit Highlight Mode",
@@ -1380,6 +1399,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
+    private func addOrEditComment(_ sender: Any?) {
+        _ = mainWindowController?.addOrEditComment()
+    }
+
+    @objc
     private func exitHighlightMode(_ sender: Any?) {
         _ = mainWindowController?.exitTransientReaderState()
     }
@@ -1707,6 +1731,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         do {
             let data = try HighlightExporter.export(context.groups, format: format)
+            try data.write(to: url)
+        } catch {
+            presentExportError(error)
+        }
+    }
+
+    @objc
+    private func exportAllOpenHighlights(_ sender: Any?) {
+        guard let documents = currentAllOpenHighlightExportContext() else { return }
+        guard let format = promptForHighlightExportFormat() else { return }
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = HighlightExporter.defaultAllOpenFilename(format: format)
+        panel.allowedContentTypes = [contentType(for: format)]
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let data = try HighlightExporter.exportAllOpen(documents, format: format)
             try data.write(to: url)
         } catch {
             presentExportError(error)
@@ -2071,7 +2115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func applyApplicationAppearance() {
-        NightModeStyle.applyThemeSelections(
+        ThemeManager.shared.apply(
             light: appConfiguration.appearance.lightTheme,
             dark: appConfiguration.appearance.darkTheme
         )
@@ -2196,6 +2240,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return (session.title, groups)
     }
 
+    private func currentAllOpenHighlightExportContext() -> [HighlightExporter.DocumentGroups]? {
+        guard let windowID = mainWindowController?.windowID else { return nil }
+        let documents = documentStore.sessions(in: windowID).compactMap { session -> HighlightExporter.DocumentGroups? in
+            guard session.isBlank == false else { return nil }
+            let groups = documentStore.annotationGroups(for: session.id)
+            guard groups.isEmpty == false else { return nil }
+            return (documentTitle: session.title, groups: groups)
+        }
+        return documents.isEmpty ? nil : documents
+    }
+
     private func promptForHighlightExportFormat() -> HighlightExportFormat? {
         let alert = NSAlert()
         alert.messageText = "Export Highlights"
@@ -2289,7 +2344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return appConfiguration.library.folderURLs.isEmpty == false
         case #selector(openLibrarySettings(_:)), #selector(openShortcutSettings(_:)):
             return true
-        case #selector(highlightSelection(_:)):
+        case #selector(highlightSelection(_:)), #selector(addOrEditComment(_:)):
             return activePDFSession != nil
         case #selector(exitHighlightMode(_:)):
             menuItem.state = controller?.isHighlightModeEnabled == true ? .on : .off
@@ -2311,6 +2366,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(exportHighlights(_:)), #selector(copyHighlightsMarkdown(_:)):
             return activePDFSession.map { documentStore.hasHighlights(for: $0.id) } == true
+        case #selector(exportAllOpenHighlights(_:)):
+            return currentAllOpenHighlightExportContext() != nil
         case #selector(removeHighlightUnderCursorAction(_:)):
             return activePDFSession != nil
         case #selector(undoLastHighlightAction(_:)):

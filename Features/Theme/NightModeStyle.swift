@@ -1,140 +1,62 @@
 import AppKit
 import CoreImage
 
+@MainActor
 enum NightModeStyle {
-    private struct RGBComponents {
-        let red: CGFloat
-        let green: CGFloat
-        let blue: CGFloat
-
-        var linearized: Self {
-            Self(
-                red: Self.linearize(red),
-                green: Self.linearize(green),
-                blue: Self.linearize(blue)
-            )
-        }
-
-        private static func linearize(_ component: CGFloat) -> CGFloat {
-            component <= 0.04045
-                ? component / 12.92
-                : pow((component + 0.055) / 1.055, 2.4)
-        }
-    }
-
     private struct MatrixRow {
         let red: CGFloat
         let green: CGFloat
         let blue: CGFloat
     }
 
-    private enum PDFStyle {
-        case none
-        case classicInvert
-        case paper(background: RGBComponents)
-        case darkPaper(
-            background: RGBComponents,
-            foreground: RGBComponents,
-            accentPreservation: CGFloat
-        )
-        case remap(
-            background: RGBComponents,
-            foreground: RGBComponents,
-            accentPreservation: CGFloat,
-            backgroundLuminance: CGFloat
-        )
+    private static let luminanceWeights = ThemeRGBComponents(
+        red: 0.2126,
+        green: 0.7152,
+        blue: 0.0722
+    )
+
+    static var pageBackgroundColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .pageBackground)
     }
 
-    private struct ThemeDescriptor {
-        let pageBackground: NSColor
-        let pageForeground: NSColor
-        let primaryText: NSColor
-        let secondaryText: NSColor
-        let tertiaryText: NSColor
-        let readerBackdrop: NSColor
-        let splitBackground: NSColor
-        let paneBackground: NSColor
-        let chromeDivider: NSColor
-        let selectedChromeBackground: NSColor
-        let chromeStroke: NSColor
-        let usesOpaqueSidebar: Bool
-        let prefersFlatPDFChrome: Bool
-        let highlightPalette: HighlightPalette
-        let pdfStyle: PDFStyle
+    static var pageForegroundColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .pageForeground)
     }
 
-    private static let luminanceWeights = RGBComponents(red: 0.2126, green: 0.7152, blue: 0.0722)
-
-    private static let moonBase = RGBComponents(
-        red: 35.0 / 255.0, green: 33.0 / 255.0, blue: 54.0 / 255.0)
-    private static let moonSurface = RGBComponents(
-        red: 42.0 / 255.0, green: 39.0 / 255.0, blue: 63.0 / 255.0)
-    private static let moonOverlay = RGBComponents(
-        red: 57.0 / 255.0, green: 53.0 / 255.0, blue: 82.0 / 255.0)
-    private static let moonMuted = RGBComponents(
-        red: 110.0 / 255.0, green: 106.0 / 255.0, blue: 134.0 / 255.0)
-    private static let moonSubtle = RGBComponents(
-        red: 144.0 / 255.0, green: 140.0 / 255.0, blue: 170.0 / 255.0)
-    private static let moonText = RGBComponents(
-        red: 224.0 / 255.0, green: 222.0 / 255.0, blue: 244.0 / 255.0)
-
-    private static let dawnBase = RGBComponents(
-        red: 250.0 / 255.0, green: 244.0 / 255.0, blue: 237.0 / 255.0)
-    private static let dawnSurface = RGBComponents(
-        red: 255.0 / 255.0, green: 250.0 / 255.0, blue: 243.0 / 255.0)
-    private static let dawnHighlight = RGBComponents(
-        red: 233.0 / 255.0, green: 223.0 / 255.0, blue: 218.0 / 255.0)
-    private static let dawnUI = RGBComponents(
-        red: 234.0 / 255.0, green: 227.0 / 255.0, blue: 225.0 / 255.0)
-    private static let dawnStrongUI = RGBComponents(
-        red: 206.0 / 255.0, green: 202.0 / 255.0, blue: 205.0 / 255.0)
-    private static let dawnMuted = RGBComponents(
-        red: 152.0 / 255.0, green: 147.0 / 255.0, blue: 165.0 / 255.0)
-    private static let dawnSubtle = RGBComponents(
-        red: 121.0 / 255.0, green: 117.0 / 255.0, blue: 147.0 / 255.0)
-    private static let dawnText = RGBComponents(
-        red: 87.0 / 255.0, green: 82.0 / 255.0, blue: 121.0 / 255.0)
-
-    nonisolated(unsafe) private static var currentLightTheme: LightTheme = .normal
-    nonisolated(unsafe) private static var currentDarkTheme: DarkTheme = .rosePineMoon
-
-    static func applyThemeSelections(light: LightTheme, dark: DarkTheme) {
-        currentLightTheme = light
-        currentDarkTheme = dark
+    static var primaryTextColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .primaryText)
     }
 
-    static let pageBackgroundColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).pageBackground
+    static var secondaryTextColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .secondaryText)
     }
-    static let pageForegroundColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).pageForeground
+
+    static var tertiaryTextColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .tertiaryText)
     }
-    static let primaryTextColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).primaryText
+
+    static var readerBackdropColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .readerBackdrop)
     }
-    static let secondaryTextColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).secondaryText
+
+    static var splitBackgroundColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .splitBackground)
     }
-    static let tertiaryTextColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).tertiaryText
+
+    static var paneBackgroundColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .paneBackground)
     }
-    static let readerBackdropColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).readerBackdrop
+
+    static var chromeDividerColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .chromeDivider)
     }
-    static let splitBackgroundColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).splitBackground
+
+    static var selectedChromeBackgroundColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .selectedChromeBackground)
     }
-    static let paneBackgroundColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).paneBackground
-    }
-    static let chromeDividerColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).chromeDivider
-    }
-    static let selectedChromeBackgroundColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).selectedChromeBackground
-    }
-    static let chromeStrokeColor = dynamicColor { appearance in
-        activeDescriptor(for: appearance).chromeStroke
+
+    static var chromeStrokeColor: NSColor {
+        ThemeManager.shared.snapshot.dynamicColor(for: .chromeStroke)
     }
 
     static func usesOpaqueSidebar(for appearance: NSAppearance? = nil) -> Bool {
@@ -210,104 +132,13 @@ enum NightModeStyle {
         }
     }
 
-    private static func activeDescriptor(for appearance: NSAppearance? = nil) -> ThemeDescriptor {
-        let resolvedAppearance = appearance ?? NSAppearance(named: .aqua)!
-        return isDarkAppearance(resolvedAppearance)
-            ? darkDescriptor(for: currentDarkTheme)
-            : lightDescriptor(for: currentLightTheme)
-    }
-
-    private static func lightDescriptor(for theme: LightTheme) -> ThemeDescriptor {
-        switch theme {
-        case .normal:
-            return ThemeDescriptor(
-                pageBackground: .white,
-                pageForeground: .black,
-                primaryText: .labelColor,
-                secondaryText: .secondaryLabelColor,
-                tertiaryText: .tertiaryLabelColor,
-                // Unified surface so sidebars and reader share one continuous plane.
-                readerBackdrop: .white,
-                splitBackground: .white,
-                paneBackground: .white,
-                chromeDivider: NSColor(calibratedWhite: 0.88, alpha: 1.0),
-                selectedChromeBackground: NSColor(calibratedWhite: 0.915, alpha: 1.0),
-                chromeStroke: NSColor(calibratedWhite: 0.82, alpha: 1.0),
-                usesOpaqueSidebar: true,
-                prefersFlatPDFChrome: false,
-                highlightPalette: .normal,
-                pdfStyle: .none
-            )
-        case .rosePineDawn:
-            return ThemeDescriptor(
-                pageBackground: color(from: dawnSurface),
-                pageForeground: color(from: dawnText),
-                primaryText: color(from: dawnText),
-                secondaryText: color(from: dawnSubtle),
-                tertiaryText: color(from: dawnMuted),
-                readerBackdrop: color(from: dawnBase),
-                splitBackground: color(from: dawnBase),
-                paneBackground: color(from: dawnBase),
-                chromeDivider: color(from: dawnUI),
-                selectedChromeBackground: color(from: dawnHighlight, alpha: 0.5),
-                chromeStroke: color(from: dawnStrongUI),
-                usesOpaqueSidebar: true,
-                prefersFlatPDFChrome: true,
-                highlightPalette: .rosePineDawn,
-                pdfStyle: .paper(background: dawnSurface)
-            )
-        }
-    }
-
-    private static func darkDescriptor(for theme: DarkTheme) -> ThemeDescriptor {
-        switch theme {
-        case .normal:
-            let pageBackground = RGBComponents(red: 0.09, green: 0.09, blue: 0.09)
-            let pageForeground = RGBComponents(red: 0.95, green: 0.95, blue: 0.95)
-            return ThemeDescriptor(
-                pageBackground: NSColor(calibratedWhite: 0.09, alpha: 1.0),
-                pageForeground: NSColor(calibratedWhite: 0.95, alpha: 1.0),
-                primaryText: .labelColor,
-                secondaryText: .secondaryLabelColor,
-                tertiaryText: .tertiaryLabelColor,
-                readerBackdrop: NSColor(calibratedWhite: 0.09, alpha: 1.0),
-                splitBackground: NSColor(calibratedWhite: 0.09, alpha: 1.0),
-                paneBackground: NSColor(calibratedWhite: 0.09, alpha: 1.0),
-                chromeDivider: NSColor(calibratedWhite: 0.12, alpha: 1.0),
-                selectedChromeBackground: NSColor(calibratedWhite: 0.19, alpha: 1.0),
-                chromeStroke: NSColor(calibratedWhite: 0.28, alpha: 1.0),
-                usesOpaqueSidebar: true,
-                prefersFlatPDFChrome: true,
-                highlightPalette: .normal,
-                pdfStyle: .remap(
-                    background: pageBackground, foreground: pageForeground,
-                    accentPreservation: 0.08, backgroundLuminance: 0.84)
-            )
-        case .rosePineMoon:
-            return ThemeDescriptor(
-                pageBackground: color(from: moonSurface),
-                pageForeground: color(from: moonText),
-                primaryText: color(from: moonText),
-                secondaryText: color(from: moonSubtle),
-                tertiaryText: color(from: moonMuted),
-                readerBackdrop: color(from: moonBase),
-                splitBackground: color(from: moonBase),
-                paneBackground: color(from: moonBase),
-                chromeDivider: color(from: moonOverlay),
-                selectedChromeBackground: color(from: moonOverlay),
-                chromeStroke: color(from: moonMuted),
-                usesOpaqueSidebar: true,
-                prefersFlatPDFChrome: true,
-                highlightPalette: .rosePineMoon,
-                pdfStyle: .darkPaper(
-                    background: moonSurface, foreground: moonText, accentPreservation: 0.85)
-            )
-        }
+    private static func activeDescriptor(for appearance: NSAppearance?) -> ThemeDescriptor {
+        ThemeManager.shared.snapshot.descriptor(for: appearance)
     }
 
     private static func makeRemapFilter(
-        background: RGBComponents,
-        foreground: RGBComponents,
+        background: ThemeRGBComponents,
+        foreground: ThemeRGBComponents,
         accentPreservation: CGFloat,
         backgroundLuminance: CGFloat
     ) -> CIFilter? {
@@ -336,8 +167,8 @@ enum NightModeStyle {
     }
 
     private static func colorMatrixRows(
-        background: RGBComponents,
-        foreground: RGBComponents,
+        background: ThemeRGBComponents,
+        foreground: ThemeRGBComponents,
         accentPreservation: CGFloat,
         backgroundLuminance: CGFloat
     ) -> (red: MatrixRow, green: MatrixRow, blue: MatrixRow) {
@@ -386,21 +217,5 @@ enum NightModeStyle {
             green: (diagonal == .green ? preserving : 0) - delta * luminanceWeights.green,
             blue: (diagonal == .blue ? preserving : 0) - delta * luminanceWeights.blue
         )
-    }
-
-    private static func color(from components: RGBComponents, alpha: CGFloat = 1.0) -> NSColor {
-        NSColor(
-            srgbRed: components.red, green: components.green, blue: components.blue,
-            alpha: alpha)
-    }
-
-    private static func dynamicColor(_ provider: @escaping (NSAppearance) -> NSColor) -> NSColor {
-        NSColor(name: nil) { appearance in
-            provider(appearance)
-        }
-    }
-
-    private static func isDarkAppearance(_ appearance: NSAppearance) -> Bool {
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 }

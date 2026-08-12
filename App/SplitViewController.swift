@@ -59,13 +59,13 @@ final class SplitViewController: NSSplitViewController {
     }
 
     /// Shared window/chrome plane — matches reader backdrop for seamless panes.
-    static let splitBackgroundColor: NSColor = NightModeStyle.readerBackdropColor
+    static var splitBackgroundColor: NSColor { NightModeStyle.readerBackdropColor }
 
-    static let dividerBackgroundColor: NSColor = NightModeStyle.chromeDividerColor
+    static var dividerBackgroundColor: NSColor { NightModeStyle.chromeDividerColor }
 
-    static let selectedChromeBackgroundColor: NSColor = NightModeStyle.selectedChromeBackgroundColor
+    static var selectedChromeBackgroundColor: NSColor { NightModeStyle.selectedChromeBackgroundColor }
 
-    static let chromeStrokeColor: NSColor = NightModeStyle.chromeStrokeColor
+    static var chromeStrokeColor: NSColor { NightModeStyle.chromeStrokeColor }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -482,6 +482,11 @@ final class SplitViewController: NSSplitViewController {
         readerWorkspaceViewController.triggerHighlightShortcut()
     }
 
+    @discardableResult
+    func addOrEditComment() -> Bool {
+        readerWorkspaceViewController.addOrEditComment()
+    }
+
     func exitHighlightMode() {
         readerWorkspaceViewController.exitHighlightMode()
     }
@@ -524,7 +529,7 @@ final class SplitViewController: NSSplitViewController {
 
     @discardableResult
     func findNextMatch() -> Bool {
-        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        guard documentStore.searchSnapshot(in: windowID).totalMatches > 0 else { return false }
         _ = rightSidebarViewController.selectNextSearchMatch(activate: true)
         syncFindStatus()
         return true
@@ -532,7 +537,7 @@ final class SplitViewController: NSSplitViewController {
 
     @discardableResult
     func findPreviousMatch() -> Bool {
-        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        guard documentStore.searchSnapshot(in: windowID).totalMatches > 0 else { return false }
         _ = rightSidebarViewController.selectPreviousSearchMatch(activate: true)
         syncFindStatus()
         return true
@@ -570,6 +575,14 @@ final class SplitViewController: NSSplitViewController {
             reader.onFindActionRequested = { [weak self] action in
                 self?.handleFindAction(action)
             }
+            reader.onRevealAnnotationRequested = { [weak self] group in
+                guard let self else { return }
+                self.documentStore.setRightSidebarVisible(true, in: self.windowID)
+                self.rightSidebarViewController.revealAnnotation(group.groupID, focusEditor: false)
+            }
+            reader.shouldSuppressAnnotationPreview = { [weak self] groupID in
+                self?.shouldSuppressAnnotationPreview(for: groupID) ?? false
+            }
         }
 
         rightSidebarViewController.onActivateSearchMatch = { [weak self] match in
@@ -586,6 +599,12 @@ final class SplitViewController: NSSplitViewController {
         }
         rightSidebarViewController.onActivateAnnotation = { [weak self] group in
             self?.activateAnnotation(group)
+        }
+        rightSidebarViewController.onDeleteAnnotation = { [weak self] group in
+            self?.deleteAnnotation(group)
+        }
+        rightSidebarViewController.onChangeAnnotationColor = { [weak self] group, color in
+            self?.changeAnnotationColor(group, to: color)
         }
         rightSidebarViewController.onSearchSelectionDidChange = { [weak self] _, _ in
             self?.syncFindStatus()
@@ -636,6 +655,26 @@ final class SplitViewController: NSSplitViewController {
 
     private func activateAnnotation(_ group: DocumentHighlightGroup) {
         readerWorkspaceViewController.focus(on: group)
+    }
+
+    private func deleteAnnotation(_ group: DocumentHighlightGroup) {
+        guard let sessionID = documentStore.activeSessionID(in: windowID) else { return }
+        guard documentStore.removeHighlightGroup(group, in: sessionID) else { return }
+        readerWorkspaceViewController.activeReaderViewController().pdfView.needsDisplay = true
+    }
+
+    private func changeAnnotationColor(_ group: DocumentHighlightGroup, to color: HighlightColor) {
+        guard let sessionID = documentStore.activeSessionID(in: windowID) else { return }
+        guard documentStore.updateHighlightColor(color, forHighlightGroup: group.groupID, in: sessionID) else {
+            return
+        }
+        readerWorkspaceViewController.activeReaderViewController().pdfView.needsDisplay = true
+    }
+
+    private func shouldSuppressAnnotationPreview(for groupID: String) -> Bool {
+        guard documentStore.isRightSidebarVisible(in: windowID),
+              documentStore.rightSidebarMode(in: windowID) == .annotations else { return false }
+        return rightSidebarViewController.selectedAnnotationGroupID == groupID
     }
 
     private func syncFindStatus() {

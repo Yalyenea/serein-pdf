@@ -582,10 +582,10 @@ struct WindowChromeTests {
     func themeRefreshUpdatesReaderEvenWhenAppearanceModeStaysLight() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
-        NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+        ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
         app.appearance = NSAppearance(named: .aqua)
         defer {
-            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
             app.appearance = previousAppearance
         }
 
@@ -607,7 +607,7 @@ struct WindowChromeTests {
             return
         }
 
-        NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
+        ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
         controller.refreshThemeAppearance()
         flushLayout(controller.window)
 
@@ -657,10 +657,10 @@ struct WindowChromeTests {
     func themeRefreshUpdatesOutlineColorsWhenAppearanceModeStaysLight() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
-        NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+        ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
         app.appearance = NSAppearance(named: .aqua)
         defer {
-            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
             app.appearance = previousAppearance
         }
 
@@ -684,7 +684,7 @@ struct WindowChromeTests {
         }
         let originalColor = resolvedColor(originalTextColor, in: titleLabel.effectiveAppearance)
 
-        NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
+        ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
         controller.refreshThemeAppearance()
         flushLayout(controller.window)
 
@@ -2010,10 +2010,10 @@ struct WindowChromeTests {
     func legacySidebarOpacityDoesNotMakeSidebarSurfacesTranslucent() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
-        NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+        ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
         app.appearance = NSAppearance(named: .aqua)
         defer {
-            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
             app.appearance = previousAppearance
         }
 
@@ -2695,6 +2695,140 @@ struct WindowChromeTests {
         #expect(abs(reader.pdfView.scaleFactor - targetScale) < 0.001)
         #expect(store.session(for: session.id)?.scaleMode == .manual)
         #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - targetScale) < 0.001)
+    }
+
+    @Test
+    func userMagnificationLeavesFitWidthAndKeepsLiveScale() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "pinch-from-fit-width",
+                pageSizes: [NSSize(width: 720, height: 900)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+
+        let targetScale = min(reader.pdfView.scaleFactor * 1.2, reader.pdfView.maxScaleFactor)
+        reader.testingBeginUserMagnification()
+        reader.pdfView.scaleFactor = targetScale
+        flushLayout(controller.window)
+
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs(reader.pdfView.scaleFactor - targetScale) < 0.001)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - targetScale) < 0.001)
+    }
+
+    @Test
+    func layoutDrivenScaleChangeFromFitWidthReappliesFitWidth() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "layout-scale-from-fit-width",
+                pageSizes: [NSSize(width: 720, height: 900)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        let fitScale = reader.pdfView.scaleFactor
+        #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+
+        reader.pdfView.scaleFactor = min(fitScale * 1.2, reader.pdfView.maxScaleFactor)
+        flushLayout(controller.window)
+
+        #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+        #expect(abs(reader.pdfView.scaleFactor - fitScale) < 0.05)
+    }
+
+    @Test
+    func userMagnificationLeavesFitHeightAndKeepsLiveScale() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "pinch-from-fit-height",
+                pageSizes: [NSSize(width: 720, height: 1800)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToHeight()
+        flushLayout(controller.window)
+        #expect(store.session(for: session.id)?.scaleMode == .fitHeight)
+
+        let targetScale = min(reader.pdfView.scaleFactor * 1.2, reader.pdfView.maxScaleFactor)
+        reader.testingBeginUserMagnification()
+        reader.pdfView.scaleFactor = targetScale
+        flushLayout(controller.window)
+
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs(reader.pdfView.scaleFactor - targetScale) < 0.001)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - targetScale) < 0.001)
+    }
+
+    @Test
+    func pdfViewZoomInFromFitWidthPinsManualScale() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "pdfkit-zoom-in-from-fit-width",
+                pageSizes: [NSSize(width: 720, height: 900)]
+            )
+        )
+        flushLayout(controller.window)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate split view controller")
+            return
+        }
+
+        let reader = splitController.readerViewController
+        reader.fitToWidth()
+        flushLayout(controller.window)
+        let fitScale = reader.pdfView.scaleFactor
+        #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+        #expect(reader.pdfView.canZoomIn)
+
+        reader.pdfView.zoomIn(nil)
+        flushLayout(controller.window)
+
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(reader.pdfView.scaleFactor > fitScale + 0.01)
+        #expect(abs((store.session(for: session.id)?.zoomScale ?? 0) - reader.pdfView.scaleFactor) < 0.001)
     }
 
     @Test

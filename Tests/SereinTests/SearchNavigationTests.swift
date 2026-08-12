@@ -5,6 +5,74 @@ import XCTest
 
 @MainActor
 final class SearchNavigationTests: XCTestCase {
+    func testSearchOptionsInvalidateSnapshotAndFilterCaseAndWholeWords() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "search-options",
+            pages: ["Needle needle needles xneedle"]
+        )
+        _ = try store.open(documentAt: url)
+
+        store.updateSearch(
+            query: "needle",
+            scope: .currentDocument,
+            options: .default,
+            in: store.defaultWindowID
+        )
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 4)
+
+        let wholeWords = SearchOptions(matchesWholeWords: true)
+        store.updateSearch(
+            query: "needle",
+            scope: .currentDocument,
+            options: wholeWords,
+            in: store.defaultWindowID
+        )
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).options, wholeWords)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 2)
+
+        let caseSensitiveWholeWords = SearchOptions(
+            isCaseSensitive: true,
+            matchesWholeWords: true
+        )
+        store.updateSearch(
+            query: "needle",
+            scope: .currentDocument,
+            options: caseSensitiveWholeWords,
+            in: store.defaultWindowID
+        )
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).options, caseSensitiveWholeWords)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 1)
+    }
+
+    func testCaseSensitiveOptionAppliesAcrossAllOpenDocuments() throws {
+        let store = makeStore()
+        let first = try makeSearchableTemporaryPDF(
+            named: "search-options-first",
+            pages: ["Needle"]
+        )
+        let second = try makeSearchableTemporaryPDF(
+            named: "search-options-second",
+            pages: ["needle"]
+        )
+        _ = try store.open(documentAt: first)
+        _ = try store.open(documentAt: second)
+        let options = SearchOptions(isCaseSensitive: true)
+
+        store.updateSearch(
+            query: "needle",
+            scope: .allOpen,
+            options: options,
+            in: store.defaultWindowID
+        )
+
+        let snapshot = store.searchSnapshot(in: store.defaultWindowID)
+        XCTAssertEqual(snapshot.options, options)
+        XCTAssertEqual(snapshot.totalMatches, 1)
+        XCTAssertEqual(snapshot.sections.count, 1)
+        XCTAssertEqual(snapshot.sections.first?.title, "search-options-second")
+    }
+
     func testFirstSubmitOnlySearchesAndSecondSubmitStartsNavigation() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
@@ -23,6 +91,32 @@ final class SearchNavigationTests: XCTestCase {
         reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
         reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
 
+        XCTAssertEqual(actions, [.activateNext])
+    }
+
+    func testChangingFindOptionsDoesNotCountAsRepeatedSubmit() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "search-option-submit-key",
+            pages: ["Needle needle"]
+        )
+        let session = try store.open(documentAt: url)
+        let reader = ReaderViewController(documentStore: store, windowID: store.defaultWindowID)
+        reader.targetSessionID = session.id
+        reader.loadViewIfNeeded()
+        reader.showFindBar()
+
+        var actions: [FindNavigationAction] = []
+        reader.onFindActionRequested = { actions.append($0) }
+        let findBar = FindBarView()
+
+        reader.findBar(findBar, didSubmitQuery: "needle", scope: .currentDocument)
+        findBar.setSearchOptions(SearchOptions(isCaseSensitive: true))
+        reader.findBar(findBar, didSubmitQuery: "needle", scope: .currentDocument)
+        XCTAssertTrue(actions.isEmpty)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 1)
+
+        reader.findBar(findBar, didSubmitQuery: "needle", scope: .currentDocument)
         XCTAssertEqual(actions, [.activateNext])
     }
 
@@ -114,14 +208,14 @@ final class SearchNavigationTests: XCTestCase {
 
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .currentDocument)
-        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 1)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 1)
 
         reader.showFindBar(scope: .allOpen)
 
         XCTAssertTrue(reader.isFindBarVisible)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .allOpen)
         XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "needle")
-        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 2)
     }
 
     func testShowFindBarPrefillsSearchFromCurrentPDFSelection() throws {
@@ -143,7 +237,7 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertTrue(reader.isFindBarVisible)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .currentDocument)
         XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "selected phrase")
-        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 2)
     }
 
     func testEmptySearchStateStaysBlankWithoutInstructionalCopy() throws {
@@ -198,7 +292,7 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertTrue(reader.isFindBarVisible)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .allOpen)
         XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "shared needle")
-        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 2)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 2)
     }
 
     func testSplitControllerFindNextAdvancesSelectionWithActivate() throws {
@@ -277,7 +371,7 @@ final class SearchNavigationTests: XCTestCase {
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
         flushSearchNavigationLayout(windowController.window)
         let match = try XCTUnwrap(
-            store.searchSections(in: store.defaultWindowID).flatMap(\.matches).first
+            store.searchSnapshot(in: store.defaultWindowID).sections.flatMap(\.matches).first
         )
 
         XCTAssertTrue(split.findNextMatch())
@@ -317,7 +411,7 @@ final class SearchNavigationTests: XCTestCase {
         let reader = split.readerViewController
         store.updateSearch(query: "needle", scope: .allOpen, in: store.defaultWindowID)
         flushSearchNavigationLayout(windowController.window)
-        let matches = store.searchSections(in: store.defaultWindowID).flatMap(\.matches)
+        let matches = store.searchSnapshot(in: store.defaultWindowID).sections.flatMap(\.matches)
         XCTAssertEqual(matches.map(\.sessionID), [firstSession.id, secondSession.id])
         let firstMatch = try XCTUnwrap(matches.first)
         let secondMatch = try XCTUnwrap(matches.dropFirst().first)

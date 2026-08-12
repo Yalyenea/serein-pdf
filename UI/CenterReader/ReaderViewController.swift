@@ -13,6 +13,7 @@ enum FindNavigationAction: Equatable {
 private struct SubmittedSearchKey: Equatable {
     let query: String
     let scope: SearchScope
+    let options: SearchOptions
 }
 
 private struct PDFViewportAnchor {
@@ -48,7 +49,19 @@ private final class ReaderSurfaceView: NSView {
 
     override func layout() {
         super.layout()
-        dropHighlightView.frame = bounds.insetBy(dx: 12, dy: 12)
+        guard bounds.origin.x.isFinite,
+              bounds.origin.y.isFinite,
+              bounds.width.isFinite,
+              bounds.height.isFinite else {
+            dropHighlightView.frame = .zero
+            return
+        }
+        dropHighlightView.frame = NSRect(
+            x: bounds.minX + 12,
+            y: bounds.minY + 12,
+            width: max(bounds.width - 24, 0),
+            height: max(bounds.height - 24, 0)
+        )
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -177,7 +190,12 @@ private final class PDFReaderClipView: NSClipView {
 final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
     var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
+    var onAnnotationActivationRequested: ((NSEvent) -> Bool)?
     var onUserMagnificationRequested: (() -> Void)?
+    var onPointerMoved: ((NSEvent?) -> Void)?
+    var contextMenuProvider: ((NSEvent) -> NSMenu?)?
+
+    private var pointerTrackingArea: NSTrackingArea?
 
     override func isAccessibilityElement() -> Bool {
         false
@@ -206,9 +224,64 @@ final class ReaderPDFView: PDFView {
         onLayoutCompleted?()
     }
 
+    override func updateTrackingAreas() {
+        if let pointerTrackingArea {
+            removeTrackingArea(pointerTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        pointerTrackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onPointerMoved?(event)
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onPointerMoved?(event)
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onPointerMoved?(nil)
+        super.mouseExited(with: event)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        Self.mergeContextMenus(
+            custom: contextMenuProvider?(event),
+            native: super.menu(for: event)
+        )
+    }
+
+    static func mergeContextMenus(custom: NSMenu?, native: NSMenu?) -> NSMenu? {
+        guard let custom else { return native }
+        guard let native else { return custom }
+        let customItems = custom.items
+        guard customItems.isEmpty == false else { return native }
+
+        customItems.forEach(custom.removeItem)
+        for (index, item) in customItems.enumerated() {
+            native.insertItem(item, at: index)
+        }
+        native.insertItem(.separator(), at: customItems.count)
+        return native
+    }
+
     override func mouseDown(with event: NSEvent) {
         if let destination = internalLinkDestination(at: event),
            onInternalLinkNavigationRequested?(destination) == true {
+            return
+        }
+        if event.clickCount == 2,
+           onAnnotationActivationRequested?(event) == true {
             return
         }
         super.mouseDown(with: event)
@@ -217,6 +290,21 @@ final class ReaderPDFView: PDFView {
     override func magnify(with event: NSEvent) {
         onUserMagnificationRequested?()
         super.magnify(with: event)
+    }
+
+    override func smartMagnify(with event: NSEvent) {
+        onUserMagnificationRequested?()
+        super.smartMagnify(with: event)
+    }
+
+    override func zoomIn(_ sender: Any?) {
+        onUserMagnificationRequested?()
+        super.zoomIn(sender)
+    }
+
+    override func zoomOut(_ sender: Any?) {
+        onUserMagnificationRequested?()
+        super.zoomOut(sender)
     }
 
     private func internalLinkDestination(at event: NSEvent) -> PDFDestination? {
@@ -236,6 +324,9 @@ final class ReaderViewController: NSViewController {
     var onOpenURLsRequested: (([URL]) -> Void)?
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
     var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
+    var onRevealAnnotationRequested: ((DocumentHighlightGroup) -> Void)?
+    /// When true for a groupID, hover preview is suppressed (e.g. same row selected in Annotations sidebar).
+    var shouldSuppressAnnotationPreview: ((String) -> Bool)?
     private let pdfContainerView = PDFContainerView()
     private let emptyStateContainer = NSStackView()
     private let emptyStateErrorLabel = NSTextField(wrappingLabelWithString: "")
@@ -245,11 +336,15 @@ final class ReaderViewController: NSViewController {
     private let panLockIndicator = NSTextField(labelWithString: "H-lock · L")
     private let switchTitleToastView = NSView()
     private let switchTitleToastLabel = NSTextField(labelWithString: "")
+    private lazy var annotationInteraction = ReaderAnnotationInteractionController(
+        documentStore: documentStore,
+        pdfView: pdfView
+    )
     private let overviewGridView = OverviewGridView()
     private let findBarView = FindBarView()
     private var findBarTopConstraint: NSLayoutConstraint?
     private var pdfContainerTopConstraint: NSLayoutConstraint?
-    private let themeManager = ThemeManager()
+    private var readerState = ReaderState()
     private(set) var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
     private var displayedDisplayMode: ReaderDisplayMode?
@@ -269,6 +364,7 @@ final class ReaderViewController: NSViewController {
     nonisolated(unsafe) private var leftMouseDownMonitor: Any?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
     nonisolated(unsafe) private var panLockScrollMonitor: Any?
+    nonisolated(unsafe) private var magnificationMonitor: Any?
     private var pendingFitWidthSessionID: UUID?
     private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
@@ -277,7 +373,6 @@ final class ReaderViewController: NSViewController {
     private var lastObservedPDFClipBounds: NSRect?
     private var isApplyingScrollClamp = false
     private var lastSubmittedSearchKey: SubmittedSearchKey?
-    private var pendingAnnotationFocusToken: Int = 0
     private var switchTitleToastHideWorkItem: DispatchWorkItem?
     private(set) var isReadingFocusModeEnabled = false
     private(set) var isHorizontalPanLocked = false
@@ -319,6 +414,30 @@ final class ReaderViewController: NSViewController {
         }
         pdfView.onUserMagnificationRequested = { [weak self] in
             self?.beginUserMagnification()
+        }
+        pdfView.onPointerMoved = { [weak self] event in
+            self?.annotationInteraction.handlePointerMoved(event)
+        }
+        pdfView.contextMenuProvider = { [weak self] event in
+            self?.annotationInteraction.makeContextMenu(for: event)
+        }
+        pdfView.onAnnotationActivationRequested = { [weak self] event in
+            self?.annotationInteraction.activateAnnotation(at: event) ?? false
+        }
+        annotationInteraction.onFocusRequested = { [weak self] in
+            self?.onFocusRequested?()
+        }
+        annotationInteraction.onRevealRequested = { [weak self] group in
+            self?.onRevealAnnotationRequested?(group)
+        }
+        annotationInteraction.onCreateHighlightRequested = { [weak self] in
+            self?.createHighlightFromCurrentSelection()
+        }
+        annotationInteraction.onNavigateRequested = { [weak self] group in
+            self?.focus(on: group, showPulse: false)
+        }
+        annotationInteraction.shouldSuppressPreview = { [weak self] groupID in
+            self?.shouldSuppressAnnotationPreview?(groupID) ?? false
         }
         pdfContainerView.readingFocusOverlay.pageBoundsProvider = { [weak self] point in
             self?.readingFocusPageBounds(at: point)
@@ -372,6 +491,15 @@ final class ReaderViewController: NSViewController {
             }
             return rewritten
         }
+        // PDFKit delivers trackpad pinch to its private document view, so
+        // PDFView.magnify(with:) never runs. Pin fit modes to manual before
+        // the scale-changed notification tries to snap back to fit-width.
+        magnificationMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .smartMagnify]) { [weak self] event in
+            MainActor.assumeIsolated {
+                self?.handleMagnificationEventIfNeeded(event)
+            }
+            return event
+        }
         refreshDisplayedDocument()
         configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
@@ -379,7 +507,7 @@ final class ReaderViewController: NSViewController {
 
     private func syncNightModeFromSystem() {
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        themeManager.setNightModeEnabled(isDark)
+        readerState.isNightModeEnabled = isDark
     }
 
     override func viewDidLayout() {
@@ -388,6 +516,7 @@ final class ReaderViewController: NSViewController {
             reflowOverviewGrid()
         }
         syncPDFMarginBackgroundAfterPDFKitLayout()
+        annotationInteraction.layoutOverlay()
 
         guard let session = targetSession(),
               displayedSessionID == session.id,
@@ -447,6 +576,9 @@ final class ReaderViewController: NSViewController {
             NSEvent.removeMonitor(monitor)
         }
         if let monitor = panLockScrollMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = magnificationMonitor {
             NSEvent.removeMonitor(monitor)
         }
     }
@@ -543,6 +675,7 @@ final class ReaderViewController: NSViewController {
 
         pdfContainerView.embedPDFView(pdfView)
         container.addSubview(pdfContainerView)
+        annotationInteraction.install(in: container)
         container.addSubview(emptyStateContainer)
         container.addSubview(highlightModeIndicator)
         container.addSubview(panLockIndicator)
@@ -1236,7 +1369,7 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyOverviewSurfaceAppearance() {
-        let isNightModeEnabled = themeManager.readerState.isNightModeEnabled
+        let isNightModeEnabled = readerState.isNightModeEnabled
         let pageBackground = isNightModeEnabled
             ? NightModeStyle.pageBackgroundColor
             : NightModeStyle.readerBackdropColor
@@ -1250,15 +1383,15 @@ final class ReaderViewController: NSViewController {
     }
 
     var isNightModeEnabled: Bool {
-        themeManager.readerState.isNightModeEnabled
+        readerState.isNightModeEnabled
     }
 
     var isHighlightModeEnabled: Bool {
-        themeManager.readerState.isHighlightModeEnabled
+        readerState.isHighlightModeEnabled
     }
 
     var currentHighlightColor: HighlightColor {
-        themeManager.readerState.highlightColor
+        readerState.highlightColor
     }
 
     @discardableResult
@@ -1267,18 +1400,18 @@ final class ReaderViewController: NSViewController {
             return true
         }
 
-        themeManager.setHighlightModeEnabled(true)
+        readerState.isHighlightModeEnabled = true
         updateHighlightModeIndicator()
         return false
     }
 
     func exitHighlightMode() {
-        themeManager.setHighlightModeEnabled(false)
+        readerState.isHighlightModeEnabled = false
         updateHighlightModeIndicator()
     }
 
     func setHighlightColor(_ color: HighlightColor) {
-        themeManager.setHighlightColor(color)
+        readerState.highlightColor = color
         updateHighlightModeIndicator()
     }
 
@@ -1361,25 +1494,21 @@ final class ReaderViewController: NSViewController {
     }
 
     @discardableResult
+    func addOrEditComment() -> Bool {
+        annotationInteraction.addOrEditComment()
+    }
+
+    func presentCommentEditor(for group: DocumentHighlightGroup) {
+        annotationInteraction.presentCommentEditor(for: group)
+    }
+
+    func dismissCommentEditor() {
+        annotationInteraction.dismissCommentEditor()
+    }
+
+    @discardableResult
     func removeHighlightUnderCursor() -> Bool {
-        guard let session = targetSession(),
-              session.id == displayedSessionID,
-              let window = pdfView.window,
-              let document = pdfView.document else { return false }
-
-        let mouseInWindow = window.mouseLocationOutsideOfEventStream
-        let mouseInPDF = pdfView.convert(mouseInWindow, from: nil)
-        guard pdfView.bounds.contains(mouseInPDF),
-              let page = pdfView.page(for: mouseInPDF, nearest: false) else { return false }
-
-        let pointOnPage = pdfView.convert(mouseInPDF, to: page)
-        guard let target = HighlightService.highlightAnnotation(at: pointOnPage, on: page) else { return false }
-
-        let records = HighlightService.removeHighlightGroup(containing: target, in: document)
-        guard records.isEmpty == false else { return false }
-
-        documentStore.noteHighlightsRemoved(records, for: session.id)
-        return true
+        annotationInteraction.removeHighlightUnderCursor()
     }
 
     @discardableResult
@@ -1415,7 +1544,7 @@ final class ReaderViewController: NSViewController {
     }
 
     func toggleNightMode() {
-        themeManager.toggleNightMode()
+        readerState.isNightModeEnabled.toggle()
         applyReaderAppearance()
     }
 
@@ -1431,8 +1560,13 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func search(for query: String) -> Bool {
-        documentStore.updateSearch(query: query, scope: findBarView.scope, in: windowID)
-        return documentStore.totalSearchMatches(in: windowID) > 0
+        documentStore.updateSearch(
+            query: query,
+            scope: findBarView.scope,
+            options: findBarView.searchOptions,
+            in: windowID
+        )
+        return documentStore.searchSnapshot(in: windowID).totalMatches > 0
     }
 
     var isFindBarVisible: Bool {
@@ -1442,19 +1576,29 @@ final class ReaderViewController: NSViewController {
     func showFindBar(scope: SearchScope? = nil) {
         guard let container = view as NSView? else { return }
         let targetScope = scope ?? documentStore.searchScope(in: windowID)
+        let targetOptions = documentStore.searchOptions(in: windowID)
         let selectedQuery = selectedSearchQuery()
         let query = selectedQuery ?? documentStore.searchQuery(in: windowID)
         documentStore.updateSearch(
             query: query,
             scope: targetScope,
+            options: targetOptions,
             in: windowID
         )
         if let selectedQuery {
-            lastSubmittedSearchKey = SubmittedSearchKey(query: selectedQuery, scope: targetScope)
+            lastSubmittedSearchKey = SubmittedSearchKey(
+                query: selectedQuery,
+                scope: targetScope,
+                options: targetOptions
+            )
         } else if query.isEmpty == false,
-                  documentStore.totalSearchMatches(in: windowID) > 0 {
+                  documentStore.searchSnapshot(in: windowID).totalMatches > 0 {
             // Re-opening Find with an existing query should treat Enter as "next".
-            lastSubmittedSearchKey = SubmittedSearchKey(query: query, scope: targetScope)
+            lastSubmittedSearchKey = SubmittedSearchKey(
+                query: query,
+                scope: targetScope,
+                options: targetOptions
+            )
         }
         onFocusRequested?()
         if findBarView.isHidden {
@@ -1465,6 +1609,7 @@ final class ReaderViewController: NSViewController {
             container.layoutSubtreeIfNeeded()
         }
         findBarView.setScope(documentStore.searchScope(in: windowID))
+        findBarView.setSearchOptions(documentStore.searchOptions(in: windowID))
         findBarView.setQuery(documentStore.searchQuery(in: windowID))
         syncFindBarStatus()
         findBarView.focusQueryField()
@@ -1492,14 +1637,14 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func findNextMatch() -> Bool {
-        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        guard documentStore.searchSnapshot(in: windowID).totalMatches > 0 else { return false }
         onFindActionRequested?(.activateNext)
         return true
     }
 
     @discardableResult
     func findPreviousMatch() -> Bool {
-        guard documentStore.totalSearchMatches(in: windowID) > 0 else { return false }
+        guard documentStore.searchSnapshot(in: windowID).totalMatches > 0 else { return false }
         onFindActionRequested?(.activatePrevious)
         return true
     }
@@ -1513,7 +1658,10 @@ final class ReaderViewController: NSViewController {
         guard isFindBarVisible else { return }
         findBarView.setQuery(documentStore.searchQuery(in: windowID))
         findBarView.setScope(documentStore.searchScope(in: windowID))
-        findBarView.setStatus(matchIndex: nil, totalMatches: documentStore.totalSearchMatches(in: windowID))
+        findBarView.setStatus(
+            matchIndex: nil,
+            totalMatches: documentStore.searchSnapshot(in: windowID).totalMatches
+        )
     }
 
     @objc
@@ -1541,6 +1689,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
+        annotationInteraction.clearPreview()
         guard isApplyingStoreState == false,
               isNavigatingHistory == false,
               let session = targetSession(),
@@ -1576,27 +1725,56 @@ final class ReaderViewController: NSViewController {
               session.id == displayedSessionID else { return }
 
         // PDFKit uses the same notification for user zoom and layout-driven scale
-        // changes. Explicit zoom commands and magnify(with:) enter manual mode;
-        // geometry changes keep the requested fit mode and settle on the next layout.
-        switch session.scaleMode {
-        case .fitWidth:
-            pendingFitWidthSessionID = session.id
-            lastAppliedFitBoundsWidth = -1
-            view.needsLayout = true
-            return
-        case .fitHeight:
-            pendingFitHeightSessionID = session.id
-            lastAppliedFitBoundsHeight = -1
-            view.needsLayout = true
-            return
-        case .manual:
-            break
+        // changes. Trackpad pinch is pinned to manual by the magnification
+        // monitor / currentEvent; geometry changes keep the requested fit mode.
+        if isUserMagnificationEvent(NSApp.currentEvent) {
+            beginUserMagnification()
+        } else {
+            switch session.scaleMode {
+            case .fitWidth:
+                pendingFitWidthSessionID = session.id
+                lastAppliedFitBoundsWidth = -1
+                view.needsLayout = true
+                return
+            case .fitHeight:
+                pendingFitHeightSessionID = session.id
+                lastAppliedFitBoundsHeight = -1
+                view.needsLayout = true
+                return
+            case .manual:
+                break
+            }
         }
 
         documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
 
         if let position = currentReadingPosition() {
             documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        }
+    }
+
+    private func handleMagnificationEventIfNeeded(_ event: NSEvent) {
+        guard isAllPagesOverviewActive == false,
+              pdfView.isHidden == false,
+              let window = pdfView.window,
+              event.window === window else { return }
+        let point = pdfView.convert(event.locationInWindow, from: nil)
+        guard pdfView.bounds.contains(point) else { return }
+        beginUserMagnification()
+    }
+
+    private func isUserMagnificationEvent(_ event: NSEvent?) -> Bool {
+        guard let event else { return false }
+        switch event.type {
+        case .magnify, .smartMagnify:
+            return true
+        case .scrollWheel:
+            // Preview-style Option/Command+scroll zoom. Only consulted when
+            // PDFKit has already changed scaleFactor.
+            return event.modifierFlags.contains(.option)
+                || event.modifierFlags.contains(.command)
+        default:
+            return false
         }
     }
 
@@ -1608,6 +1786,7 @@ final class ReaderViewController: NSViewController {
         lastAppliedFitBoundsWidth = 0
         lastAppliedFitBoundsHeight = 0
         displayedScaleMode = .manual
+        guard session.scaleMode != .manual else { return }
         documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
     }
 
@@ -1618,7 +1797,7 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyHighlightOnMouseUpIfNeeded(event: NSEvent) {
-        guard themeManager.readerState.isHighlightModeEnabled,
+        guard readerState.isHighlightModeEnabled,
               isApplyingHighlightSelection == false,
               let window = pdfView.window,
               event.window === window else { return }
@@ -1658,6 +1837,11 @@ final class ReaderViewController: NSViewController {
 
     private func refreshDisplayedDocument() {
         guard isViewLoaded else { return }
+        defer { annotationInteraction.activeSessionID = displayedSessionID }
+
+        if displayedSessionID != targetSessionID {
+            annotationInteraction.sessionDidChange()
+        }
 
         guard let session = targetSession() else {
             pdfView.document = nil
@@ -1863,7 +2047,7 @@ final class ReaderViewController: NSViewController {
         pdfView.currentSelection = nil
     }
 
-    func go(to selection: PDFSelection, recordHistory: Bool = true) {
+    func go(to selection: PDFSelection, recordHistory: Bool = true, setSelection: Bool = true) {
         let targetPosition: ReadingPosition?
         if let page = selection.pages.first, let document = pdfView.document {
             let bounds = selection.bounds(for: page)
@@ -1875,15 +2059,26 @@ final class ReaderViewController: NSViewController {
             targetPosition = nil
         }
         if let targetPosition, displayedReadingPosition == targetPosition {
-            pdfView.setCurrentSelection(selection, animate: false)
+            if setSelection {
+                pdfView.setCurrentSelection(selection, animate: false)
+            } else {
+                pdfView.currentSelection = nil
+            }
             return
         }
         if recordHistory {
             recordNavigationHistoryBeforeJump()
         }
         isApplyingStoreState = true
-        pdfView.setCurrentSelection(selection, animate: true)
+        if setSelection {
+            pdfView.setCurrentSelection(selection, animate: true)
+        } else {
+            pdfView.currentSelection = nil
+        }
         pdfView.go(to: selection)
+        if setSelection == false {
+            pdfView.currentSelection = nil
+        }
         isApplyingStoreState = false
         if let position = targetPosition {
             displayedReadingPosition = position
@@ -1902,22 +2097,20 @@ final class ReaderViewController: NSViewController {
         }
     }
 
-    func focus(on highlight: DocumentHighlightGroup) {
+    func focus(on highlight: DocumentHighlightGroup, showPulse: Bool = true) {
         if let selection = highlight.primarySelection {
-            go(to: selection)
-            pendingAnnotationFocusToken += 1
-            let token = pendingAnnotationFocusToken
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-                MainActor.assumeIsolated {
-                    guard let self, self.pendingAnnotationFocusToken == token else { return }
-                    self.pdfView.currentSelection = nil
-                }
+            go(to: selection, setSelection: false)
+            if showPulse {
+                annotationInteraction.showFocusPulse(for: highlight)
             }
             return
         }
 
         guard pdfView.document?.page(at: highlight.pageIndex) != nil else { return }
         _ = jumpToPage(highlight.pageIndex, recordHistory: true)
+        if showPulse {
+            annotationInteraction.showFocusPulse(for: highlight)
+        }
     }
 
     @discardableResult
@@ -2269,6 +2462,7 @@ final class ReaderViewController: NSViewController {
     @objc
     private func handlePDFClipViewBoundsDidChange(_ notification: Notification) {
         guard let clipView = notification.object as? NSClipView else { return }
+        annotationInteraction.clearPreview()
         let previousBounds = lastObservedPDFClipBounds
         lastObservedPDFClipBounds = clipView.bounds
         guard isApplyingScrollClamp == false else { return }
@@ -2530,10 +2724,14 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     private func highlightCurrentSelection() -> Bool {
+        createHighlightFromCurrentSelection() != nil
+    }
+
+    private func createHighlightFromCurrentSelection() -> DocumentHighlightGroup? {
         guard let session = targetSession(),
               session.id == displayedSessionID,
               let selection = pdfView.currentSelection,
-              HighlightService.selectionContainsText(selection) else { return false }
+              HighlightService.selectionContainsText(selection) else { return nil }
 
         isApplyingHighlightSelection = true
         defer { isApplyingHighlightSelection = false }
@@ -2541,19 +2739,19 @@ final class ReaderViewController: NSViewController {
         let appliedRecords = HighlightService.applyHighlight(
             to: selection,
             color: NightModeStyle.highlightColor(
-                for: themeManager.readerState.highlightColor,
+                for: readerState.highlightColor,
                 appearance: NSApp.effectiveAppearance
             )
         )
-        guard appliedRecords.isEmpty == false else { return false }
+        guard let firstRecord = appliedRecords.first else { return nil }
 
         documentStore.noteHighlightsAdded(appliedRecords, for: session.id)
         pdfView.currentSelection = nil
-        return true
+        return documentStore.annotationGroup(containing: firstRecord.annotation, for: session.id)
     }
 
     private func applyReaderAppearance() {
-        let isNightModeEnabled = themeManager.readerState.isNightModeEnabled
+        let isNightModeEnabled = readerState.isNightModeEnabled
         let appearance = NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
             let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
@@ -2657,9 +2855,9 @@ final class ReaderViewController: NSViewController {
     }
 
     private func updateHighlightModeIndicator() {
-        let isEnabled = themeManager.readerState.isHighlightModeEnabled
+        let isEnabled = readerState.isHighlightModeEnabled
         highlightModeIndicator.isHidden = !isEnabled
-        let color = themeManager.readerState.highlightColor
+        let color = readerState.highlightColor
         highlightModeLabel.stringValue = "Highlight · Esc"
         highlightModeColorDot.layer?.backgroundColor = NightModeStyle.highlightColor(
             for: color,
@@ -2730,14 +2928,21 @@ extension ReaderViewController {
 extension ReaderViewController: FindBarDelegate {
     func findBar(_ view: FindBarView, didSubmitQuery query: String, scope: SearchScope) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let submittedKey = SubmittedSearchKey(query: trimmed, scope: scope)
+        let options = view.searchOptions
+        let submittedKey = SubmittedSearchKey(query: trimmed, scope: scope, options: options)
         let currentQuery = documentStore.searchQuery(in: windowID)
         let currentScope = documentStore.searchScope(in: windowID)
+        let currentOptions = documentStore.searchOptions(in: windowID)
 
         if trimmed.isEmpty {
             lastSubmittedSearchKey = nil
-            if currentQuery.isEmpty == false || currentScope != scope {
-                documentStore.updateSearch(query: "", scope: scope, in: windowID)
+            if currentQuery.isEmpty == false || currentScope != scope || currentOptions != options {
+                documentStore.updateSearch(
+                    query: "",
+                    scope: scope,
+                    options: options,
+                    in: windowID
+                )
             }
             syncFindBarStatus()
             return
@@ -2746,13 +2951,19 @@ extension ReaderViewController: FindBarDelegate {
         if lastSubmittedSearchKey == submittedKey,
            currentQuery == trimmed,
            currentScope == scope,
-           documentStore.totalSearchMatches(in: windowID) > 0 {
+           currentOptions == options,
+           documentStore.searchSnapshot(in: windowID).totalMatches > 0 {
             onFindActionRequested?(.activateNext)
             return
         }
 
-        if trimmed != currentQuery || scope != currentScope {
-            documentStore.updateSearch(query: trimmed, scope: scope, in: windowID)
+        if trimmed != currentQuery || scope != currentScope || options != currentOptions {
+            documentStore.updateSearch(
+                query: trimmed,
+                scope: scope,
+                options: options,
+                in: windowID
+            )
         }
 
         lastSubmittedSearchKey = submittedKey

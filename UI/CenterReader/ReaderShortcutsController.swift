@@ -18,6 +18,11 @@ final class ReaderShortcutsController {
     private static let supplementalPlainShortcuts: [(KeyboardShortcut, ShortcutCommand)] = [
         (KeyboardShortcut(key: "c", modifiers: []), .singlePageContinuous),
     ]
+    private static let highlightModeColorShortcuts: [(KeyboardShortcut, ShortcutCommand)] = [
+        (KeyboardShortcut(key: "1", modifiers: []), .highlightColorPink),
+        (KeyboardShortcut(key: "2", modifiers: []), .highlightColorYellow),
+        (KeyboardShortcut(key: "3", modifiers: []), .highlightColorGreen),
+    ]
     private static let windowRoutedCommands: [ShortcutCommand] = [
         .navigateBack,
         .navigateForward,
@@ -26,16 +31,19 @@ final class ReaderShortcutsController {
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]
     private let handlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
     private let supplementalHandlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
+    private let isHighlightModeEnabledProvider: @MainActor (NSWindow) -> Bool
     private var isWaitingForChordKey = false
 
     init(
         shortcutsProvider: @escaping @MainActor () -> [ShortcutCommand: KeyboardShortcut],
         handlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler],
-        supplementalHandlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler] = { [:] }
+        supplementalHandlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler] = { [:] },
+        isHighlightModeEnabledProvider: @escaping @MainActor (NSWindow) -> Bool = { _ in false }
     ) {
         self.shortcutsProvider = shortcutsProvider
         self.handlerProvider = handlerProvider
         self.supplementalHandlerProvider = supplementalHandlerProvider
+        self.isHighlightModeEnabledProvider = isHighlightModeEnabledProvider
     }
 
     func handleShortcutEvent(for event: NSEvent, in window: NSWindow) -> Bool {
@@ -90,6 +98,10 @@ final class ReaderShortcutsController {
     func handlePlainShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
         guard Self.shouldHandlePlainShortcut(for: window.firstResponder) else { return false }
 
+        if handleHighlightModeColorShortcut(for: event, in: window) {
+            return true
+        }
+
         let shortcuts = shortcutsProvider()
         let handlers = handlerProvider()
         let supplementalHandlers = supplementalHandlerProvider()
@@ -108,6 +120,18 @@ final class ReaderShortcutsController {
             return true
         }
 
+        return false
+    }
+
+    private func handleHighlightModeColorShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
+        guard isHighlightModeEnabledProvider(window) else { return false }
+        let handlers = handlerProvider()
+        for (shortcut, command) in Self.highlightModeColorShortcuts {
+            guard shortcut.matches(event: event),
+                  let handler = handlers[command] else { continue }
+            handler()
+            return true
+        }
         return false
     }
 

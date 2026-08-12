@@ -32,6 +32,7 @@ let package = Package(
                 "Scripts",
                 "Website",
                 "build",
+                "docs",
             ],
             sources: [
                 "App",

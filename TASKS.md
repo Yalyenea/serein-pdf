@@ -22,7 +22,7 @@
 | M13.1 网站后续完善 | 待办 |
 | 多主题预设 | 规划中 · [docs/theme-presets-plan.md](docs/theme-presets-plan.md) |
 | REVIEW 5.1 近期债 | ✅ |
-| REVIEW 5.2 中期重构 | 未开始 |
+| REVIEW 5.2 中期重构 | 进行中（S2 / S3 已部分拆分） |
 | 阅读跳转 / CI 侧栏 layout | ✅（已合 main） |
 
 ## 3. 下一步勾选
@@ -32,21 +32,15 @@
 ### 3.1 中期重构（REVIEW 5.2）
 
 - [ ] S1 拆 `AppDelegate`
-- [ ] S3 拆 `ReaderViewController`
-- [ ] S2 拆 `DocumentStore`（兼 P4 search 副作用）
+- [ ] S3 继续拆 `ReaderViewController` 的 scale / viewport / overview（annotation interaction 已提取）
+- [ ] S2 继续拆 `DocumentStore` 的 tab / annotation / persistence（search snapshot 与 P4 已收口）
 - [ ] C1 根治：config schema 表驱动
 - [ ] S4 palette 共享基类
-- [ ] P3 OCR 异步化 + 持久缓存
-- [ ] C4/S5 主题状态并发收口
 - [ ] H1 本地化决策
 
 ### 3.2 产品候选（REVIEW 5.3）
 
 - [ ] 下划线 / 删除线批注
-- [ ] find 大小写 / 全词选项
-- [ ] outline 过滤框
-- [ ] 高亮色数字键 1/2/3
-- [ ] 跨文档批注汇总导出
 - [ ] URL scheme PoC（对齐 M11）
 
 ### 3.3 里程碑待办
@@ -72,7 +66,6 @@
 - [ ] `M12-D003` Zed / VS Code / LaTeX / Typst SyncTeX：先 RFC
 - [ ] `M12-D004` 双屏同步滚动：分屏 / comparison 手测稳定后再做
 - [ ] `M12-D005` Finder 外部 rename 自动跟路径
-- [ ] `M12-D006` PDF 高亮 → 右栏评论双向定位
 
 #### M13.1 网站后续
 

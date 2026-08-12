@@ -5,93 +5,301 @@ import XCTest
 
 @MainActor
 final class AnnotationsViewControllerTests: XCTestCase {
-    func testApplyCommentPersistsFromSidebarEditor() throws {
+    func testReaderContextMenuKeepsNativePDFKitItems() throws {
+        let custom = NSMenu(title: "Serein")
+        custom.addItem(NSMenuItem(title: "Highlight Selection", action: nil, keyEquivalent: ""))
+        let native = NSMenu(title: "PDFKit")
+        native.addItem(NSMenuItem(title: "Translate", action: nil, keyEquivalent: ""))
+        native.addItem(NSMenuItem(title: "Look Up", action: nil, keyEquivalent: ""))
+
+        let menu = try XCTUnwrap(ReaderPDFView.mergeContextMenus(custom: custom, native: native))
+
+        XCTAssertEqual(menu.items.map(\.title), ["Highlight Selection", "", "Translate", "Look Up"])
+        XCTAssertTrue(menu.items[1].isSeparatorItem)
+    }
+
+    func testMultipleCommentsShareOneFullHeightScrollableFeed() throws {
         let store = makeStore()
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-comment"))
-        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
-        store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-comment-feed"))
+        let document = try store.pdfDocument(for: session.id)
+        let records = try (0..<3).map { index in
+            try makeHighlightRecord(
+                in: document,
+                bounds: NSRect(x: 24, y: 110 + CGFloat(index * 30), width: 120, height: 18)
+            )
+        }
+        store.noteHighlightsAdded(records, for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        let groups = store.annotationGroups(for: session.id)
+        XCTAssertEqual(groups.count, 3)
+        for (index, group) in groups.enumerated() {
+            XCTAssertTrue(
+                store.updateComment(
+                    "Comment \(index + 1)",
+                    forHighlightGroup: group.groupID,
+                    in: session.id
+                )
+            )
+        }
 
         let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
         controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 280, height: 520)
         controller.view.layoutSubtreeIfNeeded()
 
-        let textView = try XCTUnwrap(findDescendant(of: NSTextView.self, in: controller.view))
-        let applyButton = try XCTUnwrap(findButton(titled: "Apply", in: controller.view))
+        let scrollView = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? NSScrollView }.first)
+        let tableView = try XCTUnwrap(scrollView.documentView as? NSTableView)
+        let highlightRows = (0..<tableView.numberOfRows).filter {
+            controller.tableView(tableView, shouldSelectRow: $0)
+        }
+        XCTAssertEqual(highlightRows.count, 3)
+        XCTAssertEqual(scrollView.frame.minY, controller.view.bounds.minY, accuracy: 0.5)
+        XCTAssertEqual(scrollView.frame.maxY, controller.view.bounds.maxY, accuracy: 0.5)
+        XCTAssertEqual(controller.view.subviews.compactMap { $0 as? NSScrollView }.count, 1)
 
-        XCTAssertTrue(textView.isEditable)
-        XCTAssertTrue(textView.isSelectable)
-        XCTAssertTrue(textView.allowsUndo)
-        XCTAssertFalse(textView.isRichText)
-        XCTAssertEqual(textView.textContainer?.widthTracksTextView, true)
-
-        textView.string = "Sidebar comment"
-        controller.textDidChange(Notification(name: NSText.didChangeNotification, object: textView))
-
-        XCTAssertTrue(applyButton.isEnabled)
-
-        applyButton.performClick(nil)
-
-        XCTAssertEqual(store.annotationGroups(for: session.id).first?.comment, "Sidebar comment")
+        let visibleComments = highlightRows.compactMap { row -> String? in
+            guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) else { return nil }
+            return findAllDescendants(of: NSTextField.self, in: cell)
+                .map(\.stringValue)
+                .first { $0.hasPrefix("Comment ") }
+        }
+        XCTAssertEqual(Set(visibleComments), Set(["Comment 1", "Comment 2", "Comment 3"]))
     }
 
-    func testApplyCommentSurvivesMomentarySelectionLoss() throws {
-        let store = makeStore()
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-selection"))
-        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
-        store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
-
-        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
-        controller.loadViewIfNeeded()
-        controller.view.layoutSubtreeIfNeeded()
-
-        let textView = try XCTUnwrap(findDescendant(of: NSTextView.self, in: controller.view))
-        let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
-        let applyButton = try XCTUnwrap(findButton(titled: "Apply", in: controller.view))
-
-        textView.string = "Selection-safe comment"
-        controller.textDidChange(Notification(name: NSText.didChangeNotification, object: textView))
-        XCTAssertTrue(applyButton.isEnabled)
-
-        tableView.allowsEmptySelection = true
-        tableView.deselectAll(nil)
-        controller.tableViewSelectionDidChange(
-            Notification(name: NSTableView.selectionDidChangeNotification, object: tableView)
-        )
-
-        XCTAssertTrue(applyButton.isEnabled)
-
-        applyButton.performClick(nil)
-
-        XCTAssertEqual(store.annotationGroups(for: session.id).first?.comment, "Selection-safe comment")
-    }
-
-    func testLongSnippetRowsExpandAndDoNotStaySingleLine() throws {
+    func testRowPreviewsShowFullSnippetAndTrackWidthConsistently() throws {
+        let snippet = "special tokens define hard segmentation boundaries"
         let group = DocumentHighlightGroup(
             groupID: "long-snippet",
             pageIndex: 0,
-            snippet: "Compressed Sparse Attention keeps long highlight snippets readable in the sidebar list.",
+            snippet: snippet,
             color: .pink,
             createdAt: nil,
             comment: "",
             primarySelection: nil,
             records: []
         )
-        let rowHeight = AnnotationHighlightCellView.preferredHeight(for: group, width: 240)
-        XCTAssertGreaterThan(rowHeight, 46)
 
-        let cell = AnnotationHighlightCellView(frame: NSRect(x: 0, y: 0, width: 240, height: rowHeight))
-        cell.configure(with: group)
-        let snippetLabel = try XCTUnwrap(
-            findTextField(
-                matching: "Compressed Sparse Attention keeps long highlight snippets readable in the sidebar list.",
-                in: cell
-            )
+        let narrowWidth: CGFloat = 140
+        let wideWidth: CGFloat = 420
+        let narrowHeight = AnnotationHighlightCellView.preferredHeight(for: group, width: narrowWidth)
+        let wideHeight = AnnotationHighlightCellView.preferredHeight(for: group, width: wideWidth)
+
+        // Narrow wrap needs more vertical space than a single wide line.
+        XCTAssertGreaterThan(narrowHeight, wideHeight)
+
+        let narrowTextW = narrowWidth - 12 - 6
+        let wideTextW = wideWidth - 12 - 6
+        let narrowSnippetH = AnnotationHighlightCellView.measuredHeight(
+            for: snippet,
+            font: .systemFont(ofSize: 11.5, weight: .medium),
+            width: narrowTextW,
+            maximumLines: 0
         )
-        XCTAssertEqual(snippetLabel.maximumNumberOfLines, 0)
-        XCTAssertEqual(snippetLabel.lineBreakMode, .byWordWrapping)
-        XCTAssertEqual(snippetLabel.cell?.wraps, true)
-        XCTAssertEqual(snippetLabel.cell?.usesSingleLineMode, false)
-        XCTAssertNil(findTextField(matching: "No comment", in: cell))
+        let wideSnippetH = AnnotationHighlightCellView.measuredHeight(
+            for: snippet,
+            font: .systemFont(ofSize: 11.5, weight: .medium),
+            width: wideTextW,
+            maximumLines: 0
+        )
+        XCTAssertEqual(narrowHeight, ceil(12 + narrowSnippetH), accuracy: 0.5)
+        XCTAssertEqual(wideHeight, ceil(12 + wideSnippetH), accuracy: 0.5)
+        // Wide enough that the whole phrase is one line.
+        XCTAssertEqual(
+            wideSnippetH,
+            ceil(
+                NSFont.systemFont(ofSize: 11.5, weight: .medium).ascender
+                    - NSFont.systemFont(ofSize: 11.5, weight: .medium).descender
+                    + NSFont.systemFont(ofSize: 11.5, weight: .medium).leading
+            ),
+            accuracy: 1.5
+        )
+
+        let cell = AnnotationHighlightCellView(
+            frame: NSRect(x: 0, y: 0, width: narrowWidth, height: narrowHeight)
+        )
+        cell.configure(with: group)
+        cell.layoutSubtreeIfNeeded()
+        let snippetLabel = try XCTUnwrap(findTextField(matching: snippet, in: cell))
+        XCTAssertEqual(snippetLabel.stringValue, snippet)
+        XCTAssertEqual(snippetLabel.frame.width, narrowTextW, accuracy: 0.5)
+        XCTAssertEqual(snippetLabel.frame.height, narrowSnippetH, accuracy: 0.5)
+        XCTAssertEqual(snippetLabel.preferredMaxLayoutWidth, narrowTextW, accuracy: 0.5)
+        XCTAssertEqual(cell.toolTip?.contains("segmentation boundaries"), true)
+
+        // Grow the cell: full text must remain, height shrinks to one line, width tracks.
+        cell.frame = NSRect(x: 0, y: 0, width: wideWidth, height: wideHeight)
+        cell.layoutSubtreeIfNeeded()
+        XCTAssertEqual(snippetLabel.stringValue, snippet)
+        XCTAssertEqual(snippetLabel.frame.width, wideTextW, accuracy: 0.5)
+        XCTAssertEqual(snippetLabel.frame.height, wideSnippetH, accuracy: 0.5)
+        XCTAssertEqual(snippetLabel.preferredMaxLayoutWidth, wideTextW, accuracy: 0.5)
+    }
+
+    func testRevealSelectsScrollsAndFocusesInlineEditor() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-reveal"))
+        let document = try store.pdfDocument(for: session.id)
+        let records = try (0..<4).map { index in
+            try makeHighlightRecord(
+                in: document,
+                bounds: NSRect(x: 24, y: 80 + CGFloat(index * 30), width: 120, height: 18)
+            )
+        }
+        store.noteHighlightsAdded(records, for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        let targetGroup = try XCTUnwrap(store.annotationGroups(for: session.id).last)
+        XCTAssertTrue(
+            store.updateComment("Existing note", forHighlightGroup: targetGroup.groupID, in: session.id)
+        )
+
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 240),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 280, height: 240)
+        controller.view.layoutSubtreeIfNeeded()
+
+        controller.reveal(groupID: targetGroup.groupID, focusEditor: true)
+
+        let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
+        XCTAssertGreaterThanOrEqual(tableView.selectedRow, 0)
+        let cell = try XCTUnwrap(
+            tableView.view(atColumn: 0, row: tableView.selectedRow, makeIfNecessary: true)
+                as? AnnotationHighlightCellView
+        )
+        let editor = try XCTUnwrap(findDescendant(of: NSTextView.self, in: cell))
+        XCTAssertEqual(editor.string, "Existing note")
+        XCTAssertTrue(window.firstResponder === editor)
+        let clipBounds = try XCTUnwrap(tableView.enclosingScrollView?.contentView.bounds)
+        XCTAssertTrue(clipBounds.intersects(tableView.rect(ofRow: tableView.selectedRow)))
+    }
+
+    func testCommandReturnSavesInlineComment() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-inline-save"))
+        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
+        store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        let group = try XCTUnwrap(store.annotationGroups(for: session.id).first)
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+
+        controller.reveal(groupID: group.groupID, focusEditor: true)
+        let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
+        let cell = try XCTUnwrap(
+            tableView.view(atColumn: 0, row: tableView.selectedRow, makeIfNecessary: true)
+                as? AnnotationHighlightCellView
+        )
+        let editor = try XCTUnwrap(findDescendant(of: NSTextView.self, in: cell))
+        editor.string = "Saved inline"
+        editor.keyDown(with: makeReturnKeyEvent(in: window, modifiers: [.command]))
+
+        XCTAssertEqual(
+            store.annotationGroups(for: session.id).first(where: { $0.groupID == group.groupID })?.comment,
+            "Saved inline"
+        )
+    }
+
+    func testSwitchingRowsCommitsInlineComment() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-switch-save"))
+        let document = try store.pdfDocument(for: session.id)
+        let records = try [
+            makeHighlightRecord(in: document, bounds: NSRect(x: 24, y: 80, width: 120, height: 18)),
+            makeHighlightRecord(in: document, bounds: NSRect(x: 24, y: 120, width: 120, height: 18)),
+        ]
+        store.noteHighlightsAdded(records, for: session.id)
+        let groups = store.annotationSections(in: store.defaultWindowID).flatMap(\.highlights)
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+
+        controller.reveal(groupID: groups[0].groupID, focusEditor: true)
+        let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
+        let editor = try XCTUnwrap(findDescendant(of: NSTextView.self, in: controller.view))
+        editor.string = "Keep this draft"
+        controller.reveal(groupID: groups[1].groupID, focusEditor: false)
+        controller.tableViewSelectionDidChange(
+            Notification(name: NSTableView.selectionDidChangeNotification, object: tableView)
+        )
+
+        XCTAssertEqual(
+            store.annotationGroups(for: session.id).first(where: { $0.groupID == groups[0].groupID })?.comment,
+            "Keep this draft"
+        )
+    }
+
+    func testSwitchingSplitPaneCommitsCommentToEditingSession() throws {
+        let store = makeStore()
+        let primarySession = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-primary-draft"))
+        let secondarySession = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-secondary-draft"))
+        let primaryRecord = try makeHighlightRecord(in: store.pdfDocument(for: primarySession.id))
+        store.noteHighlightsAdded([primaryRecord], for: primarySession.id)
+        let primaryGroup = try XCTUnwrap(store.annotationGroups(for: primarySession.id).first)
+
+        store.activate(sessionID: primarySession.id, in: store.defaultWindowID, targetPane: .primary)
+        store.setSplitEnabled(true, in: store.defaultWindowID)
+        store.activate(sessionID: secondarySession.id, in: store.defaultWindowID, targetPane: .secondary)
+        store.setFocusedPane(.primary, in: store.defaultWindowID)
+
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        controller.reveal(groupID: primaryGroup.groupID, focusEditor: true)
+        let editor = try XCTUnwrap(findDescendant(of: NSTextView.self, in: controller.view))
+        editor.string = "Primary pane draft"
+
+        store.setFocusedPane(.secondary, in: store.defaultWindowID)
+
+        XCTAssertEqual(
+            store.annotationGroups(for: primarySession.id)
+                .first(where: { $0.groupID == primaryGroup.groupID })?.comment,
+            "Primary pane draft"
+        )
+    }
+
+    func testArrowKeysSelectHighlightsAndActivateExactlyOnce() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-keyboard"))
+        let document = try store.pdfDocument(for: session.id)
+        let records = try (0..<3).map { index in
+            try makeHighlightRecord(
+                in: document,
+                bounds: NSRect(x: 24, y: 80 + CGFloat(index * 30), width: 120, height: 18)
+            )
+        }
+        store.noteHighlightsAdded(records, for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        let groups = store.annotationSections(in: store.defaultWindowID).flatMap(\.highlights)
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.reveal(groupID: groups[0].groupID, focusEditor: false)
+        let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
+        var activatedGroupIDs: [String] = []
+        controller.onActivateHighlight = { activatedGroupIDs.append($0.groupID) }
+
+        tableView.keyDown(with: makeKeyEvent(characters: "\u{F701}", keyCode: 125))
+        XCTAssertEqual(activatedGroupIDs, [groups[1].groupID])
+
+        tableView.keyDown(with: makeKeyEvent(characters: "\u{F700}", keyCode: 126))
+        XCTAssertEqual(activatedGroupIDs, [groups[1].groupID, groups[0].groupID])
     }
 
     func testAnnotationsColumnTracksSidebarWidthAndCellsStayVisible() throws {
@@ -109,7 +317,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
         let tableView = try XCTUnwrap(scrollView.documentView as? NSTableView)
         let column = try XCTUnwrap(tableView.tableColumns.first)
         XCTAssertGreaterThan(column.width, 200)
-        XCTAssertEqual(column.width, scrollView.contentSize.width, accuracy: 0.5)
+        XCTAssertEqual(column.width, scrollView.bounds.width, accuracy: 1.5)
 
         let highlightRow = try XCTUnwrap((0..<tableView.numberOfRows).first { row in
             controller.tableView(tableView, shouldSelectRow: row)
@@ -123,13 +331,20 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertGreaterThan(textField.frame.width, 100)
     }
 
-    func testSingleClickActivatesHighlightOnceAndHasNoDoubleAction() throws {
+    func testSingleClickActivatesHighlightAndDoubleClickOpensEditor() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "single-click-highlight"))
         let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
         store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
 
         let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
         controller.loadViewIfNeeded()
         let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
         let highlightRow = try XCTUnwrap((0..<tableView.numberOfRows).first {
@@ -148,9 +363,12 @@ final class AnnotationsViewControllerTests: XCTestCase {
 
         XCTAssertEqual(activatedGroupIDs.count, 1)
         XCTAssertNotEqual(doubleAction, action)
+        let editor = findDescendant(of: NSTextView.self, in: controller.view)
+        XCTAssertNotNil(editor)
+        XCTAssertTrue(window.firstResponder === editor)
     }
 
-    func testAnnotationActivationThroughMainWindowFocusesExactSelection() throws {
+    func testAnnotationActivationThroughMainWindowJumpsWithoutLeavingSelection() throws {
         _ = NSApplication.shared
         let store = makeStore()
         let url = try TestPDFFixtures.makeSearchablePDF(
@@ -201,15 +419,8 @@ final class AnnotationsViewControllerTests: XCTestCase {
         let reader = split.readerViewController
         XCTAssertEqual(reader.displayedSessionID, session.id)
         XCTAssertTrue(reader.pdfView.document === document)
-        let actualSelection = try XCTUnwrap(reader.pdfView.currentSelection)
-        let actualPage = try XCTUnwrap(actualSelection.pages.first)
-        let actualBounds = actualSelection.bounds(for: actualPage)
-        XCTAssertEqual(reader.pdfView.document?.index(for: actualPage), sourcePageIndex)
-        XCTAssertEqual(actualSelection.string, expectedSelection.string)
-        XCTAssertEqual(actualBounds.minX, expectedBounds.minX, accuracy: 0.5)
-        XCTAssertEqual(actualBounds.minY, expectedBounds.minY, accuracy: 0.5)
-        XCTAssertEqual(actualBounds.width, expectedBounds.width, accuracy: 0.5)
-        XCTAssertEqual(actualBounds.height, expectedBounds.height, accuracy: 0.5)
+        // Focus uses a pulse overlay instead of leaving a dashed PDFSelection.
+        XCTAssertNil(reader.pdfView.currentSelection)
         let currentPage = try XCTUnwrap(reader.pdfView.currentPage)
         XCTAssertEqual(reader.pdfView.document?.index(for: currentPage), sourcePageIndex)
         XCTAssertEqual(
@@ -219,12 +430,297 @@ final class AnnotationsViewControllerTests: XCTestCase {
                 point: NSPoint(x: expectedBounds.minX, y: expectedBounds.maxY)
             )
         )
-        XCTAssertTrue(reader.pdfView.bounds.intersects(reader.pdfView.convert(actualBounds, from: actualPage)))
+        XCTAssertTrue(reader.pdfView.bounds.intersects(reader.pdfView.convert(expectedBounds, from: expectedPage)))
+    }
+
+    func testReaderContextMenuPrefersClickedHighlightOverStaleSelection() throws {
+        let store = makeStore()
+        let url = try TestPDFFixtures.makeSearchablePDF(
+            named: "reader-comment-context",
+            pages: ["stale selection and comment target"]
+        )
+        let session = try store.open(documentAt: url)
+        let document = try store.pdfDocument(for: session.id)
+        let targetSelection = try XCTUnwrap(document.findString("comment target", withOptions: []).first)
+        let records = HighlightService.applyHighlight(to: targetSelection)
+        store.noteHighlightsAdded(records, for: session.id)
+
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushAnnotationNavigationLayout(windowController.window)
+        let split = try XCTUnwrap(
+            windowController.window?.contentViewController as? SplitViewController
+        )
+        let reader = split.readerViewController
+        reader.pdfView.currentSelection = try XCTUnwrap(
+            document.findString("stale selection", withOptions: []).first
+        )
+
+        let annotation = records[0].annotation
+        let page = try XCTUnwrap(annotation.page)
+        let annotationBounds = reader.pdfView.convert(annotation.bounds, from: page)
+        let pointInWindow = reader.pdfView.convert(
+            NSPoint(x: annotationBounds.midX, y: annotationBounds.midY),
+            to: nil
+        )
+        let event = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .rightMouseDown,
+                location: pointInWindow,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: try XCTUnwrap(windowController.window).windowNumber,
+                context: nil,
+                eventNumber: 1,
+                clickCount: 1,
+                pressure: 1
+            )
+        )
+
+        let menu = try XCTUnwrap(reader.pdfView.menu(for: event))
+        let editItem = try XCTUnwrap(menu.item(withTitle: "Edit Comment"))
+        XCTAssertEqual(editItem.keyEquivalent, "m")
+        XCTAssertEqual(editItem.keyEquivalentModifierMask, [.command, .option])
+        XCTAssertTrue(menu.item(withTitle: "Remove Highlight")?.isEnabled == true)
+
+        let previousMode = store.rightSidebarMode(in: store.defaultWindowID)
+        let target = try XCTUnwrap(editItem.target as? NSObject)
+        let action = try XCTUnwrap(editItem.action)
+        _ = target.perform(action, with: editItem)
+
+        XCTAssertEqual(store.annotationGroups(for: session.id).count, 1)
+        // Reader comment edit uses a local popover; it must not force the Annotations pane.
+        XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), previousMode)
+        XCTAssertNotEqual(previousMode, .annotations)
+    }
+
+    func testDoubleClickHighlightRevealsAnnotationsSidebar() throws {
+        let store = makeStore()
+        let url = try TestPDFFixtures.makeSearchablePDF(
+            named: "reader-reveal-annotation",
+            pages: ["double click annotation target"]
+        )
+        let session = try store.open(documentAt: url)
+        let document = try store.pdfDocument(for: session.id)
+        let selection = try XCTUnwrap(document.findString("annotation target", withOptions: []).first)
+        let records = HighlightService.applyHighlight(to: selection)
+        store.noteHighlightsAdded(records, for: session.id)
+        let group = try XCTUnwrap(store.annotationGroups(for: session.id).first)
+        store.setRightSidebarVisible(false, in: store.defaultWindowID)
+
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushAnnotationNavigationLayout(windowController.window)
+        let split = try XCTUnwrap(
+            windowController.window?.contentViewController as? SplitViewController
+        )
+        let reader = split.readerViewController
+        let annotation = try XCTUnwrap(records.first?.annotation)
+        let page = try XCTUnwrap(annotation.page)
+        let annotationBounds = reader.pdfView.convert(annotation.bounds, from: page)
+        let pointInWindow = reader.pdfView.convert(
+            NSPoint(x: annotationBounds.midX, y: annotationBounds.midY),
+            to: nil
+        )
+        let event = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown,
+                location: pointInWindow,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: try XCTUnwrap(windowController.window).windowNumber,
+                context: nil,
+                eventNumber: 1,
+                clickCount: 2,
+                pressure: 1
+            )
+        )
+
+        reader.pdfView.mouseDown(with: event)
+
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+        XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), .annotations)
+        XCTAssertEqual(split.rightSidebarViewController.selectedAnnotationGroupID, group.groupID)
+    }
+
+    func testSidebarContextMenuCanRecolorAndDelete() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-context-actions"))
+        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
+        store.noteHighlightsAdded([record], for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        let group = try XCTUnwrap(store.annotationGroups(for: session.id).first)
+
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.reveal(groupID: group.groupID, focusEditor: false)
+
+        var deleted: DocumentHighlightGroup?
+        var recolored: (DocumentHighlightGroup, HighlightColor)?
+        controller.onDeleteHighlight = { deleted = $0 }
+        controller.onChangeHighlightColor = { recolored = ($0, $1) }
+
+        let tableView = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
+        let menu = try XCTUnwrap(tableView.menu(for: makeRightClickEvent(in: tableView)))
+        XCTAssertNotNil(menu.item(withTitle: "Edit Comment"))
+        XCTAssertNotNil(menu.item(withTitle: "Copy Snippet"))
+        XCTAssertNotNil(menu.item(withTitle: "Delete"))
+        let colorItem = try XCTUnwrap(menu.item(withTitle: "Color"))
+        let yellow = try XCTUnwrap(colorItem.submenu?.item(withTitle: "Yellow"))
+        let yellowTarget = try XCTUnwrap(yellow.target as? NSObject)
+        let yellowAction = try XCTUnwrap(yellow.action)
+        _ = yellowTarget.perform(yellowAction, with: yellow)
+        XCTAssertEqual(recolored?.0.groupID, group.groupID)
+        XCTAssertEqual(recolored?.1, .yellow)
+
+        let delete = try XCTUnwrap(menu.item(withTitle: "Delete"))
+        let deleteTarget = try XCTUnwrap(delete.target as? NSObject)
+        let deleteAction = try XCTUnwrap(delete.action)
+        _ = deleteTarget.perform(deleteAction, with: delete)
+        XCTAssertEqual(deleted?.groupID, group.groupID)
+    }
+
+    func testEmptyStateShowsShortcutHint() throws {
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-annotations-hint"))
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let emptyLabel = try XCTUnwrap(
+            findAllDescendants(of: NSTextField.self, in: controller.view)
+                .first { $0.stringValue.contains("⌘⌥M") }
+        )
+        XCTAssertTrue(emptyLabel.stringValue.contains("No annotations"))
+        XCTAssertFalse(emptyLabel.isHidden)
+    }
+
+    func testRowShowsSnippetAndCommentWithoutTimestamp() {
+        let group = DocumentHighlightGroup(
+            groupID: "no-time",
+            pageIndex: 2,
+            snippet: "snippet text",
+            color: .pink,
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
+            comment: "note",
+            primarySelection: nil,
+            records: []
+        )
+        let cell = AnnotationHighlightCellView(frame: NSRect(x: 0, y: 0, width: 240, height: 80))
+        cell.configure(with: group)
+        let labels = findAllDescendants(of: NSTextField.self, in: cell).map(\.stringValue)
+        XCTAssertTrue(labels.contains("snippet text"))
+        XCTAssertTrue(labels.contains("note"))
+        XCTAssertFalse(labels.contains { $0.contains("Page") })
+        XCTAssertFalse(labels.contains { $0.contains("202") || $0.contains(":") })
+    }
+
+    func testAnnotationsListDisablesHorizontalScrolling() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "annotations-no-hscroll"))
+        let record = try makeHighlightRecord(in: store.pdfDocument(for: session.id))
+        store.noteHighlightsAdded([record], for: session.id)
+
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 220, height: 400)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let scrollView = try XCTUnwrap(findDescendant(of: NSScrollView.self, in: controller.view))
+        XCTAssertFalse(scrollView.hasHorizontalScroller)
+        XCTAssertEqual(scrollView.horizontalScrollElasticity, .none)
+        let tableView = try XCTUnwrap(scrollView.documentView as? NSTableView)
+        let column = try XCTUnwrap(tableView.tableColumns.first)
+        XCTAssertEqual(column.width, scrollView.bounds.width, accuracy: 1.5)
+        XCTAssertEqual(column.minWidth, column.width, accuracy: 0.5)
+        XCTAssertEqual(column.maxWidth, column.width, accuracy: 0.5)
+        XCTAssertEqual(tableView.frame.width, column.width, accuracy: 1.5)
+    }
+
+    func testPreviewConfigureRejectsCommentlessHighlights() {
+        let preview = AnnotationPreviewView(frame: .zero)
+        let withoutComment = DocumentHighlightGroup(
+            groupID: "bare",
+            pageIndex: 0,
+            snippet: "only highlight",
+            color: .yellow,
+            createdAt: nil,
+            comment: "  ",
+            primarySelection: nil,
+            records: []
+        )
+        XCTAssertFalse(preview.configure(with: withoutComment))
+
+        let withComment = DocumentHighlightGroup(
+            groupID: "noted",
+            pageIndex: 0,
+            snippet: "snippet",
+            color: .pink,
+            createdAt: nil,
+            comment: "memo",
+            primarySelection: nil,
+            records: []
+        )
+        XCTAssertTrue(preview.configure(with: withComment))
+        let size = preview.preferredSize(maxWidth: 400)
+        XCTAssertGreaterThanOrEqual(size.width, 220)
+        XCTAssertLessThanOrEqual(size.width, 360)
+        XCTAssertEqual(preview.preferredSize(maxWidth: 120).width, 120)
+    }
+
+    func testReaderContextMenuFocusesItsSourceSplitPane() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "reader-context-pane"))
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        let split = try XCTUnwrap(
+            windowController.window?.contentViewController as? SplitViewController
+        )
+
+        store.setSplitEnabled(true, in: store.defaultWindowID)
+        store.activate(sessionID: session.id, in: store.defaultWindowID, targetPane: .secondary)
+        store.setFocusedPane(.primary, in: store.defaultWindowID)
+        flushAnnotationNavigationLayout(windowController.window)
+        let secondaryReader = split.readerWorkspaceViewController.secondaryReaderViewController
+        let event = try XCTUnwrap(
+            NSEvent.mouseEvent(
+                with: .rightMouseDown,
+                location: .zero,
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: try XCTUnwrap(windowController.window).windowNumber,
+                context: nil,
+                eventNumber: 1,
+                clickCount: 1,
+                pressure: 1
+            )
+        )
+
+        _ = secondaryReader.pdfView.menu(for: event)
+
+        XCTAssertEqual(store.focusedPane(in: store.defaultWindowID), .secondary)
     }
 
     private func makeStore() -> DocumentStore {
         makeIsolatedDocumentStore()
     }
+}
+
+@MainActor
+private func makeRightClickEvent(in view: NSView) -> NSEvent {
+    let location = NSPoint(x: view.bounds.midX, y: view.bounds.midY)
+    let pointInWindow = view.convert(location, to: nil)
+    return NSEvent.mouseEvent(
+        with: .rightMouseDown,
+        location: pointInWindow,
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: view.window?.windowNumber ?? 0,
+        context: nil,
+        eventNumber: 1,
+        clickCount: 1,
+        pressure: 1
+    )!
 }
 
 @MainActor
@@ -261,4 +757,16 @@ private func flushAnnotationNavigationLayout(_ window: NSWindow?) {
     window?.layoutIfNeeded()
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
     window?.layoutIfNeeded()
+}
+
+@MainActor
+private func findAllDescendants<T: NSView>(of type: T.Type, in root: NSView) -> [T] {
+    var matches: [T] = []
+    if let root = root as? T {
+        matches.append(root)
+    }
+    for subview in root.subviews {
+        matches.append(contentsOf: findAllDescendants(of: type, in: subview))
+    }
+    return matches
 }

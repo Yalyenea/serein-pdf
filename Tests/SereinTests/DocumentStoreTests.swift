@@ -1201,6 +1201,29 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.session(for: session.id)?.isAnnotationCacheLoaded, false)
     }
 
+    func testAnnotationHitBuildsOnlyTargetGroupWithoutLoadingFullCache() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "annotation-hover-target",
+            pages: ["alpha beta gamma"]
+        )
+        let session = try store.open(documentAt: url)
+        let document = try store.pdfDocument(for: session.id)
+        let selection = try XCTUnwrap(document.findString("beta", withOptions: []).first)
+        let records = HighlightService.applyHighlight(to: selection)
+        store.noteHighlightsAdded(records, for: session.id)
+
+        let group = try XCTUnwrap(
+            store.annotationGroup(containing: records[0].annotation, for: session.id)
+        )
+
+        XCTAssertEqual(group.records.count, records.count)
+        XCTAssertFalse(store.session(for: session.id)?.isAnnotationCacheLoaded ?? true)
+        XCTAssertTrue(store.removeHighlightGroup(group, in: session.id))
+        XCTAssertFalse(store.session(for: session.id)?.isAnnotationCacheLoaded ?? true)
+        XCTAssertTrue(document.page(at: 0)?.annotations.filter { $0.type == "Highlight" }.isEmpty == true)
+    }
+
     func testLoadedAnnotationCacheUpdatesIncrementallyForAddedAndRemovedHighlights() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
@@ -1409,7 +1432,16 @@ final class DocumentStoreTests: XCTestCase {
         store.updateSidebarWidths(left: 40, right: 320, in: store.defaultWindowID)
         store.setLeftSidebarVisible(true)
         store.setRightSidebarVisible(false)
+        store.setRightSidebarMode(.outline, in: store.defaultWindowID)
         XCTAssertFalse(store.isOutlineSidebarVisible(in: store.defaultWindowID))
+
+        // Right pane open but not Outline → outline content is not visible.
+        store.setRightSidebarVisible(true)
+        store.setRightSidebarMode(.annotations, in: store.defaultWindowID)
+        XCTAssertFalse(store.isOutlineSidebarVisible(in: store.defaultWindowID))
+        store.setRightSidebarMode(.outline, in: store.defaultWindowID)
+        XCTAssertTrue(store.isOutlineSidebarVisible(in: store.defaultWindowID))
+        store.setRightSidebarVisible(false)
 
         var swappedConfig = store.appConfiguration
         swappedConfig.layout.sidebarsSwapped = true
@@ -1422,6 +1454,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertFalse(store.isOutlineSidebarVisible(in: store.defaultWindowID))
 
         store.setLeftSidebarVisible(true)
+        store.setRightSidebarMode(.outline, in: store.defaultWindowID)
         XCTAssertTrue(store.isOutlineSidebarVisible(in: store.defaultWindowID))
         store.setLeftSidebarVisible(false)
 
@@ -1510,6 +1543,9 @@ final class DocumentStoreTests: XCTestCase {
         let session = try store.open(documentAt: makeTemporaryPDF(named: "split-single-duplicate"))
         let windowID = store.defaultWindowID
 
+        _ = store.annotationGroups(for: session.id)
+        XCTAssertTrue(store.session(for: session.id)?.isAnnotationCacheLoaded == true)
+
         store.setSplitEnabled(true, in: windowID)
         XCTAssertEqual(store.splitCandidateSessions(in: windowID).map(\.id), [session.id])
         store.activate(sessionID: session.id, in: windowID, targetPane: .secondary)
@@ -1521,6 +1557,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions(in: windowID).map(\.id), [session.id])
         XCTAssertEqual(store.session(for: primaryID)?.url, session.url)
         XCTAssertEqual(store.session(for: secondaryID)?.url, session.url)
+        XCTAssertFalse(store.session(for: secondaryID)?.isAnnotationCacheLoaded == true)
 
         store.setScaleMode(.manual, scaleFactor: 2.0, for: primaryID)
         XCTAssertEqual(store.session(for: primaryID)?.zoomScale, 2.0)
@@ -1865,9 +1902,10 @@ final class DocumentStoreTests: XCTestCase {
 
         store.updateSearch(query: "needle", scope: .allOpen, in: store.defaultWindowID)
 
-        let sections = store.searchSections(in: store.defaultWindowID)
+        let snapshot = store.searchSnapshot(in: store.defaultWindowID)
+        let sections = snapshot.sections
         XCTAssertEqual(sections.count, 2)
-        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 3)
+        XCTAssertEqual(snapshot.totalMatches, 3)
         XCTAssertEqual(Set(sections.map(\.title)), ["alpha-search", "beta-search"])
         XCTAssertTrue(sections.allSatisfy { $0.matches.isEmpty == false })
     }
@@ -1887,13 +1925,45 @@ final class DocumentStoreTests: XCTestCase {
 
         store.updateSearch(query: "token", scope: .allOpen, in: store.defaultWindowID)
         XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), .search)
-        XCTAssertTrue(store.sessions.contains { $0.searchCache.matches.isEmpty == false })
+        XCTAssertGreaterThan(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 0)
 
         store.clearSearch(in: store.defaultWindowID)
 
         XCTAssertEqual(store.searchQuery(in: store.defaultWindowID), "")
         XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), .outline)
-        XCTAssertTrue(store.sessions.allSatisfy { $0.searchCache.query.isEmpty && $0.searchCache.matches.isEmpty })
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 0)
+        XCTAssertTrue(store.searchSnapshot(in: store.defaultWindowID).sections.isEmpty)
+    }
+
+    func testWindowSearchSnapshotsKeepQueriesAndClearStateIsolated() throws {
+        let store = makeStore()
+        let firstWindowID = store.defaultWindowID
+        let secondWindowID = store.createWindow(copyingFrom: firstWindowID)
+        let firstURL = try makeSearchableTemporaryPDF(
+            named: "window-search-first",
+            pages: ["alpha token"]
+        )
+        let secondURL = try makeSearchableTemporaryPDF(
+            named: "window-search-second",
+            pages: ["beta token"]
+        )
+        _ = try store.open(documentAt: firstURL, in: firstWindowID)
+        _ = try store.open(documentAt: secondURL, in: secondWindowID)
+
+        store.updateSearch(query: "alpha", scope: .currentDocument, in: firstWindowID)
+        store.updateSearch(query: "beta", scope: .currentDocument, in: secondWindowID)
+
+        XCTAssertEqual(store.searchSnapshot(in: firstWindowID).query, "alpha")
+        XCTAssertEqual(store.searchSnapshot(in: firstWindowID).totalMatches, 1)
+        XCTAssertEqual(store.searchSnapshot(in: secondWindowID).query, "beta")
+        XCTAssertEqual(store.searchSnapshot(in: secondWindowID).totalMatches, 1)
+
+        store.clearSearch(in: firstWindowID)
+
+        XCTAssertEqual(store.searchSnapshot(in: firstWindowID).query, "")
+        XCTAssertEqual(store.searchSnapshot(in: firstWindowID).totalMatches, 0)
+        XCTAssertEqual(store.searchSnapshot(in: secondWindowID).query, "beta")
+        XCTAssertEqual(store.searchSnapshot(in: secondWindowID).totalMatches, 1)
     }
 
     func testCurrentDocumentSearchOnManyPagesFindsAllMatches() throws {
@@ -1907,7 +1977,7 @@ final class DocumentStoreTests: XCTestCase {
 
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
 
-        XCTAssertEqual(store.totalSearchMatches(in: store.defaultWindowID), 160)
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 160)
     }
 
     func testRestorePersistedStateDefaultsWindowsBackToSinglePane() throws {

@@ -2,21 +2,17 @@ import AppKit
 
 @MainActor
 final class ThemeManager {
-    private(set) var readerState = ReaderState()
+    static let shared = ThemeManager()
 
-    func toggleNightMode() {
-        readerState.isNightModeEnabled.toggle()
+    private(set) var selection = ThemeSelection.default
+
+    private init() {}
+
+    func apply(light: LightTheme, dark: DarkTheme) {
+        selection = ThemeSelection(light: light, dark: dark)
     }
 
-    func setNightModeEnabled(_ isEnabled: Bool) {
-        readerState.isNightModeEnabled = isEnabled
-    }
-
-    func setHighlightModeEnabled(_ isEnabled: Bool) {
-        readerState.isHighlightModeEnabled = isEnabled
-    }
-
-    func setHighlightColor(_ color: HighlightColor) {
-        readerState.highlightColor = color
+    var snapshot: ThemeSnapshot {
+        ThemeRegistry.snapshot(for: selection)
     }
 }

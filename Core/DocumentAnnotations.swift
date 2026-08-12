@@ -60,6 +60,15 @@ struct ExportedHighlight: Codable, Equatable {
     let createdAt: String?
 }
 
+struct AggregateExportedHighlight: Codable, Equatable {
+    let document: String
+    let page: Int
+    let snippet: String
+    let color: String
+    let comment: String?
+    let createdAt: String?
+}
+
 enum HighlightExportFormat: String, CaseIterable {
     case markdown
     case plainText = "plain_text"

@@ -35,6 +35,12 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
     private let queryField = FindQueryField()
     private let scopeControl = NSSegmentedControl(labels: ["This Document", "All Open"], trackingMode: .selectOne, target: nil, action: nil)
+    private let optionsControl = NSSegmentedControl(
+        labels: ["Aa", "Word"],
+        trackingMode: .selectAny,
+        target: nil,
+        action: nil
+    )
     private let statusLabel = NSTextField(labelWithString: "")
     private let previousButton = NSButton(title: "↑", target: nil, action: nil)
     private let nextButton = NSButton(title: "↓", target: nil, action: nil)
@@ -51,6 +57,13 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         scopeControl.selectedSegment == 1 ? .allOpen : .currentDocument
     }
 
+    var searchOptions: SearchOptions {
+        SearchOptions(
+            isCaseSensitive: optionsControl.isSelected(forSegment: 0),
+            matchesWholeWords: optionsControl.isSelected(forSegment: 1)
+        )
+    }
+
     init() {
         super.init(frame: .zero)
         wantsLayer = true
@@ -61,6 +74,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         queryField.bezelStyle = .roundedBezel
         queryField.delegate = self
         queryField.font = .systemFont(ofSize: 12, weight: .regular)
+        queryField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         queryField.translatesAutoresizingMaskIntoConstraints = false
         queryField.onCommandFindNext = { [weak self] in
             guard let self else { return }
@@ -77,6 +91,15 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         scopeControl.target = self
         scopeControl.action = #selector(handleScopeChanged)
         scopeControl.translatesAutoresizingMaskIntoConstraints = false
+
+        optionsControl.identifier = NSUserInterfaceItemIdentifier("findOptionsControl")
+        optionsControl.segmentStyle = .capsule
+        optionsControl.controlSize = .small
+        optionsControl.target = self
+        optionsControl.action = #selector(handleOptionsChanged)
+        optionsControl.setToolTip("Match Case", forSegment: 0)
+        optionsControl.setToolTip("Match Whole Word", forSegment: 1)
+        optionsControl.translatesAutoresizingMaskIntoConstraints = false
 
         statusLabel.font = .systemFont(ofSize: 11, weight: .regular)
         statusLabel.textColor = NightModeStyle.secondaryTextColor
@@ -106,6 +129,7 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
         addSubview(scopeControl)
         addSubview(queryField)
+        addSubview(optionsControl)
         addSubview(statusLabel)
         addSubview(previousButton)
         addSubview(nextButton)
@@ -119,9 +143,13 @@ final class FindBarView: NSView, NSTextFieldDelegate {
 
             queryField.leadingAnchor.constraint(equalTo: scopeControl.trailingAnchor, constant: 8),
             queryField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            queryField.widthAnchor.constraint(equalToConstant: 220),
+            queryField.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
 
-            statusLabel.leadingAnchor.constraint(equalTo: queryField.trailingAnchor, constant: 8),
+            optionsControl.leadingAnchor.constraint(equalTo: queryField.trailingAnchor, constant: 8),
+            optionsControl.centerYAnchor.constraint(equalTo: centerYAnchor),
+            optionsControl.widthAnchor.constraint(equalToConstant: 72),
+
+            statusLabel.leadingAnchor.constraint(equalTo: optionsControl.trailingAnchor, constant: 8),
             statusLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             statusLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 48),
 
@@ -182,6 +210,13 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     func setScope(_ scope: SearchScope) {
         scopeControl.selectedSegment = scope == .allOpen ? 1 : 0
         queryField.placeholderString = scope.placeholder
+        selectedMatchIndex = nil
+        keyboardSelectionRequested = false
+    }
+
+    func setSearchOptions(_ options: SearchOptions) {
+        optionsControl.setSelected(options.isCaseSensitive, forSegment: 0)
+        optionsControl.setSelected(options.matchesWholeWords, forSegment: 1)
         selectedMatchIndex = nil
         keyboardSelectionRequested = false
     }
@@ -266,6 +301,17 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         guard trimmed.isEmpty == false else {
             statusLabel.stringValue = ""
             return
+        }
+        delegate?.findBar(self, didSubmitQuery: queryField.stringValue, scope: scope)
+    }
+
+    @objc
+    private func handleOptionsChanged() {
+        selectedMatchIndex = nil
+        keyboardSelectionRequested = false
+        let trimmed = queryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            statusLabel.stringValue = ""
         }
         delegate?.findBar(self, didSubmitQuery: queryField.stringValue, scope: scope)
     }

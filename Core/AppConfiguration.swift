@@ -215,6 +215,7 @@ struct AppConfiguration: Equatable, Sendable {
 
         static let `default` = Shortcuts(bindings: [
             .highlightSelection: KeyboardShortcut(key: "a", modifiers: []),
+            .addComment: KeyboardShortcut(key: "m", modifiers: [.command, .option]),
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: []),
@@ -552,6 +553,7 @@ github_token = ""
 
 [shortcuts]
 highlight_selection = "a"
+add_comment = "command+option+m"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 toggle_reading_focus = "f"
@@ -671,6 +673,7 @@ github_token = "\(escapedTOMLString(configuration.updates.githubToken))"
 
 [shortcuts]
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
+add_comment = "\(serializedShortcut(.addComment, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
 toggle_reading_focus = "\(serializedShortcut(.toggleReadingFocus, configuration: configuration))"
@@ -780,6 +783,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "auto_check",
         "github_token",
         "highlight_selection",
+        "add_comment",
         "exit_highlight_mode",
         "toggle_night_mode",
         "toggle_reading_focus",
@@ -1036,6 +1040,8 @@ struct AppConfigurationParser {
             configuration.updates.githubToken = parseString(rawValue)
         case ("shortcuts", "remove_highlight"):
             try applyShortcut(rawValue, command: .removeHighlight, to: &configuration)
+        case ("shortcuts", "add_comment"):
+            try applyShortcut(rawValue, command: .addComment, to: &configuration)
         case ("shortcuts", "highlight_color_pink"):
             try applyShortcut(rawValue, command: .highlightColorPink, to: &configuration)
         case ("shortcuts", "highlight_color_yellow"):

@@ -81,12 +81,14 @@ flowchart LR
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
 | 目录来源 | 右栏或浮动目录需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
-| 搜索预览 | find bar 只负责输入 / scope / 导航,所有 preview 与命中列表都放右栏 |
-| 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转 |
+| 搜索预览 | find bar 只负责输入 / scope / 大小写 / 全词 / 导航,所有 preview 与命中列表都放右栏 |
+| 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转；结果以窗口级 `SearchSnapshot` 显式重建，读取不触发 PDF IO |
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
 | PDF 热重载 | `DocumentStore` 监听已打开 PDF 文件及其父目录;原地写入或原子替换后只重载 clean sessions,优先恢复 PDFView 实时页码;dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
-| 批注存储 | highlight group 共享 comment;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
+| 批注存储 | Serein 多行 highlight 仅以 UUID `userName` 组成 group 并共享 comment;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
+| 批注摘要 | 只使用 PDFKit 文本层生成 snippet；无文本层时显示 `Untitled Highlight`，不做 OCR / 页面栅格化 |
+| 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);正文 / `Cmd+Option+M` / 右键用阅读区旁 popover 编辑,不强制打开右栏;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
 | 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF |
 | 重复打开 | 外部 `open`、Open Recent、PDF Library 或 `Cmd+O` 选到已打开 PDF 时激活已有 window/session,不创建重复普通 tab |
@@ -95,7 +97,7 @@ flowchart LR
 | 分屏方向 | `ReaderSplitLayout` 为窗口运行期状态,支持左右 `sideBySide` / 上下 `stacked`;切换方向不改 pair、pane session 与焦点 |
 | 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
-| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack / searchCache 挂在 `DocumentSession`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
+| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
 | 侧栏外观 | 左右侧栏与中栏共用 `readerBackdrop` 实色平面(无 vibrancy 缝、无分割线);`layout.sidebarOpacity` 仅保留配置兼容,Settings 不再暴露无效控件;文档侧栏空白背景可拖窗,不抢 tab / close / scroll 事件 |
@@ -110,8 +112,8 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;Outline pane 隐藏且当前 PDF 有目录时,右缘显示标题短横线,hover 后覆盖展开完整目录;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
-| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | 连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持一键折叠 / 展开;所有预览类内容都在右栏,仅隐藏态浮动目录可覆盖中栏 |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
+| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | Annotations 为全高紧凑评论流(仅页 section + 原文 / 评论,无时间戳,无横向滑动);连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持筛选与一键折叠 / 展开;所有预览类内容都在右栏,仅正文 hover 评论卡与非 Outline 态浮动目录可覆盖中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
@@ -126,6 +128,7 @@ flowchart LR
 - `rose_pine_moon` 把 PDF 白底 / 黑字映射到 Moon 纸面 / 正文端点,保留暖冷强调色方向,并用更深的侧栏底色建立层级
 - `Settings` 的 General / Library / Shortcuts 固定为统一紧凑宽度,只允许高度按页适配;General 按 Appearance / Reading / Layout 分组,Shortcuts 使用双层信息紧凑行且禁止横向滚动
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
+- 评论预览卡与右栏评论行使用轻选中态、细色条和受限行数,避免永久详情编辑器挤占列表;预览卡按行 wrap(更宽上限),右栏行内不重复 section 的 Page 文案
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
 - 阅读聚焦使用单一圆角矩形镂空与统一外围压暗,禁止多方向渐变拼接;轻描边 / 阴影只强化焦点边界,不得污染框内文字
 - 空窗 / 空白 tab 时中栏保持纯空白(无 onboarding / 快捷键速览);加载错误仍单独显示
@@ -137,11 +140,14 @@ flowchart LR
 
 **批注**
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
+- `Cmd+Option+M`:有选区 → 创建高亮并进入评论编辑;无选区且命中高亮 → 编辑已有评论
+- 高亮模式内 `1` / `2` / `3`:切换粉 / 黄 / 绿;文本输入框优先接收数字
 - `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览 / 退出演示模式
 - `D`:删除鼠标所在高亮(多行整组删除)
 - `Cmd+S`:写回源 PDF
 - `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights
 - `File > Export Clean Copy…`:导出移除可见用户批注、保留链接与表单控件的 PDF 副本
+- `File > Export Highlights…` / `Export All Open Highlights…`:导出当前 PDF 或当前窗口全部已打开 PDF 的批注;汇总格式按 Document → Page 分组
 - `Cmd+Z`:撤销最近一次高亮新增或删除(上限 50,无 redo)
 
 **阅读**
@@ -156,7 +162,7 @@ flowchart LR
 - `Cmd+Option+G`:跳转到页 N(越界给轻量提示)
 - `Cmd+[` / `Cmd+]`:按 pane 保存 `sessionID + ReadingPosition` 的精确历史;支持同页不同坐标、跨 PDF Outline / Search 与反复后退 / 前进;PDF 内链从首次点击起走统一居中跳转,普通滚动和顺序翻页不入栈
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar(有 PDF 选中文本时立即带入搜索)/ 下一 / 上一 匹配
-- Find bar 内 `↑` / `↓` / `Enter`:选择上一 / 下一结果 / 首次提交搜索;同一 query 连续 `Enter` 继续跳转
+- Find bar 内 `Aa` / `Word`:切换区分大小写 / 全词匹配;`↑` / `↓` / `Enter` 选择上一 / 下一结果 / 首次提交搜索;同一 query + scope + options 连续 `Enter` 继续跳转
 - `F`:开启 / 关闭鼠标跟随阅读聚焦;遮罩按真实 PDF 页宽定位且不阻断选择、链接、拖拽与滚动
 - `Option+F`:调整当前窗口聚焦宽度(Page / Column / Custom)与高度;默认值在 Settings General 或 `[reader]` 配置
 - `I`:仅在本次运行中临时切换 light / dark mode,不改配置;再次按下或在 Settings 明确修改 Mode 后恢复持久化设置,并保留各自已选 theme
@@ -230,7 +236,7 @@ flowchart LR
 | `tabPresentationState` | 当前 tab 模式下的局部状态 |
 | `annotationSavePolicy` | `after10Minutes` / `never` |
 | `undoStack` | 高亮撤销栈,上限 50 |
-| `searchCache` | 当前 query 的匹配缓存(snippet + page + selection) |
+| `searchCache` | 内部搜索构建缓存(query + options + snippet + page + selection),不作为 UI 读取接口 |
 
 ### 5.2 `DocumentStore`
 
@@ -242,6 +248,7 @@ flowchart LR
 - 监听已打开 PDF 的外部改写;clean session 清理缓存并触发 UI 重读,Reader 在替换 document 前捕获实时阅读位并恢复;dirty session 不自动刷新
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - `DocumentStoreChange` 区分 chrome / content / `readingPosition`;翻页与缩放写回不触发 tab / search / annotations 列表全量重建,也不重写 workspace 快照
+- `searchSnapshot(in:)` 纯读；query / scope / options、pane 焦点、tab 与热重载边界显式调用 `rebuildSearchIfNeeded(in:)`
 - `ReadingStateStore` 每文档阅读位:上限 500(LRU)、磁盘写入 debounce、退出时 flush;失败走 `os.Logger`
 - 提供 tab 模式切换
 - 左右互换时对调 `WindowWorkspace` 的 window-level 宽度 / 可见状态
@@ -255,7 +262,7 @@ flowchart LR
 | `selectedSessionIDs` | 当前 tab 多选集合,用于连续阅读入口 |
 | `continuousReadingState` | 当前窗口的多 PDF 连续阅读组,按 session 顺序保存 |
 | `tabPresentationMode` | 当前窗口 tabs 形态 |
-| `rightSidebarMode` | `outline` / `pages` / `search` |
+| `rightSidebarMode` | `outline` / `pages` / `search` / `annotations` |
 | `searchQuery` / `searchScope` | 当前窗口搜索上下文 |
 | `isSplitEnabled` | 当前是否显示双 Reader |
 | `splitLayout` | 当前运行期左右 / 上下分屏方向,不跨启动恢复 |
@@ -276,6 +283,8 @@ flowchart LR
 | `AnnotationSavePolicy` | `after10Minutes` / `never` |
 | `HighlightPalette` | Normal / Rose Pine Dawn / Rose Pine Moon 的高亮色预设 |
 | `HighlightUndoOperation` | undo 栈元素 |
+| `SearchSnapshot` | 当前窗口不可变搜索结果与构建 source |
+| `ThemeRegistry` / `ThemeSnapshot` | curated 主题 descriptor 注册表与不可变颜色快照 |
 
 ## 6. 项目结构
 
@@ -328,15 +337,16 @@ UI/CenterReader/                          # 中栏阅读区
   ReaderWorkspaceViewController.swift     # 中栏 workspace:单 / 双 Reader 分屏 + 焦点 pane
   FloatingOutlineViewController.swift     # 右栏隐藏时的 Notion 式目录 rail + hover / 高度拖拽 overlay
   ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
+  ReaderAnnotationInteractionController.swift # 高亮 hit-test、hover 预览、菜单、评论 popover 与 pulse
   PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
   ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何
   ReadingFocusControlsViewController.swift # 当前窗口聚焦宽高紧凑调节面板
   ReaderShortcutsController.swift         # reader 快捷键(j/k/g/…)与 Cmd+K chord 分发
-  FindBarView.swift                       # find bar:查询框 + scope 切换 + 匹配导航按钮
+  FindBarView.swift                       # find bar:查询框 + scope / 大小写 / 全词切换 + 匹配导航按钮
 
 UI/RightOutline/                          # 右栏 outline / pages / search / annotations
   RightSidebarViewController.swift        # 右栏容器,segmented 切换四种子模式
-  OutlineViewController.swift             # 目录树 NSOutlineView
+  OutlineViewController.swift             # 可筛选目录树与折叠状态
   SearchResultsViewController.swift       # 搜索命中列表,支持跨 session 跳转
   AnnotationsViewController.swift         # 批注列表与 comment 编辑
 
@@ -346,13 +356,13 @@ UI/Shared/                                # 跨栏复用视图
 Features/Annotations/                     # 高亮批注功能域
   HighlightColor.swift                    # 高亮颜色枚举(pink / yellow / green)与相近色匹配
   HighlightService.swift                  # 应用 / 删除 / 重建 高亮的核心逻辑
-  HighlightExporter.swift                 # 高亮导出 Markdown / Plain / JSON
-  HighlightOCRService.swift               # 扫描件高亮走 Vision OCR 提取 snippet
+  HighlightExporter.swift                 # 单文档 / 当前窗口汇总导出 Markdown / Plain / JSON
   HighlightUndoOperation.swift            # 撤销栈元素:added / removed
 
 Features/Theme/                           # 主题与夜间模式
-  ThemeManager.swift                      # ReaderState 包装:夜间、高亮模式、高亮颜色
-  NightModeStyle.swift                    # 夜间反色与 Rose Pine Moon 色彩映射样式
+  ThemeRegistry.swift                     # Normal / Dawn / Moon 的不可变 descriptor 与 snapshot
+  ThemeManager.swift                      # @MainActor 全局主题选择唯一持有者
+  NightModeStyle.swift                    # 基于 immutable snapshot 的动态颜色与 PDF 映射 facade
 
 Resources/                                # 资源
   Info.plist                              # Bundle 信息与 PDF 文档类型声明
@@ -441,8 +451,8 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 
 ### 8.5 工程债(摘要)
 
-- 中期:拆 `AppDelegate` / `ReaderViewController` / `DocumentStore`;config 表驱动;OCR 异步缓存;主题并发收口
-- 产品候选:下划线批注、find 选项、outline 过滤、高亮色数字键、跨文档批注导出、URL scheme
+- 中期:拆 `AppDelegate`;继续拆 `ReaderViewController` 的 scale / viewport / overview 与 `DocumentStore` 的 tab / annotation / persistence;config 表驱动
+- 产品候选:下划线 / 删除线批注、URL scheme
 
 ## 9. 风险
 

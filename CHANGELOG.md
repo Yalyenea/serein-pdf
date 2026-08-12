@@ -4,6 +4,20 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Annotations
+- Hover comment cards only appear when a highlight has a comment; show after a short delay, wrap longer text up to a wider card, and suppress the card when the same item is already selected in the Annotations sidebar.
+- Reader comment edit (`cmd+option+m` / context menu) uses a lightweight popover next to the highlight instead of forcing the right sidebar open.
+- Annotations list is denser: no timestamps, tighter leading inset, section + snippet + comment only; column width is locked to the pane (no horizontal pan). Empty state shows a compact `A` / `⌘⌥M` hint; list supports double-click edit plus a context menu for Edit / Copy Snippet / Color / Delete (keyboard `D` / Delete also removes the selected row).
+- Activating an annotation jumps with a short color pulse instead of leaving a dashed PDF selection.
+- Double-clicking a highlight opens the Annotations sidebar and reveals the matching row; `1` / `2` / `3` switch pink / yellow / green while highlight mode is active.
+- Add `File > Export All Open Highlights…` for a document-then-page Markdown / Plain Text summary or aggregate JSON across the current window.
+- Remove Vision OCR from highlight snippet extraction; PDFs without a text layer use the existing `Untitled Highlight` label.
+- Keep PDFKit's native contextual actions, including system translation and lookup services, alongside Serein's highlight and comment actions.
+
+### Outline
+- Floating outline rail appears whenever the Outline *pane* is not showing — right sidebar closed, or open on Pages / Search / Annotations — not only when the whole right sidebar is collapsed.
+- Add a compact heading filter that keeps matching nodes and their ancestor paths without changing the saved collapse state.
+
 ### Docs
 - Slim live docs for next-step work: `TASKS.md` and `REVIEW.md` keep only open items; completed milestone checklists and the full 2026-06 review snapshot move to `docs/archive/`; `PROJECT.md` pending-milestone section now covers M12 empty-state, M13.1 site follow-up, multi-theme presets, and engineering debt pointers.
 
@@ -15,8 +29,12 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Fix document edges and reading boundaries: `G` reaches the real document bottom, non-continuous half-page commands finish the current PDF before crossing a continuous-reading group, backward transitions land at the previous bottom, and odd/even Two-Up spreads stop correctly.
 - Keep fit-width active and recompute scale when a page turn changes page shape.
 
+### Reading
+- Let trackpad pinch, smart zoom, and PDFKit `zoomIn`/`zoomOut` leave fit-width or fit-height instead of snapping back; keep layout/page-turn refits.
+
 ### Find
 - After choosing a result with the Find bar arrow keys, `Enter` activates that exact selection before repeated-submit navigation resumes.
+- Add match-case (`Aa`) and whole-word (`Word`) options for both current-document and All Open search.
 
 ### Chrome / Layout
 - Empty windows and blank tabs keep a pure blank center reader (no onboarding / shortcut cheatsheet); loading errors still surface there. Side panes stay blank without instructional empty copy.
@@ -28,6 +46,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Keep same-PDF comparison sessions out of URL-level reading-state persistence, and persist true reading-state LRU order across launches without losing the legacy dictionary format.
 - Replace navigation false-green tests with real PDFView page, selection, viewport, cross-session, four-mode, odd/even spread, and top/bottom boundary assertions.
 - Stabilize sidebar toggle layout tests for CI: pin default window size, wait for settled widths, assert store preferred widths survive programmatic toggles.
+- Make search results an explicit window-level `SearchSnapshot`, so reads no longer perform hidden PDF work and clearing one window cannot invalidate another window's query.
+- Move theme selection into the `@MainActor` `ThemeManager`; dynamic colors now capture immutable `ThemeSnapshot` values from `ThemeRegistry`.
+- Extract reader annotation hit-testing, hover preview, menus, comment popovers, and focus pulse into `ReaderAnnotationInteractionController`.
 
 ## [0.6.0] - 2026-08-01
 

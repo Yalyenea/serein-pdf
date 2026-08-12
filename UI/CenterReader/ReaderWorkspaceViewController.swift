@@ -371,6 +371,11 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         activeReaderViewController().triggerHighlightShortcut()
     }
 
+    @discardableResult
+    func addOrEditComment() -> Bool {
+        activeReaderViewController().addOrEditComment()
+    }
+
     func exitHighlightMode() {
         activeReaderViewController().exitHighlightMode()
     }
@@ -626,16 +631,15 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     }
 
     private func syncSearchHighlights(for reader: ReaderViewController, sessionID: UUID?) {
-        let query = documentStore.searchQuery(in: windowID)
+        documentStore.rebuildSearchIfNeeded(in: windowID)
+        let snapshot = documentStore.searchSnapshot(in: windowID)
         guard let sessionID,
-              let session = documentStore.session(for: sessionID),
-              query.isEmpty == false,
-              session.searchCache.query == query else {
+              snapshot.query.isEmpty == false else {
             reader.clearSearchResults()
             return
         }
 
-        reader.applySearchResults(session.searchCache.matches, selectedMatchIndex: nil)
+        reader.applySearchResults(snapshot.matches(for: sessionID), selectedMatchIndex: nil)
     }
 
     private func embed(_ controller: NSViewController, in hostView: NSView) {

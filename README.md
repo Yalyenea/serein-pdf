@@ -14,10 +14,10 @@ site for showcase, download notes, and compact docs.
 - Tabbed documents with switchable layouts: left vertical sidebar or adaptive titlebar tabs
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
-- Right pane hosts **Outline + Pages + Search + Annotations**; Outline wraps long titles with tight line spacing, no horizontal panning, and one-click tree expand/collapse, while all search / annotation previews stay on the right
-- When the Outline sidebar is hidden, a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as an overlay, dragging either vertical edge resizes it symmetrically around its center, and PDFs without an outline show no rail
+- Right pane hosts **Outline + Pages + Search + Annotations**; Annotations is a full-height compact comment feed with inline editing and keyboard navigation, while Outline adds heading filtering, wrapped titles, no horizontal panning, and one-click tree expand/collapse
+- When the Outline pane is not active (right sidebar closed, or open on Pages / Search / Annotations), a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as an overlay, dragging either vertical edge resizes it symmetrically around its center, and PDFs without an outline show no rail
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
-- Find bar supports `This Document` / `All Open`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
+- Find bar supports `This Document` / `All Open`, match-case `Aa`, and whole-word `Word`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, and `g` / `shift+g` jump to the real document edges; `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document Outline, Pages, link, Search, and annotation jumps, while internal links stay centered from their first activation
 - Cursor reading focus (`f`) dims the page outside a compact rounded band without blocking PDF interaction; `option+f` adjusts the current window between Page, Column (half-page), and Custom widths plus a configurable height
 - Horizontal pan lock (`l`) centers the page on X and blocks left/right panning while zoomed; vertical scroll and page turns stay free
@@ -52,8 +52,9 @@ site for showcase, download notes, and compact docs.
 - Rose Pine Moon maps the PDF's white/black endpoints to a dark paper/text pair, preserves warm/cool accent direction, and keeps the surrounding sidebars one shade deeper
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
 - Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
-- `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets
-- Highlights can carry comments in the right sidebar, and Markdown export is page-grouped as snippet + comment for note-taking
+- While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input
+- `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets; `Export All Open Highlights…` groups the current window's annotated PDFs by document and page
+- Highlights with comments preview on hover (delayed, suppressed when the same item is selected in the Annotations pane); `cmd+option+m` or the reader context menu opens a lightweight reader-side comment popover; the Annotations list supports inline edit, right-click recolor/delete/copy, and keyboard delete; Markdown export remains page-grouped as snippet + comment
 - Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
 - Settings keeps one compact 680 pt width across General, Library, and Shortcuts; page height may adapt, while shortcut rows keep defaults and actions aligned without horizontal scrolling
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
@@ -156,6 +157,7 @@ open_library_settings = "none"  # cmd+k, cmd+l is a built-in chord
 open_shortcut_settings = "none" # cmd+k, cmd+s is a built-in chord
 share_document = "none"         # cmd+k, cmd+e is a built-in chord
 export_clean_copy = "none"
+add_comment = "command+option+m"
 new_blank_tab = "command+t"
 copy_current_pdf_path = "command+shift+c"
 toggle_continuous_reading = "none"
@@ -202,6 +204,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Action | Shortcut |
 |---|---|
 | Highlight selection / enter highlight mode | `a` |
+| Add or edit comment | `cmd+option+m` |
 | Exit highlight mode | `esc` |
 | Temporarily toggle light / dark mode without changing settings | `i` |
 | Switch current theme | `cmd+k`, then `cmd+t` |
@@ -227,6 +230,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |
+| Highlight color in highlight mode | `1` / `2` / `3` (pink / yellow / green) |
 | Show current PDF in Finder | `cmd+r` |
 | Half-page down / up | `ctrl+d` / `ctrl+u` |
 | Jump to first / last page | `g` / `shift+g` |

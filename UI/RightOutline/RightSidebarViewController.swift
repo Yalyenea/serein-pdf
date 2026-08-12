@@ -40,6 +40,8 @@ final class RightSidebarViewController: NSViewController {
     var onActivateSearchMatch: ((SearchSidebarMatch) -> Void)?
     var onSearchSelectionDidChange: ((Int?, Int) -> Void)?
     var onActivateAnnotation: ((DocumentHighlightGroup) -> Void)?
+    var onDeleteAnnotation: ((DocumentHighlightGroup) -> Void)?
+    var onChangeAnnotationColor: ((DocumentHighlightGroup, HighlightColor) -> Void)?
     var onWillNavigateFromPages: (() -> Void)?
     var onDidNavigateFromPages: (() -> Void)?
     private let thumbnailView = NavigationTrackingPDFThumbnailView()
@@ -92,6 +94,12 @@ final class RightSidebarViewController: NSViewController {
         }
         annotationsViewController.onActivateHighlight = { [weak self] group in
             self?.onActivateAnnotation?(group)
+        }
+        annotationsViewController.onDeleteHighlight = { [weak self] group in
+            self?.onDeleteAnnotation?(group)
+        }
+        annotationsViewController.onChangeHighlightColor = { [weak self] group, color in
+            self?.onChangeAnnotationColor?(group, color)
         }
         thumbnailView.onWillNavigate = { [weak self] in
             self?.onWillNavigateFromPages?()
@@ -313,6 +321,17 @@ final class RightSidebarViewController: NSViewController {
 
     func setMode(_ newMode: RightSidebarMode) {
         documentStore.setRightSidebarMode(newMode, in: windowID)
+    }
+
+    func revealAnnotation(_ groupID: String, focusEditor: Bool) {
+        loadViewIfNeeded()
+        setMode(.annotations)
+        applyMode()
+        annotationsViewController.reveal(groupID: groupID, focusEditor: focusEditor)
+    }
+
+    var selectedAnnotationGroupID: String? {
+        annotationsViewController.isViewLoaded ? annotationsViewController.selectedGroupID : nil
     }
 
     func applyStateFromStore() {
