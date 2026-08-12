@@ -234,6 +234,88 @@ struct OutlineViewControllerTests {
     }
 
     @Test
+    func outlineFilterShowsCaseInsensitiveMatchesAndAncestorPathsOnly() throws {
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(
+            documentAt: makeTemporaryPDFWithOutline(
+                named: "filter-outline",
+                outlineTitles: ["Overview", "Appendix"],
+                includeChild: true
+            )
+        )
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+
+        setOutlineFilter("CHILD", in: controller)
+        #expect(outlineRows(in: controller.view).map(\.node.title) == [
+            "Overview",
+            "filter-outline child",
+        ])
+
+        setOutlineFilter("overview", in: controller)
+        #expect(outlineRows(in: controller.view).map(\.node.title) == ["Overview"])
+    }
+
+    @Test
+    func outlineFilterIgnoresCollapseAndClearingRestoresIt() throws {
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(
+            documentAt: makeTemporaryPDFWithOutline(
+                named: "filter-collapse",
+                includeChild: true
+            )
+        )
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        let toggleButton = try #require(
+            findView(identifier: "outlineExpansionToggleButton", in: controller.view) as? NSButton
+        )
+
+        toggleButton.performClick(nil)
+        #expect(outlineRows(in: controller.view).count == 2)
+
+        setOutlineFilter("child", in: controller)
+        #expect(outlineRows(in: controller.view).map(\.node.title) == [
+            "filter-collapse 1",
+            "filter-collapse child",
+        ])
+        #expect(toggleButton.isEnabled == false)
+
+        setOutlineFilter("", in: controller)
+        #expect(outlineRows(in: controller.view).count == 2)
+        #expect(toggleButton.isEnabled)
+        #expect(toggleButton.toolTip == "Expand outline")
+    }
+
+    @Test
+    func outlineFilterShowsNoMatchingHeadingsState() throws {
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "filter-empty"))
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+
+        setOutlineFilter("missing heading", in: controller)
+
+        let emptyLabel = try #require(
+            findView(identifier: "outlineEmptyStateLabel", in: controller.view) as? NSTextField
+        )
+        let scrollView = try #require(outlineScrollView(in: controller.view))
+        #expect(outlineRows(in: controller.view).isEmpty)
+        #expect(emptyLabel.stringValue == "No matching headings.")
+        #expect(emptyLabel.isHidden == false)
+        #expect(scrollView.isHidden)
+    }
+
+    @Test
     func collapsedOutlineStaysTopAnchoredWhenContentShrinks() throws {
         let store = makeIsolatedDocumentStore()
         _ = try store.open(
@@ -450,6 +532,18 @@ private func outlineRows(in root: NSView) -> [OutlineRowView] {
     return rowsContainer.subviews
         .compactMap { $0 as? OutlineRowView }
         .sorted { $0.frame.minY < $1.frame.minY }
+}
+
+@MainActor
+private func setOutlineFilter(_ query: String, in controller: OutlineViewController) {
+    guard let field = findView(identifier: "outlineFilterField", in: controller.view) as? NSSearchField else {
+        Issue.record("Failed to locate outline filter field")
+        return
+    }
+    field.stringValue = query
+    controller.controlTextDidChange(
+        Notification(name: NSControl.textDidChangeNotification, object: field)
+    )
 }
 
 @MainActor

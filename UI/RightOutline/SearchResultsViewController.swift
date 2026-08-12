@@ -218,10 +218,11 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
     private func rebuildRows() {
         guard isViewLoaded else { return }
+        documentStore.rebuildSearchIfNeeded(in: windowID)
         let previousSelection = selectedMatchKey ?? selectedMatch().map {
             SearchSelectionKey(sessionID: $0.sessionID, matchIndex: $0.matchIndex)
         }
-        rows = documentStore.searchSections(in: windowID).flatMap { section in
+        rows = documentStore.searchSnapshot(in: windowID).sections.flatMap { section in
             [SearchResultsRow.section(section.title)] + section.matches.map { .match($0) }
         }
         tableView.reloadData()

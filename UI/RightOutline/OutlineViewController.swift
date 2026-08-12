@@ -293,7 +293,7 @@ final class OutlineRowView: NSControl {
     }
 }
 
-final class OutlineViewController: NSViewController {
+final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     private struct VisibleRow {
         let node: OutlineNode
         let path: [Int]
@@ -309,12 +309,14 @@ final class OutlineViewController: NSViewController {
     var onNavigationRequested: ((OutlineNavigationRequest) -> Void)?
     private let titleLabel = NSTextField(labelWithString: "Outline")
     private let expansionToggleButton = NSButton()
+    private let filterField = NSSearchField()
     private let emptyStateLabel = NSTextField(labelWithString: "")
     private let scrollView = OutlineScrollView()
     private let outlineDocumentView = OutlineDocumentView()
     private let rowsContainerView = OutlineRowsContainerView()
     private let pageCounterLabel = NSTextField(labelWithString: "")
     private var nodes: [OutlineNode] = []
+    private var filterQuery = ""
     private var displayedSessionID: UUID?
     private var collapsedPaths = Set<[Int]>()
     private var expandablePaths = Set<[Int]>()
@@ -376,7 +378,19 @@ final class OutlineViewController: NSViewController {
         expansionToggleButton.action = #selector(toggleOutlineExpansion(_:))
         expansionToggleButton.setButtonType(.momentaryChange)
 
+        filterField.identifier = NSUserInterfaceItemIdentifier("outlineFilterField")
+        filterField.placeholderString = "Filter headings"
+        filterField.controlSize = .small
+        filterField.focusRingType = .none
+        filterField.font = .systemFont(ofSize: 11.5)
+        filterField.sendsSearchStringImmediately = true
+        filterField.sendsWholeSearchString = false
+        filterField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        filterField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        filterField.delegate = self
+
         emptyStateLabel.font = .systemFont(ofSize: 12)
+        emptyStateLabel.identifier = NSUserInterfaceItemIdentifier("outlineEmptyStateLabel")
         emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         emptyStateLabel.maximumNumberOfLines = 0
         emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -405,7 +419,7 @@ final class OutlineViewController: NSViewController {
         scrollView.contentView.backgroundColor = .clear
         scrollView.documentView = outlineDocumentView
 
-        for view in [titleLabel, expansionToggleButton, emptyStateLabel, scrollView, pageCounterLabel] {
+        for view in [titleLabel, expansionToggleButton, filterField, emptyStateLabel, scrollView, pageCounterLabel] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -420,13 +434,18 @@ final class OutlineViewController: NSViewController {
             expansionToggleButton.widthAnchor.constraint(equalToConstant: 22),
             expansionToggleButton.heightAnchor.constraint(equalToConstant: 20),
 
+            filterField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            filterField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+            filterField.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
+            filterField.heightAnchor.constraint(equalToConstant: 22),
+
             emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            emptyStateLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 14),
+            emptyStateLabel.topAnchor.constraint(equalTo: filterField.bottomAnchor, constant: 12),
 
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
+            scrollView.topAnchor.constraint(equalTo: filterField.bottomAnchor, constant: 8),
             scrollView.bottomAnchor.constraint(equalTo: pageCounterLabel.topAnchor, constant: -4),
 
             pageCounterLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
@@ -448,6 +467,16 @@ final class OutlineViewController: NSViewController {
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
             pageCounterLabel.textColor = NightModeStyle.tertiaryTextColor
         }
+        renderOutlineRows()
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        let nextQuery = filterField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard nextQuery != filterQuery else { return }
+        filterQuery = nextQuery
+        rowViewCache.removeAll()
+        renderedRowHeights.removeAll()
+        rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         renderOutlineRows()
     }
 
@@ -496,10 +525,6 @@ final class OutlineViewController: NSViewController {
         renderedRowHeights.removeAll()
         rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         renderOutlineRows()
-
-        let isEmpty = nodes.isEmpty
-        emptyStateLabel.isHidden = true
-        scrollView.isHidden = isEmpty
         updateExpansionToggleButton()
     }
 
@@ -510,6 +535,13 @@ final class OutlineViewController: NSViewController {
             renderedRowHeights.removeAll()
             rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         }
+
+        let showsNoMatches = filterQuery.isEmpty == false
+            && nodes.isEmpty == false
+            && renderedRows.isEmpty
+        emptyStateLabel.stringValue = showsNoMatches ? "No matching headings." : ""
+        emptyStateLabel.isHidden = !showsNoMatches
+        scrollView.isHidden = nodes.isEmpty || showsNoMatches
 
         updateExpansionToggleButton()
         layoutOutlineRows()
@@ -595,7 +627,7 @@ final class OutlineViewController: NSViewController {
             path: row.path,
             level: row.level,
             attributedTitle: attributedTitle,
-            isExpandable: row.node.children.isEmpty == false,
+            isExpandable: row.node.children.isEmpty == false && filterQuery.isEmpty,
             isExpanded: isExpanded,
             isSelected: selectedPath == row.path,
             onActivate: { [weak self] node in
@@ -655,7 +687,7 @@ final class OutlineViewController: NSViewController {
     }
 
     private func updateExpansionToggleButton() {
-        expansionToggleButton.isEnabled = expandablePaths.isEmpty == false
+        expansionToggleButton.isEnabled = filterQuery.isEmpty && expandablePaths.isEmpty == false
         let hasCollapsedRows = collapsedPaths.isEmpty == false
         let symbolName = hasCollapsedRows ? "chevron.right" : "chevron.down"
         let accessibilityDescription = hasCollapsedRows ? "Expand outline" : "Collapse outline"
@@ -668,6 +700,10 @@ final class OutlineViewController: NSViewController {
     }
 
     private func visibleRows() -> [VisibleRow] {
+        if filterQuery.isEmpty == false {
+            return filteredRows(in: nodes, level: 0, prefix: [])
+        }
+
         var rows: [VisibleRow] = []
 
         func append(nodes: [OutlineNode], level: Int, prefix: [Int]) {
@@ -681,6 +717,23 @@ final class OutlineViewController: NSViewController {
         }
 
         append(nodes: nodes, level: 0, prefix: [])
+        return rows
+    }
+
+    private func filteredRows(in nodes: [OutlineNode], level: Int, prefix: [Int]) -> [VisibleRow] {
+        var rows: [VisibleRow] = []
+        for (index, node) in nodes.enumerated() {
+            let path = prefix + [index]
+            let matchingDescendants = filteredRows(
+                in: node.children,
+                level: level + 1,
+                prefix: path
+            )
+            guard node.title.localizedCaseInsensitiveContains(filterQuery)
+                    || matchingDescendants.isEmpty == false else { continue }
+            rows.append(VisibleRow(node: node, path: path, level: level))
+            rows.append(contentsOf: matchingDescendants)
+        }
         return rows
     }
 

@@ -48,7 +48,6 @@ enum HighlightService {
     static func buildHighlightGroups(in document: PDFDocument) -> [DocumentHighlightGroup] {
         var groupedRecords: [String: [HighlightAnnotationRecord]] = [:]
         var orderedGroupIDs: [String] = []
-        var ocrCache: [ObjectIdentifier: [HighlightOCRService.RecognizedLine]] = [:]
 
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
@@ -57,7 +56,7 @@ enum HighlightService {
                 .sorted(by: annotationSortOrder)
 
             for annotation in annotations {
-                let groupID = resolvedGroupID(for: annotation, pageIndex: pageIndex)
+                let groupID = resolvedGroupID(for: annotation)
                 if groupedRecords[groupID] == nil {
                     groupedRecords[groupID] = []
                     orderedGroupIDs.append(groupID)
@@ -71,8 +70,7 @@ enum HighlightService {
         return orderedGroupIDs.compactMap { groupID in
             highlightGroup(
                 groupID: groupID,
-                records: groupedRecords[groupID] ?? [],
-                ocrCache: &ocrCache
+                records: groupedRecords[groupID] ?? []
             )
         }
     }
@@ -80,10 +78,9 @@ enum HighlightService {
     static func buildHighlightGroups(from records: [HighlightAnnotationRecord]) -> [DocumentHighlightGroup] {
         var groupedRecords: [String: [HighlightAnnotationRecord]] = [:]
         var orderedGroupIDs: [String] = []
-        var ocrCache: [ObjectIdentifier: [HighlightOCRService.RecognizedLine]] = [:]
 
         for record in records {
-            let groupID = resolvedGroupID(for: record.annotation, pageIndex: record.pageIndex)
+            let groupID = resolvedGroupID(for: record.annotation)
             if groupedRecords[groupID] == nil {
                 groupedRecords[groupID] = []
                 orderedGroupIDs.append(groupID)
@@ -94,10 +91,42 @@ enum HighlightService {
         return orderedGroupIDs.compactMap { groupID in
             highlightGroup(
                 groupID: groupID,
-                records: groupedRecords[groupID] ?? [],
-                ocrCache: &ocrCache
+                records: groupedRecords[groupID] ?? []
             )
         }
+    }
+
+    static func buildHighlightGroup(
+        containing annotation: PDFAnnotation,
+        in document: PDFDocument
+    ) -> DocumentHighlightGroup? {
+        guard isHighlight(annotation),
+              let annotationPage = annotation.page,
+              annotationPage.document === document else { return nil }
+
+        let groupID = resolvedGroupID(for: annotation)
+        var records: [HighlightAnnotationRecord] = []
+        if let sereinGroupID = sereinGroupID(for: annotation) {
+            for pageIndex in 0..<document.pageCount {
+                guard let page = document.page(at: pageIndex) else { continue }
+                for candidate in page.annotations {
+                    guard isHighlight(candidate),
+                          self.sereinGroupID(for: candidate) == sereinGroupID else { continue }
+                    records.append(
+                        HighlightAnnotationRecord(pageIndex: pageIndex, annotation: candidate)
+                    )
+                }
+            }
+        } else {
+            records = [
+                HighlightAnnotationRecord(
+                    pageIndex: document.index(for: annotationPage),
+                    annotation: annotation
+                ),
+            ]
+        }
+
+        return highlightGroup(groupID: groupID, records: records)
     }
 
     static func highlightAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
@@ -107,16 +136,15 @@ enum HighlightService {
         }
     }
 
-    /// Removes the given annotation plus any siblings sharing the same `userName`
-    /// group id across the whole document, so a multi-line highlight disappears as one block.
+    /// Removes the given annotation plus any Serein siblings sharing its UUID group id.
+    /// External annotations use their own `/NM` identity and are removed individually.
     /// Returns the removed annotations with their original page indexes, in page order.
     @discardableResult
     static func removeHighlightGroup(
         containing annotation: PDFAnnotation,
         in document: PDFDocument
     ) -> [HighlightAnnotationRecord] {
-        let groupID = annotation.userName
-        guard let groupID, groupID.isEmpty == false else {
+        guard let groupID = sereinGroupID(for: annotation) else {
             let pageIndex = annotation.page.map { document.index(for: $0) } ?? 0
             annotation.page?.removeAnnotation(annotation)
             return [HighlightAnnotationRecord(pageIndex: pageIndex, annotation: annotation)]
@@ -125,7 +153,9 @@ enum HighlightService {
         var records: [HighlightAnnotationRecord] = []
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
-            let victims = page.annotations.filter { $0.type == "Highlight" && $0.userName == groupID }
+            let victims = page.annotations.filter {
+                isHighlight($0) && sereinGroupID(for: $0) == groupID
+            }
             for victim in victims {
                 page.removeAnnotation(victim)
                 records.append(HighlightAnnotationRecord(pageIndex: pageIndex, annotation: victim))
@@ -165,8 +195,22 @@ enum HighlightService {
         return didChange
     }
 
+    @discardableResult
+    static func updateColor(_ color: NSColor, for records: [HighlightAnnotationRecord]) -> Bool {
+        guard records.isEmpty == false else { return false }
+        let target = HighlightColor.closest(to: color)
+        var didChange = false
+        for record in records {
+            if HighlightColor.closest(to: record.annotation.color) != target {
+                record.annotation.color = color
+                didChange = true
+            }
+        }
+        return didChange
+    }
+
     static func groupIDs(for records: [HighlightAnnotationRecord]) -> Set<String> {
-        Set(records.map { resolvedGroupID(for: $0.annotation, pageIndex: $0.pageIndex) })
+        Set(records.map { resolvedGroupID(for: $0.annotation) })
     }
 
     private static func explodedSelections(_ selection: PDFSelection) -> [PDFSelection] {
@@ -178,14 +222,31 @@ enum HighlightService {
         annotation.type == "Highlight"
     }
 
-    private static func resolvedGroupID(for annotation: PDFAnnotation, pageIndex: Int) -> String {
-        if let groupID = annotation.userName?.trimmingCharacters(in: .whitespacesAndNewlines),
-           groupID.isEmpty == false {
+    private static func resolvedGroupID(for annotation: PDFAnnotation) -> String {
+        if let groupID = sereinGroupID(for: annotation) {
             return groupID
         }
 
-        let bounds = annotation.bounds.integral
-        return "page-\(pageIndex)-\(Int(bounds.minX))-\(Int(bounds.minY))-\(Int(bounds.width))-\(Int(bounds.height))"
+        return "external:\(externalAnnotationID(for: annotation))"
+    }
+
+    private static func sereinGroupID(for annotation: PDFAnnotation) -> String? {
+        guard let rawValue = annotation.userName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let groupID = UUID(uuidString: rawValue) else { return nil }
+        return groupID.uuidString
+    }
+
+    private static func externalAnnotationID(for annotation: PDFAnnotation) -> String {
+        if let rawValue = annotation.value(forAnnotationKey: .name) as? String {
+            let annotationID = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if annotationID.isEmpty == false {
+                return annotationID
+            }
+        }
+
+        // Reading an external PDF must not mutate it. Object identity is enough to keep
+        // an unnamed annotation independent for the lifetime of the loaded document.
+        return String(describing: ObjectIdentifier(annotation))
     }
 
     private static func annotationSortOrder(_ lhs: PDFAnnotation, _ rhs: PDFAnnotation) -> Bool {
@@ -209,14 +270,13 @@ enum HighlightService {
 
     private static func highlightGroup(
         groupID: String,
-        records unsortedRecords: [HighlightAnnotationRecord],
-        ocrCache: inout [ObjectIdentifier: [HighlightOCRService.RecognizedLine]]
+        records unsortedRecords: [HighlightAnnotationRecord]
     ) -> DocumentHighlightGroup? {
         let records = unsortedRecords.sorted(by: recordSortOrder)
         guard let firstRecord = records.first else { return nil }
 
         let snippet = records
-            .compactMap { annotationSnippet(for: $0, ocrCache: &ocrCache) }
+            .compactMap(annotationSnippet)
             .joined(separator: " ")
         let comment = records
             .compactMap(\.annotation.contents)
@@ -235,35 +295,13 @@ enum HighlightService {
         )
     }
 
-    private static func annotationSnippet(
-        for record: HighlightAnnotationRecord,
-        ocrCache: inout [ObjectIdentifier: [HighlightOCRService.RecognizedLine]]
-    ) -> String? {
+    private static func annotationSnippet(for record: HighlightAnnotationRecord) -> String? {
         let extracted = annotationSelection(for: record)?.string.map(PDFTextSanitizer.sanitize)
-
-        if let extracted,
-           extracted.isEmpty == false,
-           containsIdeographicText(extracted) == false {
-            return extracted
-        }
-
-        guard let page = record.annotation.page,
-              let ocrSnippet = HighlightOCRService.snippet(
-                for: record.annotation,
-                on: page,
-                cache: &ocrCache
-              ) else {
-            return extracted?.isEmpty == false ? extracted : nil
-        }
-        return ocrSnippet
+        return extracted?.isEmpty == false ? extracted : nil
     }
 
     private static func annotationSelection(for record: HighlightAnnotationRecord) -> PDFSelection? {
         guard let page = record.annotation.page else { return nil }
         return page.selection(for: record.annotation.bounds)
-    }
-
-    private static func containsIdeographicText(_ text: String) -> Bool {
-        text.unicodeScalars.contains { $0.properties.isIdeographic }
     }
 }

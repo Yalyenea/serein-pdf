@@ -600,6 +600,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @discardableResult
+    func addOrEditComment() -> Bool {
+        splitViewController.addOrEditComment()
+    }
+
+    @discardableResult
     func exitTransientReaderState() -> Bool {
         if isFindBarVisible {
             hideFindBar()

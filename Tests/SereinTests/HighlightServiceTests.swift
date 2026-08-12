@@ -106,9 +106,9 @@ final class HighlightServiceTests: XCTestCase {
     func testNightModeStyleResolvesHighlightColorFromActiveTheme() {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
-        NightModeStyle.applyThemeSelections(light: .rosePineDawn, dark: .rosePineMoon)
+        ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
         defer {
-            NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon)
+            ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
             app.appearance = previousAppearance
         }
 
@@ -171,6 +171,16 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(groups.first?.snippet, "非正定")
     }
 
+    func testUpdateColorRecolorsAllRecordsInGroup() throws {
+        let document = try makeSearchableDocument(text: "alpha beta")
+        let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
+        let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.pink.nsColor)
+        XCTAssertFalse(records.isEmpty)
+        XCTAssertTrue(HighlightService.updateColor(HighlightColor.yellow.nsColor, for: records))
+        XCTAssertEqual(HighlightColor.closest(to: records[0].annotation.color), .yellow)
+        XCTAssertFalse(HighlightService.updateColor(HighlightColor.yellow.nsColor, for: records))
+    }
+
     func testBuildHighlightGroupsFromRecordsOnlyUsesChangedRecords() throws {
         let document = try makeSearchableDocument(text: "alpha beta gamma")
         let alphaSelection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
@@ -192,8 +202,108 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(groups.first?.createdAt, Date(timeIntervalSince1970: 42))
     }
 
+    func testExternalHighlightsBySameAuthorStayIndependent() throws {
+        let document = try makeSearchableDocument(text: "alpha beta")
+        let page = try XCTUnwrap(document.page(at: 0))
+        let first = makeHighlight(on: page, bounds: NSRect(x: 24, y: 100, width: 80, height: 18))
+        let second = makeHighlight(on: page, bounds: NSRect(x: 24, y: 70, width: 80, height: 18))
+        first.userName = "Shared Author"
+        second.userName = "Shared Author"
+
+        let groups = HighlightService.buildHighlightGroups(in: document)
+
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertNotEqual(groups[0].groupID, groups[1].groupID)
+        XCTAssertNil(first.value(forAnnotationKey: .name) as? String)
+        XCTAssertNil(second.value(forAnnotationKey: .name) as? String)
+
+        XCTAssertTrue(HighlightService.updateComment("First only", for: groups[0].records))
+        XCTAssertEqual(groups[0].records.first?.annotation.contents, "First only")
+        XCTAssertNil(groups[1].records.first?.annotation.contents)
+
+        let removed = HighlightService.removeHighlightGroup(
+            containing: groups[0].records[0].annotation,
+            in: document
+        )
+        XCTAssertEqual(removed.count, 1)
+        XCTAssertEqual(page.annotations.filter { $0.type == "Highlight" }.count, 1)
+        XCTAssertTrue(page.annotations.contains { $0 === groups[1].records[0].annotation })
+    }
+
+    func testUUIDAuthorKeepsSereinMultilineGroupSemantics() throws {
+        let document = try makeSearchableDocument(text: "alpha beta")
+        let page = try XCTUnwrap(document.page(at: 0))
+        let groupID = UUID()
+        let first = makeHighlight(on: page, bounds: NSRect(x: 24, y: 100, width: 80, height: 18))
+        let second = makeHighlight(on: page, bounds: NSRect(x: 24, y: 70, width: 80, height: 18))
+        first.userName = groupID.uuidString.lowercased()
+        second.userName = groupID.uuidString
+
+        let groups = HighlightService.buildHighlightGroups(in: document)
+
+        let group = try XCTUnwrap(groups.first)
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(group.groupID, groupID.uuidString)
+        XCTAssertEqual(group.records.count, 2)
+
+        XCTAssertTrue(HighlightService.updateComment("Shared", for: group.records))
+        XCTAssertEqual(first.contents, "Shared")
+        XCTAssertEqual(second.contents, "Shared")
+
+        let removed = HighlightService.removeHighlightGroup(containing: first, in: document)
+        XCTAssertEqual(removed.count, 2)
+        XCTAssertTrue(page.annotations.filter { $0.type == "Highlight" }.isEmpty)
+    }
+
+    func testBuildHighlightGroupContainingUUIDCollectsRecordsAcrossPages() throws {
+        let document = TestPDFFixtures.makeBlankDocument(pageCount: 2)
+        let firstPage = try XCTUnwrap(document.page(at: 0))
+        let secondPage = try XCTUnwrap(document.page(at: 1))
+        let groupID = UUID().uuidString
+        let first = makeHighlight(on: firstPage, bounds: NSRect(x: 24, y: 100, width: 80, height: 18))
+        let second = makeHighlight(on: secondPage, bounds: NSRect(x: 24, y: 70, width: 80, height: 18))
+        first.userName = groupID
+        second.userName = groupID
+        makeHighlight(on: secondPage, bounds: NSRect(x: 24, y: 40, width: 80, height: 18)).userName = UUID().uuidString
+
+        let group = try XCTUnwrap(
+            HighlightService.buildHighlightGroup(containing: first, in: document)
+        )
+
+        XCTAssertEqual(group.groupID, groupID)
+        XCTAssertEqual(group.records.map(\.pageIndex), [0, 1])
+        XCTAssertEqual(group.records.count, 2)
+        XCTAssertTrue(group.records.contains { $0.annotation === first })
+        XCTAssertTrue(group.records.contains { $0.annotation === second })
+    }
+
+    func testBuildHighlightGroupContainingExternalAnnotationOnlyUsesHitAnnotation() throws {
+        let document = TestPDFFixtures.makeBlankDocument(pageCount: 1)
+        let page = try XCTUnwrap(document.page(at: 0))
+        let first = makeHighlight(on: page, bounds: NSRect(x: 24, y: 100, width: 80, height: 18))
+        let second = makeHighlight(on: page, bounds: NSRect(x: 24, y: 70, width: 80, height: 18))
+        first.userName = "Shared Author"
+        second.userName = "Shared Author"
+
+        let group = try XCTUnwrap(
+            HighlightService.buildHighlightGroup(containing: first, in: document)
+        )
+
+        XCTAssertEqual(group.records.count, 1)
+        XCTAssertEqual(group.snippet, "Untitled Highlight")
+        XCTAssertTrue(group.records[0].annotation === first)
+        XCTAssertFalse(group.records.contains { $0.annotation === second })
+    }
+
     private func makeSearchableDocument(text: String) throws -> PDFDocument {
         try TestPDFFixtures.makeSearchableDocument(text: text)
+    }
+
+    private func makeHighlight(on page: PDFPage, bounds: NSRect) -> PDFAnnotation {
+        let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
+        annotation.color = HighlightColor.default.nsColor
+        page.addAnnotation(annotation)
+        return annotation
     }
 }
 

@@ -7,6 +7,13 @@ private final class FindBarDelegateSpy: NSObject, FindBarDelegate {
     struct Submission: Equatable {
         let query: String
         let scope: SearchScope
+        let options: SearchOptions
+
+        init(query: String, scope: SearchScope, options: SearchOptions = .default) {
+            self.query = query
+            self.scope = scope
+            self.options = options
+        }
     }
 
     var submissions: [Submission] = []
@@ -15,7 +22,7 @@ private final class FindBarDelegateSpy: NSObject, FindBarDelegate {
     var onSelectNext: ((FindBarView) -> Void)?
 
     func findBar(_ view: FindBarView, didSubmitQuery query: String, scope: SearchScope) {
-        submissions.append(Submission(query: query, scope: scope))
+        submissions.append(Submission(query: query, scope: scope, options: view.searchOptions))
     }
 
     func findBarRequestsSelectNext(_ view: FindBarView) {
@@ -71,6 +78,75 @@ final class FindBarViewTests: XCTestCase {
         _ = target.perform(action, with: scopeControl)
 
         XCTAssertEqual(delegate.submissions, [FindBarDelegateSpy.Submission(query: "needle", scope: .allOpen)])
+    }
+
+    func testOptionChangeWithExistingQuerySubmitsSearch() throws {
+        let view = FindBarView()
+        let delegate = FindBarDelegateSpy()
+        view.delegate = delegate
+        view.setQuery("needle")
+
+        let optionsControl = try XCTUnwrap(
+            view.subviews
+                .compactMap { $0 as? NSSegmentedControl }
+                .first { $0.identifier?.rawValue == "findOptionsControl" }
+        )
+        optionsControl.setSelected(true, forSegment: 0)
+        optionsControl.setSelected(true, forSegment: 1)
+
+        let target = try XCTUnwrap(optionsControl.target as? NSObject)
+        let action = try XCTUnwrap(optionsControl.action)
+        _ = target.perform(action, with: optionsControl)
+
+        XCTAssertEqual(
+            delegate.submissions,
+            [
+                FindBarDelegateSpy.Submission(
+                    query: "needle",
+                    scope: .currentDocument,
+                    options: SearchOptions(isCaseSensitive: true, matchesWholeWords: true)
+                ),
+            ]
+        )
+    }
+
+    func testOptionChangeWithoutQueryStillUpdatesOptions() throws {
+        let view = FindBarView()
+        let delegate = FindBarDelegateSpy()
+        view.delegate = delegate
+        let optionsControl = try XCTUnwrap(
+            view.subviews
+                .compactMap { $0 as? NSSegmentedControl }
+                .first { $0.identifier?.rawValue == "findOptionsControl" }
+        )
+        optionsControl.setSelected(true, forSegment: 0)
+
+        let target = try XCTUnwrap(optionsControl.target as? NSObject)
+        let action = try XCTUnwrap(optionsControl.action)
+        _ = target.perform(action, with: optionsControl)
+
+        XCTAssertEqual(
+            delegate.submissions,
+            [
+                FindBarDelegateSpy.Submission(
+                    query: "",
+                    scope: .currentDocument,
+                    options: SearchOptions(isCaseSensitive: true)
+                ),
+            ]
+        )
+    }
+
+    func testSetSearchOptionsRoundTripsWithoutSubmitting() {
+        let view = FindBarView()
+        let delegate = FindBarDelegateSpy()
+        view.delegate = delegate
+        let options = SearchOptions(isCaseSensitive: true, matchesWholeWords: true)
+
+        view.setSearchOptions(options)
+
+        XCTAssertEqual(view.searchOptions, options)
+        XCTAssertTrue(delegate.submissions.isEmpty)
     }
 
     func testArrowSelectionMakesNextEnterActivateCurrentMatch() {

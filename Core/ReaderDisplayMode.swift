@@ -51,6 +51,7 @@ enum ReaderScaleMode: String, Codable, Sendable {
 
 enum ShortcutCommand: String, CaseIterable, Sendable {
     case highlightSelection = "highlight_selection"
+    case addComment = "add_comment"
     case exitHighlightMode = "exit_highlight_mode"
     case toggleNightMode = "toggle_night_mode"
     case toggleReadingFocus = "toggle_reading_focus"
@@ -120,6 +121,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         switch self {
         case .highlightSelection:
             "Highlight Selection or Enter Highlight Mode"
+        case .addComment:
+            "Add or Edit Comment"
         case .exitHighlightMode:
             "Exit Highlight Mode"
         case .toggleNightMode:

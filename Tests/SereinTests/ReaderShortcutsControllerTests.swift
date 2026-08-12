@@ -7,6 +7,91 @@ private final class PDFMockTextView: NSTextView {}
 
 @MainActor
 final class ReaderShortcutsControllerTests: XCTestCase {
+    func testHighlightModeNumberKeysSelectPinkYellowAndGreen() {
+        var triggeredCommands: [ShortcutCommand] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [
+                    .highlightColorPink: { triggeredCommands.append(.highlightColorPink) },
+                    .highlightColorYellow: { triggeredCommands.append(.highlightColorYellow) },
+                    .highlightColorGreen: { triggeredCommands.append(.highlightColorGreen) },
+                ]
+            },
+            isHighlightModeEnabledProvider: { _ in true }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "2", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "3", modifiers: []), in: window))
+        XCTAssertEqual(
+            triggeredCommands,
+            [.highlightColorPink, .highlightColorYellow, .highlightColorGreen]
+        )
+    }
+
+    func testHighlightModeNumberKeysRequireActiveModeAndNoModifiers() {
+        var didTrigger = false
+        let disabledController = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [.highlightColorPink: { didTrigger = true }]
+            },
+            isHighlightModeEnabledProvider: { _ in false }
+        )
+        let enabledController = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [.highlightColorPink: { didTrigger = true }]
+            },
+            isHighlightModeEnabledProvider: { _ in true }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertFalse(disabledController.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifiers: []), in: window))
+        XCTAssertFalse(
+            enabledController.handleShortcutEvent(
+                for: makeKeyEvent(characters: "1", modifiers: [.command]),
+                in: window
+            )
+        )
+        XCTAssertFalse(didTrigger)
+    }
+
+    func testHighlightModeNumberKeysRespectEditableTextInput() {
+        var didTrigger = false
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: {
+                [.highlightColorPink: { didTrigger = true }]
+            },
+            isHighlightModeEnabledProvider: { _ in true }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let textView = NSTextView()
+        window.contentView = textView
+        window.makeFirstResponder(textView)
+
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifiers: []), in: window))
+        XCTAssertFalse(didTrigger)
+    }
+
     func testHandlePlainShortcutInvokesMatchingHandler() {
         var triggeredCommands: [ShortcutCommand] = []
         let controller = ReaderShortcutsController(

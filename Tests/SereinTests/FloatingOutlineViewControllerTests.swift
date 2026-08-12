@@ -149,6 +149,34 @@ struct FloatingOutlineViewControllerTests {
     }
 
     @Test
+    func floatingOutlineShowsWhenRightSidebarIsNotOnOutlineMode() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(documentAt: makeFloatingOutlinePDF(named: "floating-while-annotations"))
+        let controller = FloatingOutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+
+        store.setRightSidebarVisible(true)
+        store.setRightSidebarMode(.outline, in: store.defaultWindowID)
+        #expect(controller.testingIsPresented == false)
+
+        store.setRightSidebarMode(.annotations, in: store.defaultWindowID)
+        #expect(controller.testingIsPresented)
+
+        store.setRightSidebarMode(.pages, in: store.defaultWindowID)
+        #expect(controller.testingIsPresented)
+
+        store.setRightSidebarMode(.search, in: store.defaultWindowID)
+        #expect(controller.testingIsPresented)
+
+        store.setRightSidebarMode(.outline, in: store.defaultWindowID)
+        #expect(controller.testingIsPresented == false)
+    }
+
+    @Test
     func expandedFloatingOutlineNavigatesWithoutResizingReader() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()

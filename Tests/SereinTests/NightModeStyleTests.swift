@@ -11,9 +11,39 @@ struct NightModeStyleTests {
         dark: DarkTheme,
         _ body: () throws -> Void
     ) rethrows {
-        NightModeStyle.applyThemeSelections(light: light, dark: dark)
-        defer { NightModeStyle.applyThemeSelections(light: .normal, dark: .rosePineMoon) }
+        ThemeManager.shared.apply(light: light, dark: dark)
+        defer { ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon) }
         try body()
+    }
+
+    @Test
+    @MainActor
+    func registryCoversEveryConfiguredTheme() {
+        #expect(Set(ThemeRegistry.lightThemes.keys) == Set(LightTheme.allCases))
+        #expect(Set(ThemeRegistry.darkThemes.keys) == Set(DarkTheme.allCases))
+        #expect(ThemeSelection.default == ThemeSelection(light: .normal, dark: .rosePineMoon))
+    }
+
+    @Test
+    @MainActor
+    func dynamicColorsCaptureImmutableThemeSnapshot() {
+        ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
+        let normalColor = NightModeStyle.pageBackgroundColor
+
+        ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
+        defer { ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon) }
+        let dawnColor = NightModeStyle.pageBackgroundColor
+
+        assertColor(resolve(normalColor, in: .aqua), matches: .white)
+        assertColor(
+            resolve(dawnColor, in: .aqua),
+            matches: NSColor(
+                srgbRed: 1,
+                green: 250.0 / 255.0,
+                blue: 243.0 / 255.0,
+                alpha: 1
+            )
+        )
     }
 
     @Test

@@ -47,6 +47,7 @@ reading_focus_height = 112
 
 [shortcuts]
 highlight_selection = "h"
+add_comment = "command+shift+m"
 exit_highlight_mode = "escape"
 toggle_night_mode = "n"
 adjust_reading_focus = "control+r"
@@ -103,6 +104,7 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.reader.readingFocus.customWidthRatio, 0.64, accuracy: 0.001)
         XCTAssertEqual(configuration.reader.readingFocus.height, 112, accuracy: 0.001)
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "h", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.addComment], KeyboardShortcut(key: "m", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "n", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.adjustReadingFocus], KeyboardShortcut(key: "r", modifiers: [.control]))

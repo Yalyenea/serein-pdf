@@ -80,6 +80,8 @@ final class DocumentStore {
     private var splitComparisonSessionIDs: Set<UUID> = []
     private var pdfDocumentCache: [UUID: PDFDocument] = [:]
     private var pdfDocumentRecency: [UUID] = []
+    private var searchSnapshots: [UUID: SearchSnapshot] = [:]
+    private var searchOptionsByWindowID: [UUID: SearchOptions] = [:]
     private let fileMonitor = PDFFileMonitor()
     private static let recentlyClosedLimit = 10
     private static let livePDFDocumentLimit = 4
@@ -152,10 +154,14 @@ final class DocumentStore {
         windowWorkspace(for: windowID)?.isRightSidebarVisible ?? true
     }
 
+    /// True only when the outline *pane content* is on screen (sidebar open + Outline mode).
+    /// Pages / Search / Annotations leave room for the floating outline rail.
     func isOutlineSidebarVisible(in windowID: UUID) -> Bool {
-        appConfiguration.layout.sidebarsSwapped
+        let outlinePaneVisible = appConfiguration.layout.sidebarsSwapped
             ? isLeftSidebarVisible(in: windowID)
             : isRightSidebarVisible(in: windowID)
+        guard outlinePaneVisible else { return false }
+        return rightSidebarMode(in: windowID) == .outline
     }
 
     func sidebarWidths(in windowID: UUID) -> (left: CGFloat, right: CGFloat) {
@@ -231,7 +237,10 @@ final class DocumentStore {
         guard windowWorkspaces.count > 1,
               let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         windowWorkspaces.remove(at: index)
+        searchSnapshots.removeValue(forKey: windowID)
+        searchOptionsByWindowID.removeValue(forKey: windowID)
         removeUnreferencedSessions()
+        prunePDFDocumentCache()
         notifyChange()
     }
 
@@ -259,6 +268,9 @@ final class DocumentStore {
         mergedWorkspace.recentlyClosedURLs = Array(mergedRecentlyClosedURLs.suffix(Self.recentlyClosedLimit))
         normalizeWorkspace(&mergedWorkspace, preferredSessionID: targetID)
         windowWorkspaces = [mergedWorkspace]
+        searchSnapshots = searchSnapshots.filter { $0.key == targetWindowID }
+        searchOptionsByWindowID = searchOptionsByWindowID.filter { $0.key == targetWindowID }
+        rebuildSearchIfNeeded(in: targetWindowID)
         notifyChange()
     }
 
@@ -388,6 +400,10 @@ final class DocumentStore {
         windowWorkspace(for: windowID)?.searchScope ?? .currentDocument
     }
 
+    func searchOptions(in windowID: UUID) -> SearchOptions {
+        searchOptionsByWindowID[windowID] ?? .default
+    }
+
     static func normalizedDocumentURL(_ url: URL) -> URL {
         url.standardizedFileURL.resolvingSymlinksInPath()
     }
@@ -507,6 +523,7 @@ final class DocumentStore {
         }
         normalizeWorkspace(&windowWorkspaces[workspaceIndex], preferredSessionID: preferredSessionID)
         removeUnreferencedSessions()
+        rebuildSearchIfNeeded(in: windowID)
         notifyChange()
     }
 
@@ -545,23 +562,19 @@ final class DocumentStore {
 
         var workspace = windowWorkspaces[workspaceIndex]
         guard workspace.sessionIDs.contains(sessionID) else { return }
-        let duplicatedSessionID: UUID?
         if let targetPane {
-            duplicatedSessionID = activateSessionForSplitEdit(
+            _ = activateSessionForSplitEdit(
                 sessionID: sessionID,
                 targetPane: targetPane,
                 in: &workspace
             )
         } else {
-            duplicatedSessionID = nil
             activateSessionForTabNavigation(sessionID: sessionID, in: &workspace)
         }
 
         normalizeWorkspace(&workspace)
         windowWorkspaces[workspaceIndex] = workspace
-        if let duplicatedSessionID {
-            updateSearchCachesAfterOpen(for: duplicatedSessionID)
-        }
+        rebuildSearchIfNeeded(in: windowID)
         if notify {
             notifyChange()
         }
@@ -727,6 +740,7 @@ final class DocumentStore {
         guard workspace.focusedPane != resolvedPane else { return }
         workspace.focusedPane = resolvedPane
         windowWorkspaces[index] = workspace
+        rebuildSearchIfNeeded(in: windowID)
         notifyChange()
     }
 
@@ -758,6 +772,7 @@ final class DocumentStore {
         normalizeWorkspace(&workspace)
         windowWorkspaces[index] = workspace
         removeUnreferencedSessions()
+        rebuildSearchIfNeeded(in: windowID)
         notifyChange()
     }
 
@@ -887,9 +902,11 @@ final class DocumentStore {
 
         guard matchingIndexes.allSatisfy({ sessions[$0].isDirty == false }) else { return }
 
+        let invalidatedSessionIDs = Set(matchingIndexes.map { sessions[$0].id })
         for index in matchingIndexes {
             invalidateCleanSessionAfterExternalChange(at: index, snapshot: snapshot)
         }
+        invalidateSearchSnapshots(referencing: invalidatedSessionIDs)
         notifyChange()
     }
 
@@ -996,86 +1013,48 @@ final class DocumentStore {
         setRightSidebarMode(nextMode, in: windowID)
     }
 
-    func updateSearch(query: String, scope: SearchScope, in windowID: UUID) {
+    func updateSearch(
+        query: String,
+        scope: SearchScope,
+        options: SearchOptions = .default,
+        in windowID: UUID
+    ) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         windowWorkspaces[index].searchScope = scope
         windowWorkspaces[index].searchQuery = trimmed
+        searchOptionsByWindowID[windowID] = options
 
         if trimmed.isEmpty {
-            clearSearchCaches()
+            searchSnapshots.removeValue(forKey: windowID)
             if windowWorkspaces[index].rightSidebarMode == .search {
                 windowWorkspaces[index].rightSidebarMode = .outline
             }
+            prunePDFDocumentCache()
             notifyChange()
             return
         }
 
-        populateSearchCaches(for: trimmed, scope: scope, windowID: windowID)
+        rebuildSearchIfNeeded(in: windowID)
         windowWorkspaces[index].rightSidebarMode = .search
         notifyChange()
     }
 
     func clearSearch(in windowID: UUID) {
-        updateSearch(query: "", scope: searchScope(in: windowID), in: windowID)
+        updateSearch(
+            query: "",
+            scope: searchScope(in: windowID),
+            options: searchOptions(in: windowID),
+            in: windowID
+        )
     }
 
-    func searchSections(in windowID: UUID) -> [SearchSidebarSection] {
-        let query = searchQuery(in: windowID)
-        guard query.isEmpty == false else { return [] }
-
-        switch searchScope(in: windowID) {
-        case .currentDocument:
-            guard let sessionID = activeSessionID(in: windowID) else { return [] }
-            rebuildSearchCache(for: sessionID, query: query)
-            guard let session = session(for: sessionID) else { return [] }
-            let grouped = Dictionary(grouping: session.searchCache.matches) { $0.pageIndex }
-            return grouped
-                .keys
-                .sorted()
-                .map { pageIndex in
-                    SearchSidebarSection(
-                        title: "Page \(pageIndex + 1)",
-                        matches: grouped[pageIndex, default: []].map {
-                            SearchSidebarMatch(
-                                sessionID: session.id,
-                                sessionTitle: session.title,
-                                matchIndex: $0.matchIndex,
-                                pageIndex: $0.pageIndex,
-                                matchedText: $0.matchedText,
-                                previewText: $0.previewText,
-                                selection: $0.selection
-                            )
-                        }
-                    )
-                }
-        case .allOpen:
-            for sessionID in windowWorkspace(for: windowID)?.sessionIDs ?? [] {
-                rebuildSearchCache(for: sessionID, query: query)
-            }
-            return sessions(in: windowID).compactMap { session in
-                guard session.searchCache.query == query,
-                      session.searchCache.matches.isEmpty == false else { return nil }
-                return SearchSidebarSection(
-                    title: session.title,
-                    matches: session.searchCache.matches.map {
-                        SearchSidebarMatch(
-                            sessionID: session.id,
-                            sessionTitle: session.title,
-                            matchIndex: $0.matchIndex,
-                            pageIndex: $0.pageIndex,
-                            matchedText: $0.matchedText,
-                            previewText: $0.previewText,
-                            selection: $0.selection
-                        )
-                    }
-                )
-            }
-        }
-    }
-
-    func totalSearchMatches(in windowID: UUID) -> Int {
-        searchSections(in: windowID).reduce(0) { $0 + $1.matches.count }
+    func searchSnapshot(in windowID: UUID) -> SearchSnapshot {
+        searchSnapshots[windowID] ?? SearchSnapshot.empty(
+            query: searchQuery(in: windowID),
+            scope: searchScope(in: windowID),
+            options: searchOptions(in: windowID)
+        )
     }
 
     func annotationSections(in windowID: UUID) -> [DocumentHighlightSection] {
@@ -1109,6 +1088,34 @@ final class DocumentStore {
         return sessions.first(where: { $0.id == sessionID })?.annotationCache.groups ?? []
     }
 
+    func annotationGroup(
+        containing annotation: PDFAnnotation,
+        for sessionID: UUID
+    ) -> DocumentHighlightGroup? {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return nil }
+        if sessions[sessionIndex].isAnnotationCacheLoaded {
+            return sessions[sessionIndex].annotationCache.groups.first { group in
+                group.records.contains { $0.annotation === annotation }
+            }
+        }
+        guard let document = loadedPDFDocument(for: sessionID) else { return nil }
+        return HighlightService.buildHighlightGroup(containing: annotation, in: document)
+    }
+
+    @discardableResult
+    func removeHighlightGroup(
+        _ group: DocumentHighlightGroup,
+        in sessionID: UUID,
+        now: Date = Date()
+    ) -> Bool {
+        guard let document = loadedPDFDocument(for: sessionID),
+              group.records.allSatisfy({ $0.annotation.page?.document === document }) else { return false }
+
+        HighlightService.removeHighlights(group.records, in: document)
+        noteHighlightsRemoved(group.records, for: sessionID, now: now)
+        return true
+    }
+
     func hasHighlights(for sessionID: UUID) -> Bool {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
         if session.isAnnotationCacheLoaded {
@@ -1122,10 +1129,6 @@ final class DocumentStore {
             }
         }
         return false
-    }
-
-    func currentSessionSearchMatches(in windowID: UUID) -> [DocumentSearchMatch] {
-        activeSession(in: windowID)?.searchCache.matches ?? []
     }
 
     func setDirty(_ isDirty: Bool, for sessionID: UUID, now: Date = Date()) {
@@ -1169,6 +1172,28 @@ final class DocumentStore {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
               let group = sessions[sessionIndex].annotationCache.groups.first(where: { $0.groupID == groupID }),
               HighlightService.updateComment(comment, for: group.records) else { return false }
+
+        markAnnotationsDirty(for: sessionIndex, now: now)
+        upsertCachedAnnotationGroups(from: group.records, for: sessionIndex)
+        notifyChange()
+        return true
+    }
+
+    @discardableResult
+    func updateHighlightColor(
+        _ color: HighlightColor,
+        forHighlightGroup groupID: String,
+        in sessionID: UUID,
+        now: Date = Date()
+    ) -> Bool {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return false }
+        ensureAnnotationCacheLoaded(for: sessionIndex)
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+              let group = sessions[sessionIndex].annotationCache.groups.first(where: { $0.groupID == groupID }),
+              HighlightService.updateColor(
+                NightModeStyle.highlightColor(for: color),
+                for: group.records
+              ) else { return false }
 
         markAnnotationsDirty(for: sessionIndex, now: now)
         upsertCachedAnnotationGroups(from: group.records, for: sessionIndex)
@@ -1338,6 +1363,8 @@ final class DocumentStore {
         sessions = []
         pdfDocumentCache.removeAll()
         pdfDocumentRecency.removeAll()
+        searchSnapshots.removeAll()
+        searchOptionsByWindowID.removeAll()
         splitComparisonSessionIDs.removeAll()
         var usedSessionIDs: Set<UUID> = []
         for reference in persistedState.sessions {
@@ -1544,6 +1571,8 @@ final class DocumentStore {
         windowWorkspaces[sourceIndex] = source
         windowWorkspaces[destinationIndex] = destination
         removeUnreferencedSessions()
+        rebuildSearchIfNeeded(in: source.id)
+        rebuildSearchIfNeeded(in: destination.id)
         return true
     }
 
@@ -1800,6 +1829,9 @@ final class DocumentStore {
                 pinned.insert(splitPair.primarySessionID)
                 pinned.insert(splitPair.secondarySessionID)
             }
+            if workspace.searchQuery.isEmpty == false {
+                pinned.formUnion(searchTargetSessionIDs(in: workspace))
+            }
         }
         return pinned
     }
@@ -1819,42 +1851,127 @@ final class DocumentStore {
         }
     }
 
-    private func populateSearchCaches(for query: String, scope: SearchScope, windowID: UUID) {
-        let targetSessionIDs: [UUID]
-        switch scope {
-        case .currentDocument:
-            targetSessionIDs = activeSessionID(in: windowID).map { [$0] } ?? []
-        case .allOpen:
-            targetSessionIDs = windowWorkspace(for: windowID)?.sessionIDs ?? []
+    func rebuildSearchIfNeeded(in windowID: UUID) {
+        guard let workspace = windowWorkspace(for: windowID) else {
+            searchSnapshots.removeValue(forKey: windowID)
+            return
+        }
+        let query = workspace.searchQuery
+        guard query.isEmpty == false else {
+            searchSnapshots.removeValue(forKey: windowID)
+            return
         }
 
-        for sessionID in targetSessionIDs {
-            rebuildSearchCache(for: sessionID, query: query)
+        let source = SearchSnapshotSource(
+            query: query,
+            scope: workspace.searchScope,
+            options: searchOptions(in: windowID),
+            targets: searchTargetSessionIDs(in: workspace).compactMap { sessionID in
+                guard let session = session(for: sessionID) else { return nil }
+                return SearchSnapshotSource.Target(
+                    sessionID: sessionID,
+                    sessionTitle: session.title,
+                    fileSnapshot: session.fileSnapshot
+                )
+            }
+        )
+        guard searchSnapshots[windowID]?.source != source else { return }
+
+        var matchesBySessionID: [UUID: [DocumentSearchMatch]] = [:]
+        for target in source.targets {
+            rebuildSearchCache(for: target.sessionID, query: query, options: source.options)
+            guard let session = session(for: target.sessionID),
+                  session.searchCache.query == query,
+                  session.searchCache.options == source.options else { continue }
+            matchesBySessionID[target.sessionID] = session.searchCache.matches
+        }
+
+        let sections: [SearchSidebarSection]
+        switch source.scope {
+        case .currentDocument:
+            guard let sessionID = source.targets.first?.sessionID,
+                  let session = session(for: sessionID) else {
+                sections = []
+                break
+            }
+            let grouped = Dictionary(grouping: matchesBySessionID[sessionID, default: []]) { $0.pageIndex }
+            sections = grouped.keys.sorted().map { pageIndex in
+                SearchSidebarSection(
+                    title: "Page \(pageIndex + 1)",
+                    matches: grouped[pageIndex, default: []].map {
+                        searchSidebarMatch(from: $0, session: session)
+                    }
+                )
+            }
+        case .allOpen:
+            sections = source.targets.compactMap { target in
+                guard let session = session(for: target.sessionID),
+                      let matches = matchesBySessionID[target.sessionID],
+                      matches.isEmpty == false else { return nil }
+                return SearchSidebarSection(
+                    title: session.title,
+                    matches: matches.map { searchSidebarMatch(from: $0, session: session) }
+                )
+            }
+        }
+
+        searchSnapshots[windowID] = SearchSnapshot(
+            source: source,
+            sections: sections,
+            matchesBySessionID: matchesBySessionID,
+            totalMatches: matchesBySessionID.values.reduce(0) { $0 + $1.count }
+        )
+    }
+
+    private func searchTargetSessionIDs(in workspace: WindowWorkspace) -> [UUID] {
+        switch workspace.searchScope {
+        case .currentDocument:
+            workspace.activeSessionID.map { [$0] } ?? []
+        case .allOpen:
+            workspace.sessionIDs
         }
     }
 
-    private func rebuildSearchCache(for sessionID: UUID, query: String) {
+    private func invalidateSearchSnapshots(referencing sessionIDs: Set<UUID>) {
+        let invalidatedWindowIDs = searchSnapshots.compactMap { windowID, snapshot in
+            snapshot.source.targets.contains { sessionIDs.contains($0.sessionID) } ? windowID : nil
+        }
+        for windowID in invalidatedWindowIDs {
+            searchSnapshots.removeValue(forKey: windowID)
+        }
+    }
+
+    private func searchSidebarMatch(
+        from match: DocumentSearchMatch,
+        session: DocumentSession
+    ) -> SearchSidebarMatch {
+        SearchSidebarMatch(
+            sessionID: session.id,
+            sessionTitle: session.title,
+            matchIndex: match.matchIndex,
+            pageIndex: match.pageIndex,
+            matchedText: match.matchedText,
+            previewText: match.previewText,
+            selection: match.selection
+        )
+    }
+
+    private func rebuildSearchCache(
+        for sessionID: UUID,
+        query: String,
+        options: SearchOptions
+    ) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        if sessions[index].searchCache.query == query {
+        if sessions[index].searchCache.query == query,
+           sessions[index].searchCache.options == options {
             return
         }
         guard let document = try? pdfDocument(for: sessionID) else { return }
         sessions[index].searchCache = DocumentSearchCache(
             query: query,
-            matches: DocumentSearchService.buildMatches(for: query, in: document)
+            options: options,
+            matches: DocumentSearchService.buildMatches(for: query, options: options, in: document)
         )
-    }
-
-    private func updateSearchCachesAfterOpen(for sessionID: UUID) {
-        for index in windowWorkspaces.indices {
-            let query = windowWorkspaces[index].searchQuery
-            guard query.isEmpty == false else { continue }
-            if windowWorkspaces[index].sessionIDs.contains(sessionID) &&
-                (windowWorkspaces[index].searchScope == .allOpen ||
-                 windowWorkspaces[index].activeSessionID == sessionID) {
-                rebuildSearchCache(for: sessionID, query: query)
-            }
-        }
     }
 
     private func restoredSessionIDs(
@@ -1880,12 +1997,6 @@ final class DocumentStore {
         ].compactMap { $0 }
         var seen: Set<UUID> = []
         return fallbackIDs.filter { seen.insert($0).inserted }
-    }
-
-    private func clearSearchCaches() {
-        for index in sessions.indices {
-            sessions[index].searchCache.clear()
-        }
     }
 
     private static let logger = Logger(subsystem: "local.yfff.Serein", category: "DocumentStore")
@@ -2006,7 +2117,9 @@ final class DocumentStore {
         guard let sourceSession = session(for: sessionID),
               sourceSession.isBlank == false else { return nil }
         do {
-            let duplicate = try makeSession(documentAt: sourceSession.url, seedState: sourceSession)
+            var duplicate = try makeSession(documentAt: sourceSession.url, seedState: sourceSession)
+            duplicate.annotationCache = DocumentHighlightCache()
+            duplicate.isAnnotationCacheLoaded = false
             sessions.append(duplicate)
             splitComparisonSessionIDs.insert(duplicate.id)
             return duplicate.id
