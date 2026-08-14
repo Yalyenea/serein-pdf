@@ -1165,6 +1165,54 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(document.page(at: 0)?.annotations.count, 1)
     }
 
+    func testCurrentPageImageUsesSessionPageAndRejectsBlankTabs() throws {
+        let store = makeStore()
+        let url = try TestPDFFixtures.makeLabeledPDF(
+            named: "current-page-image",
+            pageSizes: [
+                NSSize(width: 200, height: 260),
+                NSSize(width: 300, height: 400),
+            ]
+        )
+        let session = try store.open(documentAt: url)
+        let document = try store.pdfDocument(for: session.id)
+        let firstPage = try XCTUnwrap(document.page(at: 0))
+        let secondPage = try XCTUnwrap(document.page(at: 1))
+
+        let firstImage = try store.currentPageImage(for: session.id)
+        XCTAssertEqual(
+            firstImage.size.width,
+            firstPage.bounds(for: .mediaBox).width * PDFPageImageService.renderScale,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(
+            firstImage.size.height,
+            firstPage.bounds(for: .mediaBox).height * PDFPageImageService.renderScale,
+            accuracy: 0.5
+        )
+
+        store.updateCurrentPage(index: 1, for: session.id)
+        let secondImage = try store.currentPageImage(for: session.id)
+        XCTAssertEqual(
+            secondImage.size.width,
+            secondPage.bounds(for: .mediaBox).width * PDFPageImageService.renderScale,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(
+            secondImage.size.height,
+            secondPage.bounds(for: .mediaBox).height * PDFPageImageService.renderScale,
+            accuracy: 0.5
+        )
+
+        let blank = store.newBlankTab()
+        XCTAssertThrowsError(try store.currentPageImage(for: blank.id)) { error in
+            guard case DocumentStoreError.blankSession = error else {
+                XCTFail("expected blankSession, got \(error)")
+                return
+            }
+        }
+    }
+
     func testAnnotationSectionsExposeSnippetColorAndPageGrouping() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(

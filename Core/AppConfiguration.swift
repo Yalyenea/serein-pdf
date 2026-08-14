@@ -224,6 +224,7 @@ struct AppConfiguration: Equatable, Sendable {
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
             .copyCurrentPDFPath: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
+            .copyCurrentPageAsImage: KeyboardShortcut(key: "c", modifiers: [.command, .option]),
             .removeHighlight: KeyboardShortcut(key: "d", modifiers: []),
             .highlightColorPink: KeyboardShortcut(key: "p", modifiers: [.command, .shift]),
             .highlightColorYellow: KeyboardShortcut(key: "y", modifiers: [.command, .shift]),
@@ -575,6 +576,7 @@ share_document = "none"
 export_clean_copy = "none"
 copy_highlights_markdown = "command+shift+e"
 copy_current_pdf_path = "command+shift+c"
+copy_current_page_as_image = "command+option+c"
 remove_highlight = "d"
 highlight_color_pink = "command+shift+p"
 highlight_color_yellow = "command+shift+y"
@@ -689,6 +691,7 @@ share_document = "\(serializedShortcut(.shareDocument, configuration: configurat
 export_clean_copy = "\(serializedShortcut(.exportCleanCopy, configuration: configuration))"
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
 copy_current_pdf_path = "\(serializedShortcut(.copyCurrentPDFPath, configuration: configuration))"
+copy_current_page_as_image = "\(serializedShortcut(.copyCurrentPageAsImage, configuration: configuration))"
 remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
 highlight_color_pink = "\(serializedShortcut(.highlightColorPink, configuration: configuration))"
 highlight_color_yellow = "\(serializedShortcut(.highlightColorYellow, configuration: configuration))"
@@ -799,6 +802,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "export_clean_copy",
         "copy_highlights_markdown",
         "copy_current_pdf_path",
+        "copy_current_page_as_image",
         "remove_highlight",
         "highlight_color_pink",
         "highlight_color_yellow",
@@ -982,6 +986,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .copyHighlightsMarkdown, to: &configuration)
         case ("shortcuts", "copy_current_pdf_path"):
             try applyShortcut(rawValue, command: .copyCurrentPDFPath, to: &configuration)
+        case ("shortcuts", "copy_current_page_as_image"):
+            try applyShortcut(rawValue, command: .copyCurrentPageAsImage, to: &configuration)
         case ("reader", "default_display_mode"):
             let value = parseString(rawValue)
             guard let displayMode = ReaderDisplayMode(rawValue: value) else {

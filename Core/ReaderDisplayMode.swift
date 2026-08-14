@@ -67,6 +67,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case exportCleanCopy = "export_clean_copy"
     case copyHighlightsMarkdown = "copy_highlights_markdown"
     case copyCurrentPDFPath = "copy_current_pdf_path"
+    case copyCurrentPageAsImage = "copy_current_page_as_image"
     case removeHighlight = "remove_highlight"
     case highlightColorPink = "highlight_color_pink"
     case highlightColorYellow = "highlight_color_yellow"
@@ -153,6 +154,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Copy Highlights as Markdown"
         case .copyCurrentPDFPath:
             "Copy Current PDF Path"
+        case .copyCurrentPageAsImage:
+            "Copy Page as Image"
         case .removeHighlight:
             "Remove Highlight"
         case .highlightColorPink:

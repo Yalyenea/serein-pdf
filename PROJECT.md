@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -112,7 +112,7 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作,含复制当前页为图片;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
 | 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | Annotations 为全高紧凑评论流(仅页 section + 原文 / 评论,无时间戳,无横向滑动);连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持筛选与一键折叠 / 展开;所有预览类内容都在右栏,仅正文 hover 评论卡与非 Outline 态浮动目录可覆盖中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
@@ -176,6 +176,7 @@ flowchart LR
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
 - `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+Shift+C`:复制当前 PDF 路径到剪贴板
+- `Cmd+Option+C`:复制当前页为图片(2× mediaBox,含批注,不含夜间滤镜);阅读区右键同样提供
 - `Cmd+W`:多选 tabs 时关闭选中的 PDFs;否则关闭当前 tab
 - `Cmd+Shift+W`:关闭当前窗口
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
@@ -309,6 +310,7 @@ Core/                                     # 文档 / 窗口 / 配置 / 持久化
   SecurityScopedAccessController.swift    # `/Users` 等访问 root 的 security-scoped bookmark 持久访问
   PDFLibrary.swift                        # PDF 库扫描、root / folder / item catalog
   CleanPDFService.swift                   # 生成保留 Link / Widget、移除可见用户批注的 PDF 副本
+  PDFPageImageService.swift               # 当前页栅格化为 NSImage 并写入剪贴板
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
   DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 非运行期窗口状态
   DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等
@@ -391,6 +393,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   AnnotationsViewControllerTests.swift    # 批注列表 / comment 编辑
   AnnotationSaveTests.swift               # 手动 / 自动批注保存策略
   CleanPDFServiceTests.swift              # Clean Copy 保留 Link / Widget 且不污染源文档
+  PDFPageImageServiceTests.swift          # 当前页 2× 栅格化与剪贴板写入
   HighlightServiceTests.swift             # 高亮 apply / remove / 分组
   HighlightExporterTests.swift            # 三种导出格式
   HighlightUndoTests.swift                # 撤销栈上限与 added/removed 还原

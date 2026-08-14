@@ -47,6 +47,7 @@ site for showcase, download notes, and compact docs.
 - Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - `cmd+k`, then `cmd+t` switches the current light or dark theme, VS Code-style
+- Copy the current page as an image (`cmd+option+c` or the reader context menu); the raster includes annotations at 2× mediaBox and does not apply night-mode filters
 - `cmd+k` chords also refresh the PDF Library index, jump to Library / Shortcuts settings, share the current PDF, merge windows, and move the current PDF to a new window
 - Rose Pine Dawn replaces only the PDF's white paper with an Obsidian-like warm surface, preserving the document's original text and accent colors
 - Rose Pine Moon maps the PDF's white/black endpoints to a dark paper/text pair, preserves warm/cool accent direction, and keeps the surrounding sidebars one shade deeper
@@ -160,6 +161,7 @@ export_clean_copy = "none"
 add_comment = "command+option+m"
 new_blank_tab = "command+t"
 copy_current_pdf_path = "command+shift+c"
+copy_current_page_as_image = "command+option+c"
 toggle_continuous_reading = "none"
 toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
@@ -216,6 +218,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Export clean copy | configurable, default none |
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Copy current PDF path | `cmd+shift+c` |
+| Copy current page as image | `cmd+option+c` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
 | New blank tab | `cmd+t` |

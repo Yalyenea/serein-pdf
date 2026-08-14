@@ -701,6 +701,27 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertEqual(store.focusedPane(in: store.defaultWindowID), .secondary)
     }
 
+    func testReaderContextMenuIncludesCopyPageAsImage() throws {
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "copy-page-menu"))
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushAnnotationNavigationLayout(windowController.window)
+
+        let split = try XCTUnwrap(
+            windowController.window?.contentViewController as? SplitViewController
+        )
+        let reader = split.readerViewController
+        let event = makeRightClickEvent(in: reader.pdfView)
+        let menu = try XCTUnwrap(reader.pdfView.menu(for: event))
+        let item = try XCTUnwrap(menu.item(withTitle: ShortcutCommand.copyCurrentPageAsImage.menuTitle))
+
+        XCTAssertTrue(item.isEnabled)
+        XCTAssertEqual(item.keyEquivalent, "c")
+        XCTAssertEqual(item.keyEquivalentModifierMask, [.command, .option])
+    }
+
     private func makeStore() -> DocumentStore {
         makeIsolatedDocumentStore()
     }

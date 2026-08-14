@@ -365,6 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .exportCleanCopy: { [weak self] in self?.exportCleanCopy(nil) },
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
             .copyCurrentPDFPath: { [weak self] in self?.copyCurrentPDFPath(nil) },
+            .copyCurrentPageAsImage: { [weak self] in self?.copyCurrentPageAsImage(nil) },
             .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
             .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
             .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
@@ -647,6 +648,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .copyCurrentPDFPath,
             action: #selector(copyCurrentPDFPath(_:))
         )
+        let copyCurrentPageAsImageItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.copyCurrentPageAsImage.menuTitle,
+            command: .copyCurrentPageAsImage,
+            action: #selector(copyCurrentPageAsImage(_:))
+        )
         let findItem = NSMenuItem(
             title: "Find…",
             action: #selector(findInCurrentDocument(_:)),
@@ -734,6 +740,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             refreshLibraryItem,
             openContainingFolderItem,
             copyCurrentPDFPathItem,
+            copyCurrentPageAsImageItem,
             recentItem,
             reopenClosedItem,
             findItem,
@@ -1783,6 +1790,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         pasteboard.setString(activeSession.url.path, forType: .string)
     }
 
+    @objc
+    private func copyCurrentPageAsImage(_ sender: Any?) {
+        guard let session = currentPageImageSession(),
+              let image = try? documentStore.currentPageImage(for: session.id) else { return }
+        PDFPageImageService.copyToPasteboard(image)
+    }
+
+    private func currentPageImageSession() -> DocumentSession? {
+        guard let windowID = mainWindowController?.windowID ?? mainWindowControllers.values.first?.windowID else {
+            return nil
+        }
+        let pane = documentStore.isSplitEnabled(in: windowID)
+            ? documentStore.focusedPane(in: windowID)
+            : .primary
+        guard let sessionID = documentStore.displayedSessionID(for: pane, in: windowID),
+              let session = documentStore.session(for: sessionID),
+              session.isBlank == false else {
+            return nil
+        }
+        return session
+    }
+
     private func currentPDFShareContext() -> (controller: MainWindowController, session: DocumentSession)? {
         guard let controller = mainWindowController,
               let session = documentStore.activeSession(in: controller.windowID),
@@ -2400,6 +2429,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return false
         case #selector(openContainingFolder(_:)), #selector(copyCurrentPDFPath(_:)):
             return activePDFSession != nil
+        case #selector(copyCurrentPageAsImage(_:)):
+            return currentPageImageSession() != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
             return controller?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):

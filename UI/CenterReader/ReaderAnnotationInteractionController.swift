@@ -152,6 +152,15 @@ final class ReaderAnnotationInteractionController: NSObject {
                 isEnabled: hit != nil
             )
         )
+        menu.addItem(.separator())
+        menu.addItem(
+            contextMenuItem(
+                title: ShortcutCommand.copyCurrentPageAsImage.menuTitle,
+                command: .copyCurrentPageAsImage,
+                action: #selector(copyCurrentPageAsImage(_:)),
+                isEnabled: pdfView.currentPage != nil
+            )
+        )
         return menu
     }
 
@@ -395,6 +404,12 @@ final class ReaderAnnotationInteractionController: NSObject {
         if let createdGroup = onCreateHighlightRequested?() {
             presentCommentEditor(for: createdGroup)
         }
+    }
+
+    @objc
+    private func copyCurrentPageAsImage(_ sender: Any?) {
+        guard let page = pdfView.currentPage else { return }
+        PDFPageImageService.copyToPasteboard(PDFPageImageService.image(from: page))
     }
 
     @objc

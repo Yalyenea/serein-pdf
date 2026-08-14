@@ -1330,6 +1330,17 @@ final class DocumentStore {
         notifyChange()
     }
 
+    func currentPageImage(for sessionID: UUID) throws -> NSImage {
+        let document = try pdfDocument(for: sessionID)
+        guard let session = session(for: sessionID) else {
+            throw DocumentStoreError.missingSession(sessionID)
+        }
+        guard let page = document.page(at: session.currentPageIndex) else {
+            throw DocumentStoreError.unreadableDocument(session.url)
+        }
+        return PDFPageImageService.image(from: page)
+    }
+
     func cleanCopyData(for sessionID: UUID) throws -> Data {
         let document = try pdfDocument(for: sessionID)
         return try CleanPDFService.cleanCopyData(from: document)

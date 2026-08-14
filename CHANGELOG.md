@@ -31,6 +31,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Reading
 - Let trackpad pinch, smart zoom, and PDFKit `zoomIn`/`zoomOut` leave fit-width or fit-height instead of snapping back; keep layout/page-turn refits.
+- Copy the current page as an image (`cmd+option+c`, File menu, or reader context menu). Rasterizes the focused pane's current page at 2× mediaBox with annotations, without the night-mode display filter.
 
 ### Find
 - After choosing a result with the Find bar arrow keys, `Enter` activates that exact selection before repeated-submit navigation resumes.

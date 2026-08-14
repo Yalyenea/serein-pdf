@@ -14,6 +14,10 @@ final class AppConfigurationTests: XCTestCase {
             // testConfigKeyListsStayInSyncAndMissingKeysSelfHeal.
             XCTAssertEqual(configuration, .default)
             XCTAssertEqual(configuration.layout.floatingOutlineHeight, 360, accuracy: 0.001)
+            XCTAssertEqual(
+                configuration.shortcuts.bindings[.copyCurrentPageAsImage],
+                KeyboardShortcut(key: "c", modifiers: [.command, .option])
+            )
         }
     }
 
