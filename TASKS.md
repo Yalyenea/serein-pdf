@@ -18,7 +18,7 @@
 |---|---|
 | M1–M10.x / M13 / M14 / M15 | ✅ 见 archive + CHANGELOG |
 | M11 扩展生态（预研） | 未开始 |
-| M12 Backlog 体验分流 | 进行中（空窗 010–014） |
+| M12 Backlog 体验分流 | 空窗 010–014 ✅（其余暂缓项有触发条件再开） |
 | M13.1 网站后续完善 | 待办 |
 | 多主题预设 | 规划中 · [docs/theme-presets-plan.md](docs/theme-presets-plan.md) |
 | REVIEW 5.1 近期债 | ✅ |
@@ -51,14 +51,6 @@
 - [ ] `M11-002` PoC：若决策继续，选一条路径把「导出高亮」重写为插件
 - [ ] `M11-003` Serein Extension API 草稿
 - [ ] `M11-004` 若推迟，在 RFC 写清「为什么现在不做」
-
-#### M12 空窗体验收尾
-
-- [ ] `M12-010` 空窗侧栏占比收口：无 session 时折叠侧栏或更窄默认宽度，引导集中中栏
-- [ ] `M12-011` 右栏空窗 chrome 弱化：无文档时隐藏 / disable segmented 与 Outline 操作
-- [ ] `M12-012` 左栏空态层次：`Documents` section 标题；空态上移 Recent 或中栏同步入口
-- [ ] `M12-013` 空态视觉语言统一：共享 empty state 组件
-- [ ] `M12-014` 侧栏顶部留白校准：空态垂直居中或收紧 titlebar 留白
 
 #### M12 暂缓（有触发条件再开）
 

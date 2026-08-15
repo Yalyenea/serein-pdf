@@ -347,11 +347,11 @@
 - [x] `M12-015` 文档侧栏空白区域拖窗:只让背景接管窗口拖动,不抢 tab、关闭按钮、divider、滚动与跨窗 tab 拖拽。
 - [x] `M12-016` Notion 式浮动目录:Outline pane 隐藏时以标题短横线常驻阅读区右缘,hover 覆盖展开现有完整目录;上下边缘以中心对称调节当前窗口高度,General / TOML 配置全局默认值;支持 swap / 连续阅读 / 点击跳页,无目录时隐藏且不改变 reader framing。
 - [x] `M12-017` Settings 布局收口:General / Library / Shortcuts 固定统一紧凑宽度,切换仅调整高度;General 按职责分组,Shortcuts 以标题 / 默认值双层行压缩操作区并禁止横向滚动。
-- [ ] `M12-010` 空窗侧栏占比收口:无 session 时自动折叠侧栏或采用更窄默认宽度,把引导集中到中栏。
-- [ ] `M12-011` 右栏空窗 chrome 弱化:无文档时隐藏 / disable segmented 与 Outline 操作控件,避免「已就绪但未加载」噪音。
-- [ ] `M12-012` 左栏空态层次增强:补 `Documents` section 标题;空态时上移 Recent 列表或在中栏同步展示快捷入口。
-- [ ] `M12-013` 空态视觉语言统一:抽共享 empty state 组件,统一三栏与右栏各 mode 的字号 / 颜色 / 对齐。
-- [ ] `M12-014` 侧栏顶部留白校准:空态时将侧栏内容垂直居中或收紧 titlebar 留白,减少顶部死区。
+- [x] `M12-010` 空窗侧栏占比收口:无 session 时右栏（outline pane）自动折叠,把引导集中到中栏;首开文档自动恢复（空窗期间用户显式切换过则让位）。
+- [x] `M12-011` 右栏空窗 chrome 弱化:无文档（无 session / 空白 tab）时隐藏 segmented 与各 mode 面板,只留居中共享空态,避免「已就绪但未加载」噪音。
+- [x] `M12-012` 左栏空态层次增强:补 `Documents` section 标题;空态时 Recent 列表上移到标题下作为主快捷入口。
+- [x] `M12-013` 空态视觉语言统一:共享 `EmptyStateView` 组件,统一字号 / 颜色 / 对齐;`PlaceholderViewController` 基于它重建。
+- [x] `M12-014` 侧栏顶部留白校准:右栏空态垂直居中,左栏 `Documents` 标题填充顶部留白,减少死区。
 
 ### 18.2 暂缓
 

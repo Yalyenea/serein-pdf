@@ -696,6 +696,177 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(recorder.observedChange, .sidebarVisibility)
     }
 
+    func testFreshStoreStartsWithOutlinePaneCollapsed() {
+        // M12-010: an empty window has nothing for the outline pane to answer.
+        let store = makeStore()
+        XCTAssertTrue(store.sessions(in: store.defaultWindowID).isEmpty)
+        XCTAssertTrue(store.isLeftSidebarVisible(in: store.defaultWindowID))
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+    }
+
+    func testClosingLastSessionHidesOutlinePane() throws {
+        // M12-010: closing every session in a window auto-collapses the outline
+        // pane; the tabs pane stays because it hosts the recent quick entry.
+        let store = makeStore()
+        store.setRightSidebarVisible(true, in: store.defaultWindowID)
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-second"))
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+
+        store.close(sessionID: second.id, from: store.defaultWindowID)
+        XCTAssertFalse(store.sessions(in: store.defaultWindowID).isEmpty)
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+
+        store.close(sessionID: first.id, from: store.defaultWindowID)
+        XCTAssertTrue(store.sessions(in: store.defaultWindowID).isEmpty)
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+        XCTAssertTrue(store.isLeftSidebarVisible(in: store.defaultWindowID))
+
+        // Re-opening a document into the auto-collapsed window restores the pane.
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-reopen"))
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+    }
+
+    func testOpeningFirstPDFIntoAutoCollapsedWindowRestoresOutlinePane() throws {
+        // Auto-collapse only describes the empty window: the first document
+        // restores the outline pane so the TOC is immediately available.
+        let store = makeStore()
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-open"))
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+
+        store.setRightSidebarVisible(false, in: store.defaultWindowID)
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+    }
+
+    func testExplicitOutlineToggleDuringEmptyWindowWins() throws {
+        // The user's own toggle while empty hands visibility back to them;
+        // opening a document must not resurrect the auto-collapsed state.
+        let store = makeStore()
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+
+        store.setRightSidebarVisible(true, in: store.defaultWindowID)
+        store.setRightSidebarVisible(false, in: store.defaultWindowID)
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-user"))
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+    }
+
+    func testSwappedEmptyWindowCollapsesAndRestoresOutlinePane() throws {
+        var configuration = AppConfiguration.default
+        configuration.layout.sidebarsSwapped = true
+        let store = makeStore(appConfiguration: configuration)
+
+        XCTAssertFalse(store.isLeftSidebarVisible(in: store.defaultWindowID))
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-swapped"))
+
+        XCTAssertTrue(store.isLeftSidebarVisible(in: store.defaultWindowID))
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+    }
+
+    func testExplicitSwappedOutlineToggleDuringEmptyWindowWins() throws {
+        var configuration = AppConfiguration.default
+        configuration.layout.sidebarsSwapped = true
+        let store = makeStore(appConfiguration: configuration)
+
+        store.setLeftSidebarVisible(true, in: store.defaultWindowID)
+        store.setLeftSidebarVisible(false, in: store.defaultWindowID)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-swapped-user"))
+
+        XCTAssertFalse(store.isLeftSidebarVisible(in: store.defaultWindowID))
+        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
+    }
+
+    func testMovingLastSessionToNewWindowHidesSourceOutlinePane() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-move"))
+        store.setRightSidebarVisible(true, in: store.defaultWindowID)
+        let newWindowID = try XCTUnwrap(store.moveActiveSessionToNewWindow(from: store.defaultWindowID))
+
+        XCTAssertTrue(store.sessions(in: store.defaultWindowID).isEmpty)
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+        XCTAssertEqual(store.sessions(in: newWindowID).map(\.id), [session.id])
+        XCTAssertTrue(store.isRightSidebarVisible(in: newWindowID))
+    }
+
+    func testRestoredEmptyWindowHidesOutlinePane() throws {
+        let windowID = UUID()
+        let persistence = InMemoryDocumentStorePersistence()
+        persistence.state = PersistedDocumentStoreState(
+            sessions: [],
+            windows: [
+                .init(
+                    id: windowID,
+                    tabPresentationMode: .verticalSidebar,
+                    isLeftSidebarVisible: true,
+                    isRightSidebarVisible: true,
+                    rightSidebarMode: .outline,
+                    searchQuery: "",
+                    searchScope: .currentDocument,
+                    splitState: .init(
+                        isEnabled: false,
+                        primarySessionID: nil,
+                        secondarySessionID: nil,
+                        primarySessionURL: nil,
+                        secondarySessionURL: nil,
+                        focusedPane: .primary
+                    ),
+                    recentlyClosedURLs: []
+                ),
+            ]
+        )
+        let store = DocumentStore(
+            persistence: persistence,
+            readingStateStore: InMemoryReadingStateStore(),
+            recentFilesStore: InMemoryRecentFilesStore()
+        )
+
+        try store.restorePersistedState()
+
+        XCTAssertTrue(store.sessions(in: windowID).isEmpty)
+        XCTAssertFalse(store.isRightSidebarVisible(in: windowID))
+        XCTAssertTrue(store.isLeftSidebarVisible(in: windowID))
+    }
+
+    func testPersistedAutoCollapsedWindowRestoresOutlineOnFirstOpen() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let store = makeStore(persistence: persistence)
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-persist"))
+        store.close(sessionID: session.id, from: store.defaultWindowID)
+
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+        XCTAssertEqual(persistence.state?.windows.first?.isRightSidebarVisible, true)
+
+        let restoredStore = makeStore(persistence: persistence)
+        try restoredStore.restorePersistedState()
+        let restoredWindowID = restoredStore.defaultWindowID
+        XCTAssertFalse(restoredStore.isRightSidebarVisible(in: restoredWindowID))
+
+        _ = try restoredStore.open(
+            documentAt: makeTemporaryPDF(named: "empty-policy-persist-reopen"),
+            in: restoredWindowID
+        )
+
+        XCTAssertTrue(restoredStore.isRightSidebarVisible(in: restoredWindowID))
+    }
+
+    func testCopiedAutoCollapsedWindowRestoresOutlineOnFirstOpen() throws {
+        let store = makeStore()
+        let copiedWindowID = store.createWindow(copyingFrom: store.defaultWindowID)
+
+        XCTAssertFalse(store.isRightSidebarVisible(in: copiedWindowID))
+
+        _ = try store.open(
+            documentAt: makeTemporaryPDF(named: "empty-policy-copy"),
+            in: copiedWindowID
+        )
+
+        XCTAssertTrue(store.isRightSidebarVisible(in: copiedWindowID))
+    }
+
     func testRightSidebarModeChangePostsLightweightNotification() {
         let store = makeStore()
         let recorder = DocumentStoreChangeRecorder()

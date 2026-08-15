@@ -70,6 +70,80 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertGreaterThan(wideButtonWidth, narrowButtonWidth)
     }
 
+    func testEmptyWindowShowsDocumentsHeaderAndSharedHint() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 240, height: 360)
+        controller.view.layoutSubtreeIfNeeded()
+        let emptyState = try XCTUnwrap(
+            findDescendant(of: EmptyStateView.self, in: controller.view)
+        )
+
+        XCTAssertEqual(controller.testingDocumentsTitle, "Documents")
+        XCTAssertTrue(controller.testingEmptyStateVisible)
+        XCTAssertFalse(controller.testingCountLabelVisible)
+        XCTAssertFalse(controller.testingRecentSectionVisible)
+        XCTAssertEqual(emptyState.frame.width, 216, accuracy: 0.5)
+        XCTAssertGreaterThan(emptyState.frame.height, 0)
+    }
+
+    func testEmptyWindowMovesRecentFilesUpUnderHeader() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        let firstURL = try makeTemporaryPDF(named: "empty-recents-first")
+        let secondURL = try makeTemporaryPDF(named: "empty-recents-second")
+        let first = try store.open(documentAt: firstURL)
+        let second = try store.open(documentAt: secondURL)
+        store.close(sessionID: second.id, from: store.defaultWindowID)
+        store.close(sessionID: first.id, from: store.defaultWindowID)
+
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+
+        XCTAssertTrue(store.sessions(in: store.defaultWindowID).isEmpty)
+        XCTAssertTrue(controller.testingRecentSectionVisible)
+        XCTAssertTrue(controller.testingRecentSectionTopPinned)
+        XCTAssertFalse(controller.testingEmptyStateVisible)
+        XCTAssertEqual(
+            controller.testingRecentFileTitles,
+            ["empty-recents-second", "empty-recents-first"]
+        )
+    }
+
+    func testEmptyWindowHintShowsWhenRecentsDisabled() throws {
+        _ = NSApplication.shared
+        var configuration = AppConfiguration.default
+        configuration.layout.showRecentFilesInSidebar = false
+        let store = makeIsolatedDocumentStore(appConfiguration: configuration)
+        let url = try makeTemporaryPDF(named: "empty-recents-disabled")
+        let session = try store.open(documentAt: url)
+        store.close(sessionID: session.id, from: store.defaultWindowID)
+
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+
+        XCTAssertTrue(controller.testingEmptyStateVisible)
+        XCTAssertFalse(controller.testingRecentSectionVisible)
+    }
+
+    func testNonEmptyWindowShowsCountAndBottomPinnedRecents() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-count-first"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-count-second"))
+
+        let controller = VerticalTabsViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+
+        XCTAssertFalse(controller.testingEmptyStateVisible)
+        XCTAssertTrue(controller.testingCountLabelVisible)
+        XCTAssertTrue(controller.testingRecentSectionVisible)
+        XCTAssertFalse(controller.testingRecentSectionTopPinned)
+    }
+
     func testVerticalTabsReturnRenameStaysInOwnWindow() throws {
         _ = NSApplication.shared
         let store = makeStore()

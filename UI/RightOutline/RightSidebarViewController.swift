@@ -46,6 +46,11 @@ final class RightSidebarViewController: NSViewController {
     var onDidNavigateFromPages: (() -> Void)?
     private let thumbnailView = NavigationTrackingPDFThumbnailView()
     private let modeSegmented = NSSegmentedControl()
+    private let emptyStateView = EmptyStateView(
+        title: "No Document Open",
+        detail: "Open a PDF to see its outline and notes."
+    )
+    private var lastAppliedDocumentPresence: Bool?
     private var lastAppliedThumbnailWidth: CGFloat = 0
     private var lastAppliedThumbnailColumns: Int = 1
     private var outlineModeConstraints: [NSLayoutConstraint] = []
@@ -108,6 +113,7 @@ final class RightSidebarViewController: NSViewController {
             self?.onDidNavigateFromPages?()
         }
         applyMode()
+        applyDocumentPresence()
     }
 
     deinit {
@@ -160,7 +166,12 @@ final class RightSidebarViewController: NSViewController {
         let searchView = searchResultsViewController.view
         searchView.translatesAutoresizingMaskIntoConstraints = false
 
-        for view in [modeSegmented, outlineView, thumbnailView, searchView] {
+        // The empty state defaults to visible: an empty window should show it
+        // even if no store notification arrived before loadView. Keep whatever
+        // applyDocumentPresence already set when it ran earlier.
+        emptyStateView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        for view in [modeSegmented, outlineView, thumbnailView, searchView, emptyStateView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -177,6 +188,16 @@ final class RightSidebarViewController: NSViewController {
             segmentedLeading,
             segmentedTrailing,
             modeSegmented.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
+        ])
+
+        // M12-014: the no-document state centers its copy instead of leaving a
+        // titlebar-anchored dead zone.
+        NSLayoutConstraint.activate([
+            emptyStateView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            emptyStateView.leadingAnchor.constraint(
+                equalTo: container.leadingAnchor, constant: 16),
+            emptyStateView.trailingAnchor.constraint(
+                equalTo: container.trailingAnchor, constant: -16),
         ])
 
         outlineModeConstraints = [
@@ -230,6 +251,35 @@ final class RightSidebarViewController: NSViewController {
         onSearchSelectionDidChange?(summary.selectedIndex, summary.totalMatches)
     }
 
+    /// M12-011: without a PDF document (no active session, or a blank tab) the
+    /// segmented chrome and mode panes are noise — hide them and show one shared
+    /// centered empty state instead. Mode machinery stays intact underneath so
+    /// pane lazy-loading and mode memory survive the transition.
+    private func applyDocumentPresence() {
+        let hasDocument = activeDocument() != nil
+        guard hasDocument != lastAppliedDocumentPresence else { return }
+        lastAppliedDocumentPresence = hasDocument
+
+        modeSegmented.isHidden = !hasDocument
+        emptyStateView.isHidden = hasDocument
+        setModeContentHidden(!hasDocument)
+        view.needsLayout = true
+    }
+
+    private func setModeContentHidden(_ hidden: Bool) {
+        outlineViewController.view.isHidden = hidden || appliedMode != .outline
+        thumbnailView.isHidden = hidden || appliedMode != .pages
+        searchResultsViewController.view.isHidden = hidden || appliedMode != .search
+        if annotationsViewController.isViewLoaded {
+            annotationsViewController.view.isHidden = hidden || appliedMode != .annotations
+        }
+    }
+
+    private func activeDocument() -> DocumentSession? {
+        guard let session = documentStore.activeSession(in: windowID) else { return nil }
+        return session.isBlank ? nil : session
+    }
+
     private func applyMode() {
         let mode = documentStore.rightSidebarMode(in: windowID)
         guard appliedMode != mode else { return }
@@ -259,12 +309,7 @@ final class RightSidebarViewController: NSViewController {
         }
 
         appliedMode = mode
-        outlineViewController.view.isHidden = mode != .outline
-        thumbnailView.isHidden = mode != .pages
-        searchResultsViewController.view.isHidden = mode != .search
-        if annotationsViewController.isViewLoaded {
-            annotationsViewController.view.isHidden = mode != .annotations
-        }
+        setModeContentHidden(emptyStateView.isHidden == false)
 
         view.needsLayout = true
     }
@@ -273,6 +318,7 @@ final class RightSidebarViewController: NSViewController {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             (view as? SidebarMaterialView)?.applySurface()
         }
+        emptyStateView.refreshChromeColors()
         outlineViewController.refreshChromeColors()
         searchResultsViewController.refreshChromeColors()
         if annotationsViewController.isViewLoaded {
@@ -338,6 +384,7 @@ final class RightSidebarViewController: NSViewController {
         let mode = documentStore.rightSidebarMode(in: windowID)
         modeSegmented.selectedSegment = mode.rawValue
         applyMode()
+        applyDocumentPresence()
     }
 
     private func ensureAnnotationsViewLoaded() {
@@ -375,3 +422,15 @@ final class RightSidebarViewController: NSViewController {
         searchResultsViewController.activateSelectedMatch()
     }
 }
+
+#if DEBUG
+extension RightSidebarViewController {
+    var testingEmptyStateVisible: Bool {
+        emptyStateView.isHidden == false
+    }
+
+    var testingSegmentedHidden: Bool {
+        modeSegmented.isHidden
+    }
+}
+#endif

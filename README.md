@@ -40,6 +40,7 @@ site for showcase, download notes, and compact docs.
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Opened PDFs are also noted to macOS native recent documents, and the active PDF URL is exposed to the window for system window/document integration
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
+- Empty windows auto-collapse the outline pane so the reader owns the window; opening the first document restores it unless you explicitly toggled it while empty. The tabs pane gains a `Documents` section header and, in empty windows, moves Recent PDFs up under it as the quick-reopen entry; the right sidebar shows a single centered "No Document Open" state instead of a ready-but-empty panel.
 - Blank space in the document sidebar drags the current window while tabs, close buttons, scrolling, and the divider keep their own interactions
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Settings General can edit the default left and right sidebar widths; the legacy opacity key remains config-only for compatibility

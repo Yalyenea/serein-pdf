@@ -10,10 +10,12 @@ class PlaceholderViewController: NSViewController {
 
     private let titleText: String
     private let detailText: String
+    private let emptyStateView: EmptyStateView
 
     init(titleText: String, detailText: String) {
         self.titleText = titleText
         self.detailText = detailText
+        self.emptyStateView = EmptyStateView(title: titleText, detail: detailText)
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -23,31 +25,15 @@ class PlaceholderViewController: NSViewController {
     }
 
     override func loadView() {
-        let titleLabel = NSTextField(labelWithString: titleText)
-        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        titleLabel.textColor = NightModeStyle.primaryTextColor
-
-        let detailLabel = NSTextField(labelWithString: detailText)
-        detailLabel.font = .systemFont(ofSize: 12)
-        detailLabel.textColor = NightModeStyle.secondaryTextColor
-        detailLabel.maximumNumberOfLines = 0
-
-        let stackView = NSStackView(views: [titleLabel, detailLabel])
-        stackView.orientation = .vertical
-        stackView.alignment = .leading
-        stackView.spacing = 6
-        stackView.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
-
         let container = NSView()
         container.wantsLayer = true
         container.layer?.backgroundColor = Self.paneBackgroundColor.cgColor
-        container.addSubview(stackView)
-        stackView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(emptyStateView)
 
         NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            stackView.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
-            stackView.topAnchor.constraint(equalTo: container.topAnchor),
+            emptyStateView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            emptyStateView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            emptyStateView.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
         ])
 
         view = container
@@ -57,5 +43,6 @@ class PlaceholderViewController: NSViewController {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = Self.paneBackgroundColor.cgColor
         }
+        emptyStateView.refreshChromeColors()
     }
 }

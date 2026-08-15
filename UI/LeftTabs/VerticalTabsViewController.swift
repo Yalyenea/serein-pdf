@@ -49,12 +49,18 @@ final class VerticalTabsViewController: NSViewController {
     var onCloseSessionRequested: ((UUID) -> Void)?
     var onAlternateSessionActivationRequested: ((UUID) -> Void)?
     var onOpenRecentURLRequested: ((URL) -> Void)?
+    private let documentsTitleLabel = NSTextField(labelWithString: "Documents")
     private let countLabel = NSTextField(labelWithString: "0 open")
-    private let emptyStateLabel = NSTextField(labelWithString: "")
+    private let emptyStateView = EmptyStateView(
+        title: "No Documents Open",
+        detail: "Press ⌘O to open a PDF"
+    )
     private let listStackView = NSStackView()
     private let recentSectionContainer = NSStackView()
     private let recentTitleLabel = NSTextField(labelWithString: "Recent PDFs")
     private let recentListStackView = NSStackView()
+    private var recentBottomConstraints: [NSLayoutConstraint] = []
+    private var recentTopConstraints: [NSLayoutConstraint] = []
     private var recentButtons: [NSButton] = []
     private var recentButtonURLs: [URL] = []
     private static let recentDisplayLimit = 5
@@ -101,19 +107,20 @@ final class VerticalTabsViewController: NSViewController {
         container.allowsWindowDragFromBackground = true
         container.layer?.masksToBounds = true
 
+        documentsTitleLabel.font = .systemFont(ofSize: 10, weight: .semibold)
+        documentsTitleLabel.textColor = NightModeStyle.tertiaryTextColor
+        documentsTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         countLabel.font = .systemFont(ofSize: 11, weight: .medium)
         countLabel.textColor = NightModeStyle.secondaryTextColor
         countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let headerStack = NSStackView(views: [NSView(), countLabel])
+        let headerStack = NSStackView(views: [documentsTitleLabel, NSView(), countLabel])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 8
 
-        emptyStateLabel.font = .systemFont(ofSize: 12)
-        emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
-        emptyStateLabel.maximumNumberOfLines = 0
-        emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        emptyStateView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         listStackView.orientation = .vertical
         listStackView.alignment = .leading
@@ -143,7 +150,7 @@ final class VerticalTabsViewController: NSViewController {
         recentListWidthMatch.priority = .required
         recentListWidthMatch.isActive = true
 
-        for view in [headerStack, emptyStateLabel, listStackView, recentSectionContainer] {
+        for view in [headerStack, emptyStateView, listStackView, recentSectionContainer] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -153,25 +160,35 @@ final class VerticalTabsViewController: NSViewController {
             headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
             headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
 
-            emptyStateLabel.leadingAnchor.constraint(
-                equalTo: container.leadingAnchor, constant: 12),
-            emptyStateLabel.trailingAnchor.constraint(
-                equalTo: container.trailingAnchor, constant: -12),
-            emptyStateLabel.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 14),
+            emptyStateView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            emptyStateView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            emptyStateView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 12),
 
             listStackView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
             listStackView.trailingAnchor.constraint(
                 equalTo: container.trailingAnchor, constant: -8),
             listStackView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 10),
+        ]
+        pinned.forEach { $0.priority = .defaultHigh }
+        NSLayoutConstraint.activate(pinned)
 
+        // Recent section: pinned to the bottom while documents are open, moved up
+        // under the Documents header when the window is empty (M12-012).
+        recentBottomConstraints = [
             recentSectionContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             recentSectionContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
             recentSectionContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
             listStackView.bottomAnchor.constraint(
                 lessThanOrEqualTo: recentSectionContainer.topAnchor, constant: -10),
         ]
-        pinned.forEach { $0.priority = .defaultHigh }
-        NSLayoutConstraint.activate(pinned)
+        recentTopConstraints = [
+            recentSectionContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            recentSectionContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            recentSectionContainer.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 12),
+        ]
+        recentBottomConstraints.forEach { $0.priority = .defaultHigh }
+        recentTopConstraints.forEach { $0.priority = .defaultHigh }
+        NSLayoutConstraint.activate(recentBottomConstraints)
 
         view = container
     }
@@ -179,8 +196,9 @@ final class VerticalTabsViewController: NSViewController {
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             (view as? SidebarMaterialView)?.applySurface()
+            documentsTitleLabel.textColor = NightModeStyle.tertiaryTextColor
             countLabel.textColor = NightModeStyle.secondaryTextColor
-            emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
+            emptyStateView.refreshChromeColors()
             recentTitleLabel.textColor = NightModeStyle.tertiaryTextColor
             recentButtons.forEach {
                 $0.contentTintColor = NightModeStyle.secondaryTextColor
@@ -198,10 +216,25 @@ final class VerticalTabsViewController: NSViewController {
         applyEmptyState()
     }
 
+    /// M12-012: with documents open, the recent footer stays pinned to the
+    /// bottom; in an empty window the recents move up under the Documents header
+    /// as the primary quick-entry content, falling back to the shared hint.
     private func applyEmptyState() {
         let noSessions = documentStore.sessions(in: windowID).isEmpty
         listStackView.isHidden = noSessions
-        emptyStateLabel.isHidden = true
+        countLabel.isHidden = noSessions
+
+        if noSessions {
+            let recentsVisible = recentSectionContainer.isHidden == false
+            emptyStateView.isHidden = recentsVisible
+            recentTopConstraints.forEach { $0.isActive = recentsVisible }
+            recentBottomConstraints.forEach { $0.isActive = false }
+        } else {
+            emptyStateView.isHidden = true
+            recentTopConstraints.forEach { $0.isActive = false }
+            recentBottomConstraints.forEach { $0.isActive = true }
+        }
+        view.needsLayout = true
     }
 
     private func rebuildList() {
@@ -430,6 +463,22 @@ extension VerticalTabsViewController {
 
     var testingRecentSectionVisible: Bool {
         recentSectionContainer.isHidden == false
+    }
+
+    var testingRecentSectionTopPinned: Bool {
+        recentTopConstraints.allSatisfy(\.isActive)
+    }
+
+    var testingEmptyStateVisible: Bool {
+        emptyStateView.isHidden == false
+    }
+
+    var testingCountLabelVisible: Bool {
+        countLabel.isHidden == false
+    }
+
+    var testingDocumentsTitle: String {
+        documentsTitleLabel.stringValue
     }
 
     var testingRecentListWidth: CGFloat {

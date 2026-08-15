@@ -100,6 +100,9 @@ flowchart LR
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
+| 空窗策略 | 无 session 时右栏(outline pane)自动折叠,中栏独占窗口;首开文档自动恢复右栏,除非空窗期间用户显式切换过可见性(显式操作让位);左栏常驻并托管 Recent 快捷入口 |
+| 右栏无文档态 | 无文档(无 session 或空白 tab)时隐藏 segmented 与各 mode 面板,只显示居中共享空态,模式机制与懒加载保持原样 |
+| 空态组件 | 左 / 右栏空态与 placeholder 共用 `EmptyStateView`(12 semibold / 11 secondary,居中文案块),宿主决定位置;面板级上下文空文案沿用 12pt secondary |
 | 侧栏外观 | 左右侧栏与中栏共用 `readerBackdrop` 实色平面(无 vibrancy 缝、无分割线);`layout.sidebarOpacity` 仅保留配置兼容,Settings 不再暴露无效控件;文档侧栏空白背景可拖窗,不抢 tab / close / scroll 事件 |
 | 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
@@ -132,6 +135,7 @@ flowchart LR
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
 - 阅读聚焦使用单一圆角矩形镂空与统一外围压暗,禁止多方向渐变拼接;轻描边 / 阴影只强化焦点边界,不得污染框内文字
 - 空窗 / 空白 tab 时中栏保持纯空白(无 onboarding / 快捷键速览);加载错误仍单独显示
+- 空窗时左栏显示 `Documents` section 标题 + 上移的 Recent 快捷入口(无 recents 或关闭时显示共享提示文案);右栏无文档态只保留居中空态文案,不显示 segmented 等"已就绪"chrome
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
 ### 4.3 快捷键总表
@@ -438,9 +442,9 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 - Serein Extension API 草稿
 - 风险评估:沙箱、上架(若走 MAS)、维护成本;若推迟,说明"为什么现在不做"
 
-### 8.2 Milestone 12 空窗体验收尾
+### 8.2 M12 空窗体验收尾 ✅
 
-- `M12-010`–`M12-014`:无 session 时侧栏占比 / 右栏 chrome 弱化 / 左栏层次 / 共享 empty state / 顶部留白
+- `M12-010`–`M12-014` 已完成:空窗右栏自动折叠(首开恢复,显式操作让位)、右栏无文档 chrome 弱化、左栏 `Documents` 标题 + Recent 上移、共享 `EmptyStateView`、空态留白校准。
 - 暂缓项(`M12-D002`–`D006`)见 TASKS,有明确触发条件再开
 
 ### 8.3 Milestone 13.1 网站后续

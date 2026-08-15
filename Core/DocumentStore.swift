@@ -78,6 +78,10 @@ final class DocumentStore {
     private(set) var recentDocumentURLs: [URL] = []
     private(set) var windowWorkspaces: [WindowWorkspace]
     private var splitComparisonSessionIDs: Set<UUID> = []
+    /// Windows whose outline pane the empty-window policy auto-collapsed.
+    /// Cleared when the user explicitly touches visibility while empty, or when
+    /// the first session opens (which restores the pane).
+    private var outlineAutoHiddenWindowIDs: Set<UUID> = []
     private var pdfDocumentCache: [UUID: PDFDocument] = [:]
     private var pdfDocumentRecency: [UUID] = []
     private var searchSnapshots: [UUID: SearchSnapshot] = [:]
@@ -104,6 +108,9 @@ final class DocumentStore {
                 rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
             ),
         ]
+        // M12-010: a fresh empty window starts with the outline pane collapsed so
+        // the reader owns the window; the tabs pane stays (it hosts recents).
+        applyEmptyWindowSidebarPolicy(&windowWorkspaces[0])
         recentDocumentURLs = (try? recentFilesStore.loadRecentFiles()) ?? []
         fileMonitor.onChange = { [weak self] url in
             self?.refreshExternallyChangedFile(at: url)
@@ -119,6 +126,7 @@ final class DocumentStore {
             rightSidebarWidth: appConfiguration.layout.rightSidebarWidth
         )
         windowWorkspaces = [fallback]
+        applyEmptyWindowSidebarPolicy(&windowWorkspaces[0])
         return fallback.id
     }
 
@@ -157,10 +165,8 @@ final class DocumentStore {
     /// True only when the outline *pane content* is on screen (sidebar open + Outline mode).
     /// Pages / Search / Annotations leave room for the floating outline rail.
     func isOutlineSidebarVisible(in windowID: UUID) -> Bool {
-        let outlinePaneVisible = appConfiguration.layout.sidebarsSwapped
-            ? isLeftSidebarVisible(in: windowID)
-            : isRightSidebarVisible(in: windowID)
-        guard outlinePaneVisible else { return false }
+        guard let workspace = windowWorkspace(for: windowID),
+              isOutlinePaneVisible(in: workspace) else { return false }
         return rightSidebarMode(in: windowID) == .outline
     }
 
@@ -209,13 +215,14 @@ final class DocumentStore {
 
     func createWindow(copyingFrom sourceWindowID: UUID? = nil) -> UUID {
         let source = sourceWindowID.flatMap(windowWorkspace(for:)) ?? windowWorkspaces.first ?? WindowWorkspace()
+        let sourceVisibility = sidebarVisibilityReflectingUserIntent(in: source)
         var copy = WindowWorkspace(
             sessionIDs: [],
             selectedSessionIDs: [],
             continuousReadingState: ContinuousReadingState(),
             tabPresentationMode: source.tabPresentationMode,
-            isLeftSidebarVisible: source.isLeftSidebarVisible,
-            isRightSidebarVisible: source.isRightSidebarVisible,
+            isLeftSidebarVisible: sourceVisibility.left,
+            isRightSidebarVisible: sourceVisibility.right,
             rightSidebarMode: .outline,
             searchQuery: "",
             searchScope: .currentDocument,
@@ -985,8 +992,15 @@ final class DocumentStore {
 
     func setLeftSidebarVisible(_ isVisible: Bool, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
-        guard windowWorkspaces[index].isLeftSidebarVisible != isVisible else { return }
+        let explicitlyControlsOutline = appConfiguration.layout.sidebarsSwapped &&
+            windowWorkspaces[index].sessionIDs.isEmpty
+        let clearsAutoHiddenState = explicitlyControlsOutline &&
+            outlineAutoHiddenWindowIDs.contains(windowID)
+        guard windowWorkspaces[index].isLeftSidebarVisible != isVisible || clearsAutoHiddenState else { return }
         windowWorkspaces[index].isLeftSidebarVisible = isVisible
+        if explicitlyControlsOutline {
+            outlineAutoHiddenWindowIDs.remove(windowID)
+        }
         notifyChange(.sidebarVisibility)
     }
 
@@ -996,8 +1010,17 @@ final class DocumentStore {
 
     func setRightSidebarVisible(_ isVisible: Bool, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
-        guard windowWorkspaces[index].isRightSidebarVisible != isVisible else { return }
+        let explicitlyControlsOutline = appConfiguration.layout.sidebarsSwapped == false &&
+            windowWorkspaces[index].sessionIDs.isEmpty
+        let clearsAutoHiddenState = explicitlyControlsOutline &&
+            outlineAutoHiddenWindowIDs.contains(windowID)
+        guard windowWorkspaces[index].isRightSidebarVisible != isVisible || clearsAutoHiddenState else { return }
         windowWorkspaces[index].isRightSidebarVisible = isVisible
+        // An explicit toggle while the window is empty hands visibility back to
+        // the user; the auto-collapse must not restore the pane on first open.
+        if explicitlyControlsOutline {
+            outlineAutoHiddenWindowIDs.remove(windowID)
+        }
         notifyChange(.sidebarVisibility)
     }
 
@@ -1439,6 +1462,8 @@ final class DocumentStore {
         }
 
         windowWorkspaces = restoredWindows
+        // Fresh policy state: restores re-derive auto-collapse from scratch.
+        outlineAutoHiddenWindowIDs.removeAll()
         normalizeAllWorkspaces()
         syncPDFFileMonitor()
         notifyChange()
@@ -1729,6 +1754,54 @@ final class DocumentStore {
             workspace.focusedPane = .primary
         }
 
+        applyEmptyWindowSidebarPolicy(&workspace)
+    }
+
+    /// M12-010: an empty window (no sessions) has nothing for the outline pane
+    /// to answer, so it auto-collapses; the tabs pane stays because it hosts the
+    /// recent-files quick entry. Runs on every workspace normalization so all
+    /// close / move / merge / restore paths converge on the same policy.
+    /// Opening the first session into an auto-collapsed window restores the pane
+    /// unless the user explicitly touched its visibility while it was empty.
+    private func applyEmptyWindowSidebarPolicy(_ workspace: inout WindowWorkspace) {
+        if workspace.sessionIDs.isEmpty {
+            if isOutlinePaneVisible(in: workspace) {
+                setOutlinePaneVisible(false, in: &workspace)
+                outlineAutoHiddenWindowIDs.insert(workspace.id)
+            }
+        } else if outlineAutoHiddenWindowIDs.remove(workspace.id) != nil {
+            setOutlinePaneVisible(true, in: &workspace)
+        }
+    }
+
+    private func isOutlinePaneVisible(in workspace: WindowWorkspace) -> Bool {
+        appConfiguration.layout.sidebarsSwapped
+            ? workspace.isLeftSidebarVisible
+            : workspace.isRightSidebarVisible
+    }
+
+    private func setOutlinePaneVisible(_ isVisible: Bool, in workspace: inout WindowWorkspace) {
+        if appConfiguration.layout.sidebarsSwapped {
+            workspace.isLeftSidebarVisible = isVisible
+        } else {
+            workspace.isRightSidebarVisible = isVisible
+        }
+    }
+
+    private func sidebarVisibilityReflectingUserIntent(
+        in workspace: WindowWorkspace
+    ) -> (left: Bool, right: Bool) {
+        var visibility = (
+            left: workspace.isLeftSidebarVisible,
+            right: workspace.isRightSidebarVisible
+        )
+        guard outlineAutoHiddenWindowIDs.contains(workspace.id) else { return visibility }
+        if appConfiguration.layout.sidebarsSwapped {
+            visibility.left = true
+        } else {
+            visibility.right = true
+        }
+        return visibility
     }
 
     private func fallbackSessionID(in workspace: WindowWorkspace, preferredSessionID: UUID?, excluding excludedID: UUID?) -> UUID? {
@@ -2045,6 +2118,7 @@ final class DocumentStore {
                         PersistedDocumentStoreState.SessionReference(id: $0.id, url: $0.url, title: $0.title)
                     },
                     windows: windowWorkspaces.map { workspace in
+                        let sidebarVisibility = sidebarVisibilityReflectingUserIntent(in: workspace)
                         let sessionIDs = workspace.sessionIDs.filter { persistedSessionIDs.contains($0) }
                         let continuousSessionIDs = workspace.continuousReadingState.orderedSessionIDs
                             .filter { persistedSessionIDs.contains($0) }
@@ -2061,8 +2135,8 @@ final class DocumentStore {
                             sessionURLs: sessionIDs.compactMap { session(for: $0)?.url },
                             continuousReadingSessionIDs: continuousSessionIDs,
                             tabPresentationMode: workspace.tabPresentationMode,
-                            isLeftSidebarVisible: workspace.isLeftSidebarVisible,
-                            isRightSidebarVisible: workspace.isRightSidebarVisible,
+                            isLeftSidebarVisible: sidebarVisibility.left,
+                            isRightSidebarVisible: sidebarVisibility.right,
                             rightSidebarMode: workspace.rightSidebarMode,
                             searchQuery: workspace.searchQuery,
                             searchScope: workspace.searchScope,

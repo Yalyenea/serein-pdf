@@ -314,8 +314,12 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     var isImmersiveModeEnabled: Bool {
+        // Requires an open session: an empty window may legitimately have both
+        // panes hidden (outline pane auto-collapsed by the empty-window policy,
+        // tabs pane hidden by horizontal mode) without being immersive.
         documentStore.isLeftSidebarVisible(in: windowID) == false &&
-            documentStore.isRightSidebarVisible(in: windowID) == false
+            documentStore.isRightSidebarVisible(in: windowID) == false &&
+            documentStore.sessionCount(in: windowID) > 0
     }
 
     func toggleDemoMode() {
