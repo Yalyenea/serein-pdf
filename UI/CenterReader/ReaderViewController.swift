@@ -174,16 +174,37 @@ private final class PDFReaderClipView: NSClipView {
     }
 
     override func scroll(to newOrigin: NSPoint) {
-        super.scroll(to: clampedOrigin(for: newOrigin))
+        applyLockedOrigin(clampedOrigin(for: newOrigin), proposed: newOrigin) { origin in
+            super.scroll(to: origin)
+        }
     }
 
     override func setBoundsOrigin(_ newOrigin: NSPoint) {
-        super.setBoundsOrigin(clampedOrigin(for: newOrigin))
+        applyLockedOrigin(clampedOrigin(for: newOrigin), proposed: newOrigin) { origin in
+            super.setBoundsOrigin(origin)
+        }
     }
 
     private func clampedOrigin(for origin: NSPoint) -> NSPoint {
         guard let forcedOriginX else { return origin }
         return NSPoint(x: forcedOriginX, y: origin.y)
+    }
+
+    private func applyLockedOrigin(
+        _ origin: NSPoint,
+        proposed: NSPoint,
+        apply: (NSPoint) -> Void
+    ) {
+        // Horizontal lock fights PDFKit/AppKit mid-gesture; implicit layer
+        // actions would flash the rejected X for a frame.
+        guard origin.x != proposed.x else {
+            apply(origin)
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        apply(origin)
+        CATransaction.commit()
     }
 }
 
@@ -192,6 +213,7 @@ final class ReaderPDFView: PDFView {
     var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
     var onAnnotationActivationRequested: ((NSEvent) -> Bool)?
     var onUserMagnificationRequested: (() -> Void)?
+    var shouldAllowUserMagnification: (() -> Bool)?
     var onPointerMoved: ((NSEvent?) -> Void)?
     var contextMenuProvider: ((NSEvent) -> NSMenu?)?
 
@@ -288,23 +310,31 @@ final class ReaderPDFView: PDFView {
     }
 
     override func magnify(with event: NSEvent) {
+        guard allowsUserMagnification else { return }
         onUserMagnificationRequested?()
         super.magnify(with: event)
     }
 
     override func smartMagnify(with event: NSEvent) {
+        guard allowsUserMagnification else { return }
         onUserMagnificationRequested?()
         super.smartMagnify(with: event)
     }
 
     override func zoomIn(_ sender: Any?) {
+        guard allowsUserMagnification else { return }
         onUserMagnificationRequested?()
         super.zoomIn(sender)
     }
 
     override func zoomOut(_ sender: Any?) {
+        guard allowsUserMagnification else { return }
         onUserMagnificationRequested?()
         super.zoomOut(sender)
+    }
+
+    private var allowsUserMagnification: Bool {
+        shouldAllowUserMagnification?() ?? true
     }
 
     private func internalLinkDestination(at event: NSEvent) -> PDFDestination? {
@@ -415,6 +445,9 @@ final class ReaderViewController: NSViewController {
         pdfView.onUserMagnificationRequested = { [weak self] in
             self?.beginUserMagnification()
         }
+        pdfView.shouldAllowUserMagnification = { [weak self] in
+            self?.shouldLockHorizontalPan == false
+        }
         pdfView.onPointerMoved = { [weak self] event in
             self?.annotationInteraction.handlePointerMoved(event)
         }
@@ -494,11 +527,17 @@ final class ReaderViewController: NSViewController {
         // PDFKit delivers trackpad pinch to its private document view, so
         // PDFView.magnify(with:) never runs. Pin fit modes to manual before
         // the scale-changed notification tries to snap back to fit-width.
+        // While pan-locked, swallow the gesture so scale cannot drift X.
         magnificationMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .smartMagnify]) { [weak self] event in
+            guard let self else { return event }
+            var rewritten: NSEvent? = event
             MainActor.assumeIsolated {
-                self?.handleMagnificationEventIfNeeded(event)
+                rewritten = self.rewriteMagnificationEventIfPanLocked(event)
+                if rewritten != nil {
+                    self.handleMagnificationEventIfNeeded(event)
+                }
             }
-            return event
+            return rewritten
         }
         refreshDisplayedDocument()
         configurePDFScrollBehaviorIfNeeded()
@@ -791,7 +830,8 @@ final class ReaderViewController: NSViewController {
             adjustOverviewZoom(scale: 1.1)
             return
         }
-        guard let session = targetSession(),
+        guard shouldLockHorizontalPan == false,
+              let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
@@ -805,7 +845,8 @@ final class ReaderViewController: NSViewController {
             adjustOverviewZoom(scale: 1 / 1.1)
             return
         }
-        guard let session = targetSession(),
+        guard shouldLockHorizontalPan == false,
+              let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
@@ -1435,20 +1476,35 @@ final class ReaderViewController: NSViewController {
             configurePDFScrollBehaviorIfNeeded()
             return
         }
-        isHorizontalPanLocked = enabled
-        guard isViewLoaded else { return }
-        updatePanLockIndicator()
-        configurePDFScrollBehaviorIfNeeded()
-        if isHorizontalPanLocked {
+
+        guard isViewLoaded else {
+            isHorizontalPanLocked = enabled
+            return
+        }
+
+        if enabled {
+            configurePDFScrollBehaviorIfNeeded()
+            let currentOriginX = pdfClipView()?.bounds.origin.x
+            isHorizontalPanLocked = true
+            (pdfClipView() as? PDFReaderClipView)?.forcedOriginX = currentOriginX
             recenterDocumentViewIfNeeded()
         } else {
+            isHorizontalPanLocked = false
             (pdfClipView() as? PDFReaderClipView)?.forcedOriginX = nil
+            configurePDFScrollBehaviorIfNeeded()
         }
+        updatePanLockIndicator()
     }
 
     private func rewriteScrollEventIfPanLocked(_ event: NSEvent) -> NSEvent? {
         guard shouldLockHorizontalPan else { return event }
-        guard scrollEventIsOverPDFContent(event) else { return event }
+        guard pointerEventIsOverPDFContent(event) else { return event }
+
+        // Preview-style Option/Command+scroll zoom would scale around the
+        // cursor and shift the locked X. Drop it with pinch.
+        if event.modifierFlags.contains(.option) || event.modifierFlags.contains(.command) {
+            return nil
+        }
 
         // Horizontal-dominant or pure-horizontal: discard entirely so PDFKit never pans on X.
         let horizontal = abs(event.scrollingDeltaX)
@@ -1460,7 +1516,13 @@ final class ReaderViewController: NSViewController {
         return ScrollWheelHorizontalStripper.verticalOnly(from: event) ?? event
     }
 
-    private func scrollEventIsOverPDFContent(_ event: NSEvent) -> Bool {
+    private func rewriteMagnificationEventIfPanLocked(_ event: NSEvent) -> NSEvent? {
+        guard shouldLockHorizontalPan else { return event }
+        guard pointerEventIsOverPDFContent(event) else { return event }
+        return nil
+    }
+
+    private func pointerEventIsOverPDFContent(_ event: NSEvent) -> Bool {
         guard isAllPagesOverviewActive == false,
               pdfContainerView.isHidden == false,
               pdfView.isHidden == false,
@@ -1728,6 +1790,7 @@ final class ReaderViewController: NSViewController {
         // changes. Trackpad pinch is pinned to manual by the magnification
         // monitor / currentEvent; geometry changes keep the requested fit mode.
         if isUserMagnificationEvent(NSApp.currentEvent) {
+            guard shouldLockHorizontalPan == false else { return }
             beginUserMagnification()
         } else {
             switch session.scaleMode {
@@ -1754,7 +1817,8 @@ final class ReaderViewController: NSViewController {
     }
 
     private func handleMagnificationEventIfNeeded(_ event: NSEvent) {
-        guard isAllPagesOverviewActive == false,
+        guard shouldLockHorizontalPan == false,
+              isAllPagesOverviewActive == false,
               pdfView.isHidden == false,
               let window = pdfView.window,
               event.window === window else { return }
@@ -1779,7 +1843,8 @@ final class ReaderViewController: NSViewController {
     }
 
     private func beginUserMagnification() {
-        guard let session = targetSession(),
+        guard shouldLockHorizontalPan == false,
+              let session = targetSession(),
               session.id == displayedSessionID else { return }
         pendingFitWidthSessionID = nil
         pendingFitHeightSessionID = nil
@@ -2456,7 +2521,13 @@ final class ReaderViewController: NSViewController {
         }
 
         let overflowX = max(documentView.frame.width - clipView.bounds.width, 0)
-        clipView.forcedOriginX = overflowX <= 0.5 ? 0 : overflowX * 0.5
+        let currentOriginX = clipView.forcedOriginX ?? clipView.bounds.origin.x
+        let clampedX = min(max(currentOriginX, 0), overflowX)
+        // Ignore subpixel overflow flicker from PDFKit layout so the locked
+        // X does not chatter by a fraction of a point.
+        if clipView.forcedOriginX == nil || abs(clampedX - currentOriginX) > 0.5 {
+            clipView.forcedOriginX = clampedX
+        }
     }
 
     @objc
@@ -2599,9 +2670,9 @@ final class ReaderViewController: NSViewController {
         var targetOrigin = clipView.bounds.origin
         if fitsHorizontally {
             targetOrigin.x = 0
-        } else if shouldLockHorizontalPan {
-            let overflowX = max(documentView.frame.width - clipView.bounds.width, 0)
-            targetOrigin.x = overflowX * 0.5
+        } else if shouldLockHorizontalPan,
+                  let forcedOriginX = (clipView as? PDFReaderClipView)?.forcedOriginX {
+            targetOrigin.x = forcedOriginX
         }
         if fitsVertically {
             targetOrigin.y = 0

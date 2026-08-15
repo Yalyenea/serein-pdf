@@ -159,7 +159,7 @@ flowchart LR
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`:`singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`;`C` 在 `singlePage` 与 `singlePageContinuous` 间切换
 - `singlePage` 完整放下当前页时双轴居中并钳制空白区域滑动;放大到超出视口后仍允许页内平移
-- `L`:切换水平平移锁定(放大后 X 居中并禁止左右滑动,竖直滚动与翻页不受影响;按焦点 pane)
+- `L`:切换水平平移锁定(保持当前 X 位置并禁止左右滑动与捏合 / 快捷键缩放,竖直滚动与翻页不受影响;按焦点 pane)
 - `J` / `K`:下一页 / 上一页(文本输入上下文让路)
 - `Ctrl+D` / `Ctrl+U`:下滚 / 上滚半页;非连续模式先走完当前 PDF,到边界才切换连续阅读组中的相邻 PDF
 - `G` / `g`:跳到真实文末页底 / 文首页顶

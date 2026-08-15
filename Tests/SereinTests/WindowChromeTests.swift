@@ -2266,7 +2266,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func horizontalPanLockCentersAndBlocksHorizontalScroll() throws {
+    func horizontalPanLockPreservesPositionAndBlocksHorizontalScroll() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
@@ -2304,14 +2304,16 @@ struct WindowChromeTests {
         scrollView.reflectScrolledClipView(clipView)
         flushLayout(controller.window)
         #expect(abs(clipView.bounds.origin.x - 40) < 1.5)
+        let unlockedPosition = store.activeSession?.lastReadPosition
 
         #expect(controller.toggleHorizontalPanLock() == true)
         #expect(reader.testingHorizontalPanLockIsEnabled)
         #expect(reader.testingPanLockIndicatorIsVisible)
         flushLayout(controller.window)
 
-        let lockedX = max(documentView.frame.width - clipView.bounds.width, 0) * 0.5
-        #expect(abs(clipView.bounds.origin.x - lockedX) < 1.5)
+        let lockedX = clipView.bounds.origin.x
+        #expect(abs(lockedX - 40) < 1.5)
+        #expect(store.activeSession?.lastReadPosition == unlockedPosition)
 
         let beforeY = clipView.bounds.origin.y
         clipView.setBoundsOrigin(NSPoint(x: lockedX + 55, y: beforeY))
@@ -2320,9 +2322,20 @@ struct WindowChromeTests {
         #expect(abs(clipView.bounds.origin.x - lockedX) < 1.5)
         #expect(abs(clipView.bounds.origin.y - beforeY) < 1.5)
 
+        let scaleBefore = reader.pdfView.scaleFactor
+        reader.zoomOut()
+        reader.pdfView.zoomOut(nil)
+        flushLayout(controller.window)
+        #expect(abs(reader.pdfView.scaleFactor - scaleBefore) < 0.0001)
+        #expect(abs(clipView.bounds.origin.x - lockedX) < 1.5)
+
         #expect(controller.toggleHorizontalPanLock() == false)
         #expect(reader.testingHorizontalPanLockIsEnabled == false)
         #expect(reader.testingPanLockIndicatorIsVisible == false)
+
+        reader.zoomOut()
+        flushLayout(controller.window)
+        #expect(reader.pdfView.scaleFactor < scaleBefore - 0.01)
     }
 
     @Test

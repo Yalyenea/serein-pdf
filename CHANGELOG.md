@@ -31,6 +31,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Reading
 - Let trackpad pinch, smart zoom, and PDFKit `zoomIn`/`zoomOut` leave fit-width or fit-height instead of snapping back; keep layout/page-turn refits.
+- Horizontal pan lock now also blocks pinch, smart zoom, Option/Command+scroll zoom, and `cmd+=` / `cmd+-`, so scale cannot drift the locked X.
 - Copy the current page as an image (`cmd+option+c`, File menu, or reader context menu). Rasterizes the focused pane's current page at 2× mediaBox with annotations, without the night-mode display filter.
 
 ### Find
