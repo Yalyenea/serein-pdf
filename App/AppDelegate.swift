@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var lastRecentFilesCleanupDate: Date?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
     private var pendingOpenURLs: [URL] = []
+    private let sereinOpenURLResolver = SereinOpenURLResolver()
     private let openDocumentSelectionResolver = OpenDocumentSelectionResolver()
     private let securityScopedAccessController = SecurityScopedAccessController()
     private let codexShareCoordinator = CodexShareCoordinator()
@@ -263,7 +264,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         mainWindowController?.hideFindBar()
         let targetWindowID = mainWindowController?.windowID ?? documentStore.defaultWindowID
         do {
-            let frontWindowID = try openResolvedDocumentURLs(urls, in: targetWindowID)
+            let documentURLs = try sereinOpenURLResolver.resolve(urls)
+            let frontWindowID = try openResolvedDocumentURLs(documentURLs, in: targetWindowID)
             bringWindowToFront(frontWindowID)
         } catch {
             presentOpenError(error)

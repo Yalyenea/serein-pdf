@@ -57,7 +57,6 @@
 ### 3.2 产品候选（增量小、复用现有管线）
 
 - [ ] 下划线 / 删除线批注（复用 group / undo / export）
-- [ ] URL scheme `serein://open?file=…&page=N`（对齐 M11）
 
 ### 3.3 承接里程碑
 

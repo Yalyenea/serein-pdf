@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / `serein://open?file=…` 本地 PDF 深链 / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -90,7 +90,7 @@ flowchart LR
 | 批注摘要 | 只使用 PDFKit 文本层生成 snippet；无文本层时显示 `Untitled Highlight`，不做 OCR / 页面栅格化 |
 | 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);正文 / `Cmd+Option+M` / 右键用阅读区旁 popover 编辑,不强制打开右栏;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
-| 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF |
+| 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF;`serein://open?file=<encoded file URL>` 仅接收单个本地可读 PDF 并复用同一打开管线 |
 | Codex 交接 | `Ctrl+Cmd+C` 按上下文发送:有选区时通过 `codex://new?prompt=…` 预填新任务,无选区时导出当前页临时 PNG;`Ctrl+Cmd+Shift+C` 使用原 PDF;文件通过 macOS 打开事件交给 `com.openai.codex`;Settings 可关闭整个集成;不传 workspace `path`,Codex 客户端可能自行把文件父目录作为 workspace |
 | 外部应用 | `Reveal in Finder` 与 `Open With` 保持独立;File 菜单和两种 tab 右键菜单按系统适配顺序动态列出已安装 PDF 应用,对 dirty PDF 先执行保存确认 |
 | 重复打开 | 外部 `open`、Open Recent、PDF Library 或 `Cmd+O` 选到已打开 PDF 时激活已有 window/session,不创建重复普通 tab |
@@ -463,7 +463,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 ### 8.5 工程债(摘要)
 
 - 中期:拆 `AppDelegate`;继续拆 `ReaderViewController` 的 scale / viewport / overview 与 `DocumentStore` 的 tab / annotation / persistence;config 表驱动
-- 产品候选:下划线 / 删除线批注、URL scheme
+- 产品候选:下划线 / 删除线批注
 
 ## 9. 风险
 
