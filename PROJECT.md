@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -91,6 +91,8 @@ flowchart LR
 | 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);正文 / `Cmd+Option+M` / 右键用阅读区旁 popover 编辑,不强制打开右栏;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
 | 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF |
+| Codex 交接 | `Ctrl+Cmd+C` 按上下文发送:有选区时通过 `codex://new?prompt=…` 预填新任务,无选区时导出当前页临时 PNG;`Ctrl+Cmd+Shift+C` 使用原 PDF;文件通过 macOS 打开事件交给 `com.openai.codex`;Settings 可关闭整个集成;不传 workspace `path`,Codex 客户端可能自行把文件父目录作为 workspace |
+| 外部应用 | `Reveal in Finder` 与 `Open With` 保持独立;File 菜单和两种 tab 右键菜单按系统适配顺序动态列出已安装 PDF 应用,对 dirty PDF 先执行保存确认 |
 | 重复打开 | 外部 `open`、Open Recent、PDF Library 或 `Cmd+O` 选到已打开 PDF 时激活已有 window/session,不创建重复普通 tab |
 | 自动保存 | 默认 `10 min`,可设 `never` |
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
@@ -115,7 +117,7 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作,含复制当前页为图片;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作,含复制当前页为图片、发送选区文字 / 当前页图片到 Codex;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
 | 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | Annotations 为全高紧凑评论流(仅页 section + 原文 / 评论,无时间戳,无横向滑动);连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持筛选与一键折叠 / 展开;所有预览类内容都在右栏,仅正文 hover 评论卡与非 Outline 态浮动目录可覆盖中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
@@ -181,6 +183,8 @@ flowchart LR
 - `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+Shift+C`:复制当前 PDF 路径到剪贴板
 - `Cmd+Option+C`:复制当前页为图片(2× mediaBox,含批注,不含夜间滤镜);阅读区右键同样提供
+- `Ctrl+Cmd+C`:有选区时发送文字到 Codex,否则发送当前页图片;`Ctrl+Cmd+Shift+C`:发送当前 PDF;Reader 右键按当前上下文只显示一项;Settings > General 可关闭 Codex 集成
+- `File > Open With` 或 PDF tab 右键:动态选择兼容的已安装应用打开 PDF;`Reveal in Finder` 独立保留
 - `Cmd+W`:多选 tabs 时关闭选中的 PDFs;否则关闭当前 tab
 - `Cmd+Shift+W`:关闭当前窗口
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)

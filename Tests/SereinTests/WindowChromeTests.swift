@@ -1831,7 +1831,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
 
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 680, height: 642))
+        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 680, height: 704))
     }
 
     @Test
@@ -1868,7 +1868,30 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 642))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 704))
+    }
+
+    @Test
+    func settingsWindowCanDisableCodexIntegration() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) { configuration in
+            publishedConfigurations.append(configuration)
+        }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let checkbox = try #require(
+            findView(identifier: "codexIntegrationCheckbox", in: contentView) as? NSButton
+        )
+        #expect(checkbox.state == .on)
+
+        checkbox.state = .off
+        let action = try #require(checkbox.action)
+        let target = try #require(checkbox.target)
+        NSApp.sendAction(action, to: target, from: checkbox)
+
+        #expect(publishedConfigurations.last?.integrations.codexEnabled == false)
     }
 
     @Test

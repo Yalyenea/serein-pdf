@@ -49,6 +49,8 @@ final class VerticalTabsViewController: NSViewController {
     var onCloseSessionRequested: ((UUID) -> Void)?
     var onAlternateSessionActivationRequested: ((UUID) -> Void)?
     var onOpenRecentURLRequested: ((URL) -> Void)?
+    var onRevealInFinderRequested: ((UUID) -> Void)?
+    var onOpenWithMenuRequested: ((UUID) -> NSMenu?)?
     private let documentsTitleLabel = NSTextField(labelWithString: "Documents")
     private let countLabel = NSTextField(labelWithString: "0 open")
     private let emptyStateView = EmptyStateView(
@@ -289,6 +291,12 @@ final class VerticalTabsViewController: NSViewController {
                 },
                 onContextMenu: { [weak self] sessionID in
                     self?.selectForContextMenuIfNeeded(sessionID)
+                },
+                onRevealInFinder: { [weak self] sessionID in
+                    self?.onRevealInFinderRequested?(sessionID)
+                },
+                onOpenWithMenu: { [weak self] sessionID in
+                    self?.onOpenWithMenuRequested?(sessionID)
                 },
                 onStartContinuousReading: { [weak self] _ in
                     guard let self else { return }

@@ -349,6 +349,42 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertEqual(controller.testingTabDragSourceHitTargets, [true])
     }
 
+    func testVerticalTabContextMenuKeepsRevealSeparateFromOpenWith() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "vertical-open-with"))
+        let controller = VerticalTabsViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        var revealedSessionID: UUID?
+        controller.onRevealInFinderRequested = { revealedSessionID = $0 }
+        controller.onOpenWithMenuRequested = { requestedSessionID in
+            XCTAssertEqual(requestedSessionID, session.id)
+            let menu = NSMenu(title: "Open With")
+            menu.addItem(withTitle: "Preview", action: nil, keyEquivalent: "")
+            return menu
+        }
+        controller.loadViewIfNeeded()
+        let window = makeWindow(for: controller.view)
+        defer { window.close() }
+
+        let tabItem = try XCTUnwrap(findDescendant(of: VerticalTabItemView.self, in: controller.view))
+        let contextMenu = try XCTUnwrap(
+            tabItem.menu(for: mouseDownEvent(in: window, at: .zero))
+        )
+        let revealItem = try XCTUnwrap(contextMenu.item(withTitle: "Reveal in Finder"))
+        let openWithItem = try XCTUnwrap(contextMenu.item(withTitle: "Open With"))
+
+        XCTAssertEqual(openWithItem.submenu?.items.map(\.title), ["Preview"])
+        NSApp.sendAction(
+            try XCTUnwrap(revealItem.action),
+            to: try XCTUnwrap(revealItem.target),
+            from: revealItem
+        )
+        XCTAssertEqual(revealedSessionID, session.id)
+    }
+
     private func makeTemporaryPDF(named name: String) throws -> URL {
         try TestPDFFixtures.makeBlankPDF(named: name)
     }

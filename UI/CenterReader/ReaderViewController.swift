@@ -355,6 +355,8 @@ final class ReaderViewController: NSViewController {
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
     var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
     var onRevealAnnotationRequested: ((DocumentHighlightGroup) -> Void)?
+    var onSendSelectionToCodexRequested: ((String) -> Void)?
+    var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
     /// When true for a groupID, hover preview is suppressed (e.g. same row selected in Annotations sidebar).
     var shouldSuppressAnnotationPreview: ((String) -> Bool)?
     private let pdfContainerView = PDFContainerView()
@@ -468,6 +470,12 @@ final class ReaderViewController: NSViewController {
         }
         annotationInteraction.onNavigateRequested = { [weak self] group in
             self?.focus(on: group, showPulse: false)
+        }
+        annotationInteraction.onSendSelectionToCodexRequested = { [weak self] text in
+            self?.onSendSelectionToCodexRequested?(text)
+        }
+        annotationInteraction.onSendPageImageToCodexRequested = { [weak self] image, pageNumber in
+            self?.onSendPageImageToCodexRequested?(image, pageNumber)
         }
         annotationInteraction.shouldSuppressPreview = { [weak self] groupID in
             self?.shouldSuppressAnnotationPreview?(groupID) ?? false
@@ -1677,10 +1685,14 @@ final class ReaderViewController: NSViewController {
         findBarView.focusQueryField()
     }
 
-    private func selectedSearchQuery() -> String? {
+    var selectedText: String? {
         guard let text = pdfView.currentSelection?.string.map(PDFTextSanitizer.sanitize),
               text.isEmpty == false else { return nil }
         return text
+    }
+
+    private func selectedSearchQuery() -> String? {
+        selectedText
     }
 
     func hideFindBar() {

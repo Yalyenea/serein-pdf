@@ -1813,6 +1813,10 @@ final class DocumentStoreTests: XCTestCase {
 
         let comparisonID = try XCTUnwrap(store.displayedSessionID(for: .secondary, in: windowID))
         XCTAssertNotEqual(comparisonID, session.id)
+        XCTAssertEqual(
+            store.publicSessionID(forDisplayedSessionID: comparisonID, in: windowID),
+            session.id
+        )
         XCTAssertEqual(store.sessions.count, 2)
         XCTAssertEqual(store.sessions(in: windowID).map(\.id), [session.id])
         XCTAssertEqual(persistence.state?.sessions.map(\.id), [session.id])

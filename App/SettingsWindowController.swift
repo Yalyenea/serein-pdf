@@ -2,7 +2,7 @@ import AppKit
 
 private enum SettingsWindowMetrics {
     static let contentWidth: CGFloat = 680
-    static let generalContentSize = NSSize(width: contentWidth, height: 642)
+    static let generalContentSize = NSSize(width: contentWidth, height: 704)
     static let libraryContentSize = NSSize(width: contentWidth, height: 484)
     static let shortcutsContentSize = NSSize(width: contentWidth, height: 620)
     static let pageSegmentWidth: CGFloat = 88
@@ -265,6 +265,11 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         target: nil,
         action: nil
     )
+    private let codexIntegrationCheckbox = NSButton(
+        checkboxWithTitle: "Enable Codex integration",
+        target: nil,
+        action: nil
+    )
     private let footnoteLabel = NSTextField(
         wrappingLabelWithString: "Reading focus defaults apply immediately unless a window has a temporary ⌥F adjustment. Other reader defaults apply to newly opened PDFs. Private GitHub repos need [updates] github_token in config.toml."
     )
@@ -395,6 +400,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         applyFloatingOutlineHeightControls(configuration.layout)
         showRecentInSidebarCheckbox.state = configuration.layout.showRecentFilesInSidebar ? .on : .off
         autoCheckUpdatesCheckbox.state = configuration.updates.autoCheck ? .on : .off
+        codexIntegrationCheckbox.state = configuration.integrations.codexEnabled ? .on : .off
         shortcutsErrorLabel.stringValue = ""
         rebuildLibraryFolderRows()
 
@@ -465,6 +471,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         )
         updatedConfiguration.layout.showRecentFilesInSidebar = showRecentInSidebarCheckbox.state == .on
         updatedConfiguration.updates.autoCheck = autoCheckUpdatesCheckbox.state == .on
+        updatedConfiguration.integrations.codexEnabled = codexIntegrationCheckbox.state == .on
         publishConfigurationIfChanged(updatedConfiguration)
     }
 
@@ -617,6 +624,12 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         autoCheckUpdatesCheckbox.target = self
         autoCheckUpdatesCheckbox.action = #selector(handleGeneralControlChanged(_:))
 
+        codexIntegrationCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        codexIntegrationCheckbox.identifier = NSUserInterfaceItemIdentifier("codexIntegrationCheckbox")
+        codexIntegrationCheckbox.controlSize = .small
+        codexIntegrationCheckbox.target = self
+        codexIntegrationCheckbox.action = #selector(handleGeneralControlChanged(_:))
+
         footnoteLabel.translatesAutoresizingMaskIntoConstraints = false
         footnoteLabel.font = .systemFont(ofSize: 11)
         footnoteLabel.textColor = .secondaryLabelColor
@@ -662,10 +675,14 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             [makeRowLabel("Floating Outline Height"), floatingOutlineHeightStack],
             [makeRowLabel("Layout"), layoutOptionsStack],
         ])
+        let integrationsGrid = makeSettingsGrid([
+            [makeRowLabel("Codex"), codexIntegrationCheckbox],
+        ])
         let sectionsStack = NSStackView(views: [
             makeSettingsSection(title: "Appearance", content: appearanceGrid),
             makeSettingsSection(title: "Reading", content: readingGrid),
             makeSettingsSection(title: "Layout", content: layoutGrid),
+            makeSettingsSection(title: "Integrations", content: integrationsGrid),
         ])
         sectionsStack.orientation = .vertical
         sectionsStack.alignment = .leading

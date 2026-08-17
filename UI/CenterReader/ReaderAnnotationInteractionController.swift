@@ -9,6 +9,8 @@ final class ReaderAnnotationInteractionController: NSObject {
     var onRevealRequested: ((DocumentHighlightGroup) -> Void)?
     var onCreateHighlightRequested: (() -> DocumentHighlightGroup?)?
     var onNavigateRequested: ((DocumentHighlightGroup) -> Void)?
+    var onSendSelectionToCodexRequested: ((String) -> Void)?
+    var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
     var shouldSuppressPreview: ((String) -> Bool)?
 
     private let documentStore: DocumentStore
@@ -161,6 +163,16 @@ final class ReaderAnnotationInteractionController: NSObject {
                 isEnabled: pdfView.currentPage != nil
             )
         )
+        if documentStore.appConfiguration.integrations.codexEnabled {
+            menu.addItem(
+                contextMenuItem(
+                    title: hasSelection ? "Send Selection to Codex" : "Send Page Image to Codex",
+                    command: .sendContextToCodex,
+                    action: #selector(sendContextToCodex(_:)),
+                    isEnabled: hasSelection || pdfView.currentPage != nil
+                )
+            )
+        }
         return menu
     }
 
@@ -410,6 +422,20 @@ final class ReaderAnnotationInteractionController: NSObject {
     private func copyCurrentPageAsImage(_ sender: Any?) {
         guard let page = pdfView.currentPage else { return }
         PDFPageImageService.copyToPasteboard(PDFPageImageService.image(from: page))
+    }
+
+    @objc
+    private func sendContextToCodex(_ sender: Any?) {
+        if let text = pdfView.currentSelection?.string.map(PDFTextSanitizer.sanitize),
+           text.isEmpty == false {
+            onSendSelectionToCodexRequested?(text)
+            return
+        }
+        guard let page = pdfView.currentPage,
+              let document = pdfView.document else { return }
+        let pageIndex = document.index(for: page)
+        guard pageIndex >= 0 else { return }
+        onSendPageImageToCodexRequested?(PDFPageImageService.image(from: page), pageIndex + 1)
     }
 
     @objc

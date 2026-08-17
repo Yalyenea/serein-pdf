@@ -210,6 +210,12 @@ struct AppConfiguration: Equatable, Sendable {
         )
     }
 
+    struct Integrations: Equatable, Sendable {
+        var codexEnabled: Bool
+
+        static let `default` = Integrations(codexEnabled: true)
+    }
+
     struct Shortcuts: Equatable, Sendable {
         var bindings: [ShortcutCommand: KeyboardShortcut]
 
@@ -225,6 +231,8 @@ struct AppConfiguration: Equatable, Sendable {
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
             .copyCurrentPDFPath: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
             .copyCurrentPageAsImage: KeyboardShortcut(key: "c", modifiers: [.command, .option]),
+            .sendContextToCodex: KeyboardShortcut(key: "c", modifiers: [.command, .control]),
+            .sendCurrentPDFToCodex: KeyboardShortcut(key: "c", modifiers: [.command, .control, .shift]),
             .removeHighlight: KeyboardShortcut(key: "d", modifiers: []),
             .highlightColorPink: KeyboardShortcut(key: "p", modifiers: [.command, .shift]),
             .highlightColorYellow: KeyboardShortcut(key: "y", modifiers: [.command, .shift]),
@@ -282,6 +290,7 @@ struct AppConfiguration: Equatable, Sendable {
     var library: Library
     var access: Access
     var updates: Updates
+    var integrations: Integrations
 
     init(
         appearance: Appearance = .default,
@@ -291,7 +300,8 @@ struct AppConfiguration: Equatable, Sendable {
         layout: Layout = .default,
         library: Library = .default,
         access: Access = .default,
-        updates: Updates = .default
+        updates: Updates = .default,
+        integrations: Integrations = .default
     ) {
         self.appearance = appearance
         self.reader = reader
@@ -301,6 +311,7 @@ struct AppConfiguration: Equatable, Sendable {
         self.library = library
         self.access = access
         self.updates = updates
+        self.integrations = integrations
     }
 
     static let `default` = AppConfiguration(
@@ -311,7 +322,8 @@ struct AppConfiguration: Equatable, Sendable {
         layout: .default,
         library: .default,
         access: .default,
-        updates: .default
+        updates: .default,
+        integrations: .default
     )
 }
 
@@ -552,6 +564,9 @@ auto_check = true
 # Required for private GitHub repos. classic PAT with repo scope, or fine-grained: Contents read + metadata.
 github_token = ""
 
+[integrations]
+codex_enabled = true
+
 [shortcuts]
 highlight_selection = "a"
 add_comment = "command+option+m"
@@ -577,6 +592,8 @@ export_clean_copy = "none"
 copy_highlights_markdown = "command+shift+e"
 copy_current_pdf_path = "command+shift+c"
 copy_current_page_as_image = "command+option+c"
+send_context_to_codex = "command+control+c"
+send_current_pdf_to_codex = "command+control+shift+c"
 remove_highlight = "d"
 highlight_color_pink = "command+shift+p"
 highlight_color_yellow = "command+shift+y"
@@ -673,6 +690,9 @@ root_bookmarks = \(serializedBookmarkArray(configuration.access.rootBookmarkData
 auto_check = \(configuration.updates.autoCheck ? "true" : "false")
 github_token = "\(escapedTOMLString(configuration.updates.githubToken))"
 
+[integrations]
+codex_enabled = \(configuration.integrations.codexEnabled ? "true" : "false")
+
 [shortcuts]
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
 add_comment = "\(serializedShortcut(.addComment, configuration: configuration))"
@@ -692,6 +712,8 @@ export_clean_copy = "\(serializedShortcut(.exportCleanCopy, configuration: confi
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
 copy_current_pdf_path = "\(serializedShortcut(.copyCurrentPDFPath, configuration: configuration))"
 copy_current_page_as_image = "\(serializedShortcut(.copyCurrentPageAsImage, configuration: configuration))"
+send_context_to_codex = "\(serializedShortcut(.sendContextToCodex, configuration: configuration))"
+send_current_pdf_to_codex = "\(serializedShortcut(.sendCurrentPDFToCodex, configuration: configuration))"
 remove_highlight = "\(serializedShortcut(.removeHighlight, configuration: configuration))"
 highlight_color_pink = "\(serializedShortcut(.highlightColorPink, configuration: configuration))"
 highlight_color_yellow = "\(serializedShortcut(.highlightColorYellow, configuration: configuration))"
@@ -785,6 +807,8 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "[updates]",
         "auto_check",
         "github_token",
+        "[integrations]",
+        "codex_enabled",
         "highlight_selection",
         "add_comment",
         "exit_highlight_mode",
@@ -803,6 +827,8 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "copy_highlights_markdown",
         "copy_current_pdf_path",
         "copy_current_page_as_image",
+        "send_context_to_codex",
+        "send_current_pdf_to_codex",
         "remove_highlight",
         "highlight_color_pink",
         "highlight_color_yellow",
@@ -988,6 +1014,12 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .copyCurrentPDFPath, to: &configuration)
         case ("shortcuts", "copy_current_page_as_image"):
             try applyShortcut(rawValue, command: .copyCurrentPageAsImage, to: &configuration)
+        case ("shortcuts", "send_context_to_codex"):
+            try applyShortcut(rawValue, command: .sendContextToCodex, to: &configuration)
+        case ("shortcuts", "send_current_pdf_to_codex"):
+            try applyShortcut(rawValue, command: .sendCurrentPDFToCodex, to: &configuration)
+        case ("integrations", "codex_enabled"):
+            configuration.integrations.codexEnabled = try parseBool(rawValue)
         case ("reader", "default_display_mode"):
             let value = parseString(rawValue)
             guard let displayMode = ReaderDisplayMode(rawValue: value) else {
@@ -1346,6 +1378,19 @@ struct AppConfigurationStore {
                 AppConfiguration.default.shortcuts.bindings[.copyCurrentPDFPath]
                 ?? legacyContinuousReading
             configuration.shortcuts.bindings[.toggleContinuousReading] = nil
+            didMigrate = true
+        }
+        let hasLegacyCodexShortcuts =
+            existingContent.contains("send_context_to_codex") == false &&
+            (existingContent.contains("send_selection_to_codex") ||
+                existingContent.contains("send_current_page_to_codex"))
+        if hasLegacyCodexShortcuts {
+            configuration.shortcuts.bindings[.sendContextToCodex] =
+                AppConfiguration.default.shortcuts.bindings[.sendContextToCodex]
+            if configuration.shortcuts.bindings[.sendCurrentPDFToCodex] == nil {
+                configuration.shortcuts.bindings[.sendCurrentPDFToCodex] =
+                    AppConfiguration.default.shortcuts.bindings[.sendCurrentPDFToCodex]
+            }
             didMigrate = true
         }
 

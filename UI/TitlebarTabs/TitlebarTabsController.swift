@@ -48,6 +48,8 @@ final class TitlebarTabsController: NSViewController {
     let windowID: UUID
     var onCloseSessionRequested: ((UUID) -> Void)?
     var onAlternateSessionActivationRequested: ((UUID) -> Void)?
+    var onRevealInFinderRequested: ((UUID) -> Void)?
+    var onOpenWithMenuRequested: ((UUID) -> NSMenu?)?
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let documentContainerView = NSView()
@@ -226,6 +228,12 @@ final class TitlebarTabsController: NSViewController {
                 },
                 onContextMenu: { [weak self] sessionID in
                     self?.selectForContextMenuIfNeeded(sessionID)
+                },
+                onRevealInFinder: { [weak self] sessionID in
+                    self?.onRevealInFinderRequested?(sessionID)
+                },
+                onOpenWithMenu: { [weak self] sessionID in
+                    self?.onOpenWithMenuRequested?(sessionID)
                 },
                 onStartContinuousReading: { [weak self] _ in
                     guard let self else { return }

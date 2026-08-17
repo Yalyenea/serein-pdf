@@ -58,12 +58,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         action: nil,
         keyEquivalent: ""
     )
+    private let sendToCodexMenu = NSMenu(title: "Send to Codex")
+    private let sendToCodexItem = NSMenuItem(title: "Send to Codex", action: nil, keyEquivalent: "")
+    private let openWithMenu = NSMenu(title: "Open With")
+    private let openWithItem = NSMenuItem(title: "Open With", action: nil, keyEquivalent: "")
     private var autoSaveTimer: Timer?
     private var lastRecentFilesCleanupDate: Date?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
     private var pendingOpenURLs: [URL] = []
     private let openDocumentSelectionResolver = OpenDocumentSelectionResolver()
     private let securityScopedAccessController = SecurityScopedAccessController()
+    private let codexShareCoordinator = CodexShareCoordinator()
+    private let externalApplicationService = ExternalApplicationService()
     private var cachedShortcutHandlerMap: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler]?
     private var appUpdateCoordinator: AppUpdateCoordinator?
     private var mainWindowController: MainWindowController? {
@@ -340,6 +346,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if menu === windowMenu || menu === moveCurrentPDFToWindowMenu {
             rebuildMoveCurrentPDFToWindowMenu()
         }
+        if menu === openWithMenu {
+            rebuildOpenWithMenu()
+        }
+        openWithItem.isEnabled = currentPublicPDFSession() != nil
         refreshManagedMenuState(in: menu)
     }
 
@@ -366,6 +376,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
             .copyCurrentPDFPath: { [weak self] in self?.copyCurrentPDFPath(nil) },
             .copyCurrentPageAsImage: { [weak self] in self?.copyCurrentPageAsImage(nil) },
+            .sendContextToCodex: { [weak self] in self?.sendContextToCodex(nil) },
+            .sendCurrentPDFToCodex: { [weak self] in self?.sendCurrentPDFToCodex(nil) },
             .removeHighlight: { [weak self] in self?.removeHighlightUnderCursorAction(nil) },
             .highlightColorPink: { [weak self] in self?.setHighlightColorPink(nil) },
             .highlightColorYellow: { [weak self] in self?.setHighlightColorYellow(nil) },
@@ -449,6 +461,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
         controller.installReaderOpenURLsHandler { [weak self] urls, windowID in
             self?.openDroppedDocuments(urls, preferredWindowID: windowID)
+        }
+        controller.installCodexShareHandlers(
+            selectionHandler: { [weak self] text, _ in
+                self?.openTextInCodex(text)
+            },
+            pageImageHandler: { [weak self] image, pageNumber, windowID in
+                self?.openPageImageInCodex(image, pageNumber: pageNumber, windowID: windowID)
+            }
+        )
+        controller.installOpenWithMenuProvider { [weak self] sessionID, windowID in
+            self?.makeOpenWithMenu(for: sessionID, in: windowID)
+        }
+        controller.installRevealInFinderHandler { [weak self] sessionID, windowID in
+            self?.revealPDFInFinder(for: sessionID, in: windowID)
         }
         mainWindowControllers[windowID] = controller
         return controller
@@ -653,6 +679,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .copyCurrentPageAsImage,
             action: #selector(copyCurrentPageAsImage(_:))
         )
+        openWithMenu.autoenablesItems = false
+        openWithMenu.delegate = self
+        openWithItem.submenu = openWithMenu
+        let sendContextToCodexItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.sendContextToCodex.menuTitle,
+            command: .sendContextToCodex,
+            action: #selector(sendContextToCodex(_:))
+        )
+        let sendCurrentPDFToCodexItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.sendCurrentPDFToCodex.menuTitle,
+            command: .sendCurrentPDFToCodex,
+            action: #selector(sendCurrentPDFToCodex(_:))
+        )
+        sendToCodexMenu.autoenablesItems = false
+        sendToCodexMenu.delegate = self
+        sendToCodexMenu.items = [
+            sendContextToCodexItem,
+            sendCurrentPDFToCodexItem,
+        ]
+        sendToCodexItem.submenu = sendToCodexMenu
+        sendToCodexItem.isHidden = appConfiguration.integrations.codexEnabled == false
         let findItem = NSMenuItem(
             title: "Find…",
             action: #selector(findInCurrentDocument(_:)),
@@ -739,6 +786,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             openLibraryItem,
             refreshLibraryItem,
             openContainingFolderItem,
+            openWithItem,
             copyCurrentPDFPathItem,
             copyCurrentPageAsImageItem,
             recentItem,
@@ -749,6 +797,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             findPreviousItem,
             saveAnnotationsItem,
             shareDocumentItem,
+            sendToCodexItem,
             exportCleanCopyItem,
             exportHighlightsItem,
             exportAllOpenHighlightsItem,
@@ -1797,10 +1846,87 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         PDFPageImageService.copyToPasteboard(image)
     }
 
+    @objc
+    private func sendContextToCodex(_ sender: Any?) {
+        guard appConfiguration.integrations.codexEnabled else { return }
+        if let text = mainWindowController?.selectedReaderText {
+            openTextInCodex(text)
+            return
+        }
+        sendCurrentPageToCodex()
+    }
+
+    private func sendCurrentPageToCodex() {
+        guard let session = currentPageImageSession() else { return }
+
+        do {
+            let image = try documentStore.currentPageImage(for: session.id)
+            openPageImageInCodex(
+                image,
+                pageNumber: session.currentPageIndex + 1,
+                documentTitle: session.title
+            )
+        } catch {
+            presentCodexShareError(error)
+        }
+    }
+
+    @objc
+    private func sendCurrentPDFToCodex(_ sender: Any?) {
+        guard appConfiguration.integrations.codexEnabled,
+              let session = currentPublicPDFSession(),
+              saveBeforeSharingIfNeeded(session) else { return }
+        openFilesInCodex([session.url])
+    }
+
+    private func openTextInCodex(_ text: String) {
+        guard appConfiguration.integrations.codexEnabled else { return }
+        do {
+            try codexShareCoordinator.openText(text)
+        } catch {
+            presentCodexShareError(error)
+        }
+    }
+
+    private func openPageImageInCodex(_ image: NSImage, pageNumber: Int, windowID: UUID) {
+        guard appConfiguration.integrations.codexEnabled else { return }
+        guard let session = focusedPDFSession(in: windowID) else { return }
+        openPageImageInCodex(image, pageNumber: pageNumber, documentTitle: session.title)
+    }
+
+    private func openPageImageInCodex(_ image: NSImage, pageNumber: Int, documentTitle: String) {
+        do {
+            let url = try codexShareCoordinator.writePageImage(
+                image,
+                documentTitle: documentTitle,
+                pageNumber: pageNumber
+            )
+            openFilesInCodex([url])
+        } catch {
+            presentCodexShareError(error)
+        }
+    }
+
+    private func openFilesInCodex(_ urls: [URL]) {
+        guard appConfiguration.integrations.codexEnabled else { return }
+        do {
+            try codexShareCoordinator.openFiles(urls) { [weak self] error in
+                guard let error else { return }
+                self?.presentCodexShareError(error)
+            }
+        } catch {
+            presentCodexShareError(error)
+        }
+    }
+
     private func currentPageImageSession() -> DocumentSession? {
         guard let windowID = mainWindowController?.windowID ?? mainWindowControllers.values.first?.windowID else {
             return nil
         }
+        return focusedPDFSession(in: windowID)
+    }
+
+    private func focusedPDFSession(in windowID: UUID) -> DocumentSession? {
         let pane = documentStore.isSplitEnabled(in: windowID)
             ? documentStore.focusedPane(in: windowID)
             : .primary
@@ -1812,6 +1938,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return session
     }
 
+    private func currentPublicPDFSession() -> DocumentSession? {
+        guard let windowID = mainWindowController?.windowID,
+              let focusedSession = focusedPDFSession(in: windowID),
+              let publicSessionID = documentStore.publicSessionID(
+                forDisplayedSessionID: focusedSession.id,
+                in: windowID
+              ) else { return nil }
+        return documentStore.session(for: publicSessionID)
+    }
+
+    private func makeOpenWithMenu(for sessionID: UUID, in windowID: UUID) -> NSMenu? {
+        guard let publicSessionID = documentStore.publicSessionID(
+            forDisplayedSessionID: sessionID,
+            in: windowID
+        ),
+        let session = documentStore.session(for: publicSessionID),
+        session.isBlank == false else { return nil }
+
+        let menu = NSMenu(title: "Open With")
+        menu.autoenablesItems = false
+        populateOpenWithMenu(menu, session: session)
+        return menu
+    }
+
+    private func revealPDFInFinder(for sessionID: UUID, in windowID: UUID) {
+        guard let publicSessionID = documentStore.publicSessionID(
+            forDisplayedSessionID: sessionID,
+            in: windowID
+        ),
+        let session = documentStore.session(for: publicSessionID),
+        session.isBlank == false else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([session.url])
+    }
+
+    private func rebuildOpenWithMenu() {
+        openWithMenu.removeAllItems()
+        guard let session = currentPublicPDFSession() else {
+            addUnavailableOpenWithItem(to: openWithMenu, title: "No PDF Open")
+            return
+        }
+        populateOpenWithMenu(openWithMenu, session: session)
+    }
+
+    private func populateOpenWithMenu(_ menu: NSMenu, session: DocumentSession) {
+        let applications = externalApplicationService.applications(for: session.url)
+        guard applications.isEmpty == false else {
+            addUnavailableOpenWithItem(to: menu, title: "No Compatible Applications")
+            return
+        }
+
+        for application in applications {
+            let item = NSMenuItem(
+                title: application.name,
+                action: #selector(openPDFWithApplication(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.image = application.icon
+            item.representedObject = OpenWithRequest(
+                sessionID: session.id,
+                applicationURL: application.url
+            )
+            menu.addItem(item)
+        }
+    }
+
+    private func addUnavailableOpenWithItem(to menu: NSMenu, title: String) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        menu.addItem(item)
+    }
+
+    @objc
+    private func openPDFWithApplication(_ sender: NSMenuItem) {
+        guard let request = sender.representedObject as? OpenWithRequest,
+              let session = documentStore.session(for: request.sessionID),
+              saveBeforeOpeningExternallyIfNeeded(session) else { return }
+
+        externalApplicationService.open(
+            documentURL: session.url,
+            with: request.applicationURL
+        ) { [weak self] error in
+            guard let error else { return }
+            self?.presentExternalApplicationError(error)
+        }
+    }
+
     private func currentPDFShareContext() -> (controller: MainWindowController, session: DocumentSession)? {
         guard let controller = mainWindowController,
               let session = documentStore.activeSession(in: controller.windowID),
@@ -1820,12 +2033,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func saveBeforeSharingIfNeeded(_ session: DocumentSession) -> Bool {
+        saveAnnotationsIfNeeded(
+            session,
+            title: "Save Before Sharing",
+            message: "This PDF has unsaved annotations. Save them before sharing or exporting a clean copy."
+        )
+    }
+
+    private func saveBeforeOpeningExternallyIfNeeded(_ session: DocumentSession) -> Bool {
+        saveAnnotationsIfNeeded(
+            session,
+            title: "Save Before Opening",
+            message: "This PDF has unsaved annotations. Save them before opening it in another application."
+        )
+    }
+
+    private func saveAnnotationsIfNeeded(
+        _ session: DocumentSession,
+        title: String,
+        message: String
+    ) -> Bool {
         guard session.isDirty else { return true }
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Save Before Sharing"
-        alert.informativeText = "This PDF has unsaved annotations. Save them before sharing or exporting a clean copy."
+        alert.messageText = title
+        alert.informativeText = message
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
 
@@ -2162,6 +2395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func refreshMenuShortcuts() {
+        sendToCodexItem.isHidden = appConfiguration.integrations.codexEnabled == false
         guard let menu = NSApp.mainMenu else { return }
         refreshMenuShortcuts(in: menu)
         refreshManagedMenuState(in: menu)
@@ -2187,6 +2421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func refreshManagedMenuState() {
+        sendToCodexItem.isHidden = appConfiguration.integrations.codexEnabled == false
         guard let menu = NSApp.mainMenu else { return }
         refreshManagedMenuState(in: menu)
     }
@@ -2206,6 +2441,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func presentOpenError(_ error: Error) {
         let alert = NSAlert(error: error)
         alert.messageText = "Failed to open documents"
+        if let window = mainWindowController?.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func presentCodexShareError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Failed to send to Codex"
+        if let window = mainWindowController?.window ?? NSApp.mainWindow {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
+    private func presentExternalApplicationError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Failed to open PDF"
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2431,6 +2686,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(copyCurrentPageAsImage(_:)):
             return currentPageImageSession() != nil
+        case #selector(sendContextToCodex(_:)):
+            let dynamicTitle = controller?.selectedReaderText == nil
+                ? "Send Page Image to Codex"
+                : "Send Selection to Codex"
+            menuItem.title = menuTitle(dynamicTitle, for: .sendContextToCodex)
+            return appConfiguration.integrations.codexEnabled && currentPageImageSession() != nil
+        case #selector(sendCurrentPDFToCodex(_:)):
+            return appConfiguration.integrations.codexEnabled && currentPublicPDFSession() != nil
         case #selector(findNextMatchAction(_:)), #selector(findPreviousMatchAction(_:)):
             return controller?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):

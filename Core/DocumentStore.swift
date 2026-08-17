@@ -363,6 +363,11 @@ final class DocumentStore {
         }
     }
 
+    func publicSessionID(forDisplayedSessionID sessionID: UUID, in windowID: UUID) -> UUID? {
+        guard let workspace = windowWorkspace(for: windowID) else { return nil }
+        return publicSessionID(for: sessionID, in: workspace)
+    }
+
     func focusedPane(in windowID: UUID) -> ReaderPane {
         windowWorkspace(for: windowID)?.focusedPane ?? .primary
     }

@@ -722,6 +722,67 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertEqual(item.keyEquivalentModifierMask, [.command, .option])
     }
 
+    func testReaderContextMenuSendsSelectionAndPageImageToCodexHandlers() throws {
+        let store = makeStore()
+        let url = try TestPDFFixtures.makeSearchablePDF(
+            named: "codex-context-menu",
+            pages: ["selected text for Codex"]
+        )
+        _ = try store.open(documentAt: url)
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushAnnotationNavigationLayout(windowController.window)
+
+        let split = try XCTUnwrap(
+            windowController.window?.contentViewController as? SplitViewController
+        )
+        let reader = split.readerViewController
+        reader.pdfView.currentSelection = try XCTUnwrap(
+            reader.pdfView.document?.findString("selected text", withOptions: []).first
+        )
+        var sentText: String?
+        var sentPageNumber: Int?
+        var sentImage: NSImage?
+        reader.onSendSelectionToCodexRequested = { sentText = $0 }
+        reader.onSendPageImageToCodexRequested = { image, pageNumber in
+            sentImage = image
+            sentPageNumber = pageNumber
+        }
+
+        let selectionMenu = try XCTUnwrap(
+            reader.pdfView.menu(for: makeRightClickEvent(in: reader.pdfView))
+        )
+        let selectionItem = try XCTUnwrap(
+            selectionMenu.item(withTitle: "Send Selection to Codex")
+        )
+
+        XCTAssertTrue(
+            NSApp.sendAction(try XCTUnwrap(selectionItem.action), to: selectionItem.target, from: selectionItem)
+        )
+        XCTAssertEqual(sentText, "selected text")
+        XCTAssertNil(sentImage)
+
+        reader.pdfView.currentSelection = nil
+        let pageMenu = try XCTUnwrap(reader.pdfView.menu(for: makeRightClickEvent(in: reader.pdfView)))
+        let pageItem = try XCTUnwrap(pageMenu.item(withTitle: "Send Page Image to Codex"))
+        XCTAssertTrue(
+            NSApp.sendAction(try XCTUnwrap(pageItem.action), to: pageItem.target, from: pageItem)
+        )
+
+        XCTAssertEqual(sentPageNumber, 1)
+        XCTAssertNotNil(sentImage)
+
+        var configuration = store.appConfiguration
+        configuration.integrations.codexEnabled = false
+        store.updateAppConfiguration(configuration)
+        let disabledMenu = try XCTUnwrap(
+            reader.pdfView.menu(for: makeRightClickEvent(in: reader.pdfView))
+        )
+        XCTAssertNil(disabledMenu.item(withTitle: "Send Selection to Codex"))
+        XCTAssertNil(disabledMenu.item(withTitle: "Send Page Image to Codex"))
+    }
+
     private func makeStore() -> DocumentStore {
         makeIsolatedDocumentStore()
     }

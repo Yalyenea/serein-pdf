@@ -27,4 +27,15 @@ final class PDFPageImageServiceTests: XCTestCase {
         XCTAssertEqual(copiedImage.size.width, image.size.width, accuracy: 0.5)
         XCTAssertEqual(copiedImage.size.height, image.size.height, accuracy: 0.5)
     }
+
+    func testPNGDataKeepsRenderedPixelDimensions() throws {
+        let document = TestPDFFixtures.makeBlankDocument(pageCount: 1)
+        let page = try XCTUnwrap(document.page(at: 0))
+        let image = PDFPageImageService.image(from: page)
+        let data = try XCTUnwrap(PDFPageImageService.pngData(from: image))
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: data))
+
+        XCTAssertEqual(bitmap.pixelsWide, Int(image.size.width))
+        XCTAssertEqual(bitmap.pixelsHigh, Int(image.size.height))
+    }
 }

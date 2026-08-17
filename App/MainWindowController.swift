@@ -254,6 +254,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     var currentPageCount: Int { splitViewController.readerViewController.currentPageCount }
+    var selectedReaderText: String? { splitViewController.readerViewController.selectedText }
 
     var isAllPagesOverviewActive: Bool {
         splitViewController.readerViewController.isAllPagesOverviewActive
@@ -437,6 +438,48 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 guard let self else { return }
                 handler(urls, self.windowID)
             }
+        }
+    }
+
+    func installCodexShareHandlers(
+        selectionHandler: @escaping (String, UUID) -> Void,
+        pageImageHandler: @escaping (NSImage, Int, UUID) -> Void
+    ) {
+        let readers = [
+            splitViewController.readerWorkspaceViewController.primaryReaderViewController,
+            splitViewController.readerWorkspaceViewController.secondaryReaderViewController,
+        ]
+        for reader in readers {
+            reader.onSendSelectionToCodexRequested = { [weak self] text in
+                guard let self else { return }
+                selectionHandler(text, self.windowID)
+            }
+            reader.onSendPageImageToCodexRequested = { [weak self] image, pageNumber in
+                guard let self else { return }
+                pageImageHandler(image, pageNumber, self.windowID)
+            }
+        }
+    }
+
+    func installOpenWithMenuProvider(_ provider: @escaping (UUID, UUID) -> NSMenu?) {
+        splitViewController.verticalTabsViewController.onOpenWithMenuRequested = { [weak self] sessionID in
+            guard let self else { return nil }
+            return provider(sessionID, self.windowID)
+        }
+        splitViewController.titlebarTabsController.onOpenWithMenuRequested = { [weak self] sessionID in
+            guard let self else { return nil }
+            return provider(sessionID, self.windowID)
+        }
+    }
+
+    func installRevealInFinderHandler(_ handler: @escaping (UUID, UUID) -> Void) {
+        splitViewController.verticalTabsViewController.onRevealInFinderRequested = { [weak self] sessionID in
+            guard let self else { return }
+            handler(sessionID, self.windowID)
+        }
+        splitViewController.titlebarTabsController.onRevealInFinderRequested = { [weak self] sessionID in
+            guard let self else { return }
+            handler(sessionID, self.windowID)
         }
     }
 

@@ -17,6 +17,8 @@ final class VerticalTabItemView: NSView {
     private var onClose: ((UUID) -> Void)?
     private var onRename: ((UUID, String) -> Void)?
     private var onContextMenu: ((UUID) -> Void)?
+    private var onRevealInFinder: ((UUID) -> Void)?
+    private var onOpenWithMenu: ((UUID) -> NSMenu?)?
     private var onStartContinuousReading: ((UUID) -> Void)?
     private var onExitContinuousReading: ((UUID) -> Void)?
     private var preEditTitle = ""
@@ -44,6 +46,8 @@ final class VerticalTabItemView: NSView {
         onClose: @escaping (UUID) -> Void,
         onRename: @escaping (UUID, String) -> Void,
         onContextMenu: @escaping (UUID) -> Void,
+        onRevealInFinder: @escaping (UUID) -> Void,
+        onOpenWithMenu: @escaping (UUID) -> NSMenu?,
         onStartContinuousReading: @escaping (UUID) -> Void,
         onExitContinuousReading: @escaping (UUID) -> Void
     ) {
@@ -57,6 +61,8 @@ final class VerticalTabItemView: NSView {
         self.onClose = onClose
         self.onRename = onRename
         self.onContextMenu = onContextMenu
+        self.onRevealInFinder = onRevealInFinder
+        self.onOpenWithMenu = onOpenWithMenu
         self.onStartContinuousReading = onStartContinuousReading
         self.onExitContinuousReading = onExitContinuousReading
         super.init(frame: .zero)
@@ -199,6 +205,20 @@ final class VerticalTabItemView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         onContextMenu?(sessionID)
         let menu = NSMenu()
+        if let openWithMenu = onOpenWithMenu?(sessionID) {
+            let revealItem = NSMenuItem(
+                title: "Reveal in Finder",
+                action: #selector(handleRevealInFinder),
+                keyEquivalent: ""
+            )
+            revealItem.target = self
+            menu.addItem(revealItem)
+
+            let openWithItem = NSMenuItem(title: "Open With", action: nil, keyEquivalent: "")
+            openWithItem.submenu = openWithMenu
+            menu.addItem(openWithItem)
+            menu.addItem(.separator())
+        }
         let startItem = NSMenuItem(
             title: "Start Continuous Reading",
             action: #selector(handleStartContinuousReading),
@@ -227,6 +247,11 @@ final class VerticalTabItemView: NSView {
     @objc
     private func handleExitContinuousReading() {
         onExitContinuousReading?(sessionID)
+    }
+
+    @objc
+    private func handleRevealInFinder() {
+        onRevealInFinder?(sessionID)
     }
 
     func beginEditing() {

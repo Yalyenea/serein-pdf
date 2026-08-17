@@ -49,6 +49,8 @@ site for showcase, download notes, and compact docs.
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - `cmd+k`, then `cmd+t` switches the current light or dark theme, VS Code-style
 - Copy the current page as an image (`cmd+option+c` or the reader context menu); the raster includes annotations at 2× mediaBox and does not apply night-mode filters
+- `ctrl+cmd+c` sends the current context to Codex: selected text prefills a new task, otherwise the focused page is attached as a PNG. `ctrl+cmd+shift+c` attaches the current PDF. The integration can be disabled in Settings > General. Serein does not pass a workspace path, though Codex may choose the attached file's parent directory as its workspace.
+- `Reveal in Finder` and `Open With` remain separate actions. `Open With` dynamically lists compatible installed apps such as Preview, Skim, or Adobe Acrobat in the File menu and PDF tab context menus.
 - `cmd+k` chords also refresh the PDF Library index, jump to Library / Shortcuts settings, share the current PDF, merge windows, and move the current PDF to a new window
 - Rose Pine Dawn replaces only the PDF's white paper with an Obsidian-like warm surface, preserving the document's original text and accent colors
 - Rose Pine Moon maps the PDF's white/black endpoints to a dark paper/text pair, preserves warm/cool accent direction, and keeps the surrounding sidebars one shade deeper
@@ -151,6 +153,9 @@ folders = ["/Users/your-name/Documents/Papers"]
 roots = ["/Users"]
 root_bookmarks = [] # managed by Serein; do not edit manually
 
+[integrations]
+codex_enabled = true
+
 [shortcuts]
 switch_current_theme = "none"   # cmd+k, cmd+t is a built-in chord
 open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
@@ -163,6 +168,8 @@ add_comment = "command+option+m"
 new_blank_tab = "command+t"
 copy_current_pdf_path = "command+shift+c"
 copy_current_page_as_image = "command+option+c"
+send_context_to_codex = "command+control+c"
+send_current_pdf_to_codex = "command+control+shift+c"
 toggle_continuous_reading = "none"
 toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
@@ -220,6 +227,8 @@ Defined in `[shortcuts]` above. Highlights:
 | Copy highlights as Markdown | `cmd+shift+e` |
 | Copy current PDF path | `cmd+shift+c` |
 | Copy current page as image | `cmd+option+c` |
+| Send selected text, or current page image, to Codex | `ctrl+cmd+c` |
+| Send current PDF to Codex | `ctrl+cmd+shift+c` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
 | New blank tab | `cmd+t` |
@@ -235,7 +244,7 @@ Defined in `[shortcuts]` above. Highlights:
 | Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |
 | Highlight color in highlight mode | `1` / `2` / `3` (pink / yellow / green) |
-| Show current PDF in Finder | `cmd+r` |
+| Reveal current PDF in Finder | `cmd+r` |
 | Half-page down / up | `ctrl+d` / `ctrl+u` |
 | Jump to first / last page | `g` / `shift+g` |
 | Close selected tabs, or current tab/window | `cmd+w` |

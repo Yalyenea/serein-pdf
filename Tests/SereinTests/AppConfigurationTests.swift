@@ -18,6 +18,15 @@ final class AppConfigurationTests: XCTestCase {
                 configuration.shortcuts.bindings[.copyCurrentPageAsImage],
                 KeyboardShortcut(key: "c", modifiers: [.command, .option])
             )
+            XCTAssertTrue(configuration.integrations.codexEnabled)
+            XCTAssertEqual(
+                configuration.shortcuts.bindings[.sendContextToCodex],
+                KeyboardShortcut(key: "c", modifiers: [.command, .control])
+            )
+            XCTAssertEqual(
+                configuration.shortcuts.bindings[.sendCurrentPDFToCodex],
+                KeyboardShortcut(key: "c", modifiers: [.command, .control, .shift])
+            )
         }
     }
 
@@ -49,6 +58,9 @@ reading_focus_width = "column"
 reading_focus_custom_width = 0.64
 reading_focus_height = 112
 
+[integrations]
+codex_enabled = false
+
 [shortcuts]
 highlight_selection = "h"
 add_comment = "command+shift+m"
@@ -60,6 +72,7 @@ save_annotations = "command+shift+s"
 share_document = "command+option+e"
 export_clean_copy = "command+option+shift+e"
 copy_current_pdf_path = "command+shift+c"
+send_context_to_codex = "command+option+x"
 toggle_left_sidebar = "command+shift+l"
 close_current_tab = "command+e"
 close_current_window = "command+shift+e"
@@ -118,6 +131,8 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.shareDocument], KeyboardShortcut(key: "e", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.exportCleanCopy], KeyboardShortcut(key: "e", modifiers: [.command, .option, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.copyCurrentPDFPath], KeyboardShortcut(key: "c", modifiers: [.command, .shift]))
+        XCTAssertFalse(configuration.integrations.codexEnabled)
+        XCTAssertEqual(configuration.shortcuts.bindings[.sendContextToCodex], KeyboardShortcut(key: "x", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleLeftSidebar], KeyboardShortcut(key: "l", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentWindow], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
@@ -338,6 +353,39 @@ fit_width = "command+9"
         XCTAssertTrue(persistedContent.contains("copy_current_pdf_path = \"command+shift+c\""))
         XCTAssertTrue(persistedContent.contains("toggle_continuous_reading = \"none\""))
         XCTAssertFalse(persistedContent.contains("toggle_continuous_reading = \"command+shift+c\""))
+    }
+
+    func testBootstrapMigratesLegacyCodexShortcutsToContextPair() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(
+                of: "send_context_to_codex = \"command+control+c\"",
+                with: "send_selection_to_codex = \"none\"\nsend_current_page_to_codex = \"none\""
+            )
+            .replacingOccurrences(
+                of: "send_current_pdf_to_codex = \"command+control+shift+c\"",
+                with: "send_current_pdf_to_codex = \"none\""
+            )
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(
+            configuration.shortcuts.bindings[.sendContextToCodex],
+            KeyboardShortcut(key: "c", modifiers: [.command, .control])
+        )
+        XCTAssertEqual(
+            configuration.shortcuts.bindings[.sendCurrentPDFToCodex],
+            KeyboardShortcut(key: "c", modifiers: [.command, .control, .shift])
+        )
+        XCTAssertFalse(persistedContent.contains("send_selection_to_codex"))
+        XCTAssertFalse(persistedContent.contains("send_current_page_to_codex"))
     }
 
     func testParseStringStripsInlineCommentsOutsideQuotes() throws {

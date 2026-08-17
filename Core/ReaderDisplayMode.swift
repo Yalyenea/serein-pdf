@@ -68,6 +68,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case copyHighlightsMarkdown = "copy_highlights_markdown"
     case copyCurrentPDFPath = "copy_current_pdf_path"
     case copyCurrentPageAsImage = "copy_current_page_as_image"
+    case sendContextToCodex = "send_context_to_codex"
+    case sendCurrentPDFToCodex = "send_current_pdf_to_codex"
     case removeHighlight = "remove_highlight"
     case highlightColorPink = "highlight_color_pink"
     case highlightColorYellow = "highlight_color_yellow"
@@ -156,6 +158,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Copy Current PDF Path"
         case .copyCurrentPageAsImage:
             "Copy Page as Image"
+        case .sendContextToCodex:
+            "Send Context to Codex"
+        case .sendCurrentPDFToCodex:
+            "Send Current PDF to Codex"
         case .removeHighlight:
             "Remove Highlight"
         case .highlightColorPink:
@@ -227,7 +233,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .showRecentFilesPalette:
             "Open Recent Quickly…"
         case .openContainingFolder:
-            "Show in Finder"
+            "Reveal in Finder"
         case .reopenLastClosed:
             "Reopen Closed Tab"
         case .newBlankTab:
