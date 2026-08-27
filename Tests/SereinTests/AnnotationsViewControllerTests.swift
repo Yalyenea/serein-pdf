@@ -482,7 +482,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
         let editItem = try XCTUnwrap(menu.item(withTitle: "Edit Comment"))
         XCTAssertEqual(editItem.keyEquivalent, "m")
         XCTAssertEqual(editItem.keyEquivalentModifierMask, [.command, .option])
-        XCTAssertTrue(menu.item(withTitle: "Remove Highlight")?.isEnabled == true)
+        XCTAssertTrue(menu.item(withTitle: "Remove Annotation")?.isEnabled == true)
 
         let previousMode = store.rightSidebarMode(in: store.defaultWindowID)
         let target = try XCTUnwrap(editItem.target as? NSObject)

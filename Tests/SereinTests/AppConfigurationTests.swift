@@ -63,6 +63,8 @@ codex_enabled = false
 
 [shortcuts]
 highlight_selection = "h"
+underline_selection = "v"
+strikethrough_selection = "z"
 add_comment = "command+shift+m"
 exit_highlight_mode = "escape"
 toggle_night_mode = "n"
@@ -121,6 +123,8 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.reader.readingFocus.customWidthRatio, 0.64, accuracy: 0.001)
         XCTAssertEqual(configuration.reader.readingFocus.height, 112, accuracy: 0.001)
         XCTAssertEqual(configuration.shortcuts.bindings[.highlightSelection], KeyboardShortcut(key: "h", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.underlineSelection], KeyboardShortcut(key: "v", modifiers: []))
+        XCTAssertEqual(configuration.shortcuts.bindings[.strikethroughSelection], KeyboardShortcut(key: "z", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.addComment], KeyboardShortcut(key: "m", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.exitHighlightMode], KeyboardShortcut(key: "escape", modifiers: []))
         XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "n", modifiers: []))

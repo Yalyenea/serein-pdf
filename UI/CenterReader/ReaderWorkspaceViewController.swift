@@ -367,8 +367,8 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     }
 
     @discardableResult
-    func triggerHighlightShortcut() -> Bool {
-        activeReaderViewController().triggerHighlightShortcut()
+    func triggerAnnotationShortcut(_ type: AnnotationMarkupType) -> Bool {
+        activeReaderViewController().triggerAnnotationShortcut(type)
     }
 
     @discardableResult

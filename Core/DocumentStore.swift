@@ -1152,7 +1152,7 @@ final class DocumentStore {
         guard let document = loadedPDFDocument(for: sessionID) else { return false }
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
-            if page.annotations.contains(where: { $0.type == "Highlight" }) {
+            if page.annotations.contains(where: HighlightService.isMarkupAnnotation) {
                 return true
             }
         }

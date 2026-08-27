@@ -51,6 +51,8 @@ enum ReaderScaleMode: String, Codable, Sendable {
 
 enum ShortcutCommand: String, CaseIterable, Sendable {
     case highlightSelection = "highlight_selection"
+    case underlineSelection = "underline_selection"
+    case strikethroughSelection = "strikethrough_selection"
     case addComment = "add_comment"
     case exitHighlightMode = "exit_highlight_mode"
     case toggleNightMode = "toggle_night_mode"
@@ -124,10 +126,14 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         switch self {
         case .highlightSelection:
             "Highlight Selection or Enter Highlight Mode"
+        case .underlineSelection:
+            "Underline Selection or Enter Underline Mode"
+        case .strikethroughSelection:
+            "Strikethrough Selection or Enter Strikethrough Mode"
         case .addComment:
             "Add or Edit Comment"
         case .exitHighlightMode:
-            "Exit Highlight Mode"
+            "Exit Annotation Mode"
         case .toggleNightMode:
             "Toggle Night Mode"
         case .toggleReadingFocus:
@@ -163,7 +169,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .sendCurrentPDFToCodex:
             "Send Current PDF to Codex"
         case .removeHighlight:
-            "Remove Highlight"
+            "Remove Annotation"
         case .highlightColorPink:
             "Highlight Color: \(HighlightColor.pink.menuTitle)"
         case .highlightColorYellow:
@@ -283,6 +289,15 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .highlightColorPink: .pink
         case .highlightColorYellow: .yellow
         case .highlightColorGreen: .green
+        default: nil
+        }
+    }
+
+    var annotationMarkupType: AnnotationMarkupType? {
+        switch self {
+        case .highlightSelection: .highlight
+        case .underlineSelection: .underline
+        case .strikethroughSelection: .strikethrough
         default: nil
         }
     }

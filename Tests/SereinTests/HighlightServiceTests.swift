@@ -155,6 +155,34 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(hit?.color.cgColor.components, HighlightColor.green.nsColor.cgColor.components)
     }
 
+    func testAdditionalMarkupTypesParticipateInGroupingAndHitTesting() throws {
+        let document = try makeSearchableDocument(text: "alpha beta")
+        let page = try XCTUnwrap(document.page(at: 0))
+        let cases = [
+            (text: "alpha", type: AnnotationMarkupType.underline, pdfType: "Underline"),
+            (text: "beta", type: AnnotationMarkupType.strikethrough, pdfType: "StrikeOut"),
+        ]
+
+        for item in cases {
+            let selection = try XCTUnwrap(document.findString(item.text, withOptions: []).first)
+            let records = HighlightService.applyHighlight(
+                to: selection,
+                color: HighlightColor.pink.nsColor,
+                type: item.type
+            )
+            let bounds = selection.bounds(for: page)
+            let hit = HighlightService.highlightAnnotation(
+                at: NSPoint(x: bounds.midX, y: bounds.midY),
+                on: page
+            )
+
+            XCTAssertEqual(records.first?.annotation.type, item.pdfType)
+            XCTAssertTrue(hit === records.first?.annotation)
+        }
+
+        XCTAssertEqual(HighlightService.buildHighlightGroups(in: document).map(\.snippet), ["alpha", "beta"])
+    }
+
     func testTextSanitizerPreservesChineseAndRemovesHiddenUnicodeArtifacts() {
         let sanitized = PDFTextSanitizer.sanitize("中\u{0000}\u{200B}文\u{FEFF} 高\u{2060}亮")
         XCTAssertEqual(sanitized, "中文 高亮")

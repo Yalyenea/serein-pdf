@@ -56,6 +56,8 @@ site for showcase, download notes, and compact docs.
 - Rose Pine Dawn replaces only the PDF's white paper with an Obsidian-like warm surface, preserving the document's original text and accent colors
 - Rose Pine Moon maps the PDF's white/black endpoints to a dark paper/text pair, preserves warm/cool accent direction, and keeps the surrounding sidebars one shade deeper
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
+- Underline workflow (`u` to underline) shares the compact mode, comment, undo, save, sidebar, and export pipeline
+- Strikethrough uses the same annotation pipeline with the plain `s` shortcut
 - Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
 - While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets; `Export All Open Highlights…` groups the current window's annotated PDFs by document and page
@@ -158,6 +160,9 @@ root_bookmarks = [] # managed by Serein; do not edit manually
 codex_enabled = true
 
 [shortcuts]
+highlight_selection = "a"
+underline_selection = "u"
+strikethrough_selection = "s"
 switch_current_theme = "none"   # cmd+k, cmd+t is a built-in chord
 open_library_pdf = "none"       # cmd+k, cmd+o is a built-in chord
 refresh_library_index = "none"  # cmd+k, cmd+r is a built-in chord
@@ -215,8 +220,10 @@ Defined in `[shortcuts]` above. Highlights:
 | Action | Shortcut |
 |---|---|
 | Highlight selection / enter highlight mode | `a` |
+| Underline selection / enter underline mode | `u` |
+| Strikethrough selection / enter strikethrough mode | `s` |
 | Add or edit comment | `cmd+option+m` |
-| Exit highlight mode | `esc` |
+| Exit annotation mode | `esc` |
 | Temporarily toggle light / dark mode without changing settings | `i` |
 | Switch current theme | `cmd+k`, then `cmd+t` |
 | Refresh PDF Library index | `cmd+k`, then `cmd+r` |

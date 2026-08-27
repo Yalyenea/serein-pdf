@@ -642,8 +642,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     @discardableResult
-    func triggerHighlightShortcut() -> Bool {
-        splitViewController.triggerHighlightShortcut()
+    func triggerAnnotationShortcut(_ type: AnnotationMarkupType) -> Bool {
+        splitViewController.triggerAnnotationShortcut(type)
     }
 
     @discardableResult
@@ -665,7 +665,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             toggleDemoMode()
             return true
         }
-        if isHighlightModeEnabled {
+        if isAnnotationModeEnabled {
             exitHighlightMode()
             return true
         }
@@ -742,8 +742,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.findPreviousMatch()
     }
 
-    var isHighlightModeEnabled: Bool {
-        splitViewController.readerViewController.isHighlightModeEnabled
+    var isAnnotationModeEnabled: Bool {
+        splitViewController.readerViewController.isAnnotationModeEnabled
     }
 
     var isNightModeEnabled: Bool {

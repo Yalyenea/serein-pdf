@@ -1,6 +1,26 @@
 import AppKit
 import PDFKit
 
+enum AnnotationMarkupType: String, CaseIterable, Sendable {
+    case highlight = "Highlight"
+    case underline = "Underline"
+    case strikethrough = "Strikethrough"
+
+    var pdfSubtype: PDFAnnotationSubtype {
+        switch self {
+        case .highlight: .highlight
+        case .underline: .underline
+        case .strikethrough: .strikeOut
+        }
+    }
+
+    var modeTitle: String { rawValue }
+
+    func matches(_ annotation: PDFAnnotation) -> Bool {
+        annotation.type == (self == .strikethrough ? "StrikeOut" : rawValue)
+    }
+}
+
 enum HighlightService {
     static let defaultColor: NSColor = HighlightColor.default.nsColor
 
@@ -16,6 +36,7 @@ enum HighlightService {
     static func applyHighlight(
         to selection: PDFSelection,
         color: NSColor = defaultColor,
+        type: AnnotationMarkupType = .highlight,
         createdAt: Date = Date()
     ) -> [HighlightAnnotationRecord] {
         var records: [HighlightAnnotationRecord] = []
@@ -26,7 +47,7 @@ enum HighlightService {
                 let bounds = lineSelection.bounds(for: page)
                 guard bounds.isNull == false, bounds.isEmpty == false else { continue }
 
-                let annotation = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
+                let annotation = PDFAnnotation(bounds: bounds, forType: type.pdfSubtype, withProperties: nil)
                 annotation.color = color
                 annotation.userName = groupID
                 annotation.modificationDate = createdAt
@@ -52,7 +73,7 @@ enum HighlightService {
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
             let annotations = page.annotations
-                .filter { isHighlight($0) }
+                .filter { isMarkupAnnotation($0) }
                 .sorted(by: annotationSortOrder)
 
             for annotation in annotations {
@@ -100,7 +121,7 @@ enum HighlightService {
         containing annotation: PDFAnnotation,
         in document: PDFDocument
     ) -> DocumentHighlightGroup? {
-        guard isHighlight(annotation),
+        guard isMarkupAnnotation(annotation),
               let annotationPage = annotation.page,
               annotationPage.document === document else { return nil }
 
@@ -110,7 +131,7 @@ enum HighlightService {
             for pageIndex in 0..<document.pageCount {
                 guard let page = document.page(at: pageIndex) else { continue }
                 for candidate in page.annotations {
-                    guard isHighlight(candidate),
+                    guard isMarkupAnnotation(candidate),
                           self.sereinGroupID(for: candidate) == sereinGroupID else { continue }
                     records.append(
                         HighlightAnnotationRecord(pageIndex: pageIndex, annotation: candidate)
@@ -132,7 +153,7 @@ enum HighlightService {
     static func highlightAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
         // PDFKit draws later annotations on top; prefer the topmost hit.
         page.annotations.last { annotation in
-            annotation.type == "Highlight" && annotation.bounds.contains(pointOnPage)
+            isMarkupAnnotation(annotation) && annotation.bounds.contains(pointOnPage)
         }
     }
 
@@ -154,7 +175,7 @@ enum HighlightService {
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
             let victims = page.annotations.filter {
-                isHighlight($0) && sereinGroupID(for: $0) == groupID
+                isMarkupAnnotation($0) && sereinGroupID(for: $0) == groupID
             }
             for victim in victims {
                 page.removeAnnotation(victim)
@@ -218,8 +239,8 @@ enum HighlightService {
         return lineSelections.isEmpty ? [selection] : lineSelections
     }
 
-    private static func isHighlight(_ annotation: PDFAnnotation) -> Bool {
-        annotation.type == "Highlight"
+    static func isMarkupAnnotation(_ annotation: PDFAnnotation) -> Bool {
+        AnnotationMarkupType.allCases.contains { $0.matches(annotation) }
     }
 
     private static func resolvedGroupID(for annotation: PDFAnnotation) -> String {

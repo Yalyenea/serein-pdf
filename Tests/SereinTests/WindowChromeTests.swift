@@ -440,7 +440,7 @@ struct WindowChromeTests {
         let controller = ReaderViewController(documentStore: store)
         controller.loadViewIfNeeded()
 
-        #expect(controller.triggerHighlightShortcut() == false)
+        #expect(controller.triggerAnnotationShortcut(.highlight) == false)
         controller.view.layoutSubtreeIfNeeded()
 
         let highlightLabels = textFields(in: controller.view)
@@ -2688,7 +2688,7 @@ struct WindowChromeTests {
         }
 
         reader.pdfView.currentSelection = selection
-        #expect(reader.triggerHighlightShortcut() == true)
+        #expect(reader.triggerAnnotationShortcut(.highlight) == true)
         flushLayout(controller.window)
 
         #expect(abs(reader.pdfView.scaleFactor - zoomedScale) < 0.001)
@@ -2725,7 +2725,7 @@ struct WindowChromeTests {
         }
 
         reader.pdfView.currentSelection = selection
-        #expect(reader.triggerHighlightShortcut() == true)
+        #expect(reader.triggerAnnotationShortcut(.highlight) == true)
         flushLayout(controller.window)
 
         #expect(abs(reader.pdfView.scaleFactor - targetScale) < 0.001)
@@ -3025,7 +3025,7 @@ struct WindowChromeTests {
         }
 
         reader.pdfView.currentSelection = selection
-        #expect(reader.triggerHighlightShortcut() == true)
+        #expect(reader.triggerAnnotationShortcut(.highlight) == true)
         flushLayout(controller.window)
 
         #expect(abs(reader.pdfView.scaleFactor - manualScale) < 0.001)

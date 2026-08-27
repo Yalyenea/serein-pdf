@@ -7,7 +7,7 @@ final class ReaderAnnotationInteractionController: NSObject {
     var activeSessionID: UUID?
     var onFocusRequested: (() -> Void)?
     var onRevealRequested: ((DocumentHighlightGroup) -> Void)?
-    var onCreateHighlightRequested: (() -> DocumentHighlightGroup?)?
+    var onCreateMarkupRequested: ((AnnotationMarkupType) -> DocumentHighlightGroup?)?
     var onNavigateRequested: ((DocumentHighlightGroup) -> Void)?
     var onSendSelectionToCodexRequested: ((String) -> Void)?
     var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
@@ -119,7 +119,7 @@ final class ReaderAnnotationInteractionController: NSObject {
 
         if hit != nil {
             let copyItem = NSMenuItem(
-                title: "Copy Highlight Snippet",
+                title: "Copy Annotation Snippet",
                 action: #selector(copyContext(_:)),
                 keyEquivalent: "c"
             )
@@ -129,14 +129,17 @@ final class ReaderAnnotationInteractionController: NSObject {
             menu.addItem(.separator())
         }
 
-        menu.addItem(
-            contextMenuItem(
-                title: "Highlight Selection",
-                command: .highlightSelection,
-                action: #selector(highlightContext(_:)),
-                isEnabled: hasSelection
+        for command in ShortcutCommand.allCases {
+            guard let type = command.annotationMarkupType else { continue }
+            menu.addItem(
+                contextMenuItem(
+                    title: "\(type.modeTitle) Selection",
+                    command: command,
+                    action: #selector(markupContext(_:)),
+                    isEnabled: hasSelection
+                )
             )
-        )
+        }
         menu.addItem(
             contextMenuItem(
                 title: hit == nil ? "Add Comment" : "Edit Comment",
@@ -184,7 +187,7 @@ final class ReaderAnnotationInteractionController: NSObject {
 
     @discardableResult
     func addOrEditComment() -> Bool {
-        if let createdGroup = onCreateHighlightRequested?() {
+        if let createdGroup = onCreateMarkupRequested?(.highlight) {
             presentCommentEditor(for: createdGroup)
             return true
         }
@@ -385,6 +388,7 @@ final class ReaderAnnotationInteractionController: NSObject {
     ) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
+        item.representedObject = command
         item.isEnabled = isEnabled
         if let shortcut = documentStore.appConfiguration.shortcuts.bindings[command] {
             item.keyEquivalent = shortcut.menuKeyEquivalent
@@ -403,8 +407,10 @@ final class ReaderAnnotationInteractionController: NSObject {
     }
 
     @objc
-    private func highlightContext(_ sender: Any?) {
-        _ = onCreateHighlightRequested?()
+    private func markupContext(_ sender: NSMenuItem) {
+        guard let command = sender.representedObject as? ShortcutCommand,
+              let type = command.annotationMarkupType else { return }
+        _ = onCreateMarkupRequested?(type)
     }
 
     @objc
@@ -413,7 +419,7 @@ final class ReaderAnnotationInteractionController: NSObject {
             presentCommentEditor(for: contextGroup)
             return
         }
-        if let createdGroup = onCreateHighlightRequested?() {
+        if let createdGroup = onCreateMarkupRequested?(.highlight) {
             presentCommentEditor(for: createdGroup)
         }
     }

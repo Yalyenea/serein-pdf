@@ -31,19 +31,19 @@ final class ReaderShortcutsController {
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]
     private let handlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
     private let supplementalHandlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
-    private let isHighlightModeEnabledProvider: @MainActor (NSWindow) -> Bool
+    private let isAnnotationModeEnabledProvider: @MainActor (NSWindow) -> Bool
     private var isWaitingForChordKey = false
 
     init(
         shortcutsProvider: @escaping @MainActor () -> [ShortcutCommand: KeyboardShortcut],
         handlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler],
         supplementalHandlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler] = { [:] },
-        isHighlightModeEnabledProvider: @escaping @MainActor (NSWindow) -> Bool = { _ in false }
+        isAnnotationModeEnabledProvider: @escaping @MainActor (NSWindow) -> Bool = { _ in false }
     ) {
         self.shortcutsProvider = shortcutsProvider
         self.handlerProvider = handlerProvider
         self.supplementalHandlerProvider = supplementalHandlerProvider
-        self.isHighlightModeEnabledProvider = isHighlightModeEnabledProvider
+        self.isAnnotationModeEnabledProvider = isAnnotationModeEnabledProvider
     }
 
     func handleShortcutEvent(for event: NSEvent, in window: NSWindow) -> Bool {
@@ -124,7 +124,7 @@ final class ReaderShortcutsController {
     }
 
     private func handleHighlightModeColorShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
-        guard isHighlightModeEnabledProvider(window) else { return false }
+        guard isAnnotationModeEnabledProvider(window) else { return false }
         let handlers = handlerProvider()
         for (shortcut, command) in Self.highlightModeColorShortcuts {
             guard shortcut.matches(event: event),

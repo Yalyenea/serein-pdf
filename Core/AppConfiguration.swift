@@ -221,6 +221,8 @@ struct AppConfiguration: Equatable, Sendable {
 
         static let `default` = Shortcuts(bindings: [
             .highlightSelection: KeyboardShortcut(key: "a", modifiers: []),
+            .underlineSelection: KeyboardShortcut(key: "u", modifiers: []),
+            .strikethroughSelection: KeyboardShortcut(key: "s", modifiers: []),
             .addComment: KeyboardShortcut(key: "m", modifiers: [.command, .option]),
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
@@ -569,6 +571,8 @@ codex_enabled = true
 
 [shortcuts]
 highlight_selection = "a"
+underline_selection = "u"
+strikethrough_selection = "s"
 add_comment = "command+option+m"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
@@ -695,6 +699,8 @@ codex_enabled = \(configuration.integrations.codexEnabled ? "true" : "false")
 
 [shortcuts]
 highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: configuration))"
+underline_selection = "\(serializedShortcut(.underlineSelection, configuration: configuration))"
+strikethrough_selection = "\(serializedShortcut(.strikethroughSelection, configuration: configuration))"
 add_comment = "\(serializedShortcut(.addComment, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
@@ -810,6 +816,8 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "[integrations]",
         "codex_enabled",
         "highlight_selection",
+        "underline_selection",
+        "strikethrough_selection",
         "add_comment",
         "exit_highlight_mode",
         "toggle_night_mode",
@@ -982,6 +990,10 @@ struct AppConfigurationParser {
             }
         case ("shortcuts", "highlight_selection"):
             try applyShortcut(rawValue, command: .highlightSelection, to: &configuration)
+        case ("shortcuts", "underline_selection"):
+            try applyShortcut(rawValue, command: .underlineSelection, to: &configuration)
+        case ("shortcuts", "strikethrough_selection"):
+            try applyShortcut(rawValue, command: .strikethroughSelection, to: &configuration)
         case ("shortcuts", "exit_highlight_mode"):
             try applyShortcut(rawValue, command: .exitHighlightMode, to: &configuration)
         case ("shortcuts", "toggle_night_mode"):

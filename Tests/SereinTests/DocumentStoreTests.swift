@@ -1490,12 +1490,12 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.annotationGroups(for: session.id).first?.snippet, "alpha")
     }
 
-    func testHasHighlightsDoesNotBuildAnnotationCache() throws {
+    func testHasHighlightsRecognizesTextMarkupWithoutBuildingAnnotationCache() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "highlight-menu-validation"))
         let annotation = PDFAnnotation(
             bounds: NSRect(x: 20, y: 20, width: 60, height: 18),
-            forType: .highlight,
+            forType: .strikeOut,
             withProperties: nil
         )
 

@@ -18,7 +18,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
                     .highlightColorGreen: { triggeredCommands.append(.highlightColorGreen) },
                 ]
             },
-            isHighlightModeEnabledProvider: { _ in true }
+            isAnnotationModeEnabledProvider: { _ in true }
         )
         let window = NSWindow(
             contentRect: .init(x: 0, y: 0, width: 400, height: 300),
@@ -43,14 +43,14 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             handlerProvider: {
                 [.highlightColorPink: { didTrigger = true }]
             },
-            isHighlightModeEnabledProvider: { _ in false }
+            isAnnotationModeEnabledProvider: { _ in false }
         )
         let enabledController = ReaderShortcutsController(
             shortcutsProvider: { [:] },
             handlerProvider: {
                 [.highlightColorPink: { didTrigger = true }]
             },
-            isHighlightModeEnabledProvider: { _ in true }
+            isAnnotationModeEnabledProvider: { _ in true }
         )
         let window = NSWindow(
             contentRect: .init(x: 0, y: 0, width: 400, height: 300),
@@ -76,7 +76,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             handlerProvider: {
                 [.highlightColorPink: { didTrigger = true }]
             },
-            isHighlightModeEnabledProvider: { _ in true }
+            isAnnotationModeEnabledProvider: { _ in true }
         )
         let window = NSWindow(
             contentRect: .init(x: 0, y: 0, width: 400, height: 300),

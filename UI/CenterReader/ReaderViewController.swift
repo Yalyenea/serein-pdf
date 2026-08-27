@@ -465,8 +465,8 @@ final class ReaderViewController: NSViewController {
         annotationInteraction.onRevealRequested = { [weak self] group in
             self?.onRevealAnnotationRequested?(group)
         }
-        annotationInteraction.onCreateHighlightRequested = { [weak self] in
-            self?.createHighlightFromCurrentSelection()
+        annotationInteraction.onCreateMarkupRequested = { [weak self] type in
+            self?.createHighlightFromCurrentSelection(type: type)
         }
         annotationInteraction.onNavigateRequested = { [weak self] group in
             self?.focus(on: group, showPulse: false)
@@ -1435,8 +1435,8 @@ final class ReaderViewController: NSViewController {
         readerState.isNightModeEnabled
     }
 
-    var isHighlightModeEnabled: Bool {
-        readerState.isHighlightModeEnabled
+    var isAnnotationModeEnabled: Bool {
+        readerState.isAnnotationModeEnabled
     }
 
     var currentHighlightColor: HighlightColor {
@@ -1444,18 +1444,18 @@ final class ReaderViewController: NSViewController {
     }
 
     @discardableResult
-    func triggerHighlightShortcut() -> Bool {
-        if highlightCurrentSelection() {
+    func triggerAnnotationShortcut(_ type: AnnotationMarkupType) -> Bool {
+        if highlightCurrentSelection(type: type) {
             return true
         }
 
-        readerState.isHighlightModeEnabled = true
+        readerState.annotationMode = type
         updateHighlightModeIndicator()
         return false
     }
 
     func exitHighlightMode() {
-        readerState.isHighlightModeEnabled = false
+        readerState.annotationMode = nil
         updateHighlightModeIndicator()
     }
 
@@ -1874,14 +1874,15 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyHighlightOnMouseUpIfNeeded(event: NSEvent) {
-        guard readerState.isHighlightModeEnabled,
+        guard readerState.isAnnotationModeEnabled,
               isApplyingHighlightSelection == false,
               let window = pdfView.window,
               event.window === window else { return }
 
         let locationInPDF = pdfView.convert(event.locationInWindow, from: nil)
         guard pdfView.bounds.contains(locationInPDF) else { return }
-        _ = highlightCurrentSelection()
+        guard let annotationMode = readerState.annotationMode else { return }
+        _ = highlightCurrentSelection(type: annotationMode)
     }
 
     private func requestFocusIfNeeded(event: NSEvent) {
@@ -2806,11 +2807,13 @@ final class ReaderViewController: NSViewController {
 
 
     @discardableResult
-    private func highlightCurrentSelection() -> Bool {
-        createHighlightFromCurrentSelection() != nil
+    private func highlightCurrentSelection(type: AnnotationMarkupType = .highlight) -> Bool {
+        createHighlightFromCurrentSelection(type: type) != nil
     }
 
-    private func createHighlightFromCurrentSelection() -> DocumentHighlightGroup? {
+    private func createHighlightFromCurrentSelection(
+        type: AnnotationMarkupType = .highlight
+    ) -> DocumentHighlightGroup? {
         guard let session = targetSession(),
               session.id == displayedSessionID,
               let selection = pdfView.currentSelection,
@@ -2824,7 +2827,8 @@ final class ReaderViewController: NSViewController {
             color: NightModeStyle.highlightColor(
                 for: readerState.highlightColor,
                 appearance: NSApp.effectiveAppearance
-            )
+            ),
+            type: type
         )
         guard let firstRecord = appliedRecords.first else { return nil }
 
@@ -2938,10 +2942,10 @@ final class ReaderViewController: NSViewController {
     }
 
     private func updateHighlightModeIndicator() {
-        let isEnabled = readerState.isHighlightModeEnabled
+        let isEnabled = readerState.isAnnotationModeEnabled
         highlightModeIndicator.isHidden = !isEnabled
         let color = readerState.highlightColor
-        highlightModeLabel.stringValue = "Highlight · Esc"
+        highlightModeLabel.stringValue = "\(readerState.annotationMode?.modeTitle ?? "Highlight") · Esc"
         highlightModeColorDot.layer?.backgroundColor = NightModeStyle.highlightColor(
             for: color,
             appearance: NSApp.effectiveAppearance

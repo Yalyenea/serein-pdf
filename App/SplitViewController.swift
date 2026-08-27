@@ -478,8 +478,8 @@ final class SplitViewController: NSSplitViewController {
     }
 
     @discardableResult
-    func triggerHighlightShortcut() -> Bool {
-        readerWorkspaceViewController.triggerHighlightShortcut()
+    func triggerAnnotationShortcut(_ type: AnnotationMarkupType) -> Bool {
+        readerWorkspaceViewController.triggerAnnotationShortcut(type)
     }
 
     @discardableResult

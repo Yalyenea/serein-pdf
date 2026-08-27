@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / `serein://open?file=…` 本地 PDF 深链 / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮 / 高亮评论 / 删除高亮 / 手动 & 自动保存 / 高亮导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 高亮撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / `serein://open?file=…` 本地 PDF 深链 / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮、下划线与删除线 / 批注评论 / 删除批注 / 手动 & 自动保存 / 批注导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 批注撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -86,7 +86,7 @@ flowchart LR
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
 | PDF 热重载 | `DocumentStore` 监听已打开 PDF 文件及其父目录;原地写入或原子替换后只重载 clean sessions,优先恢复 PDFView 实时页码;dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
-| 批注存储 | Serein 多行 highlight 仅以 UUID `userName` 组成 group 并共享 comment;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
+| 批注存储 | Serein 多行 highlight / underline / strikeout 仅以 UUID `userName` 组成 group 并共享 comment;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 批注摘要 | 只使用 PDFKit 文本层生成 snippet；无文本层时显示 `Untitled Highlight`，不做 OCR / 页面栅格化 |
 | 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);正文 / `Cmd+Option+M` / 右键用阅读区旁 popover 编辑,不强制打开右栏;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
@@ -146,15 +146,17 @@ flowchart LR
 
 **批注**
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
+- `U`:有选区 → 立即加下划线;无选区 → 进入下划线模式
+- `S`:有选区 → 立即加删除线;无选区 → 进入删除线模式
 - `Cmd+Option+M`:有选区 → 创建高亮并进入评论编辑;无选区且命中高亮 → 编辑已有评论
 - 高亮模式内 `1` / `2` / `3`:切换粉 / 黄 / 绿;文本输入框优先接收数字
-- `Esc`:退出高亮模式 / 关闭 Find bar / 退出全览 / 退出演示模式
-- `D`:删除鼠标所在高亮(多行整组删除)
+- `Esc`:退出批注模式 / 关闭 Find bar / 退出全览 / 退出演示模式
+- `D`:删除鼠标所在批注(多行整组删除)
 - `Cmd+S`:写回源 PDF
 - `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights
 - `File > Export Clean Copy…`:导出移除可见用户批注、保留链接与表单控件的 PDF 副本
 - `File > Export Highlights…` / `Export All Open Highlights…`:导出当前 PDF 或当前窗口全部已打开 PDF 的批注;汇总格式按 Document → Page 分组
-- `Cmd+Z`:撤销最近一次高亮新增或删除(上限 50,无 redo)
+- `Cmd+Z`:撤销最近一次批注新增或删除(上限 50,无 redo)
 
 **阅读**
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
@@ -216,8 +218,8 @@ flowchart LR
 
 ### 4.4 批注保存策略
 
-- 高亮新增 / 删除后只更新 session 与 dirty 标记,**不立即落盘**
-- 多行高亮视为一组,删除任一行时整组删除
+- 高亮 / 下划线 / 删除线新增或删除后只更新 session 与 dirty 标记,**不立即落盘**
+- 多行批注视为一组,删除任一行时整组删除
 - `Cmd+S`:当前文档未保存批注覆盖写回源 PDF
 - 关闭 dirty tab 或退出 app 时必须提示 `Save / Cancel / Discard`
 - 自动保存:默认 `10 min`,至少支持 `10 min` / `never`;失败需显式提示

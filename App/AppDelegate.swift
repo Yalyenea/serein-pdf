@@ -123,11 +123,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             supplementalHandlerProvider: { [weak self] in
                 self?.supplementalShortcutHandlerMap() ?? [:]
             },
-            isHighlightModeEnabledProvider: { [weak self] window in
+            isAnnotationModeEnabledProvider: { [weak self] window in
                 guard let self else { return false }
                 return self.mainWindowControllers.values.first {
                     $0.window === window
-                }?.isHighlightModeEnabled == true
+                }?.isAnnotationModeEnabled == true
             }
         )
 
@@ -359,8 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if let cachedShortcutHandlerMap {
             return cachedShortcutHandlerMap
         }
-        let map: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] = [
-            .highlightSelection: { [weak self] in self?.highlightSelection(nil) },
+        var map: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] = [
             .addComment: { [weak self] in self?.addOrEditComment(nil) },
             .exitHighlightMode: { [weak self] in self?.exitHighlightMode(nil) },
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
@@ -430,6 +429,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .undoLastHighlight: { [weak self] in self?.undoLastHighlightAction(nil) },
             .redoLastHighlight: { [weak self] in self?.redoLastHighlightAction(nil) },
         ]
+        for command in ShortcutCommand.allCases where command.annotationMarkupType != nil {
+            map[command] = { [weak self] in self?.applyAnnotationCommand(command) }
+        }
         cachedShortcutHandlerMap = map
         return map
     }
@@ -887,20 +889,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func buildAnnotateMenuItem() -> NSMenuItem {
         let annotateMenuItem = NSMenuItem(title: "Annotate", action: nil, keyEquivalent: "")
         let annotateMenu = managedMenu(title: "Annotate")
+        let markupItems = ShortcutCommand.allCases.compactMap { command in
+            command.annotationMarkupType.map { _ in
+                makeConfiguredMenuItem(
+                    title: command.menuTitle,
+                    command: command,
+                    action: #selector(applyAnnotationCommand(_:))
+                )
+            }
+        }
 
-        annotateMenu.items = [
-            makeConfiguredMenuItem(
-                title: "Highlight Selection or Enter Highlight Mode",
-                command: .highlightSelection,
-                action: #selector(highlightSelection(_:))
-            ),
+        annotateMenu.items = markupItems + [
             makeConfiguredMenuItem(
                 title: ShortcutCommand.addComment.menuTitle,
                 command: .addComment,
                 action: #selector(addOrEditComment(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Exit Highlight Mode",
+                title: ShortcutCommand.exitHighlightMode.menuTitle,
                 command: .exitHighlightMode,
                 action: #selector(exitHighlightMode(_:))
             ),
@@ -1452,8 +1458,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
-    private func highlightSelection(_ sender: Any?) {
-        _ = mainWindowController?.triggerHighlightShortcut()
+    private func applyAnnotationCommand(_ sender: Any?) {
+        let command = (sender as? NSMenuItem)?.representedObject as? ShortcutCommand
+            ?? sender as? ShortcutCommand
+        guard let type = command?.annotationMarkupType else { return }
+        _ = mainWindowController?.triggerAnnotationShortcut(type)
     }
 
     @objc
@@ -2630,11 +2639,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return appConfiguration.library.folderURLs.isEmpty == false
         case #selector(openLibrarySettings(_:)), #selector(openShortcutSettings(_:)):
             return true
-        case #selector(highlightSelection(_:)), #selector(addOrEditComment(_:)):
+        case #selector(applyAnnotationCommand(_:)), #selector(addOrEditComment(_:)):
             return activePDFSession != nil
         case #selector(exitHighlightMode(_:)):
-            menuItem.state = controller?.isHighlightModeEnabled == true ? .on : .off
-            return controller?.isHighlightModeEnabled == true
+            menuItem.state = controller?.isAnnotationModeEnabled == true ? .on : .off
+            return controller?.isAnnotationModeEnabled == true
         case #selector(toggleNightMode(_:)):
             menuItem.state = controller?.isNightModeEnabled == true ? .on : .off
             return activePDFSession != nil
