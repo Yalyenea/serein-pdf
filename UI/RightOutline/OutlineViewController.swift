@@ -67,6 +67,26 @@ private final class OutlineRowsContainerView: NSView {
     override var isFlipped: Bool { true }
 }
 
+private final class FloatingOutlineSearchFieldCell: NSSearchFieldCell {
+    var strokeColor: NSColor = .clear
+
+    override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
+        NSGraphicsContext.saveGraphicsState()
+        backgroundColor!.setFill()
+        NSBezierPath(roundedRect: cellFrame, xRadius: 6, yRadius: 6).fill()
+        strokeColor.setStroke()
+        let borderPath = NSBezierPath(
+            roundedRect: cellFrame.insetBy(dx: 0.5, dy: 0.5),
+            xRadius: 5.5,
+            yRadius: 5.5
+        )
+        borderPath.lineWidth = 1
+        borderPath.stroke()
+        NSGraphicsContext.restoreGraphicsState()
+        drawInterior(withFrame: cellFrame, in: controlView)
+    }
+}
+
 private final class OutlineRowTextField: NSTextField {
     override func mouseDown(with event: NSEvent) {
         if let rowView = enclosingOutlineRowView {
@@ -303,10 +323,19 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     private static let outlineFontSize: CGFloat = 13
     private static let wrappedLineHeight: CGFloat = 14
     private static let rowSpacing: CGFloat = 1
+    private static let titleTopInset: CGFloat = 12
+    private static let titleToFilterSpacing: CGFloat = 8
+    private static let filterHeight: CGFloat = 22
+    private static let filterToBodySpacing: CGFloat = 8
+    private static let bodyToCounterSpacing: CGFloat = 4
+    private static let counterBottomInset: CGFloat = 8
 
     let documentStore: DocumentStore
     let windowID: UUID
     var onNavigationRequested: ((OutlineNavigationRequest) -> Void)?
+    var preferredContentHeightDidChange: (() -> Void)?
+    var filterFieldFocusDidChange: ((Bool) -> Void)?
+    private let isFloatingPresentation: Bool
     private let titleLabel = NSTextField(labelWithString: "Outline")
     private let expansionToggleButton = NSButton()
     private let filterField = NSSearchField()
@@ -326,9 +355,14 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     private var renderedRowHeights: [String: CGFloat] = [:]
     private var renderedContentHeight: CGFloat = 1
 
-    init(documentStore: DocumentStore, windowID: UUID) {
+    init(
+        documentStore: DocumentStore,
+        windowID: UUID,
+        isFloatingPresentation: Bool = false
+    ) {
         self.documentStore = documentStore
         self.windowID = windowID
+        self.isFloatingPresentation = isFloatingPresentation
         super.init(nibName: nil, bundle: nil)
         title = "Outline"
     }
@@ -365,6 +399,10 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.clear.cgColor
 
+        if isFloatingPresentation {
+            filterField.cell = FloatingOutlineSearchFieldCell(textCell: "")
+        }
+
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         titleLabel.textColor = NightModeStyle.primaryTextColor
 
@@ -388,6 +426,11 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         filterField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         filterField.setContentHuggingPriority(.defaultLow, for: .horizontal)
         filterField.delegate = self
+        if isFloatingPresentation {
+            filterField.isBezeled = true
+            filterField.bezelStyle = .squareBezel
+            filterField.drawsBackground = false
+        }
 
         emptyStateLabel.font = .systemFont(ofSize: 12)
         emptyStateLabel.identifier = NSUserInterfaceItemIdentifier("outlineEmptyStateLabel")
@@ -426,7 +469,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: Self.titleTopInset),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: expansionToggleButton.leadingAnchor, constant: -6),
 
             expansionToggleButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
@@ -436,8 +479,11 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
             filterField.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
             filterField.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
-            filterField.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
-            filterField.heightAnchor.constraint(equalToConstant: 22),
+            filterField.topAnchor.constraint(
+                equalTo: titleLabel.bottomAnchor,
+                constant: Self.titleToFilterSpacing
+            ),
+            filterField.heightAnchor.constraint(equalToConstant: Self.filterHeight),
 
             emptyStateLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             emptyStateLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
@@ -445,11 +491,20 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: filterField.bottomAnchor, constant: 8),
-            scrollView.bottomAnchor.constraint(equalTo: pageCounterLabel.topAnchor, constant: -4),
+            scrollView.topAnchor.constraint(
+                equalTo: filterField.bottomAnchor,
+                constant: Self.filterToBodySpacing
+            ),
+            scrollView.bottomAnchor.constraint(
+                equalTo: pageCounterLabel.topAnchor,
+                constant: -Self.bodyToCounterSpacing
+            ),
 
             pageCounterLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            pageCounterLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+            pageCounterLabel.bottomAnchor.constraint(
+                equalTo: container.bottomAnchor,
+                constant: -Self.counterBottomInset
+            ),
             pageCounterLabel.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 12),
         ])
 
@@ -466,6 +521,22 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             expansionToggleButton.contentTintColor = NightModeStyle.tertiaryTextColor
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
             pageCounterLabel.textColor = NightModeStyle.tertiaryTextColor
+            if isFloatingPresentation {
+                let filterBackgroundColor = NightModeStyle.selectedChromeBackgroundColor
+                let filterStrokeColor = NightModeStyle.chromeStrokeColor
+                    .withAlphaComponent(0.32)
+                filterField.backgroundColor = filterBackgroundColor
+                filterField.textColor = NightModeStyle.primaryTextColor
+                let filterCell = filterField.cell as! FloatingOutlineSearchFieldCell
+                filterCell.strokeColor = filterStrokeColor
+                filterField.placeholderAttributedString = NSAttributedString(
+                    string: "Filter headings",
+                    attributes: [
+                        .foregroundColor: NightModeStyle.tertiaryTextColor,
+                    ]
+                )
+                filterField.needsDisplay = true
+            }
         }
         renderOutlineRows()
     }
@@ -478,6 +549,14 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         renderedRowHeights.removeAll()
         rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         renderOutlineRows()
+    }
+
+    func controlTextDidBeginEditing(_ obj: Notification) {
+        filterFieldFocusDidChange?(true)
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        filterFieldFocusDidChange?(false)
     }
 
     @objc
@@ -493,6 +572,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     }
 
     private func updatePageCounter() {
+        defer { preferredContentHeightDidChange?() }
         guard let session = documentStore.activeSession(in: windowID) else {
             pageCounterLabel.stringValue = ""
             return
@@ -545,6 +625,41 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
         updateExpansionToggleButton()
         layoutOutlineRows()
+        preferredContentHeightDidChange?()
+    }
+
+    func preferredContentHeight(for width: CGFloat) -> CGFloat {
+        loadViewIfNeeded()
+
+        let rowWidth = max(width, 1)
+        let rowsHeight = renderedRows.enumerated().reduce(CGFloat.zero) { partialHeight, entry in
+            let row = entry.element
+            let title = attributedTitle(
+                for: row.node,
+                isSelected: selectedPath == row.path
+            )
+            let rowHeight = OutlineRowView.fittingHeight(
+                for: title,
+                level: row.level,
+                rowWidth: rowWidth
+            )
+            let spacing = entry.offset == renderedRows.count - 1 ? 0 : Self.rowSpacing
+            return partialHeight + rowHeight + spacing
+        }
+        let bodyHeight = renderedRows.isEmpty
+            ? max(ceil(emptyStateLabel.intrinsicContentSize.height) + 4, OutlineRowView.minimumHeight)
+            : rowsHeight
+        let fixedChromeHeight =
+            Self.titleTopInset +
+            ceil(titleLabel.intrinsicContentSize.height) +
+            Self.titleToFilterSpacing +
+            Self.filterHeight +
+            Self.filterToBodySpacing +
+            Self.bodyToCounterSpacing +
+            ceil(pageCounterLabel.intrinsicContentSize.height) +
+            Self.counterBottomInset
+
+        return ceil(fixedChromeHeight + bodyHeight)
     }
 
     private func syncOutlineContentFrame() {

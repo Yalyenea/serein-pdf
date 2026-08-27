@@ -3,6 +3,7 @@ import AppKit
 private final class FloatingOutlineHoverView: NSView {
     var onHoverChanged: ((Bool) -> Void)?
     var onPress: (() -> Void)?
+    var onEffectiveAppearanceChanged: (() -> Void)?
     private var hoverTrackingArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
@@ -35,6 +36,11 @@ private final class FloatingOutlineHoverView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onEffectiveAppearanceChanged?()
     }
 
     override func accessibilityPerformPress() -> Bool {
@@ -146,6 +152,8 @@ final class FloatingOutlineViewController: NSViewController {
 
     private static let collapsedWidth: CGFloat = 28
     private static let expandedWidth: CGFloat = 300
+    private static let panelContentInset: CGFloat = 4
+    private static let panelBackgroundAlpha: CGFloat = 0.92
     private static let minimumCollapsedHeight: CGFloat = 56
     private static let maximumCollapsedHeight: CGFloat = 220
 
@@ -154,12 +162,14 @@ final class FloatingOutlineViewController: NSViewController {
     private let outlineViewController: OutlineViewController
     private let hoverView = FloatingOutlineHoverView()
     private let markerView = FloatingOutlineMarkerView()
-    private let panelView = NSVisualEffectView()
+    private let panelView = NSView()
     private let topResizeHandle = FloatingOutlineResizeHandleView()
     private let bottomResizeHandle = FloatingOutlineResizeHandleView()
     private var items: [Item] = []
     private var activeItemIndex: Int?
     private var isExpanded = false
+    private var isHovered = false
+    private var isFilterFieldFocused = false
     private var isOutlineInstalled = false
     private var isSuppressed = false
     private var isResizing = false
@@ -189,24 +199,40 @@ final class FloatingOutlineViewController: NSViewController {
     }
 
     private var effectiveExpandedHeight: CGFloat {
-        let configuredHeight = userAdjustedHeight ?? documentStore.appConfiguration.layout.floatingOutlineHeight
-        let maximumHeight = min(
+        let configuredMaximumHeight = userAdjustedHeight
+            ?? documentStore.appConfiguration.layout.floatingOutlineHeight
+        let availableMaximumHeight = min(
             AppConfiguration.Layout.maximumFloatingOutlineHeight,
             maximumAvailableHeight
         )
-        return min(
-            max(configuredHeight, AppConfiguration.Layout.minimumFloatingOutlineHeight),
-            max(maximumHeight, AppConfiguration.Layout.minimumFloatingOutlineHeight)
+        let configuredHeightLimit = max(
+            configuredMaximumHeight,
+            AppConfiguration.Layout.minimumFloatingOutlineHeight
         )
+        let heightLimit = min(configuredHeightLimit, availableMaximumHeight)
+        let outlineWidth = Self.expandedWidth - Self.panelContentInset * 2
+        let naturalHeight = outlineViewController.preferredContentHeight(for: outlineWidth)
+            + Self.panelContentInset * 2
+        return min(naturalHeight, heightLimit)
     }
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
         self.windowID = windowID
-        self.outlineViewController = OutlineViewController(documentStore: documentStore, windowID: windowID)
+        self.outlineViewController = OutlineViewController(
+            documentStore: documentStore,
+            windowID: windowID,
+            isFloatingPresentation: true
+        )
         super.init(nibName: nil, bundle: nil)
         title = "Floating Outline"
         addChild(outlineViewController)
+        outlineViewController.preferredContentHeightDidChange = { [weak self] in
+            self?.reportPreferredGeometryIfNeeded()
+        }
+        outlineViewController.filterFieldFocusDidChange = { [weak self] isFocused in
+            self?.setFilterFieldFocused(isFocused)
+        }
     }
 
     @available(*, unavailable)
@@ -227,6 +253,9 @@ final class FloatingOutlineViewController: NSViewController {
             guard let self else { return }
             self.setExpanded(!self.isExpanded)
         }
+        hoverView.onEffectiveAppearanceChanged = { [weak self] in
+            self?.refreshChromeColors()
+        }
 
         markerView.identifier = NSUserInterfaceItemIdentifier("floatingOutlineMarkerRail")
         markerView.translatesAutoresizingMaskIntoConstraints = false
@@ -234,9 +263,6 @@ final class FloatingOutlineViewController: NSViewController {
         hoverView.addSubview(markerView)
 
         panelView.identifier = NSUserInterfaceItemIdentifier("floatingOutlinePanel")
-        panelView.material = .popover
-        panelView.blendingMode = .withinWindow
-        panelView.state = .active
         panelView.wantsLayer = true
         panelView.layer?.cornerRadius = 8
         panelView.layer?.masksToBounds = true
@@ -296,10 +322,10 @@ final class FloatingOutlineViewController: NSViewController {
         guard isViewLoaded else { return }
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             panelView.layer?.backgroundColor = NightModeStyle.paneBackgroundColor
-                .withAlphaComponent(0.94)
+                .withAlphaComponent(Self.panelBackgroundAlpha)
                 .cgColor
             panelView.layer?.borderColor = NightModeStyle.chromeStrokeColor
-                .withAlphaComponent(0.72)
+                .withAlphaComponent(0.48)
                 .cgColor
             panelView.layer?.borderWidth = 1
         }
@@ -316,7 +342,7 @@ final class FloatingOutlineViewController: NSViewController {
     }
 
     func setMaximumAvailableHeight(_ height: CGFloat) {
-        let normalizedHeight = max(height, AppConfiguration.Layout.minimumFloatingOutlineHeight)
+        let normalizedHeight = max(height, 0)
         guard abs(maximumAvailableHeight - normalizedHeight) > 0.5 else { return }
         maximumAvailableHeight = normalizedHeight
         reportPreferredGeometryIfNeeded()
@@ -366,8 +392,18 @@ final class FloatingOutlineViewController: NSViewController {
     }
 
     private func setHovered(_ isHovered: Bool) {
-        guard isHovered || isResizing == false else { return }
-        setExpanded(isHovered)
+        self.isHovered = isHovered
+        updateExpansionForInteraction()
+    }
+
+    private func setFilterFieldFocused(_ isFocused: Bool) {
+        isFilterFieldFocused = isFocused
+        updateExpansionForInteraction()
+    }
+
+    private func updateExpansionForInteraction() {
+        guard isResizing == false else { return }
+        setExpanded(isHovered || isFilterFieldFocused)
     }
 
     private func setExpanded(_ expanded: Bool) {
@@ -421,7 +457,8 @@ final class FloatingOutlineViewController: NSViewController {
         mouseDeltaY: CGFloat
     ) {
         guard isExpanded else { return }
-        let currentHeight = effectiveExpandedHeight
+        let currentHeightLimit = userAdjustedHeight
+            ?? documentStore.appConfiguration.layout.floatingOutlineHeight
         let edgeDelta = edge == .top ? mouseDeltaY : -mouseDeltaY
         let heightDelta = edgeDelta * 2
         let maximumHeight = min(
@@ -429,10 +466,13 @@ final class FloatingOutlineViewController: NSViewController {
             maximumAvailableHeight
         )
         let nextHeight = min(
-            max(currentHeight + heightDelta, AppConfiguration.Layout.minimumFloatingOutlineHeight),
+            max(
+                currentHeightLimit + heightDelta,
+                AppConfiguration.Layout.minimumFloatingOutlineHeight
+            ),
             max(maximumHeight, AppConfiguration.Layout.minimumFloatingOutlineHeight)
         )
-        let appliedDelta = nextHeight - currentHeight
+        let appliedDelta = nextHeight - currentHeightLimit
         guard abs(appliedDelta) > 0.01 else { return }
 
         userAdjustedHeight = nextHeight
@@ -442,9 +482,8 @@ final class FloatingOutlineViewController: NSViewController {
     private func finishResizing(at locationInWindow: NSPoint) {
         isResizing = false
         let locationInView = view.convert(locationInWindow, from: nil)
-        if view.bounds.insetBy(dx: -8, dy: -8).contains(locationInView) == false {
-            setExpanded(false)
-        }
+        isHovered = view.bounds.insetBy(dx: -8, dy: -8).contains(locationInView)
+        updateExpansionForInteraction()
     }
 
     private func reportPreferredGeometryIfNeeded() {
@@ -462,10 +501,22 @@ final class FloatingOutlineViewController: NSViewController {
         outlineView.translatesAutoresizingMaskIntoConstraints = false
         panelView.addSubview(outlineView)
         NSLayoutConstraint.activate([
-            outlineView.leadingAnchor.constraint(equalTo: panelView.leadingAnchor, constant: 4),
-            outlineView.trailingAnchor.constraint(equalTo: panelView.trailingAnchor, constant: -4),
-            outlineView.topAnchor.constraint(equalTo: panelView.topAnchor, constant: 4),
-            outlineView.bottomAnchor.constraint(equalTo: panelView.bottomAnchor, constant: -4),
+            outlineView.leadingAnchor.constraint(
+                equalTo: panelView.leadingAnchor,
+                constant: Self.panelContentInset
+            ),
+            outlineView.trailingAnchor.constraint(
+                equalTo: panelView.trailingAnchor,
+                constant: -Self.panelContentInset
+            ),
+            outlineView.topAnchor.constraint(
+                equalTo: panelView.topAnchor,
+                constant: Self.panelContentInset
+            ),
+            outlineView.bottomAnchor.constraint(
+                equalTo: panelView.bottomAnchor,
+                constant: -Self.panelContentInset
+            ),
         ])
         outlineViewController.refreshChromeColors()
     }
@@ -519,6 +570,11 @@ final class FloatingOutlineViewController: NSViewController {
     var testingOutlineViewController: OutlineViewController {
         installOutlineIfNeeded()
         return outlineViewController
+    }
+
+    var testingPanelBackgroundColor: NSColor? {
+        guard let backgroundColor = panelView.layer?.backgroundColor else { return nil }
+        return NSColor(cgColor: backgroundColor)
     }
 
     func testingSetHovered(_ hovered: Bool) {

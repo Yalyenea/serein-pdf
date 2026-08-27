@@ -117,14 +117,14 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
 | 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作,含复制当前页为图片、发送选区文字 / 当前页图片到 Codex;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;拖动上下边缘时以中心对称调节当前窗口高度,不触发 PDF reflow |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作,含复制当前页为图片、发送选区文字 / 当前页图片到 Codex;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;展开高度随可见目录行收缩,受配置 / 当前窗口拖拽值与阅读区可用高度共同限制,超出时内部滚动;拖动上下边缘以中心对称调节高度上限,不触发 PDF reflow |
 | 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | Annotations 为全高紧凑评论流(仅页 section + 原文 / 评论,无时间戳,无横向滑动);连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持筛选与一键折叠 / 展开;所有预览类内容都在右栏,仅正文 hover 评论卡与非 Outline 态浮动目录可覆盖中栏 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
 
 - 紧凑布局,轻量圆角,无厚重阴影
-- 常规侧栏平铺嵌入,最多保留一条淡分割线;右栏隐藏态的浮动目录保持轻描边、紧凑、无厚重阴影
+- 常规侧栏平铺嵌入,最多保留一条淡分割线;右栏隐藏态的浮动目录使用当前主题 pane 色与轻透明背景,保持轻描边、紧凑、无厚重阴影
 - 按钮 / tab 视觉重量轻,突出选中态
 - 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
@@ -394,7 +394,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   RecentFilesStoreTests.swift             # 最近文件栈
   OutlineExtractorTests.swift             # PDF outline 解析
   OutlineViewControllerTests.swift        # 目录树视图交互
-  FloatingOutlineViewControllerTests.swift # 浮动目录显隐 / hover / 高度拖拽 / swap / 跳页 / overlay 布局
+  FloatingOutlineViewControllerTests.swift # 浮动目录显隐 / hover / 自适应高度 / 拖拽上限 / swap / 跳页 / overlay 布局
   VerticalTabsViewControllerTests.swift   # 左栏 tabs 行为
   TitlebarTabsControllerTests.swift       # (若存在)标题栏 tabs 行为,否则见 WindowChromeTests
   RightSidebarViewControllerTests.swift   # 右栏 segmented 切换

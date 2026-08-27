@@ -672,7 +672,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         ])
         let layoutGrid = makeSettingsGrid([
             [makeRowLabel("Sidebar Widths"), sidebarDefaultsStack],
-            [makeRowLabel("Floating Outline Height"), floatingOutlineHeightStack],
+            [makeRowLabel("Floating Outline Max Height"), floatingOutlineHeightStack],
             [makeRowLabel("Layout"), layoutOptionsStack],
         ])
         let integrationsGrid = makeSettingsGrid([
