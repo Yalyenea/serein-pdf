@@ -18,7 +18,7 @@ site for showcase, download notes, and compact docs.
 - When the Outline pane is not active (right sidebar closed, or open on Pages / Search / Annotations), a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as an overlay, dragging either vertical edge resizes it symmetrically around its center, and PDFs without an outline show no rail
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`, match-case `Aa`, and whole-word `Word`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
-- Reader navigation keeps the compact Vim-style layer: `c` toggles single-page continuous mode, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, and `g` / `shift+g` jump to the real document edges; `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document Outline, Pages, link, Search, and annotation jumps, while internal links stay centered from their first activation
+- Reader navigation keeps the compact Vim-style layer: `c` toggles continuity within the current Single Page, Two-Up, or Book layout, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, and `g` / `shift+g` jump to the real document edges; Book modes also accept `h` / `←` and `l` / `→` for previous / next spread; `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document Outline, Pages, link, Search, and annotation jumps, while internal links stay centered from their first activation
 - Cursor reading focus (`f`) dims the page outside a compact rounded band without blocking PDF interaction; `option+f` adjusts the current window between Page, Column (half-page), and Custom widths plus a configurable height
 - Horizontal pan lock (`l`) preserves the current X position and blocks left/right panning plus pinch / keyboard zoom; vertical scroll and page turns stay free
 - Compare split in the center reader (`cmd+ctrl+\`) opens a compact candidate chooser and can arrange the two independent readers left/right or top/bottom from the View menu
@@ -68,6 +68,7 @@ site for showcase, download notes, and compact docs.
 - All-pages overview (`cmd+shift+o`) seamless viewport-fit grid (no nested panel); zoom for manual size; click a page to jump
 - Auto-update from GitHub Releases (check on launch + **Serein → Check for Updates…**); private repos need `[updates] github_token` in config.toml
 - Single Page mode keeps fully visible pages centered on both axes and clamps blank-area scrolling, while zoomed-in pages can still pan normally
+- Book mode shows a centered cover followed by stable-size left/right page spreads. Fit Width uses the actual spread bounds, keeps compact safe margins, and fits both axes; manual zoom-out also stays centered whenever the spread fits the viewport. Horizontal wheel or trackpad movement turns one spread; Book · Continuous Turn allows deliberate continued movement to turn further spreads while momentum cannot skip ahead.
 - Demo mode (`cmd+l`) for presentation-style reading: enters full screen, fits the whole page with stable single-page framing, hides reader chrome, and restores the prior layout on `cmd+l` or Esc
 - Immersive mode (`cmd+ctrl+l`) opens both sidebars only when none are visible; otherwise it hides both sidebars and tab chrome while keeping the current window size
 - Per-PDF memory: scale and page persist across launches; sidebar widths are window-level runtime state seeded from layout defaults
@@ -180,6 +181,9 @@ toggle_continuous_reading = "none"
 toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
 toggle_horizontal_pan_lock = "l"
+book = "none"
+book_continuous = "none"
+toggle_display_mode_continuity = "c"
 merge_all_windows = "none"      # cmd+k, cmd+m is a built-in chord
 move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
@@ -244,10 +248,11 @@ Defined in `[shortcuts]` above. Highlights:
 | Toggle cursor reading focus | `f` |
 | Adjust current-window focus width / height | `option+f` |
 | Toggle horizontal pan lock (preserve current X, block zoom) | `l` |
-| Toggle Single Page Continuous | `c` |
+| Toggle current layout continuity | `c` |
 | Select document tabs 1–3 | physical left `cmd+1` / `cmd+2` / `cmd+3` |
 | Single Page Continuous | physical right `cmd+2` |
-| Other display modes | physical right `cmd+1` / `cmd+3` / `cmd+4` |
+| Other original display modes | physical right `cmd+1` / `cmd+3` / `cmd+4` |
+| Book / Book · Continuous Turn | View menu; configurable, default none |
 | Zoom in / out | `cmd+=` / `cmd+-` |
 | Find current / all open PDFs | `cmd+f` / `cmd+shift+f` |
 | Find next / previous match | `cmd+g` / `cmd+shift+g` |

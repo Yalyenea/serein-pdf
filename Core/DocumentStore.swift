@@ -740,6 +740,54 @@ final class DocumentStore {
         return ContinuousReadingTarget(sessionID: targetSessionID, readingPosition: readingPosition)
     }
 
+    @discardableResult
+    func activateContinuousReadingTarget(
+        _ target: ContinuousReadingTarget,
+        in windowID: UUID,
+        targetPane: ReaderPane?
+    ) -> UUID? {
+        guard let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else {
+            return nil
+        }
+        var workspace = windowWorkspaces[workspaceIndex]
+        guard workspace.sessionIDs.contains(target.sessionID) else { return nil }
+
+        if let targetPane {
+            _ = activateSessionForSplitEdit(
+                sessionID: target.sessionID,
+                targetPane: targetPane,
+                in: &workspace
+            )
+        } else {
+            activateSessionForTabNavigation(sessionID: target.sessionID, in: &workspace)
+        }
+        normalizeWorkspace(&workspace)
+
+        let resolvedSessionID: UUID?
+        switch targetPane {
+        case .primary:
+            resolvedSessionID = workspace.primarySessionID
+        case .secondary:
+            resolvedSessionID = workspace.secondarySessionID
+        case nil:
+            resolvedSessionID = workspace.activeSessionID
+        }
+        guard let resolvedSessionID,
+              let sessionIndex = sessions.firstIndex(where: { $0.id == resolvedSessionID }) else {
+            return nil
+        }
+
+        sessions[sessionIndex].currentPageIndex = target.readingPosition.pageIndex
+        sessions[sessionIndex].lastReadPosition = target.readingPosition
+        sessions[sessionIndex].needsInitialReadingPosition = false
+        persistReadingState(for: sessions[sessionIndex])
+        windowWorkspaces[workspaceIndex] = workspace
+        removeUnreferencedSessions()
+        rebuildSearchIfNeeded(in: windowID)
+        notifyChange()
+        return resolvedSessionID
+    }
+
     func setFocusedPane(_ pane: ReaderPane, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         var workspace = windowWorkspaces[index]
@@ -948,12 +996,9 @@ final class DocumentStore {
         notifyChange()
     }
 
-    func toggleSinglePageContinuous(for sessionID: UUID) {
+    func toggleDisplayModeContinuity(for sessionID: UUID) {
         guard let session = session(for: sessionID) else { return }
-        setDisplayMode(
-            session.displayMode == .singlePageContinuous ? .singlePage : .singlePageContinuous,
-            for: sessionID
-        )
+        setDisplayMode(session.displayMode.toggledContinuity, for: sessionID)
     }
 
     func setScaleMode(_ mode: ReaderScaleMode, scaleFactor: CGFloat, for sessionID: UUID) {

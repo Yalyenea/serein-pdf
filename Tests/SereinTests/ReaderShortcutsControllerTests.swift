@@ -205,49 +205,29 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
     }
 
-    func testPlainCInvokesSinglePageContinuousSupplementalShortcut() {
+    func testPlainCInvokesConfiguredDisplayModeContinuityShortcut() {
         var triggeredCommands: [ShortcutCommand] = []
         let controller = ReaderShortcutsController(
             shortcutsProvider: {
-                [.singlePageContinuous: KeyboardShortcut(key: "2", modifiers: [.command])]
+                [.toggleDisplayModeContinuity: KeyboardShortcut(key: "c", modifiers: [])]
             },
             handlerProvider: {
-                [.singlePageContinuous: { triggeredCommands.append(.singlePageContinuous) }]
+                [.toggleDisplayModeContinuity: { triggeredCommands.append(.toggleDisplayModeContinuity) }]
             }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
         let event = makeKeyEvent(characters: "c", modifiers: [])
 
         XCTAssertTrue(controller.handlePlainShortcut(for: event, in: window))
-        XCTAssertEqual(triggeredCommands, [.singlePageContinuous])
+        XCTAssertEqual(triggeredCommands, [.toggleDisplayModeContinuity])
     }
 
-    func testPlainCUsesSupplementalToggleHandlerWhenProvided() {
-        var triggeredCommands: [String] = []
-        let controller = ReaderShortcutsController(
-            shortcutsProvider: {
-                [.singlePageContinuous: KeyboardShortcut(key: "2", modifiers: [.command])]
-            },
-            handlerProvider: {
-                [.singlePageContinuous: { triggeredCommands.append("cmd-2") }]
-            },
-            supplementalHandlerProvider: {
-                [.singlePageContinuous: { triggeredCommands.append("toggle-c") }]
-            }
-        )
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-        let event = makeKeyEvent(characters: "c", modifiers: [])
-
-        XCTAssertTrue(controller.handlePlainShortcut(for: event, in: window))
-        XCTAssertEqual(triggeredCommands, ["toggle-c"])
-    }
-
-    func testPlainCSupplementalShortcutRespectsClearedSinglePageContinuousBinding() {
+    func testPlainCRespectsClearedDisplayModeContinuityBinding() {
         var didTrigger = false
         let controller = ReaderShortcutsController(
             shortcutsProvider: { [:] },
             handlerProvider: {
-                [.singlePageContinuous: { didTrigger = true }]
+                [.toggleDisplayModeContinuity: { didTrigger = true }]
             }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
@@ -255,6 +235,78 @@ final class ReaderShortcutsControllerTests: XCTestCase {
 
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
         XCTAssertFalse(didTrigger)
+    }
+
+    func testBookModeUsesArrowAndHLPageTurnAliases() {
+        var directions: [Int] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: { [:] },
+            bookPageTurnHandler: { direction, _ in
+                directions.append(direction)
+                return true
+            }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "h", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F702}", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "l", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F703}", modifiers: []), in: window))
+        XCTAssertEqual(directions, [-1, -1, 1, 1])
+    }
+
+    func testBookPageTurnAliasesRequireNoModifiers() {
+        var didTurn = false
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: { [:] },
+            bookPageTurnHandler: { _, _ in
+                didTurn = true
+                return true
+            }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertFalse(
+            controller.handleShortcutEvent(
+                for: makeKeyEvent(characters: "h", modifiers: [.command]),
+                in: window
+            )
+        )
+        XCTAssertFalse(didTurn)
+    }
+
+    func testPlainLFallsThroughToConfiguredPanLockOutsideBookMode() {
+        var didTogglePanLock = false
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: {
+                [.toggleHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: [])]
+            },
+            handlerProvider: {
+                [.toggleHorizontalPanLock: { didTogglePanLock = true }]
+            },
+            bookPageTurnHandler: { _, _ in false }
+        )
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "l", modifiers: []), in: window))
+        XCTAssertTrue(didTogglePanLock)
     }
 
     func testThemeChordInvokesSwitchCurrentTheme() {

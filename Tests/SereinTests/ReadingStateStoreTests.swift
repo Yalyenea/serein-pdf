@@ -11,7 +11,7 @@ final class ReadingStateStoreTests: XCTestCase {
         let url = URL(fileURLWithPath: "/tmp/test.pdf")
         let state = PersistedReadingState(
             url: url,
-            displayMode: .twoUpContinuous,
+            displayMode: .bookContinuous,
             scaleMode: .manual,
             scaleFactor: 1.6,
             readingPosition: ReadingPosition(pageIndex: 5, point: CGPoint(x: 18, y: 24))

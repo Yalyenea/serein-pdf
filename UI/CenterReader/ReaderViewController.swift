@@ -31,6 +31,12 @@ private struct PendingExternalNavigation {
     let origin: NavigationHistoryEntry
 }
 
+private enum BookScrollAxis {
+    case undecided
+    case horizontal
+    case vertical
+}
+
 private final class ReaderSurfaceView: NSView {
     var onOpenURLs: (([URL]) -> Void)?
 
@@ -346,6 +352,10 @@ final class ReaderPDFView: PDFView {
 }
 
 final class ReaderViewController: NSViewController {
+    private static let bookFitHorizontalInset: CGFloat = 32
+    private static let bookFitVerticalInset: CGFloat = 24
+    private static let bookSpreadGap: CGFloat = 14
+
     let documentStore: DocumentStore
     let windowID: UUID
     let pdfView = ReaderPDFView()
@@ -354,6 +364,7 @@ final class ReaderViewController: NSViewController {
     var onOpenURLsRequested: (([URL]) -> Void)?
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
     var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
+    var onBookPageBoundaryRequested: (Int) -> Bool = { _ in false }
     var onRevealAnnotationRequested: ((DocumentHighlightGroup) -> Void)?
     var onSendSelectionToCodexRequested: ((String) -> Void)?
     var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
@@ -397,10 +408,18 @@ final class ReaderViewController: NSViewController {
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
     nonisolated(unsafe) private var panLockScrollMonitor: Any?
     nonisolated(unsafe) private var magnificationMonitor: Any?
+    private var bookPageTurnScrollAccumulator: CGFloat = 0
+    private var lastBookPageTurnScrollTimestamp: TimeInterval?
+    private var lastBookPageTurnTimestamp: TimeInterval?
+    private var bookScrollAxis = BookScrollAxis.undecided
+    private var bookScrollGestureOwnedByReader = false
+    private var consumeBookDirectScrollUntilEnd = false
+    private var consumeBookMomentumUntilEnd = false
     private var pendingFitWidthSessionID: UUID?
     private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
     private var lastAppliedFitBoundsHeight: CGFloat = 0
+    private var isDocumentRecenteringScheduled = false
     private weak var observedPDFClipView: NSClipView?
     private var lastObservedPDFClipBounds: NSRect?
     private var isApplyingScrollClamp = false
@@ -440,6 +459,7 @@ final class ReaderViewController: NSViewController {
             self?.syncPDFMarginBackground()
             self?.applyThemeFilter()
             self?.pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
+            self?.scheduleDocumentRecentering()
         }
         pdfView.onInternalLinkNavigationRequested = { [weak self] destination in
             self?.navigate(toInternalLink: destination) ?? false
@@ -528,7 +548,7 @@ final class ReaderViewController: NSViewController {
             guard let self else { return event }
             var rewritten: NSEvent? = event
             MainActor.assumeIsolated {
-                rewritten = self.rewriteScrollEventIfPanLocked(event)
+                rewritten = self.rewriteScrollEventIfNeeded(event)
             }
             return rewritten
         }
@@ -581,6 +601,8 @@ final class ReaderViewController: NSViewController {
         case .fitWidth:
             isPending = pendingFitWidthSessionID == session.id
             boundsChanged = abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) > 0.5
+                || session.displayMode.usesBookLayout
+                    && abs(pdfView.bounds.height - lastAppliedFitBoundsHeight) > 0.5
         case .fitHeight:
             isPending = pendingFitHeightSessionID == session.id
             boundsChanged = abs(pdfView.bounds.height - lastAppliedFitBoundsHeight) > 0.5
@@ -602,7 +624,6 @@ final class ReaderViewController: NSViewController {
         switch session.scaleMode {
         case .fitWidth:
             pendingFitWidthSessionID = nil
-            lastAppliedFitBoundsWidth = pdfView.bounds.width
             applyFitWidth(for: session)
         case .fitHeight:
             pendingFitHeightSessionID = nil
@@ -778,7 +799,6 @@ final class ReaderViewController: NSViewController {
         guard let session = targetSession() else { return }
         if pdfView.bounds.width > 0 {
             pendingFitWidthSessionID = nil
-            lastAppliedFitBoundsWidth = pdfView.bounds.width
         }
         applyFitWidth(for: session)
     }
@@ -882,16 +902,28 @@ final class ReaderViewController: NSViewController {
               let currentPageIndex = currentPageIndexForNavigation(in: document) else { return false }
 
         let currentStop = session.displayMode.usesTwoUpLayout
-            ? normalizedSpreadLead(currentPageIndex, pageCount: document.pageCount)
+            ? normalizedSpreadLead(
+                currentPageIndex,
+                pageCount: document.pageCount,
+                displayMode: session.displayMode
+            )
             : currentPageIndex
-        let step = session.displayMode.usesTwoUpLayout ? 2 : 1
-        let targetPageIndex = max(currentStop - step, 0)
-        guard targetPageIndex != currentStop,
-              let page = document.page(at: targetPageIndex) else { return false }
+        let targetPageIndex = session.displayMode.usesTwoUpLayout
+            ? adjacentSpreadLead(from: currentStop, direction: -1, displayMode: session.displayMode)
+            : max(currentStop - 1, 0)
+        guard targetPageIndex != currentStop else { return false }
+        let pageIndex = session.displayMode.usesBookLayout
+            ? trailingPageIndex(forSpreadLead: targetPageIndex, pageCount: document.pageCount)
+            : targetPageIndex
+        guard let page = document.page(at: pageIndex) else { return false }
+        let pageBounds = page.bounds(for: pdfView.displayBox)
         return go(
-            to: .pageBottom(
-                pageIndex: targetPageIndex,
-                pageBounds: page.bounds(for: pdfView.displayBox)
+            to: ReadingPosition(
+                pageIndex: pageIndex,
+                point: NSPoint(
+                    x: session.displayMode.usesBookLayout ? pageBounds.maxX : pageBounds.minX,
+                    y: pageBounds.minY
+                )
             ),
             recordHistory: false
         )
@@ -1211,9 +1243,11 @@ final class ReaderViewController: NSViewController {
             case .fitWidth:
                 pendingFitWidthSessionID = session.id
                 lastAppliedFitBoundsWidth = -1
+                view.needsLayout = true
             case .fitHeight:
                 pendingFitHeightSessionID = session.id
                 lastAppliedFitBoundsHeight = -1
+                view.needsLayout = true
             case .manual:
                 break
             }
@@ -1237,9 +1271,22 @@ final class ReaderViewController: NSViewController {
         let currentStop: Int
         let targetPageIndex: Int
         if session.displayMode.usesTwoUpLayout {
-            currentStop = normalizedSpreadLead(currentPageIndex, pageCount: document.pageCount)
-            let lastSpreadLead = normalizedSpreadLead(document.pageCount - 1, pageCount: document.pageCount)
-            targetPageIndex = min(max(currentStop + direction * 2, 0), lastSpreadLead)
+            currentStop = normalizedSpreadLead(
+                currentPageIndex,
+                pageCount: document.pageCount,
+                displayMode: session.displayMode
+            )
+            let lastSpreadLead = normalizedSpreadLead(
+                document.pageCount - 1,
+                pageCount: document.pageCount,
+                displayMode: session.displayMode
+            )
+            let adjacentLead = adjacentSpreadLead(
+                from: currentStop,
+                direction: direction,
+                displayMode: session.displayMode
+            )
+            targetPageIndex = min(max(adjacentLead, 0), lastSpreadLead)
         } else {
             currentStop = currentPageIndex
             targetPageIndex = min(max(currentPageIndex + direction, 0), document.pageCount - 1)
@@ -1247,13 +1294,53 @@ final class ReaderViewController: NSViewController {
         guard targetPageIndex != currentStop else { return false }
 
         // Sequential page-turn is not a history stop (same as continuous scroll).
+        if session.displayMode.usesBookLayout, direction < 0 {
+            let pageIndex = trailingPageIndex(
+                forSpreadLead: targetPageIndex,
+                pageCount: document.pageCount
+            )
+            guard let page = document.page(at: pageIndex) else { return false }
+            let bounds = page.bounds(for: pdfView.displayBox)
+            return go(
+                to: ReadingPosition(
+                    pageIndex: pageIndex,
+                    point: NSPoint(x: bounds.maxX, y: bounds.maxY)
+                ),
+                recordHistory: false
+            )
+        }
         return jumpToPage(targetPageIndex, recordHistory: false)
     }
 
-    private func normalizedSpreadLead(_ pageIndex: Int, pageCount: Int) -> Int {
+    private func normalizedSpreadLead(
+        _ pageIndex: Int,
+        pageCount: Int,
+        displayMode: ReaderDisplayMode
+    ) -> Int {
         guard pageCount > 0 else { return 0 }
         let clamped = min(max(pageIndex, 0), pageCount - 1)
+        if displayMode.usesBookLayout {
+            guard clamped > 0 else { return 0 }
+            return clamped.isMultiple(of: 2) ? clamped - 1 : clamped
+        }
         return clamped.isMultiple(of: 2) ? clamped : clamped - 1
+    }
+
+    private func adjacentSpreadLead(
+        from currentLead: Int,
+        direction: Int,
+        displayMode: ReaderDisplayMode
+    ) -> Int {
+        guard displayMode.usesBookLayout else { return currentLead + direction * 2 }
+        if direction > 0 {
+            return currentLead == 0 ? 1 : currentLead + 2
+        }
+        return currentLead <= 1 ? 0 : currentLead - 2
+    }
+
+    private func trailingPageIndex(forSpreadLead lead: Int, pageCount: Int) -> Int {
+        guard lead > 0, lead + 1 < pageCount else { return lead }
+        return lead + 1
     }
 
     private func currentPageIndexForNavigation(in document: PDFDocument) -> Int? {
@@ -1279,6 +1366,10 @@ final class ReaderViewController: NSViewController {
     var usesContinuousScrolling: Bool {
         guard let mode = targetSession()?.displayMode else { return false }
         return mode == .singlePageContinuous || mode == .twoUpContinuous
+    }
+
+    var usesBookLayout: Bool {
+        targetSession()?.displayMode.usesBookLayout == true
     }
 
     var isAllPagesOverviewActive: Bool {
@@ -1478,6 +1569,7 @@ final class ReaderViewController: NSViewController {
     }
 
     func setHorizontalPanLockEnabled(_ enabled: Bool) {
+        if enabled, targetSession()?.displayMode.usesBookLayout == true { return }
         guard enabled != isHorizontalPanLocked else {
             guard isViewLoaded else { return }
             updatePanLockIndicator()
@@ -1504,7 +1596,59 @@ final class ReaderViewController: NSViewController {
         updatePanLockIndicator()
     }
 
-    private func rewriteScrollEventIfPanLocked(_ event: NSEvent) -> NSEvent? {
+    private func rewriteScrollEventIfNeeded(_ event: NSEvent) -> NSEvent? {
+        let phase = event.phase
+        let momentumPhase = event.momentumPhase
+        let startsGesture = phase.contains(.mayBegin) || phase.contains(.began)
+        let endsGesture = phase.contains(.ended) || phase.contains(.cancelled)
+        let endsMomentum = momentumPhase.contains(.ended) || momentumPhase.contains(.cancelled)
+        let pointerIsOverPDF = pointerEventIsOverPDFContent(event)
+        let displayMode = targetSession()?.displayMode
+
+        if startsGesture {
+            resetBookPageTurnState()
+            bookScrollGestureOwnedByReader = pointerIsOverPDF && displayMode?.usesBookLayout == true
+        }
+
+        let isPhaseLessBookInput = phase.isEmpty
+            && momentumPhase.isEmpty
+            && pointerIsOverPDF
+            && displayMode?.usesBookLayout == true
+        let isGestureLifecycleEvent = phase.isEmpty == false || momentumPhase.isEmpty == false
+        let handlesOwnedGesture = isGestureLifecycleEvent
+            && bookScrollGestureOwnedByReader
+            && (displayMode?.usesBookLayout == true
+                || consumeBookDirectScrollUntilEnd
+                || consumeBookMomentumUntilEnd)
+        let blockedModifiers: NSEvent.ModifierFlags = [.command, .option, .control]
+        var consumedBookScroll = false
+        if handlesOwnedGesture || isPhaseLessBookInput {
+            if event.modifierFlags.intersection(blockedModifiers).isEmpty {
+                consumedBookScroll = handleBookScroll(
+                    deltaX: event.scrollingDeltaX,
+                    deltaY: event.scrollingDeltaY,
+                    hasPreciseScrollingDeltas: event.hasPreciseScrollingDeltas,
+                    hasScrollPhase: isGestureLifecycleEvent,
+                    isMomentum: momentumPhase.isEmpty == false,
+                    timestamp: event.timestamp
+                )
+            } else {
+                resetBookPageTurnInput()
+            }
+        }
+
+        if phase.contains(.cancelled) {
+            resetBookPageTurnState()
+        } else if endsGesture {
+            consumeBookDirectScrollUntilEnd = false
+        }
+        if endsMomentum {
+            resetBookPageTurnState()
+        }
+        if consumedBookScroll {
+            return nil
+        }
+
         guard shouldLockHorizontalPan else { return event }
         guard pointerEventIsOverPDFContent(event) else { return event }
 
@@ -1522,6 +1666,117 @@ final class ReaderViewController: NSViewController {
         }
         guard ScrollWheelHorizontalStripper.hasHorizontalComponent(event) else { return event }
         return ScrollWheelHorizontalStripper.verticalOnly(from: event) ?? event
+    }
+
+    @discardableResult
+    private func handleBookScroll(
+        deltaX: CGFloat,
+        deltaY: CGFloat,
+        hasPreciseScrollingDeltas: Bool,
+        hasScrollPhase: Bool,
+        isMomentum: Bool,
+        timestamp: TimeInterval
+    ) -> Bool {
+        if hasPreciseScrollingDeltas == false,
+           isMomentum == false,
+           lastBookPageTurnScrollTimestamp.map({ timestamp - $0 > 0.3 }) == true {
+            resetBookPageTurnState()
+        }
+        if hasScrollPhase, isMomentum, consumeBookMomentumUntilEnd {
+            return true
+        }
+        if hasScrollPhase, isMomentum == false, consumeBookDirectScrollUntilEnd {
+            return true
+        }
+
+        guard let displayMode = targetSession()?.displayMode,
+              displayMode.usesBookLayout else { return false }
+
+        let horizontal = abs(deltaX)
+        let vertical = abs(deltaY)
+        if hasScrollPhase == false {
+            bookScrollAxis = .undecided
+        }
+        if bookScrollAxis == .undecided, max(horizontal, vertical) > 0.5 {
+            if horizontal > vertical * 1.2 {
+                bookScrollAxis = .horizontal
+            } else if vertical > horizontal * 1.2 {
+                bookScrollAxis = .vertical
+            }
+        }
+        guard bookScrollAxis == .horizontal else {
+            if hasScrollPhase == false {
+                resetBookPageTurnInput()
+                bookScrollAxis = .undecided
+            }
+            return false
+        }
+        guard horizontal > 0.01 else { return true }
+
+        let direction = deltaX < 0 ? 1 : -1
+        guard canTurnBookPageAfterHorizontalPan(direction: direction) else {
+            resetBookPageTurnInput()
+            return false
+        }
+
+        let normalizedDelta = hasPreciseScrollingDeltas ? deltaX : deltaX * 48
+        let directionChanged = bookPageTurnScrollAccumulator != 0
+            && (bookPageTurnScrollAccumulator < 0) != (normalizedDelta < 0)
+        if directionChanged {
+            bookPageTurnScrollAccumulator = 0
+        }
+        lastBookPageTurnScrollTimestamp = timestamp
+        bookPageTurnScrollAccumulator += normalizedDelta
+
+        let threshold: CGFloat = 48
+        guard abs(bookPageTurnScrollAccumulator) >= threshold else { return true }
+        if hasScrollPhase,
+           let lastBookPageTurnTimestamp,
+           timestamp - lastBookPageTurnTimestamp < 0.18 {
+            bookPageTurnScrollAccumulator = 0
+            return true
+        }
+        onFocusRequested?()
+        let didTurnLocally = turnPage(by: direction)
+        let didCrossDocument = didTurnLocally == false && onBookPageBoundaryRequested(direction)
+        bookPageTurnScrollAccumulator = 0
+        if didTurnLocally || didCrossDocument {
+            lastBookPageTurnScrollTimestamp = timestamp
+            lastBookPageTurnTimestamp = timestamp
+            if hasScrollPhase {
+                consumeBookMomentumUntilEnd = true
+                if displayMode.allowsContinuousBookPageTurn == false || didCrossDocument {
+                    consumeBookDirectScrollUntilEnd = true
+                }
+                if didCrossDocument {
+                    bookScrollGestureOwnedByReader = true
+                }
+            }
+        }
+        return true
+    }
+
+    private func canTurnBookPageAfterHorizontalPan(direction: Int) -> Bool {
+        guard let clipView = pdfClipView(), let documentView = pdfDocumentView() else { return true }
+        let overflowX = max(documentView.frame.width - clipView.bounds.width, 0)
+        guard overflowX > 1 else { return true }
+        return direction > 0
+            ? clipView.bounds.origin.x >= overflowX - 1
+            : clipView.bounds.origin.x <= 1
+    }
+
+    private func resetBookPageTurnInput() {
+        bookPageTurnScrollAccumulator = 0
+        lastBookPageTurnScrollTimestamp = nil
+    }
+
+    private func resetBookPageTurnState() {
+        resetBookPageTurnInput()
+        lastBookPageTurnTimestamp = nil
+        bookScrollAxis = .undecided
+        bookScrollGestureOwnedByReader = false
+        consumeBookDirectScrollUntilEnd = false
+        consumeBookMomentumUntilEnd = false
     }
 
     private func rewriteMagnificationEventIfPanLocked(_ event: NSEvent) -> NSEvent? {
@@ -1919,6 +2174,7 @@ final class ReaderViewController: NSViewController {
 
         if displayedSessionID != targetSessionID {
             annotationInteraction.sessionDidChange()
+            resetBookPageTurnState()
         }
 
         guard let session = targetSession() else {
@@ -1976,6 +2232,7 @@ final class ReaderViewController: NSViewController {
         defer { isApplyingStoreState = false }
 
         if documentChanged {
+            resetBookPageTurnState()
             pdfView.document = document
             displayedSessionID = refreshedSession.id
             displayedReadingPosition = nil
@@ -2195,9 +2452,13 @@ final class ReaderViewController: NSViewController {
     private func applyDisplayModeIfNeeded(_ session: DocumentSession) -> Bool {
         guard displayedDisplayMode != session.displayMode else { return false }
 
-        pdfView.displayDirection = .vertical
+        resetBookPageTurnState()
+        if session.displayMode.usesBookLayout, isHorizontalPanLocked {
+            setHorizontalPanLockEnabled(false)
+        }
+        pdfView.displayDirection = session.displayMode.displayDirection
+        pdfView.displaysAsBook = session.displayMode.displaysAsBook
         pdfView.displayMode = session.displayMode.pdfDisplayMode
-        pdfView.displaysAsBook = false
         displayedDisplayMode = session.displayMode
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
@@ -2273,7 +2534,14 @@ final class ReaderViewController: NSViewController {
         guard document.pageCount > 0, (0..<document.pageCount).contains(pageIndex) else {
             return currentReadingPosition()
         }
-        if let position = currentReadingPosition(), position.pageIndex == pageIndex {
+        if let position = currentReadingPosition(),
+           let session = targetSession(),
+           positionBelongsToCurrentSpread(
+               position,
+               currentPageIndex: pageIndex,
+               session: session,
+               document: document
+           ) {
             return position
         }
         let bounds = page.bounds(for: pdfView.displayBox)
@@ -2291,15 +2559,20 @@ final class ReaderViewController: NSViewController {
             return
         }
         guard shouldApplyFitWidth(scaleFactor, for: session) else {
-            lastAppliedFitBoundsWidth = pdfView.bounds.width
+            recordFitWidthBounds()
             displayedScaleMode = .fitWidth
             documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
             return
         }
         applyProgrammaticScale(scaleFactor, preserveViewportCenter: true)
-        lastAppliedFitBoundsWidth = pdfView.bounds.width
+        recordFitWidthBounds()
         displayedScaleMode = .fitWidth
         documentStore.setScaleMode(.fitWidth, scaleFactor: scaleFactor, for: session.id)
+    }
+
+    private func recordFitWidthBounds() {
+        lastAppliedFitBoundsWidth = pdfView.bounds.width
+        lastAppliedFitBoundsHeight = pdfView.bounds.height
     }
 
     private func applyFitHeight(for session: DocumentSession) {
@@ -2346,12 +2619,44 @@ final class ReaderViewController: NSViewController {
         guard let document = pdfView.document else { return nil }
         let pages = spreadPages(for: session, in: document)
         guard let leadPage = pages.first else { return nil }
+        if session.displayMode.usesBookLayout {
+            return bookSpreadScaleFactor(for: pages)
+        }
+
         let currentScale = max(pdfView.scaleFactor, 0.001)
         let normalizedRowWidth = pdfView.rowSize(for: leadPage).width / currentScale
         guard normalizedRowWidth > 0 else { return nil }
 
         let availableWidth = max(pdfClipView()?.frame.width ?? pdfView.bounds.width, 1)
         let unclamped = availableWidth / normalizedRowWidth
+        return min(max(unclamped, pdfView.minScaleFactor), pdfView.maxScaleFactor)
+    }
+
+    private func bookSpreadScaleFactor(for pages: [PDFPage]) -> CGFloat? {
+        let pageSizes = pages.map { $0.bounds(for: pdfView.displayBox).size }
+        guard let firstSize = pageSizes.first,
+              firstSize.width > 0,
+              firstSize.height > 0 else { return nil }
+
+        let spreadWidth: CGFloat
+        let spreadHeight: CGFloat
+        if pageSizes.count == 1 {
+            // Reserve the missing slot for the cover and an unpaired final page.
+            spreadWidth = firstSize.width * 2 + Self.bookSpreadGap
+            spreadHeight = firstSize.height
+        } else {
+            spreadWidth = pageSizes.reduce(0) { $0 + $1.width } + Self.bookSpreadGap
+            spreadHeight = pageSizes.map(\.height).max() ?? firstSize.height
+        }
+        guard spreadWidth > 0, spreadHeight > 0 else { return nil }
+
+        let clipFrame = pdfClipView()?.frame ?? pdfView.bounds
+        let availableWidth = max(clipFrame.width - Self.bookFitHorizontalInset * 2, 1)
+        let availableHeight = max(clipFrame.height - Self.bookFitVerticalInset * 2, 1)
+        let unclamped = min(
+            availableWidth / spreadWidth,
+            availableHeight / spreadHeight
+        )
         return min(max(unclamped, pdfView.minScaleFactor), pdfView.maxScaleFactor)
     }
 
@@ -2393,11 +2698,15 @@ final class ReaderViewController: NSViewController {
             return [page]
         }
 
-        let startIndex = session.currentPageIndex.isMultiple(of: 2)
-            ? session.currentPageIndex
-            : max(session.currentPageIndex - 1, 0)
+        let startIndex = normalizedSpreadLead(
+            session.currentPageIndex,
+            pageCount: document.pageCount,
+            displayMode: session.displayMode
+        )
         let firstPage = document.page(at: startIndex)
-        let secondPage = document.page(at: startIndex + 1)
+        let secondPage = session.displayMode.usesBookLayout && startIndex == 0
+            ? nil
+            : document.page(at: startIndex + 1)
         return [firstPage, secondPage].compactMap { $0 }
     }
 
@@ -2565,7 +2874,12 @@ final class ReaderViewController: NSViewController {
               let currentPage = pdfView.currentPage,
               let document = pdfView.document,
               let position = currentReadingPosition() else { return }
-        guard position.pageIndex == document.index(for: currentPage) else { return }
+        guard positionBelongsToCurrentSpread(
+            position,
+            currentPageIndex: document.index(for: currentPage),
+            session: session,
+            document: document
+        ) else { return }
         displayedReadingPosition = position
         documentStore.updateReadingPosition(
             position,
@@ -2574,6 +2888,26 @@ final class ReaderViewController: NSViewController {
         )
         completeExternalNavigation(
             target: NavigationHistoryEntry(sessionID: session.id, position: position)
+        )
+    }
+
+    private func positionBelongsToCurrentSpread(
+        _ position: ReadingPosition,
+        currentPageIndex: Int,
+        session: DocumentSession,
+        document: PDFDocument
+    ) -> Bool {
+        guard session.displayMode.usesTwoUpLayout else {
+            return position.pageIndex == currentPageIndex
+        }
+        return normalizedSpreadLead(
+            position.pageIndex,
+            pageCount: document.pageCount,
+            displayMode: session.displayMode
+        ) == normalizedSpreadLead(
+            currentPageIndex,
+            pageCount: document.pageCount,
+            displayMode: session.displayMode
         )
     }
 
@@ -2643,12 +2977,21 @@ final class ReaderViewController: NSViewController {
               let clipView = pdfClipView(),
               let documentView = pdfDocumentView() else { return }
 
-        // Horizontal: center whenever the document is narrower than the viewport
-        // (all display modes). Vertical: only single-page, where blank margin
-        // should sit evenly around a fully visible slide.
+        // Horizontal: center whenever the document is narrower than the viewport.
+        // Vertical: center single pages and Book spreads whenever they fit.
         let isSinglePage = displayedDisplayMode == .singlePage
+        let centersBookSpread = displayedDisplayMode?.usesBookLayout == true
+        let centersVertically = isSinglePage || centersBookSpread
         let fitsHorizontally = documentView.frame.width <= clipView.bounds.width + 0.5
-        let fitsVertically = isSinglePage && documentView.frame.height <= clipView.bounds.height + 0.5
+        let fitsVertically = centersVertically
+            && documentView.frame.height <= clipView.bounds.height + 0.5
+        let bookChromeOffset: CGFloat
+        if centersBookSpread, let window = view.window {
+            let standardContentHeight = window.contentRect(forFrameRect: window.frame).height
+            bookChromeOffset = max(window.frame.height - standardContentHeight, 0) * 0.5
+        } else {
+            bookChromeOffset = 0
+        }
         let targetMinX = fitsHorizontally
             ? (clipView.bounds.width - documentView.frame.width) * 0.5
             : 0
@@ -2657,7 +3000,8 @@ final class ReaderViewController: NSViewController {
         let targetMinY: CGFloat
         if fitsVertically {
             targetMinY = (clipView.bounds.height - documentView.frame.height) * 0.5
-        } else if isSinglePage {
+                - bookChromeOffset
+        } else if centersVertically {
             targetMinY = 0
         } else {
             targetMinY = documentView.frame.minY
@@ -2669,14 +3013,13 @@ final class ReaderViewController: NSViewController {
             frame.origin.x = targetMinX
             shouldUpdateFrame = true
         }
-        if isSinglePage, abs(frame.minY - targetMinY) > 0.5 {
+        if centersVertically, abs(frame.minY - targetMinY) > 0.5 {
             frame.origin.y = targetMinY
             shouldUpdateFrame = true
         }
         if shouldUpdateFrame {
             documentView.frame = frame
         }
-
         // Keep forced X in sync with current geometry before any clamp scroll.
         syncHorizontalPanLockConstraint()
 
@@ -2699,6 +3042,18 @@ final class ReaderViewController: NSViewController {
         clipView.scroll(to: targetBounds.origin)
         scrollView.reflectScrolledClipView(clipView)
         isApplyingScrollClamp = false
+    }
+
+    private func scheduleDocumentRecentering() {
+        guard isDocumentRecenteringScheduled == false,
+              displayedDisplayMode == .singlePage
+                || displayedDisplayMode?.usesBookLayout == true else { return }
+        isDocumentRecenteringScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isDocumentRecenteringScheduled = false
+            self.recenterDocumentViewIfNeeded()
+        }
     }
 
     private var shouldLockHorizontalPan: Bool {
@@ -3009,6 +3364,46 @@ extension ReaderViewController {
 
     var testingPanLockIndicatorIsVisible: Bool {
         panLockIndicator.isHidden == false
+    }
+
+    @discardableResult
+    func testingHandleContinuousBookScroll(
+        deltaX: CGFloat,
+        deltaY: CGFloat = 0,
+        hasPreciseScrollingDeltas: Bool = true,
+        hasScrollPhase: Bool = true,
+        isMomentum: Bool = false,
+        timestamp: TimeInterval
+    ) -> Bool {
+        handleBookScroll(
+            deltaX: deltaX,
+            deltaY: deltaY,
+            hasPreciseScrollingDeltas: hasPreciseScrollingDeltas,
+            hasScrollPhase: hasScrollPhase,
+            isMomentum: isMomentum,
+            timestamp: timestamp
+        )
+    }
+
+    func testingInterruptContinuousBookScrollInput() {
+        resetBookPageTurnInput()
+    }
+
+    func testingResetBookScrollGesture() {
+        resetBookPageTurnState()
+    }
+
+    func testingPositionBelongsToCurrentSpread(
+        positionPageIndex: Int,
+        currentPageIndex: Int
+    ) -> Bool {
+        guard let session = targetSession(), let document = pdfView.document else { return false }
+        return positionBelongsToCurrentSpread(
+            ReadingPosition(pageIndex: positionPageIndex, point: .zero),
+            currentPageIndex: currentPageIndex,
+            session: session,
+            document: document
+        )
     }
 }
 

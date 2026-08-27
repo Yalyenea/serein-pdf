@@ -291,7 +291,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @discardableResult
     func toggleHorizontalPanLock() -> Bool {
-        guard documentStore.activeSession(in: windowID)?.isBlank == false else {
+        guard let session = documentStore.activeSession(in: windowID),
+              session.isBlank == false,
+              session.displayMode.usesBookLayout == false else {
             return isHorizontalPanLocked
         }
         return splitViewController.readerWorkspaceViewController.toggleHorizontalPanLock()

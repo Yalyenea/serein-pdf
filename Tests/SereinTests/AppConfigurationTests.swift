@@ -18,6 +18,10 @@ final class AppConfigurationTests: XCTestCase {
                 configuration.shortcuts.bindings[.copyCurrentPageAsImage],
                 KeyboardShortcut(key: "c", modifiers: [.command, .option])
             )
+            XCTAssertEqual(
+                configuration.shortcuts.bindings[.toggleDisplayModeContinuity],
+                KeyboardShortcut(key: "c", modifiers: [])
+            )
             XCTAssertTrue(configuration.integrations.codexEnabled)
             XCTAssertEqual(
                 configuration.shortcuts.bindings[.sendContextToCodex],
@@ -82,6 +86,8 @@ fit_width = "command+shift+9"
 fit_height = "command+shift+8"
 previous_tab = "command+["
 two_up = "command+option+8"
+book = "command+option+5"
+book_continuous = "command+option+6"
 half_page_down = "control+f"
 go_to_last_page = "shift+l"
 find_previous_match = "shift+n"
@@ -144,6 +150,8 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "8", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.previousTab], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.twoUp], KeyboardShortcut(key: "8", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.book], KeyboardShortcut(key: "5", modifiers: [.command, .option]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.bookContinuous], KeyboardShortcut(key: "6", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.halfPageDown], KeyboardShortcut(key: "f", modifiers: [.control]))
         XCTAssertEqual(configuration.shortcuts.bindings[.goToLastPage], KeyboardShortcut(key: "l", modifiers: [.shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "n", modifiers: [.shift]))
@@ -247,6 +255,41 @@ fit_width = "command+9"
             XCTAssertTrue(content.contains("highlight_selection = \"a\""))
             XCTAssertTrue(content.contains("new_blank_tab = \"command+t\""))
             XCTAssertTrue(content.contains("sidebar_opacity = 0.48"))
+        }
+    }
+
+    func testMissingBookShortcutIsNotHiddenByLongerKeys() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            try AppConfigurationFile.defaultContents
+                .replacingOccurrences(of: "book = \"none\"\n", with: "")
+                .write(to: fileURL, atomically: true, encoding: .utf8)
+
+            let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+
+            XCTAssertNil(configuration.shortcuts.bindings[.book])
+            XCTAssertTrue(content.contains("book = \"none\""))
+            XCTAssertTrue(content.contains("book_continuous = \"none\""))
+            XCTAssertTrue(content.contains("root_bookmarks = []"))
+        }
+    }
+
+    func testNewContinuityShortcutDoesNotOverrideExistingPlainCBinding() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            try AppConfigurationFile.defaultContents
+                .replacingOccurrences(of: "book = \"none\"", with: "book = \"c\"")
+                .replacingOccurrences(of: "toggle_display_mode_continuity = \"c\"\n", with: "")
+                .write(to: fileURL, atomically: true, encoding: .utf8)
+
+            let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+
+            XCTAssertEqual(
+                configuration.shortcuts.bindings[.book],
+                KeyboardShortcut(key: "c", modifiers: [])
+            )
+            XCTAssertNil(configuration.shortcuts.bindings[.toggleDisplayModeContinuity])
         }
     }
 
@@ -495,7 +538,7 @@ fit_width = "command+9"
         configuration.appearance.mode = .dark
         configuration.appearance.lightTheme = .rosePineDawn
         configuration.appearance.darkTheme = .normal
-        configuration.reader.defaultDisplayMode = .twoUpContinuous
+        configuration.reader.defaultDisplayMode = .bookContinuous
         configuration.reader.fitWidthOnOpen = true
         configuration.reader.readingFocus = ReadingFocusSettings(
             widthMode: .custom,
@@ -522,7 +565,7 @@ fit_width = "command+9"
         XCTAssertEqual(reloadedConfiguration.appearance.mode, .dark)
         XCTAssertEqual(reloadedConfiguration.appearance.lightTheme, .rosePineDawn)
         XCTAssertEqual(reloadedConfiguration.appearance.darkTheme, .normal)
-        XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .twoUpContinuous)
+        XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .bookContinuous)
         XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.widthMode, .custom)
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.customWidthRatio, 0.58, accuracy: 0.001)
@@ -535,7 +578,7 @@ fit_width = "command+9"
         XCTAssertTrue(persistedContent.contains("mode = \"dark\""))
         XCTAssertTrue(persistedContent.contains("light_theme = \"rose_pine_dawn\""))
         XCTAssertTrue(persistedContent.contains("dark_theme = \"normal\""))
-        XCTAssertTrue(persistedContent.contains("default_display_mode = \"two_up_continuous\""))
+        XCTAssertTrue(persistedContent.contains("default_display_mode = \"book_continuous\""))
         XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
         XCTAssertTrue(persistedContent.contains("reading_focus_width = \"custom\""))
         XCTAssertTrue(persistedContent.contains("reading_focus_custom_width = 0.58"))

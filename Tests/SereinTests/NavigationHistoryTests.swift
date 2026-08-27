@@ -496,7 +496,7 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertTrue(primary.canGoForward)
     }
 
-    func testDisplayModeSwitchesRestoreExactAnchorInAllFourModes() throws {
+    func testDisplayModeSwitchesRestoreExactAnchorInAllModes() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(
             documentAt: TestPDFFixtures.makeBlankPDF(
@@ -523,19 +523,81 @@ final class NavigationHistoryTests: XCTestCase {
             store.setDisplayMode(mode, for: session.id)
             reader.view.layoutSubtreeIfNeeded()
             XCTAssertEqual(reader.pdfView.displayMode, mode.pdfDisplayMode)
+            XCTAssertEqual(reader.pdfView.displayDirection, mode.displayDirection)
+            XCTAssertEqual(reader.pdfView.displaysAsBook, mode.displaysAsBook)
             XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, anchor)
             let live = try XCTUnwrap(reader.testingCurrentReadingPosition)
-            XCTAssertEqual(live.pageIndex, anchor.pageIndex)
-            XCTAssertEqual(live.point.x, anchor.point.x, accuracy: 8)
-            XCTAssertEqual(live.point.y, anchor.point.y, accuracy: 16)
+            if mode.usesBookLayout {
+                XCTAssertEqual(live.pageIndex, 1, "page 2 is the right page of book spread 1/2")
+            } else {
+                XCTAssertEqual(live.pageIndex, anchor.pageIndex)
+                XCTAssertEqual(live.point.x, anchor.point.x, accuracy: 8)
+                XCTAssertEqual(live.point.y, anchor.point.y, accuracy: 16)
+            }
             XCTAssertEqual(reader.testingNavigationBackPositions.count, historyCount)
         }
     }
 
-    func testTwoUpTurnsNormalizeOddAndEvenSpreadBoundaries() throws {
+    func testBookTurnsUseCoverThenOddSpreadLeads() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(
             documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-two-up-spreads", pageCount: 6)
+        )
+        store.setDisplayMode(.book, for: session.id)
+        let reader = makeReader(store: store, sessionID: session.id)
+
+        XCTAssertTrue(reader.goToNextPage())
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+        XCTAssertTrue(reader.goToNextPage())
+        XCTAssertEqual(storePageIndex(store, session.id), 3)
+        XCTAssertTrue(reader.goToNextPage())
+        XCTAssertEqual(storePageIndex(store, session.id), 5)
+        XCTAssertFalse(reader.goToNextPage(), "six-page book ends with page index 5 alone")
+        XCTAssertTrue(reader.goToPreviousPage())
+        XCTAssertEqual(storePageIndex(store, session.id), 4)
+        XCTAssertTrue(reader.goToPreviousPage())
+        XCTAssertEqual(storePageIndex(store, session.id), 2)
+        XCTAssertTrue(reader.goToPreviousPage())
+        XCTAssertEqual(storePageIndex(store, session.id), 0)
+        XCTAssertFalse(reader.goToPreviousPage())
+        XCTAssertTrue(reader.testingNavigationBackPageIndices.isEmpty)
+
+        let odd = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-two-up-spreads-odd", pageCount: 5)
+        )
+        store.setDisplayMode(.book, for: odd.id)
+        reader.targetSessionID = odd.id
+        reader.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(reader.goToPage(3))
+        XCTAssertFalse(reader.goToNextPage(), "five-page book ends with spread 3/4")
+    }
+
+    func testBookTrailingPagePositionBelongsToCurrentSpread() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-book-trailing-anchor", pageCount: 6)
+        )
+        store.setDisplayMode(.book, for: session.id)
+        let reader = makeReader(store: store, sessionID: session.id)
+
+        XCTAssertTrue(
+            reader.testingPositionBelongsToCurrentSpread(
+                positionPageIndex: 2,
+                currentPageIndex: 1
+            )
+        )
+        XCTAssertFalse(
+            reader.testingPositionBelongsToCurrentSpread(
+                positionPageIndex: 3,
+                currentPageIndex: 1
+            )
+        )
+    }
+
+    func testTwoUpKeepsOriginalEvenSpreadLeads() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-two-up-original", pageCount: 6)
         )
         store.setDisplayMode(.twoUp, for: session.id)
         let reader = makeReader(store: store, sessionID: session.id)
@@ -545,21 +607,291 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(storePageIndex(store, session.id), 2)
         XCTAssertTrue(reader.goToNextPage())
         XCTAssertEqual(storePageIndex(store, session.id), 4)
-        XCTAssertFalse(reader.goToNextPage(), "last even spread starts at page index 4")
+        XCTAssertFalse(reader.goToNextPage())
         XCTAssertTrue(reader.goToPreviousPage())
         XCTAssertEqual(storePageIndex(store, session.id), 2)
-        XCTAssertEqual(reader.testingNavigationBackPageIndices, [0])
+    }
 
-        let odd = try store.open(
-            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-two-up-spreads-odd", pageCount: 5)
+    func testContinuousBookHorizontalScrollTurnsOneSpreadAfterThreshold() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-book-scroll", pageCount: 6)
         )
-        store.setDisplayMode(.twoUp, for: odd.id)
-        reader.targetSessionID = odd.id
+        store.setDisplayMode(.bookContinuous, for: session.id)
+        let reader = makeReader(store: store, sessionID: session.id)
+        reader.fitToWidth()
         reader.view.layoutSubtreeIfNeeded()
-        XCTAssertTrue(reader.goToPage(3))
+
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -24, timestamp: 1.0))
+        XCTAssertEqual(storePageIndex(store, session.id), 0)
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -25, timestamp: 1.05))
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: 2, deltaY: 30, timestamp: 1.1))
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 1.15))
+        XCTAssertEqual(storePageIndex(store, session.id), 1, "axis jitter must not clear the page-turn cooldown")
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 1.3))
+        XCTAssertEqual(storePageIndex(store, session.id), 3)
+
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -24, timestamp: 1.4))
+        reader.testingInterruptContinuousBookScrollInput()
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -25, timestamp: 1.45))
+        XCTAssertEqual(storePageIndex(store, session.id), 3)
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -24, timestamp: 1.5))
+        XCTAssertEqual(storePageIndex(store, session.id), 5, "modifier interruption must discard the pending delta")
+
+        store.setDisplayMode(.book, for: session.id)
+        reader.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 2.0))
+        XCTAssertEqual(storePageIndex(store, session.id), 5)
+    }
+
+    func testBookHorizontalScrollTurnsOncePerGesture() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-book-single-turn", pageCount: 8)
+        )
+        store.setDisplayMode(.book, for: session.id)
+        let reader = makeReader(store: store, sessionID: session.id)
+        reader.fitToWidth()
+        reader.view.layoutSubtreeIfNeeded()
+
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -24, timestamp: 1.0))
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -25, timestamp: 1.05))
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 1.1))
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+
+        reader.testingResetBookScrollGesture()
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 2.0))
+        XCTAssertEqual(storePageIndex(store, session.id), 3)
+
+        reader.testingResetBookScrollGesture()
+        XCTAssertTrue(
+            reader.testingHandleContinuousBookScroll(
+                deltaX: -1,
+                hasPreciseScrollingDeltas: false,
+                hasScrollPhase: false,
+                timestamp: 3.0
+            )
+        )
+        XCTAssertEqual(storePageIndex(store, session.id), 5)
+        XCTAssertTrue(
+            reader.testingHandleContinuousBookScroll(
+                deltaX: -1,
+                hasPreciseScrollingDeltas: false,
+                hasScrollPhase: false,
+                timestamp: 3.05
+            )
+        )
+        XCTAssertEqual(storePageIndex(store, session.id), 7)
+
+        XCTAssertTrue(reader.goToPage(0))
+        reader.testingResetBookScrollGesture()
+        XCTAssertFalse(
+            reader.testingHandleContinuousBookScroll(
+                deltaX: 0,
+                deltaY: 1,
+                hasPreciseScrollingDeltas: false,
+                hasScrollPhase: false,
+                timestamp: 4.0
+            )
+        )
+        XCTAssertTrue(
+            reader.testingHandleContinuousBookScroll(
+                deltaX: -1,
+                hasPreciseScrollingDeltas: false,
+                hasScrollPhase: false,
+                timestamp: 4.05
+            )
+        )
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+    }
+
+    func testContinuousBookMomentumCompletesOneTurnWithoutSkipping() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-book-momentum", pageCount: 6)
+        )
+        store.setDisplayMode(.bookContinuous, for: session.id)
+        let reader = makeReader(store: store, sessionID: session.id)
+        reader.fitToWidth()
+        reader.view.layoutSubtreeIfNeeded()
+
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -20, timestamp: 1.0))
+        XCTAssertTrue(
+            reader.testingHandleContinuousBookScroll(
+                deltaX: -30,
+                isMomentum: true,
+                timestamp: 1.05
+            )
+        )
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+        XCTAssertTrue(
+            reader.testingHandleContinuousBookScroll(
+                deltaX: -80,
+                isMomentum: true,
+                timestamp: 1.1
+            )
+        )
+        XCTAssertEqual(storePageIndex(store, session.id), 1)
+    }
+
+    func testContinuousBookScrollUsesWorkspaceBoundaryRouting() throws {
+        let store = makeIsolatedDocumentStore()
+        let sessions = try store.open(
+            documentsAt: [
+                TestPDFFixtures.makeBlankPDF(named: "nav-book-group-first", pageCount: 3),
+                TestPDFFixtures.makeBlankPDF(named: "nav-book-group-second", pageCount: 2),
+            ],
+            in: store.defaultWindowID
+        )
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        store.setDisplayMode(.bookContinuous, for: sessions[0].id)
+        store.setDisplayMode(.singlePageContinuous, for: sessions[1].id)
+        store.activate(sessionID: sessions[0].id, in: store.defaultWindowID)
+        let workspace = makeWorkspace(store: store)
+        let reader = workspace.primaryReaderViewController
+        reader.fitToWidth()
+        XCTAssertTrue(reader.goToPage(1))
+
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 1.0))
+        XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), sessions[1].id)
+        XCTAssertEqual(storePageIndex(store, sessions[1].id), 0)
+        XCTAssertTrue(
+            reader.testingHandleContinuousBookScroll(
+                deltaX: -80,
+                isMomentum: true,
+                timestamp: 1.05
+            )
+        )
+        XCTAssertEqual(storePageIndex(store, sessions[1].id), 0)
+    }
+
+    func testContinuousBookBoundaryKeepsOtherPanePositionAndAcceptsCloneSource() throws {
+        let store = makeIsolatedDocumentStore()
+        let sessions = try store.open(
+            documentsAt: [
+                TestPDFFixtures.makeBlankPDF(named: "nav-book-split-first", pageCount: 3),
+                TestPDFFixtures.makeBlankPDF(named: "nav-book-split-second", pageCount: 4),
+            ],
+            in: store.defaultWindowID
+        )
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        for session in sessions {
+            store.setDisplayMode(.bookContinuous, for: session.id)
+        }
+        store.setSplitEnabled(true, in: store.defaultWindowID)
+        store.activate(sessionID: sessions[1].id, in: store.defaultWindowID, targetPane: .primary)
+        let preservedPrimaryPosition = ReadingPosition(pageIndex: 2, point: NSPoint(x: 12, y: 34))
+        store.updateReadingPosition(
+            preservedPrimaryPosition,
+            scaleFactor: sessions[1].zoomScale,
+            for: sessions[1].id
+        )
+        store.activate(sessionID: sessions[0].id, in: store.defaultWindowID, targetPane: .secondary)
+        store.setFocusedPane(.secondary, in: store.defaultWindowID)
+
+        let workspace = makeWorkspace(store: store)
+        let reader = workspace.secondaryReaderViewController
+        reader.fitToWidth()
+        XCTAssertTrue(reader.goToPage(1))
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 1.0))
+
+        let comparisonID = try XCTUnwrap(
+            store.displayedSessionID(for: .secondary, in: store.defaultWindowID)
+        )
+        XCTAssertNotEqual(comparisonID, sessions[1].id)
+        XCTAssertEqual(
+            store.publicSessionID(forDisplayedSessionID: comparisonID, in: store.defaultWindowID),
+            sessions[1].id
+        )
+        XCTAssertEqual(store.session(for: sessions[1].id)?.lastReadPosition, preservedPrimaryPosition)
+        XCTAssertEqual(storePageIndex(store, comparisonID), 0)
+        XCTAssertEqual(store.sessions.count, 3)
+
+        reader.testingResetBookScrollGesture()
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: 60, timestamp: 2.0))
+        XCTAssertEqual(
+            store.displayedSessionID(for: .secondary, in: store.defaultWindowID),
+            sessions[0].id
+        )
+        XCTAssertEqual(storePageIndex(store, sessions[0].id), 2)
+        XCTAssertEqual(store.sessions.count, 2)
+
+        reader.testingResetBookScrollGesture()
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 3.0))
+        XCTAssertEqual(store.sessions.count, 3)
+        reader.testingResetBookScrollGesture()
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: 60, timestamp: 4.0))
+        XCTAssertEqual(store.sessions.count, 2)
+    }
+
+    func testBookBoundaryKeepsGenericPreviousTargetForNonBookDocument() throws {
+        let store = makeIsolatedDocumentStore()
+        let sessions = try store.open(
+            documentsAt: [
+                TestPDFFixtures.makeBlankPDF(named: "nav-book-mixed-first", pageCount: 5),
+                TestPDFFixtures.makeBlankPDF(named: "nav-book-mixed-second", pageCount: 3),
+            ],
+            in: store.defaultWindowID
+        )
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        store.setDisplayMode(.singlePageContinuous, for: sessions[0].id)
+        store.setDisplayMode(.bookContinuous, for: sessions[1].id)
+        store.activate(sessionID: sessions[1].id, in: store.defaultWindowID)
+
+        let workspace = makeWorkspace(store: store)
+        let reader = workspace.primaryReaderViewController
+        reader.fitToWidth()
+        XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: 60, timestamp: 1.0))
+
+        let targetDocument = try store.pdfDocument(for: sessions[0].id)
+        let targetPage = try XCTUnwrap(targetDocument.page(at: 4))
+        let targetPosition = try XCTUnwrap(store.session(for: sessions[0].id)?.lastReadPosition)
+        XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), sessions[0].id)
+        XCTAssertEqual(targetPosition.pageIndex, 4)
+        XCTAssertEqual(
+            targetPosition.point.y,
+            targetPage.bounds(for: .cropBox).minY,
+            accuracy: 0.01
+        )
+    }
+
+    func testBookFitWidthKeepsCoverAndUnpairedPageScaleStable() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(
+                named: "nav-book-fit-width",
+                pageCount: 4,
+                pageSize: NSSize(width: 500, height: 700)
+            )
+        )
+        store.setDisplayMode(.book, for: session.id)
+        let reader = makeReader(
+            store: store,
+            sessionID: session.id,
+            frame: NSRect(x: 0, y: 0, width: 800, height: 700)
+        )
+        reader.fitToWidth()
+        reader.view.layoutSubtreeIfNeeded()
+        let coverScale = reader.pdfView.scaleFactor
+
         XCTAssertTrue(reader.goToNextPage())
-        XCTAssertEqual(storePageIndex(store, odd.id), 4)
-        XCTAssertFalse(reader.goToNextPage(), "five-page document ends at lead index 4")
+        reader.view.layoutSubtreeIfNeeded()
+        let spreadScale = reader.pdfView.scaleFactor
+        XCTAssertEqual(spreadScale, coverScale, accuracy: 0.02)
+
+        XCTAssertTrue(reader.goToNextPage())
+        reader.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(reader.pdfView.scaleFactor, coverScale, accuracy: 0.02)
+
+        XCTAssertTrue(reader.goToPreviousPage())
+        reader.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(reader.pdfView.scaleFactor, coverScale, accuracy: 0.02)
+        XCTAssertTrue(reader.goToPreviousPage())
+        reader.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(reader.pdfView.scaleFactor, coverScale, accuracy: 0.02)
     }
 
     func testGoToLastPageUsesActualDocumentBottom() throws {

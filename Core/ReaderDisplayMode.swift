@@ -6,6 +6,8 @@ enum ReaderDisplayMode: String, CaseIterable, Codable, Sendable {
     case singlePageContinuous = "single_page_continuous"
     case twoUp = "two_up"
     case twoUpContinuous = "two_up_continuous"
+    case book = "book"
+    case bookContinuous = "book_continuous"
 
     var pdfDisplayMode: PDFDisplayMode {
         switch self {
@@ -17,6 +19,8 @@ enum ReaderDisplayMode: String, CaseIterable, Codable, Sendable {
             .twoUp
         case .twoUpContinuous:
             .twoUpContinuous
+        case .book, .bookContinuous:
+            .twoUp
         }
     }
 
@@ -30,6 +34,10 @@ enum ReaderDisplayMode: String, CaseIterable, Codable, Sendable {
             "Two-Up"
         case .twoUpContinuous:
             "Two-Up Continuous"
+        case .book:
+            "Book"
+        case .bookContinuous:
+            "Book · Continuous Turn"
         }
     }
 
@@ -37,8 +45,41 @@ enum ReaderDisplayMode: String, CaseIterable, Codable, Sendable {
         switch self {
         case .singlePage, .singlePageContinuous:
             false
-        case .twoUp, .twoUpContinuous:
+        case .twoUp, .twoUpContinuous, .book, .bookContinuous:
             true
+        }
+    }
+
+    var usesBookLayout: Bool {
+        self == .book || self == .bookContinuous
+    }
+
+    var displayDirection: PDFDisplayDirection {
+        usesBookLayout ? .horizontal : .vertical
+    }
+
+    var displaysAsBook: Bool {
+        usesBookLayout
+    }
+
+    var allowsContinuousBookPageTurn: Bool {
+        self == .bookContinuous
+    }
+
+    var toggledContinuity: ReaderDisplayMode {
+        switch self {
+        case .singlePage:
+            .singlePageContinuous
+        case .singlePageContinuous:
+            .singlePage
+        case .twoUp:
+            .twoUpContinuous
+        case .twoUpContinuous:
+            .twoUp
+        case .book:
+            .bookContinuous
+        case .bookContinuous:
+            .book
         }
     }
 }
@@ -94,6 +135,9 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case singlePageContinuous = "single_page_continuous"
     case twoUp = "two_up"
     case twoUpContinuous = "two_up_continuous"
+    case book = "book"
+    case bookContinuous = "book_continuous"
+    case toggleDisplayModeContinuity = "toggle_display_mode_continuity"
     case pageDown = "page_down"
     case pageUp = "page_up"
     case halfPageDown = "half_page_down"
@@ -212,6 +256,12 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             ReaderDisplayMode.twoUp.menuTitle
         case .twoUpContinuous:
             ReaderDisplayMode.twoUpContinuous.menuTitle
+        case .book:
+            ReaderDisplayMode.book.menuTitle
+        case .bookContinuous:
+            ReaderDisplayMode.bookContinuous.menuTitle
+        case .toggleDisplayModeContinuity:
+            "Toggle Current Layout Continuity"
         case .pageDown:
             "Next Page"
         case .pageUp:
@@ -279,6 +329,10 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             .twoUp
         case .twoUpContinuous:
             .twoUpContinuous
+        case .book:
+            .book
+        case .bookContinuous:
+            .bookContinuous
         default:
             nil
         }

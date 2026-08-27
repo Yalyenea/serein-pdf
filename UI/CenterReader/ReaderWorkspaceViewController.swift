@@ -107,6 +107,12 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             guard let self else { return }
             self.documentStore.setFocusedPane(.secondary, in: self.windowID)
         }
+        primaryReaderViewController.onBookPageBoundaryRequested = { [weak self] direction in
+            self?.turnBookPageAcrossBoundary(direction: direction, in: .primary) ?? false
+        }
+        secondaryReaderViewController.onBookPageBoundaryRequested = { [weak self] direction in
+            self?.turnBookPageAcrossBoundary(direction: direction, in: .secondary) ?? false
+        }
         primaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
             guard let self else { return nil }
             return self.activateHistorySession(sessionID, in: .primary)
@@ -264,15 +270,11 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     }
 
     func goToNextPage() {
-        let reader = activeReaderViewController()
-        guard reader.goToNextPage() == false else { return }
-        goToContinuousReadingBoundary(direction: 1)
+        _ = turnActivePage(direction: 1)
     }
 
     func goToPreviousPage() {
-        let reader = activeReaderViewController()
-        guard reader.goToPreviousPage() == false else { return }
-        goToContinuousReadingBoundary(direction: -1)
+        _ = turnActivePage(direction: -1)
     }
 
     func scrollHalfPageDown() {
@@ -336,20 +338,59 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         return reader.go(to: position, recordHistory: sameSession)
     }
 
-    private func goToContinuousReadingBoundary(direction: Int) {
-        let focusedPane = documentStore.focusedPane(in: windowID)
-        guard let sessionID = documentStore.displayedSessionID(for: focusedPane, in: windowID),
-              let target = documentStore.continuousReadingTarget(from: sessionID, direction: direction, in: windowID) else {
-            return
-        }
-        guard let targetSession = documentStore.session(for: target.sessionID) else { return }
-        documentStore.updateReadingPosition(
-            target.readingPosition,
-            scaleFactor: targetSession.zoomScale,
-            for: target.sessionID
+    @discardableResult
+    private func turnBookPageAcrossBoundary(direction: Int, in pane: ReaderPane) -> Bool {
+        documentStore.setFocusedPane(pane, in: windowID)
+        return goToContinuousReadingBoundary(direction: direction, usesBookPageTurn: true)
+    }
+
+    @discardableResult
+    private func turnActivePage(direction: Int) -> Bool {
+        let reader = activeReaderViewController()
+        let didTurn = direction > 0 ? reader.goToNextPage() : reader.goToPreviousPage()
+        return didTurn || goToContinuousReadingBoundary(
+            direction: direction,
+            usesBookPageTurn: reader.usesBookLayout
         )
+    }
+
+    @discardableResult
+    private func goToContinuousReadingBoundary(
+        direction: Int,
+        usesBookPageTurn: Bool = false
+    ) -> Bool {
+        let focusedPane = documentStore.focusedPane(in: windowID)
+        guard let displayedSessionID = documentStore.displayedSessionID(for: focusedPane, in: windowID),
+              let sourceSessionID = documentStore.publicSessionID(
+                forDisplayedSessionID: displayedSessionID,
+                in: windowID
+              ),
+              var target = documentStore.continuousReadingTarget(
+                from: sourceSessionID,
+                direction: direction,
+                in: windowID
+              ) else {
+            return false
+        }
+
+        if usesBookPageTurn, direction < 0,
+           documentStore.session(for: target.sessionID)?.displayMode.usesBookLayout == true,
+           let document = try? documentStore.pdfDocument(for: target.sessionID),
+           document.pageCount > 0,
+           let page = document.page(at: document.pageCount - 1) {
+            let lastPageIndex = document.pageCount - 1
+            let bounds = page.bounds(for: .cropBox)
+            target.readingPosition = ReadingPosition(
+                pageIndex: lastPageIndex,
+                point: NSPoint(x: bounds.maxX, y: bounds.maxY)
+            )
+        }
         let targetPane = documentStore.isSplitEnabled(in: windowID) ? focusedPane : nil
-        documentStore.activate(sessionID: target.sessionID, in: windowID, targetPane: targetPane)
+        return documentStore.activateContinuousReadingTarget(
+            target,
+            in: windowID,
+            targetPane: targetPane
+        ) != nil
     }
 
     private func activateHistorySession(_ sessionID: UUID, in pane: ReaderPane) -> UUID? {
