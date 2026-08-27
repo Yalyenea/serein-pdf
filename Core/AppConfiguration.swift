@@ -1405,6 +1405,17 @@ struct AppConfigurationStore {
             }
             didMigrate = true
         }
+        for command: ShortcutCommand in [.underlineSelection, .strikethroughSelection]
+        where existingContent.contains(command.rawValue) == false {
+            guard let shortcut = configuration.shortcuts.bindings[command] else { continue }
+            let hasConflict = configuration.shortcuts.bindings.contains {
+                $0.key != command && $0.value == shortcut
+            }
+            if hasConflict {
+                configuration.shortcuts.bindings[command] = nil
+                didMigrate = true
+            }
+        }
 
         let missingKeys = requiredKeys.contains(where: { existingContent.contains($0) == false })
         guard missingKeys || didMigrate else { return }

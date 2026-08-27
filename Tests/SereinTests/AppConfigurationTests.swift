@@ -392,6 +392,29 @@ fit_width = "command+9"
         XCTAssertFalse(persistedContent.contains("send_current_page_to_codex"))
     }
 
+    func testBootstrapLeavesNewMarkupShortcutUnboundWhenLegacyBindingConflicts() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(of: "underline_selection = \"u\"\n", with: "")
+            .replacingOccurrences(of: "highlight_selection = \"a\"", with: "highlight_selection = \"u\"")
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(
+            configuration.shortcuts.bindings[.highlightSelection],
+            KeyboardShortcut(key: "u", modifiers: [])
+        )
+        XCTAssertNil(configuration.shortcuts.bindings[.underlineSelection])
+        XCTAssertTrue(persistedContent.contains("underline_selection = \"none\""))
+    }
+
     func testParseStringStripsInlineCommentsOutsideQuotes() throws {
         let parser = AppConfigurationParser()
         let configuration = try parser.parse("""
