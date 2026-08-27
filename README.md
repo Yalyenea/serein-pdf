@@ -15,7 +15,7 @@ site for showcase, download notes, and compact docs.
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
 - Right pane hosts **Outline + Pages + Search + Annotations**; Annotations is a full-height compact comment feed with inline editing and keyboard navigation, while Outline adds heading filtering, wrapped titles, no horizontal panning, and one-click tree expand/collapse
-- When the Outline pane is not active (right sidebar closed, or open on Pages / Search / Annotations), a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as an overlay, dragging either vertical edge resizes it symmetrically around its center, and PDFs without an outline show no rail
+- When the Outline pane is not active (right sidebar closed, or open on Pages / Search / Annotations), a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as a translucent, theme-tinted overlay sized to its content, long outlines scroll within the configured maximum height, dragging either vertical edge adjusts that limit symmetrically around its center, and PDFs without an outline show no rail
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`, match-case `Aa`, and whole-word `Word`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles continuity within the current Single Page, Two-Up, or Book layout, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, and `g` / `shift+g` jump to the real document edges; Book modes also accept `h` / `←` and `l` / `→` for previous / next spread; `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document Outline, Pages, link, Search, and annotation jumps, while internal links stay centered from their first activation
@@ -145,7 +145,7 @@ left_sidebar_max_width = 520
 right_sidebar_width = 320
 right_sidebar_min_width = 120
 right_sidebar_max_width = 720
-floating_outline_height = 360 # 180–720 pt; default expanded height
+floating_outline_height = 360 # 180–720 pt; maximum expanded height
 sidebars_swapped = false
 show_recent_files_in_sidebar = true
 sidebar_opacity = 0.48 # legacy compatibility; solid sidebars ignore this value

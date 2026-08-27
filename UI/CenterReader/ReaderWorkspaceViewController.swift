@@ -700,10 +700,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
               floatingOutlineWidthConstraint != nil,
               floatingOutlineHeightConstraint != nil else { return }
         let maximumWidth = max(view.bounds.width - 28, 28)
-        let maximumHeight = max(
-            view.bounds.height - 48,
-            AppConfiguration.Layout.minimumFloatingOutlineHeight
-        )
+        let maximumHeight = max(view.bounds.height - 48, 0)
         floatingOutlineViewController.setMaximumAvailableHeight(maximumHeight)
         let preferredSize = floatingOutlineViewController.preferredSize
         let width = min(preferredSize.width, maximumWidth)
