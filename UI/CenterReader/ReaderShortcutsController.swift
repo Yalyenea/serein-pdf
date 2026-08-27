@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 final class ReaderShortcutsController {
     typealias ShortcutHandler = @MainActor () -> Void
+    typealias BookPageTurnHandler = @MainActor (_ direction: Int, _ window: NSWindow) -> Bool
 
     private static let chordPrefix = KeyboardShortcut(key: "k", modifiers: [.command])
     private static let chordCommands: [(KeyboardShortcut, ShortcutCommand)] = [
@@ -14,9 +15,6 @@ final class ReaderShortcutsController {
         (KeyboardShortcut(key: "e", modifiers: [.command]), .shareDocument),
         (KeyboardShortcut(key: "m", modifiers: [.command]), .mergeAllWindows),
         (KeyboardShortcut(key: "n", modifiers: [.command]), .moveCurrentPDFToNewWindow),
-    ]
-    private static let supplementalPlainShortcuts: [(KeyboardShortcut, ShortcutCommand)] = [
-        (KeyboardShortcut(key: "c", modifiers: []), .singlePageContinuous),
     ]
     private static let highlightModeColorShortcuts: [(KeyboardShortcut, ShortcutCommand)] = [
         (KeyboardShortcut(key: "1", modifiers: []), .highlightColorPink),
@@ -30,20 +28,20 @@ final class ReaderShortcutsController {
 
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]
     private let handlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
-    private let supplementalHandlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
     private let isAnnotationModeEnabledProvider: @MainActor (NSWindow) -> Bool
+    private let bookPageTurnHandler: BookPageTurnHandler
     private var isWaitingForChordKey = false
 
     init(
         shortcutsProvider: @escaping @MainActor () -> [ShortcutCommand: KeyboardShortcut],
         handlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler],
-        supplementalHandlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler] = { [:] },
-        isAnnotationModeEnabledProvider: @escaping @MainActor (NSWindow) -> Bool = { _ in false }
+        isAnnotationModeEnabledProvider: @escaping @MainActor (NSWindow) -> Bool = { _ in false },
+        bookPageTurnHandler: @escaping BookPageTurnHandler = { _, _ in false }
     ) {
         self.shortcutsProvider = shortcutsProvider
         self.handlerProvider = handlerProvider
-        self.supplementalHandlerProvider = supplementalHandlerProvider
         self.isAnnotationModeEnabledProvider = isAnnotationModeEnabledProvider
+        self.bookPageTurnHandler = bookPageTurnHandler
     }
 
     func handleShortcutEvent(for event: NSEvent, in window: NSWindow) -> Bool {
@@ -58,6 +56,10 @@ final class ReaderShortcutsController {
             return false
         }
 
+        if handleBookPageTurnShortcut(for: event, in: window) {
+            return true
+        }
+
         if handleChord(for: event) {
             return true
         }
@@ -67,6 +69,22 @@ final class ReaderShortcutsController {
         }
 
         return handlePlainShortcut(for: event, in: window)
+    }
+
+    private func handleBookPageTurnShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
+        guard event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
+              let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+
+        let direction: Int
+        switch key {
+        case "h", "\u{F702}":
+            direction = -1
+        case "l", "\u{F703}":
+            direction = 1
+        default:
+            return false
+        }
+        return bookPageTurnHandler(direction, window)
     }
 
     private func handleWindowRoutedShortcut(for event: NSEvent) -> Bool {
@@ -104,18 +122,10 @@ final class ReaderShortcutsController {
 
         let shortcuts = shortcutsProvider()
         let handlers = handlerProvider()
-        let supplementalHandlers = supplementalHandlerProvider()
 
         for (command, shortcut) in shortcuts where shortcut.isPlainShortcut {
             guard shortcut.matches(event: event) else { continue }
             guard let handler = handlers[command] else { continue }
-            handler()
-            return true
-        }
-
-        for (shortcut, command) in Self.supplementalPlainShortcuts where shortcuts[command] != nil {
-            guard shortcut.matches(event: event),
-                  let handler = supplementalHandlers[command] ?? handlers[command] else { continue }
             handler()
             return true
         }

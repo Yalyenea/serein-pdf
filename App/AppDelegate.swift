@@ -120,14 +120,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             handlerProvider: { [weak self] in
                 self?.shortcutHandlerMap() ?? [:]
             },
-            supplementalHandlerProvider: { [weak self] in
-                self?.supplementalShortcutHandlerMap() ?? [:]
-            },
             isAnnotationModeEnabledProvider: { [weak self] window in
                 guard let self else { return false }
                 return self.mainWindowControllers.values.first {
                     $0.window === window
                 }?.isAnnotationModeEnabled == true
+            },
+            bookPageTurnHandler: { [weak self] direction, window in
+                guard let self,
+                      let entry = self.mainWindowControllers.first(where: { $0.value.window === window }),
+                      self.documentStore.activeSession(in: entry.key)?.displayMode.usesBookLayout == true else {
+                    return false
+                }
+                if direction < 0 {
+                    entry.value.goToPreviousPage()
+                } else {
+                    entry.value.goToNextPage()
+                }
+                return true
             }
         )
 
@@ -401,6 +411,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .singlePageContinuous: { [weak self] in self?.useSinglePageContinuous(nil) },
             .twoUp: { [weak self] in self?.useTwoUp(nil) },
             .twoUpContinuous: { [weak self] in self?.useTwoUpContinuous(nil) },
+            .book: { [weak self] in self?.useBook(nil) },
+            .bookContinuous: { [weak self] in self?.useBookContinuous(nil) },
+            .toggleDisplayModeContinuity: { [weak self] in self?.toggleDisplayModeContinuity(nil) },
             .pageDown: { [weak self] in self?.goToNextPageAction(nil) },
             .pageUp: { [weak self] in self?.goToPreviousPageAction(nil) },
             .halfPageDown: { [weak self] in self?.scrollHalfPageDownAction(nil) },
@@ -434,12 +447,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
         cachedShortcutHandlerMap = map
         return map
-    }
-
-    private func supplementalShortcutHandlerMap() -> [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] {
-        [
-            .singlePageContinuous: { [weak self] in self?.toggleSinglePageContinuous(nil) },
-        ]
     }
 
     private func makeWindowController(windowID: UUID) -> MainWindowController {
@@ -1032,6 +1039,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 command: .singlePageContinuous,
                 action: #selector(useSinglePageContinuous(_:))
             ),
+            .separator(),
             makeConfiguredMenuItem(
                 title: ReaderDisplayMode.twoUp.menuTitle,
                 command: .twoUp,
@@ -1041,6 +1049,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 title: ReaderDisplayMode.twoUpContinuous.menuTitle,
                 command: .twoUpContinuous,
                 action: #selector(useTwoUpContinuous(_:))
+            ),
+            .separator(),
+            makeConfiguredMenuItem(
+                title: ReaderDisplayMode.book.menuTitle,
+                command: .book,
+                action: #selector(useBook(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ReaderDisplayMode.bookContinuous.menuTitle,
+                command: .bookContinuous,
+                action: #selector(useBookContinuous(_:))
             ),
             .separator(),
             makeConfiguredMenuItem(
@@ -1719,10 +1738,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
-    private func toggleSinglePageContinuous(_ sender: Any?) {
+    private func toggleDisplayModeContinuity(_ sender: Any?) {
         guard let controller = mainWindowController,
               let sessionID = documentStore.activeSessionID(in: controller.windowID) else { return }
-        documentStore.toggleSinglePageContinuous(for: sessionID)
+        documentStore.toggleDisplayModeContinuity(for: sessionID)
     }
 
     @objc
@@ -1733,6 +1752,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func useTwoUpContinuous(_ sender: Any?) {
         setActiveReaderDisplayMode(.twoUpContinuous)
+    }
+
+    @objc
+    private func useBook(_ sender: Any?) {
+        setActiveReaderDisplayMode(.book)
+    }
+
+    @objc
+    private func useBookContinuous(_ sender: Any?) {
+        setActiveReaderDisplayMode(.bookContinuous)
     }
 
     @objc
@@ -2652,7 +2681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(toggleHorizontalPanLockAction(_:)):
             menuItem.state = controller?.isHorizontalPanLocked == true ? .on : .off
-            return activePDFSession != nil
+            return activePDFSession.map { $0.displayMode.usesBookLayout == false } == true
         case #selector(showReadingFocusControlsAction(_:)):
             return activePDFSession != nil
         case #selector(saveAnnotations(_:)):
@@ -2791,6 +2820,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(useTwoUpContinuous(_:)):
             menuItem.state = activePDFSession?.displayMode == .twoUpContinuous ? .on : .off
+            return activePDFSession != nil
+        case #selector(useBook(_:)):
+            menuItem.state = activePDFSession?.displayMode == .book ? .on : .off
+            return activePDFSession != nil
+        case #selector(useBookContinuous(_:)):
+            menuItem.state = activePDFSession?.displayMode == .bookContinuous ? .on : .off
             return activePDFSession != nil
         default:
             return true

@@ -255,6 +255,7 @@ struct AppConfiguration: Equatable, Sendable {
             .singlePageContinuous: KeyboardShortcut(key: "2", modifiers: [.command]),
             .twoUp: KeyboardShortcut(key: "3", modifiers: [.command]),
             .twoUpContinuous: KeyboardShortcut(key: "4", modifiers: [.command]),
+            .toggleDisplayModeContinuity: KeyboardShortcut(key: "c", modifiers: []),
             .pageDown: KeyboardShortcut(key: "j", modifiers: []),
             .pageUp: KeyboardShortcut(key: "k", modifiers: []),
             .halfPageDown: KeyboardShortcut(key: "d", modifiers: [.control]),
@@ -620,6 +621,9 @@ single_page = "command+1"
 single_page_continuous = "command+2"
 two_up = "command+3"
 two_up_continuous = "command+4"
+book = "none"
+book_continuous = "none"
+toggle_display_mode_continuity = "c"
 page_down = "j"
 page_up = "k"
 half_page_down = "control+d"
@@ -742,6 +746,9 @@ single_page = "\(serializedShortcut(.singlePage, configuration: configuration))"
 single_page_continuous = "\(serializedShortcut(.singlePageContinuous, configuration: configuration))"
 two_up = "\(serializedShortcut(.twoUp, configuration: configuration))"
 two_up_continuous = "\(serializedShortcut(.twoUpContinuous, configuration: configuration))"
+book = "\(serializedShortcut(.book, configuration: configuration))"
+book_continuous = "\(serializedShortcut(.bookContinuous, configuration: configuration))"
+toggle_display_mode_continuity = "\(serializedShortcut(.toggleDisplayModeContinuity, configuration: configuration))"
 page_down = "\(serializedShortcut(.pageDown, configuration: configuration))"
 page_up = "\(serializedShortcut(.pageUp, configuration: configuration))"
 half_page_down = "\(serializedShortcut(.halfPageDown, configuration: configuration))"
@@ -857,6 +864,9 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "single_page_continuous",
         "two_up",
         "two_up_continuous",
+        "book",
+        "book_continuous",
+        "toggle_display_mode_continuity",
         "zoom_in",
         "zoom_out",
         "page_down",
@@ -1130,6 +1140,12 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .twoUp, to: &configuration)
         case ("shortcuts", "two_up_continuous"):
             try applyShortcut(rawValue, command: .twoUpContinuous, to: &configuration)
+        case ("shortcuts", "book"):
+            try applyShortcut(rawValue, command: .book, to: &configuration)
+        case ("shortcuts", "book_continuous"):
+            try applyShortcut(rawValue, command: .bookContinuous, to: &configuration)
+        case ("shortcuts", "toggle_display_mode_continuity"):
+            try applyShortcut(rawValue, command: .toggleDisplayModeContinuity, to: &configuration)
         case ("shortcuts", "zoom_in"):
             try applyShortcut(rawValue, command: .zoomIn, to: &configuration)
         case ("shortcuts", "zoom_out"):
@@ -1353,6 +1369,11 @@ struct AppConfigurationStore {
 
         let existingContent = try String(contentsOf: fileURL, encoding: .utf8)
         let requiredKeys = AppConfigurationFile.requiredKeys
+        let existingAssignmentPaths = Self.tomlAssignmentPaths(in: existingContent)
+        let existingSections = Self.tomlSections(in: existingContent)
+        let hasShortcutKey: (String) -> Bool = {
+            existingAssignmentPaths.contains("shortcuts.\($0)")
+        }
 
         var configuration = try parser.parse(existingContent)
         let legacyRemoveHighlight = KeyboardShortcut(key: "d", modifiers: [.command, .shift])
@@ -1365,7 +1386,7 @@ struct AppConfigurationStore {
             configuration.shortcuts.bindings[.removeHighlight] = KeyboardShortcut(key: "d", modifiers: [])
             didMigrate = true
         }
-        if existingContent.contains("find_previous_match") == false,
+        if hasShortcutKey("find_previous_match") == false,
            configuration.shortcuts.bindings[.highlightColorGreen] == legacyGreenHighlight {
             configuration.shortcuts.bindings[.highlightColorGreen] =
                 AppConfiguration.default.shortcuts.bindings[.highlightColorGreen]
@@ -1384,7 +1405,7 @@ struct AppConfigurationStore {
                 ?? KeyboardShortcut(key: "tab", modifiers: [.control])
             didMigrate = true
         }
-        if existingContent.contains("copy_current_pdf_path") == false,
+        if hasShortcutKey("copy_current_pdf_path") == false,
            configuration.shortcuts.bindings[.toggleContinuousReading] == legacyContinuousReading {
             configuration.shortcuts.bindings[.copyCurrentPDFPath] =
                 AppConfiguration.default.shortcuts.bindings[.copyCurrentPDFPath]
@@ -1393,9 +1414,9 @@ struct AppConfigurationStore {
             didMigrate = true
         }
         let hasLegacyCodexShortcuts =
-            existingContent.contains("send_context_to_codex") == false &&
-            (existingContent.contains("send_selection_to_codex") ||
-                existingContent.contains("send_current_page_to_codex"))
+            hasShortcutKey("send_context_to_codex") == false &&
+            (hasShortcutKey("send_selection_to_codex") ||
+                hasShortcutKey("send_current_page_to_codex"))
         if hasLegacyCodexShortcuts {
             configuration.shortcuts.bindings[.sendContextToCodex] =
                 AppConfiguration.default.shortcuts.bindings[.sendContextToCodex]
@@ -1406,7 +1427,7 @@ struct AppConfigurationStore {
             didMigrate = true
         }
         for command: ShortcutCommand in [.underlineSelection, .strikethroughSelection]
-        where existingContent.contains(command.rawValue) == false {
+        where hasShortcutKey(command.rawValue) == false {
             guard let shortcut = configuration.shortcuts.bindings[command] else { continue }
             let hasConflict = configuration.shortcuts.bindings.contains {
                 $0.key != command && $0.value == shortcut
@@ -1417,10 +1438,58 @@ struct AppConfigurationStore {
             }
         }
 
-        let missingKeys = requiredKeys.contains(where: { existingContent.contains($0) == false })
+        if hasShortcutKey(ShortcutCommand.toggleDisplayModeContinuity.rawValue) == false,
+           let shortcut = configuration.shortcuts.bindings[.toggleDisplayModeContinuity] {
+            let hasConflict = configuration.shortcuts.bindings.contains {
+                $0.key != .toggleDisplayModeContinuity && $0.value == shortcut
+            }
+            if hasConflict {
+                configuration.shortcuts.bindings[.toggleDisplayModeContinuity] = nil
+                didMigrate = true
+            }
+        }
+
+        let requiredAssignmentKeys = Set(requiredKeys.filter { $0.hasPrefix("[") == false })
+        let requiredAssignmentPaths = Self.tomlAssignmentPaths(in: AppConfigurationFile.defaultContents)
+            .filter { path in
+                requiredAssignmentKeys.contains(path.split(separator: ".").last.map(String.init) ?? "")
+            }
+        let missingKeys = requiredKeys.contains { requiredKey in
+            requiredKey.hasPrefix("[")
+                && requiredKey.hasSuffix("]")
+                && existingSections.contains(String(requiredKey.dropFirst().dropLast())) == false
+        } || requiredAssignmentPaths.isSubset(of: existingAssignmentPaths) == false
         guard missingKeys || didMigrate else { return }
 
         try AppConfigurationFile.render(configuration).write(to: fileURL, atomically: true, encoding: .utf8)
+    }
+
+    private static func tomlAssignmentPaths(in content: String) -> Set<String> {
+        var section = ""
+        var paths = Set<String>()
+        for rawLine in content.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("["), let closingBracket = line.firstIndex(of: "]") {
+                section = String(line[line.index(after: line.startIndex)..<closingBracket])
+                continue
+            }
+            guard line.isEmpty == false,
+                  line.hasPrefix("#") == false,
+                  let separator = line.firstIndex(of: "=") else { continue }
+            let key = line[..<separator].trimmingCharacters(in: .whitespaces)
+            guard key.isEmpty == false else { continue }
+            paths.insert(section.isEmpty ? key : "\(section).\(key)")
+        }
+        return paths
+    }
+
+    private static func tomlSections(in content: String) -> Set<String> {
+        Set(content.split(whereSeparator: \.isNewline).compactMap { rawLine in
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix("["),
+                  let closingBracket = line.firstIndex(of: "]") else { return nil }
+            return String(line[line.index(after: line.startIndex)..<closingBracket])
+        })
     }
 
     static func defaultFileURL() -> URL {

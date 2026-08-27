@@ -1895,6 +1895,30 @@ struct WindowChromeTests {
     }
 
     @Test
+    func settingsWindowPublishesBookAsDefaultDisplayMode() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) { configuration in
+            publishedConfigurations.append(configuration)
+        }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let popUp = try #require(
+            findView(identifier: "defaultDisplayModePopUp", in: contentView) as? NSPopUpButton
+        )
+        let bookItem = try #require(
+            popUp.itemArray.first { ($0.representedObject as? String) == ReaderDisplayMode.book.rawValue }
+        )
+        popUp.select(bookItem)
+        let action = try #require(popUp.action)
+        let target = try #require(popUp.target)
+        NSApp.sendAction(action, to: target, from: popUp)
+
+        #expect(publishedConfigurations.last?.reader.defaultDisplayMode == .book)
+    }
+
+    @Test
     func settingsShortcutRowsFitCompactWindowWithoutHorizontalScrolling() throws {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         controller.showWindow(nil)
@@ -2609,6 +2633,87 @@ struct WindowChromeTests {
     }
 
     @Test
+    func bookFitWidthFitsActualSpreadWithinSafeInsetsAndTracksHeight() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "book-smart-fit-width",
+                pageSizes: Array(repeating: NSSize(width: 595, height: 842), count: 4)
+            )
+        )
+        store.setDisplayMode(.book, for: session.id)
+
+        let reader = ReaderViewController(documentStore: store)
+        reader.targetSessionID = session.id
+        reader.loadViewIfNeeded()
+        reader.view.frame = NSRect(x: 0, y: 0, width: 1450, height: 913)
+        reader.view.layoutSubtreeIfNeeded()
+        #expect(reader.goToNextPage())
+        reader.fitToWidth()
+        reader.view.layoutSubtreeIfNeeded()
+
+        guard let clipView = pdfClipView(in: reader.pdfView),
+              let leftPage = reader.pdfView.document?.page(at: 1),
+              let rightPage = reader.pdfView.document?.page(at: 2) else {
+            Issue.record("Failed to locate Book spread geometry")
+            return
+        }
+        let leftSize = leftPage.bounds(for: reader.pdfView.displayBox).size
+        let rightSize = rightPage.bounds(for: reader.pdfView.displayBox).size
+        let expectedScale = min(
+            (clipView.frame.width - 64) / (leftSize.width + rightSize.width + 14),
+            (clipView.frame.height - 48) / max(leftSize.height, rightSize.height)
+        )
+        #expect(abs(reader.pdfView.scaleFactor - expectedScale) < 0.02)
+        assertBookSpreadVerticallyCentered([leftPage, rightPage], in: reader.pdfView)
+
+        let initialScale = reader.pdfView.scaleFactor
+        reader.view.frame = NSRect(x: 0, y: 0, width: 1450, height: 700)
+        reader.view.layoutSubtreeIfNeeded()
+        let resizedExpectedScale = min(
+            (clipView.frame.width - 64) / (leftSize.width + rightSize.width + 14),
+            (clipView.frame.height - 48) / max(leftSize.height, rightSize.height)
+        )
+        #expect(reader.pdfView.scaleFactor < initialScale)
+        #expect(abs(reader.pdfView.scaleFactor - resizedExpectedScale) < 0.02)
+        assertBookSpreadVerticallyCentered([leftPage, rightPage], in: reader.pdfView)
+    }
+
+    @Test
+    func bookManualZoomOutStaysCenteredAfterPDFKitSettles() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(
+            documentAt: makeTemporaryPDF(
+                named: "book-manual-zoom-centering",
+                pageSizes: Array(repeating: NSSize(width: 595, height: 842), count: 4)
+            )
+        )
+        store.setDisplayMode(.book, for: session.id)
+        let window = try #require(controller.window)
+        flushLayout(window)
+
+        let splitController = try #require(window.contentViewController as? SplitViewController)
+        let reader = splitController.readerViewController
+        #expect(reader.goToNextPage())
+        reader.fitToWidth()
+        flushLayout(window)
+
+        let leftPage = try #require(reader.pdfView.document?.page(at: 1))
+        let rightPage = try #require(reader.pdfView.document?.page(at: 2))
+        reader.zoomOut()
+        reader.zoomOut()
+        flushLayout(window)
+        flushLayout(window)
+
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        assertBookSpreadVerticallyCentered([leftPage, rightPage], in: reader.pdfView)
+    }
+
+    @Test
     func fitHeightUsesPDFKitRowHeight() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
@@ -3287,6 +3392,30 @@ private struct DocumentCenterAxes: OptionSet {
 @MainActor
 private func assertSinglePageDocumentCentered(in pdfView: PDFView) {
     assertDocumentVisuallyCentered(in: pdfView, axes: .both)
+}
+
+@MainActor
+private func assertBookSpreadVerticallyCentered(_ pages: [PDFPage], in pdfView: PDFView) {
+    guard let clipView = pdfClipView(in: pdfView),
+          let boundsInClip = bookSpreadBoundsInClip(pages, pdfView: pdfView) else {
+        Issue.record("Failed to locate Book clip view or pages")
+        return
+    }
+    #expect(
+        abs(boundsInClip.midY - clipView.bounds.midY) < 1,
+        "Book spread center \(boundsInClip.midY), viewport center \(clipView.bounds.midY)"
+    )
+}
+
+@MainActor
+private func bookSpreadBoundsInClip(_ pages: [PDFPage], pdfView: PDFView) -> NSRect? {
+    guard let clipView = pdfClipView(in: pdfView),
+          let firstPage = pages.first else { return nil }
+    let firstBounds = pdfView.convert(firstPage.bounds(for: pdfView.displayBox), from: firstPage)
+    let spreadBounds = pages.dropFirst().reduce(firstBounds) { bounds, page in
+        bounds.union(pdfView.convert(page.bounds(for: pdfView.displayBox), from: page))
+    }
+    return clipView.convert(spreadBounds, from: pdfView)
 }
 
 /// Verifies the document is centered in the clip view, not only that

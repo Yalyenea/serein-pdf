@@ -534,6 +534,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         darkThemePopUp.action = #selector(handleGeneralControlChanged(_:))
 
         displayModePopUp.translatesAutoresizingMaskIntoConstraints = false
+        displayModePopUp.identifier = NSUserInterfaceItemIdentifier("defaultDisplayModePopUp")
         displayModePopUp.controlSize = .small
         displayModePopUp.target = self
         displayModePopUp.action = #selector(handleGeneralControlChanged(_:))

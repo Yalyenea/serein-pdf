@@ -15,7 +15,7 @@
 
 ### 2.1 V1 涵盖
 
-文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单·双页、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / `serein://open?file=…` 本地 PDF 深链 / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮、下划线与删除线 / 批注评论 / 删除批注 / 手动 & 自动保存 / 批注导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 批注撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单页·双页·书籍、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / `serein://open?file=…` 本地 PDF 深链 / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮、下划线与删除线 / 批注评论 / 删除批注 / 手动 & 自动保存 / 批注导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 批注撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
 
 ### 2.2 V1 明确不做
 
@@ -101,6 +101,7 @@ flowchart LR
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
+| 书籍阅读 | 新增 `book` / `bookContinuous`,与既有 `twoUp` / `twoUpContinuous` 并存;两个书籍状态复用横向 `PDFView.twoUp + displaysAsBook` 布局,封面单页,后续按左右 spread 配对;封面与末尾孤页保留空槽以稳定页面尺寸;Fit Width 按实际页面框与固定安全边距同时约束宽高,手动缩小后只要完整可见也保持双轴居中;Continuous Turn 允许持续手势逐 spread 翻页 |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
 | 空窗策略 | 无 session 时右栏(outline pane)自动折叠,中栏独占窗口;首开文档自动恢复右栏,除非空窗期间用户显式切换过可见性(显式操作让位);左栏常驻并托管 Recent 快捷入口 |
 | 右栏无文档态 | 无文档(无 session 或空白 tab)时隐藏 segmented 与各 mode 面板,只显示居中共享空态,模式机制与懒加载保持原样 |
@@ -161,7 +162,9 @@ flowchart LR
 **阅读**
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
-- 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4`:`singlePage` / `singlePageContinuous` / `twoUp` / `twoUpContinuous`;`C` 在 `singlePage` 与 `singlePageContinuous` 间切换
+- 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4` 保持 `Single Page` / `Single Page Continuous` / `Two-Up` / `Two-Up Continuous`;`Book` / `Book · Continuous Turn` 默认无快捷键,可从 View 菜单或 Settings 选择
+- `C` 在当前单页、双页或书籍布局内切换对应连续状态
+- 书籍模式以居中封面开场,之后显示稳定页面尺寸的左右双页;Fit Width 按实际 spread 尺寸保留水平 32pt / 垂直 24pt 安全边距并完整居中,手动缩小到完整可见时继续居中;普通状态每个横向手势翻一组,Continuous Turn 可在持续手势中逐组翻页;放大时先在 spread 内惯性平移,到边缘后翻页,翻页后的惯性不会连跳;`H` / `←` 与 `L` / `→` 分别翻到上一 / 下一 spread
 - `singlePage` 完整放下当前页时双轴居中并钳制空白区域滑动;放大到超出视口后仍允许页内平移
 - `L`:切换水平平移锁定(保持当前 X 位置并禁止左右滑动与捏合 / 快捷键缩放,竖直滚动与翻页不受影响;按焦点 pane)
 - `J` / `K`:下一页 / 上一页(文本输入上下文让路)
@@ -236,7 +239,7 @@ flowchart LR
 | `pageCount: Int?` | 激活或搜索后得到的页数元数据 |
 | live `PDFDocument` | 不存入 session,由 `DocumentStore` 按需加载并通过小容量 LRU 保留当前 / 分屏 / 最近文档 |
 | `currentPageIndex: Int` | 当前页 |
-| `displayMode` | 四种阅读模式 |
+| `displayMode` | 六种阅读模式：单页 / 单页连续 / 双页 / 双页连续 / 书籍 / 书籍连续翻页 |
 | `scaleMode` | `fitWidth` / `manual` |
 | `zoomScale: CGFloat` | 缩放比例 |
 | `lastReadPosition` | 页码 + 页内位置 |
@@ -421,7 +424,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 | 里程碑 | 状态 | 要点 |
 |---|---|---|
 | M1 MVP 骨架 | ✅ | 三栏、`DocumentStore`、tab 双模式、outline、会话恢复 |
-| M2 阅读体验 | ✅ | 四种阅读模式、适应宽度、搜索、最近文件、阅读位置持久化、快捷键系统 |
+| M2 阅读体验 | ✅ | 六种阅读模式、适应宽度、搜索、最近文件、阅读位置持久化、快捷键系统 |
 | M3 高亮批注 | ✅ | 选区 + 键盘 `a` 高亮、`D` 删除、手动 / 自动保存、默认粉色 |
 | M4 夜间与打磨 | ✅ | `ThemeManager`、反色夜间、压缩标题栏、视觉减重 |
 | M5 设置与收口 | ✅ | 设置窗口(默认阅读模式 / fit-width / 自动保存策略);综合验收通过 |
@@ -465,7 +468,6 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 ### 8.5 工程债(摘要)
 
 - 中期:拆 `AppDelegate`;继续拆 `ReaderViewController` 的 scale / viewport / overview 与 `DocumentStore` 的 tab / annotation / persistence;config 表驱动
-- 产品候选:下划线 / 删除线批注
 
 ## 9. 风险
 

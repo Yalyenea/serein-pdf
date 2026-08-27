@@ -1246,20 +1246,30 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(readingStateStore.states[second.url]?.readingPosition.pageIndex, 6)
     }
 
-    func testToggleSinglePageContinuousDisplayMode() throws {
+    func testToggleDisplayModeContinuityPreservesPageLayout() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "toggle-single-page-continuous"))
 
         store.setDisplayMode(.singlePage, for: session.id)
-        store.toggleSinglePageContinuous(for: session.id)
+        store.toggleDisplayModeContinuity(for: session.id)
         XCTAssertEqual(store.session(for: session.id)?.displayMode, .singlePageContinuous)
 
-        store.toggleSinglePageContinuous(for: session.id)
+        store.toggleDisplayModeContinuity(for: session.id)
         XCTAssertEqual(store.session(for: session.id)?.displayMode, .singlePage)
 
-        store.setDisplayMode(.twoUpContinuous, for: session.id)
-        store.toggleSinglePageContinuous(for: session.id)
-        XCTAssertEqual(store.session(for: session.id)?.displayMode, .singlePageContinuous)
+        store.setDisplayMode(.twoUp, for: session.id)
+        store.toggleDisplayModeContinuity(for: session.id)
+        XCTAssertEqual(store.session(for: session.id)?.displayMode, .twoUpContinuous)
+
+        store.toggleDisplayModeContinuity(for: session.id)
+        XCTAssertEqual(store.session(for: session.id)?.displayMode, .twoUp)
+
+        store.setDisplayMode(.book, for: session.id)
+        store.toggleDisplayModeContinuity(for: session.id)
+        XCTAssertEqual(store.session(for: session.id)?.displayMode, .bookContinuous)
+
+        store.toggleDisplayModeContinuity(for: session.id)
+        XCTAssertEqual(store.session(for: session.id)?.displayMode, .book)
     }
 
     func testSaveAnnotationsWritesPDFAndClearsDirtyState() throws {
