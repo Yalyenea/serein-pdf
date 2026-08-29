@@ -174,7 +174,7 @@ final class FloatingOutlineViewController: NSViewController {
     private var isSuppressed = false
     private var isResizing = false
     private var userAdjustedHeight: CGFloat?
-    private var maximumAvailableHeight = AppConfiguration.Layout.maximumFloatingOutlineHeight
+    private var maximumAvailableHeight = CGFloat.greatestFiniteMagnitude
     private var lastReportedSize: NSSize?
 
     var preferredSizeDidChange: ((NSSize) -> Void)?
@@ -201,15 +201,11 @@ final class FloatingOutlineViewController: NSViewController {
     private var effectiveExpandedHeight: CGFloat {
         let configuredMaximumHeight = userAdjustedHeight
             ?? documentStore.appConfiguration.layout.floatingOutlineHeight
-        let availableMaximumHeight = min(
-            AppConfiguration.Layout.maximumFloatingOutlineHeight,
-            maximumAvailableHeight
-        )
         let configuredHeightLimit = max(
             configuredMaximumHeight,
             AppConfiguration.Layout.minimumFloatingOutlineHeight
         )
-        let heightLimit = min(configuredHeightLimit, availableMaximumHeight)
+        let heightLimit = min(configuredHeightLimit, maximumAvailableHeight)
         let outlineWidth = Self.expandedWidth - Self.panelContentInset * 2
         let naturalHeight = outlineViewController.preferredContentHeight(for: outlineWidth)
             + Self.panelContentInset * 2
@@ -461,16 +457,12 @@ final class FloatingOutlineViewController: NSViewController {
             ?? documentStore.appConfiguration.layout.floatingOutlineHeight
         let edgeDelta = edge == .top ? mouseDeltaY : -mouseDeltaY
         let heightDelta = edgeDelta * 2
-        let maximumHeight = min(
-            AppConfiguration.Layout.maximumFloatingOutlineHeight,
-            maximumAvailableHeight
-        )
         let nextHeight = min(
             max(
                 currentHeightLimit + heightDelta,
                 AppConfiguration.Layout.minimumFloatingOutlineHeight
             ),
-            max(maximumHeight, AppConfiguration.Layout.minimumFloatingOutlineHeight)
+            max(maximumAvailableHeight, AppConfiguration.Layout.minimumFloatingOutlineHeight)
         )
         let appliedDelta = nextHeight - currentHeightLimit
         guard abs(appliedDelta) > 0.01 else { return }
