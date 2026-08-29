@@ -27,9 +27,11 @@ jobs:
           xcodebuild -version
 
       - name: Test
-        run: swift test
+        run: swift test --no-parallel
 
       - name: Build .app
+        env:
+          SEREIN_CODESIGN_IDENTITY: "-"
         run: ./Scripts/make-app.sh build
 
       - name: Package DMG

@@ -112,7 +112,10 @@ final class ReaderAnnotationInteractionController: NSObject {
         onFocusRequested?()
         let hit = annotationHit(at: event.locationInWindow)
         contextGroup = hit?.group
-        let hasSelection = HighlightService.selectionContainsText(pdfView.currentSelection)
+        let selectedText = pdfView.currentSelection?.string
+            .map(PDFTextSanitizer.sanitize)
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let hasSelection = selectedText != nil
 
         let menu = NSMenu(title: "Reader")
         menu.autoenablesItems = false
@@ -167,14 +170,14 @@ final class ReaderAnnotationInteractionController: NSObject {
             )
         )
         if documentStore.appConfiguration.integrations.codexEnabled {
-            menu.addItem(
-                contextMenuItem(
-                    title: hasSelection ? "Send Selection to Codex" : "Send Page Image to Codex",
-                    command: .sendContextToCodex,
-                    action: #selector(sendContextToCodex(_:)),
-                    isEnabled: hasSelection || pdfView.currentPage != nil
-                )
+            let sendItem = contextMenuItem(
+                title: hasSelection ? "Send Selection to Codex" : "Send Page Image to Codex",
+                command: .sendContextToCodex,
+                action: #selector(sendContextToCodex(_:)),
+                isEnabled: hasSelection || pdfView.currentPage != nil
             )
+            sendItem.representedObject = selectedText
+            menu.addItem(sendItem)
         }
         return menu
     }
@@ -432,8 +435,7 @@ final class ReaderAnnotationInteractionController: NSObject {
 
     @objc
     private func sendContextToCodex(_ sender: Any?) {
-        if let text = pdfView.currentSelection?.string.map(PDFTextSanitizer.sanitize),
-           text.isEmpty == false {
+        if let text = (sender as? NSMenuItem)?.representedObject as? String {
             onSendSelectionToCodexRequested?(text)
             return
         }

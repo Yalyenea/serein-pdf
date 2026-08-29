@@ -757,18 +757,14 @@ final class AnnotationsViewControllerTests: XCTestCase {
             selectionMenu.item(withTitle: "Send Selection to Codex")
         )
 
-        XCTAssertTrue(
-            NSApp.sendAction(try XCTUnwrap(selectionItem.action), to: selectionItem.target, from: selectionItem)
-        )
+        selectionMenu.performActionForItem(at: selectionMenu.index(of: selectionItem))
         XCTAssertEqual(sentText, "selected text")
         XCTAssertNil(sentImage)
 
         reader.pdfView.currentSelection = nil
         let pageMenu = try XCTUnwrap(reader.pdfView.menu(for: makeRightClickEvent(in: reader.pdfView)))
         let pageItem = try XCTUnwrap(pageMenu.item(withTitle: "Send Page Image to Codex"))
-        XCTAssertTrue(
-            NSApp.sendAction(try XCTUnwrap(pageItem.action), to: pageItem.target, from: pageItem)
-        )
+        pageMenu.performActionForItem(at: pageMenu.index(of: pageItem))
 
         XCTAssertEqual(sentPageNumber, 1)
         XCTAssertNotNil(sentImage)

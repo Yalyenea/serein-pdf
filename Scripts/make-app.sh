@@ -43,8 +43,12 @@ if [[ -d "$PROJECT_ROOT/Resources/Assets.xcassets" ]]; then
     actool --compile "$APP_BUNDLE/Contents/Resources" --platform macosx --minimum-deployment-target 14.0 "$PROJECT_ROOT/Resources/Assets.xcassets" >/dev/null
 fi
 
-echo "==> ensuring local signing identity"
-"$PROJECT_ROOT/Scripts/ensure-local-codesign-identity.sh" "$CODESIGN_IDENTITY"
+if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
+    echo "==> using ad-hoc code signing"
+else
+    echo "==> ensuring local signing identity"
+    "$PROJECT_ROOT/Scripts/ensure-local-codesign-identity.sh" "$CODESIGN_IDENTITY"
+fi
 
 echo "==> signing with $CODESIGN_IDENTITY"
 codesign --force --sign "$CODESIGN_IDENTITY" --timestamp=none "$APP_BUNDLE" >/dev/null

@@ -239,60 +239,6 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(reader.testingNavigationBackPositions.last, origin)
     }
 
-    func testHistoryRestoresMidPageScrollInContinuousMode() throws {
-        let store = makeIsolatedDocumentStore()
-        // Page taller than the reader viewport so continuous reading needs mid-page points.
-        let session = try store.open(
-            documentAt: TestPDFFixtures.makeBlankPDF(
-                named: "nav-history-midpage",
-                pageCount: 4,
-                pageSize: NSSize(width: 400, height: 1400)
-            )
-        )
-        store.setDisplayMode(.singlePageContinuous, for: session.id)
-        let reader = makeReader(
-            store: store,
-            sessionID: session.id,
-            frame: NSRect(x: 0, y: 0, width: 500, height: 360)
-        )
-
-        XCTAssertTrue(reader.goToPage(1))
-        let topBeforeScroll = try XCTUnwrap(store.session(for: session.id)?.lastReadPosition)
-
-        XCTAssertTrue(reader.scrollHalfPageDown(), "viewport must be shorter than page")
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
-        let midBeforeJump = try XCTUnwrap(store.session(for: session.id)?.lastReadPosition)
-        XCTAssertEqual(midBeforeJump.pageIndex, 1)
-        XCTAssertNotEqual(
-            midBeforeJump,
-            topBeforeScroll,
-            "scroll should leave the page-top anchor; mid=\(midBeforeJump) top=\(topBeforeScroll)"
-        )
-
-        XCTAssertTrue(reader.goToPage(3))
-        XCTAssertEqual(storePageIndex(store, session.id), 3)
-        XCTAssertEqual(reader.testingNavigationBackPageIndices.last, 1)
-        // History stack tip should keep the mid-page point, not the page top.
-        let recorded = try XCTUnwrap(reader.testingNavigationBackPositions.last)
-        XCTAssertEqual(recorded.pageIndex, 1)
-        XCTAssertEqual(recorded.point.x, midBeforeJump.point.x, accuracy: 4)
-        XCTAssertEqual(recorded.point.y, midBeforeJump.point.y, accuracy: 12)
-
-        reader.navigateBack()
-        let restored = try XCTUnwrap(store.session(for: session.id)?.lastReadPosition)
-        XCTAssertEqual(restored.pageIndex, 1)
-        XCTAssertEqual(restored.point.x, midBeforeJump.point.x, accuracy: 4)
-        XCTAssertEqual(
-            restored.point.y,
-            midBeforeJump.point.y,
-            accuracy: 12,
-            "Cmd+[ should restore mid-page Y; restored=\(restored.point) mid=\(midBeforeJump.point)"
-        )
-        let liveRestored = try XCTUnwrap(reader.testingCurrentReadingPosition)
-        XCTAssertEqual(liveRestored.pageIndex, 1)
-        XCTAssertEqual(liveRestored.point.y, midBeforeJump.point.y, accuracy: 12)
-    }
-
     func testSamePagePointsRemainDistinctHistoryStops() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(

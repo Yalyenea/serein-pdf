@@ -25,15 +25,14 @@ CERT_PATH="${TMP_DIR}/serein-local-codesign.cert.pem"
 P12_PATH="${TMP_DIR}/serein-local-codesign.p12"
 
 echo "==> creating local code-signing identity: ${IDENTITY_NAME}"
-openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+/usr/bin/openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
     -subj "/CN=${IDENTITY_NAME}/" \
     -addext "keyUsage=critical,digitalSignature" \
     -addext "extendedKeyUsage=codeSigning" \
     -keyout "$KEY_PATH" \
     -out "$CERT_PATH" >/dev/null 2>&1
 
-openssl pkcs12 -export \
-    -legacy \
+/usr/bin/openssl pkcs12 -export \
     -inkey "$KEY_PATH" \
     -in "$CERT_PATH" \
     -name "$IDENTITY_NAME" \
