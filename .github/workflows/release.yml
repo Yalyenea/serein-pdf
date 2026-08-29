@@ -27,7 +27,7 @@ jobs:
           xcodebuild -version
 
       - name: Test
-        run: swift test
+        run: swift test --no-parallel
 
       - name: Build .app
         run: ./Scripts/make-app.sh build

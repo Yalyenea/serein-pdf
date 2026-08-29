@@ -15,7 +15,7 @@ default:
 
 # Run all Swift tests.
 test:
-    swift test --disable-sandbox
+    swift test --disable-sandbox --no-parallel
 
 # Verify GitHub Releases download + DMG install path (needs gh auth or SEREIN_GITHUB_TOKEN).
 verify-update:
