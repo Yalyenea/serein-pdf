@@ -4,6 +4,13 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-30
+
+### Reliability
+- Publish the v0.6.1 application changes in a verified DMG after removing redundant AppKit geometry assertions and running the test suite serially in CI.
+- Preserve the selected text captured by the reader context menu when sending it to Codex.
+- Use native macOS OpenSSL for local signing identities and ad-hoc signing for keychain-free release builds.
+
 ## [0.6.1] - 2026-08-30
 
 ### Annotations
