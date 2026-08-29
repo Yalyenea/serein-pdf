@@ -4,6 +4,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-30
+
 ### Annotations
 - Hover comment cards only appear when a highlight has a comment; show after a short delay, wrap longer text up to a wider card, and suppress the card when the same item is already selected in the Annotations sidebar.
 - Reader comment edit (`cmd+option+m` / context menu) uses a lightweight popover next to the highlight instead of forcing the right sidebar open.
