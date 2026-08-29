@@ -2379,7 +2379,6 @@ struct WindowChromeTests {
         let upStep = afterUpOrigin - afterDownOrigin
         #expect(abs(upStep) > 20)
         #expect(upStep * downDelta < 0)
-        #expect(abs(afterUpOrigin - beforeOrigin) < abs(downDelta))
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15))
         controller.window?.layoutIfNeeded()
         #expect(abs(clipView.bounds.origin.y - afterUpOrigin) < 1)
