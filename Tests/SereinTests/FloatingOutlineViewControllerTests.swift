@@ -322,6 +322,25 @@ struct FloatingOutlineViewControllerTests {
     }
 
     @Test
+    func floatingOutlineCanResizePastConfiguredRangeUpToWindowLimit() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(documentAt: makeLongFloatingOutlinePDF(named: "floating-window-limit"))
+        store.setRightSidebarVisible(false)
+        let controller = FloatingOutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        controller.setMaximumAvailableHeight(800)
+        controller.testingSetHovered(true)
+
+        controller.testingResizeFromTop(by: 300)
+
+        #expect(controller.preferredSize.height == 800)
+    }
+
+    @Test
     func floatingOutlineUsesSemanticOutlinePaneWhenSidebarsAreSwapped() throws {
         _ = NSApplication.shared
         var configuration = AppConfiguration.default
