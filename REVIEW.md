@@ -26,7 +26,7 @@
 | S1 | [ ] | `AppDelegate` god object：菜单、share/export、open-URL、palette、config、`validateMenuItem` | `App/AppDelegate.swift` | 全局行为改动回归面大 |
 | S2 | ◐ | `DocumentStore` 仍承载 tab / split / annotation / undo / persistence；搜索已改窗口级显式快照 | `Core/DocumentStore.swift` | 非搜索职责的演进成本仍高 |
 | S3 | ◐ | 批注交互已提取；缩放 / viewport / overview 仍是隐式状态机 | `UI/CenterReader/ReaderViewController.swift` | 剩余几何逻辑易回归、难单测 |
-| S4 | [ ] | 三个 palette 近乎复制粘贴，无共享基类 | `App/*PaletteController.swift` | 键处理改动要同步三处 |
+| S4 | [ ] | 四个 palette 仍缺少共享 panel shell | `App/*PaletteController.swift` | panel 外观与基础键处理改动要同步多处 |
 
 ### 2.2 性能
 

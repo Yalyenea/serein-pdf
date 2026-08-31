@@ -36,6 +36,7 @@ site for showcase, download notes, and compact docs.
 - Clean PDFs hot-reload when LaTeX, Typst, or another external compiler rewrites the open file in place or replaces it atomically, preserving the live page; PDFs with unsaved Serein annotations are left untouched
 - On first launch, Serein asks for persistent access to `/Users` so PDFs under user folders stay readable after reinstalling
 - PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
+- Spotlight-style Command Palette (`cmd+k`) searches actions available in the current context, runs the highlighted command with `enter`, and keeps the existing `cmd+k` two-stage shortcuts available inside the visible panel
 - Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Opened PDFs are also noted to macOS native recent documents, and the active PDF URL is exposed to the window for system window/document integration
@@ -52,7 +53,7 @@ site for showcase, download notes, and compact docs.
 - `ctrl+cmd+c` sends the current context to Codex: selected text prefills a new task, otherwise the focused page is attached as a PNG. `ctrl+cmd+shift+c` attaches the current PDF. The integration can be disabled in Settings > General. Serein does not pass a workspace path, though Codex may choose the attached file's parent directory as its workspace.
 - `Reveal in Finder` and `Open With` remain separate actions. `Open With` dynamically lists compatible installed apps such as Preview, Skim, or Adobe Acrobat in the File menu and PDF tab context menus.
 - Browser integrations can hand off a downloaded local PDF through `serein://open?file=<encoded file URL>`; malformed links, directories, remote file hosts, and non-PDF files are rejected.
-- `cmd+k` chords also refresh the PDF Library index, jump to Library / Shortcuts settings, share the current PDF, merge windows, and move the current PDF to a new window
+- Command Palette also exposes two-stage keys for refreshing the PDF Library index, opening Library / Shortcuts settings, sharing the current PDF, merging windows, and moving the current PDF to a new window
 - Rose Pine Dawn replaces only the PDF's white paper with an Obsidian-like warm surface, preserving the document's original text and accent colors
 - Rose Pine Moon maps the PDF's white/black endpoints to a dark paper/text pair, preserves warm/cool accent direction, and keeps the surrounding sidebars one shade deeper
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
@@ -62,7 +63,7 @@ site for showcase, download notes, and compact docs.
 - While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets; `Export All Open Highlights…` groups the current window's annotated PDFs by document and page
 - Highlights with comments preview on hover (delayed, suppressed when the same item is selected in the Annotations pane); `cmd+option+m` or the reader context menu opens a lightweight reader-side comment popover; the Annotations list supports inline edit, right-click recolor/delete/copy, and keyboard delete; Markdown export remains page-grouped as snippet + comment
-- Settings now includes a Shortcuts page with capture, clear, restore-default, and conflict rejection
+- Settings includes a searchable, grouped Shortcuts page with capture, clear, reset-all, conflict rejection, and separate keycaps for built-in two-stage shortcuts
 - Settings keeps one compact 680 pt width across General, Library, and Shortcuts; page height may adapt, while shortcut rows keep defaults and actions aligned without horizontal scrolling
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
 - All-pages overview (`cmd+shift+o`) seamless viewport-fit grid (no nested panel); zoom for manual size; click a page to jump
@@ -214,8 +215,10 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 - `access.roots` defaults to `/Users`. `access.root_bookmarks` stores the
   persistent macOS access token created on first launch, so reinstalling Serein
   does not require re-authorizing each PDF under user folders.
-- Setting a shortcut to `none` clears it completely; Serein will not silently
-  fall back to the default binding after restart.
+- Setting a shortcut to `none` clears its configurable direct binding; Serein
+  will not restore that default after restart. Read-only built-in `cmd+k`
+  sequences remain listed in Settings and the Command Palette. `cmd+k` itself
+  is reserved for opening the palette.
 
 ## Keyboard shortcuts
 
@@ -223,6 +226,7 @@ Defined in `[shortcuts]` above. Highlights:
 
 | Action | Shortcut |
 |---|---|
+| Open / close Command Palette | `cmd+k` |
 | Highlight selection / enter highlight mode | `a` |
 | Underline selection / enter underline mode | `u` |
 | Strikethrough selection / enter strikethrough mode | `s` |

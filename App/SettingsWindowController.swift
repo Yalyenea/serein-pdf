@@ -63,6 +63,10 @@ final class SettingsWindowController: NSWindowController {
         settingsViewController.selectPage(SettingsPage(rawValue: index) ?? .general)
         applyPreferredWindowSize(settingsViewController.preferredContentSizeForCurrentPage())
     }
+
+    func setShortcutSearchForTesting(_ query: String) {
+        settingsViewController.setShortcutSearchForTesting(query)
+    }
 #endif
 
     override func showWindow(_ sender: Any?) {
@@ -176,6 +180,12 @@ private final class ShortcutCaptureButton: NSButton {
         onShortcutCaptured?(KeyboardShortcut(key: key, modifiers: modifiers))
     }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard isCapturing else { return super.performKeyEquivalent(with: event) }
+        keyDown(with: event)
+        return true
+    }
+
     private func updateTitle() {
         if isCapturing {
             title = "Type Shortcut"
@@ -185,7 +195,7 @@ private final class ShortcutCaptureButton: NSButton {
     }
 }
 
-private final class SettingsViewController: NSViewController, NSTextFieldDelegate {
+private final class SettingsViewController: NSViewController, NSSearchFieldDelegate {
     var onConfigurationChanged: ((AppConfiguration) -> Void)?
     var onPreferredContentSizeChanged: ((NSSize) -> Void)?
 
@@ -207,8 +217,10 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
     private let shortcutsContentView = FlippedContentView()
     private let shortcutsStackView = NSStackView()
     private let shortcutsHintLabel = NSTextField(
-        wrappingLabelWithString: "Select a shortcut, then press its new key combination. Delete clears it; changes apply immediately."
+        wrappingLabelWithString: "Select a shortcut and type a new combination. Built-in ⌘K sequences remain available and changes apply immediately."
     )
+    private let shortcutSearchField = NSSearchField(frame: .zero)
+    private let resetAllShortcutsButton = NSButton(title: "Reset All", target: nil, action: nil)
     private let shortcutsErrorLabel = NSTextField(labelWithString: "")
 
     private let modePopUp = NSPopUpButton()
@@ -382,6 +394,9 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
     }
 
     func apply(configuration: AppConfiguration) {
+        let shouldRebuildShortcutRows = isViewLoaded
+            && self.configuration.shortcuts != configuration.shortcuts
+            && shortcutSearchField.stringValue.isEmpty == false
         self.configuration = configuration
         guard isViewLoaded else { return }
 
@@ -402,17 +417,29 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         autoCheckUpdatesCheckbox.state = configuration.updates.autoCheck ? .on : .off
         codexIntegrationCheckbox.state = configuration.integrations.codexEnabled ? .on : .off
         shortcutsErrorLabel.stringValue = ""
+        resetAllShortcutsButton.isEnabled = configuration.shortcuts != .default
         rebuildLibraryFolderRows()
 
+        if shouldRebuildShortcutRows {
+            rebuildShortcutRows()
+        }
+        applyShortcutRows(configuration)
+    }
+
+    private func applyShortcutRows(_ configuration: AppConfiguration) {
         for command in ShortcutCommand.allCases {
             shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
-            shortcutDefaultLabels[command]?.stringValue =
-                "Default: \(AppConfiguration.default.shortcuts.bindings[command]?.displayString ?? "None")"
+            if let defaultShortcut = AppConfiguration.default.shortcuts.bindings[command] {
+                shortcutDefaultLabels[command]?.stringValue = "Default \(defaultShortcut.displayString)"
+            } else if command.builtInShortcutSequence != nil {
+                shortcutDefaultLabels[command]?.stringValue = "Direct shortcut optional"
+            } else {
+                shortcutDefaultLabels[command]?.stringValue = "No default shortcut"
+            }
             shortcutClearButtons[command]?.isEnabled = configuration.shortcuts.bindings[command] != nil
             shortcutRestoreButtons[command]?.isEnabled =
                 configuration.shortcuts.bindings[command] != AppConfiguration.default.shortcuts.bindings[command]
         }
-
     }
 
     @objc
@@ -925,6 +952,13 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         handleGeneralControlChanged(field)
     }
 
+    func controlTextDidChange(_ obj: Notification) {
+        guard let searchField = obj.object as? NSSearchField,
+              searchField === shortcutSearchField else { return }
+        rebuildShortcutRows()
+        applyShortcutRows(configuration)
+    }
+
     private func buildLibraryPage() {
         libraryHintLabel.translatesAutoresizingMaskIntoConstraints = false
         libraryHintLabel.font = .systemFont(ofSize: 11)
@@ -993,7 +1027,20 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         shortcutsHintLabel.textColor = .secondaryLabelColor
         shortcutsHintLabel.maximumNumberOfLines = 0
 
+        shortcutSearchField.translatesAutoresizingMaskIntoConstraints = false
+        shortcutSearchField.identifier = NSUserInterfaceItemIdentifier("shortcutSearchField")
+        shortcutSearchField.placeholderString = "Filter actions"
+        shortcutSearchField.controlSize = .small
+        shortcutSearchField.delegate = self
+
+        resetAllShortcutsButton.translatesAutoresizingMaskIntoConstraints = false
+        resetAllShortcutsButton.controlSize = .small
+        resetAllShortcutsButton.bezelStyle = .rounded
+        resetAllShortcutsButton.target = self
+        resetAllShortcutsButton.action = #selector(resetAllShortcuts(_:))
+
         shortcutsErrorLabel.translatesAutoresizingMaskIntoConstraints = false
+        shortcutsErrorLabel.identifier = NSUserInterfaceItemIdentifier("shortcutsErrorLabel")
         shortcutsErrorLabel.font = .systemFont(ofSize: 11, weight: .medium)
         shortcutsErrorLabel.textColor = .systemRed
         shortcutsErrorLabel.maximumNumberOfLines = 0
@@ -1004,6 +1051,8 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
 
         shortcutsContentView.translatesAutoresizingMaskIntoConstraints = false
         shortcutsContentView.addSubview(shortcutsHintLabel)
+        shortcutsContentView.addSubview(shortcutSearchField)
+        shortcutsContentView.addSubview(resetAllShortcutsButton)
         shortcutsContentView.addSubview(shortcutsErrorLabel)
         shortcutsContentView.addSubview(shortcutsStackView)
 
@@ -1012,9 +1061,16 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             shortcutsHintLabel.trailingAnchor.constraint(equalTo: shortcutsContentView.trailingAnchor, constant: -32),
             shortcutsHintLabel.topAnchor.constraint(equalTo: shortcutsContentView.topAnchor, constant: 16),
 
+            shortcutSearchField.leadingAnchor.constraint(equalTo: shortcutsHintLabel.leadingAnchor),
+            shortcutSearchField.topAnchor.constraint(equalTo: shortcutsHintLabel.bottomAnchor, constant: 10),
+            shortcutSearchField.widthAnchor.constraint(equalToConstant: 240),
+
+            resetAllShortcutsButton.trailingAnchor.constraint(equalTo: shortcutsHintLabel.trailingAnchor),
+            resetAllShortcutsButton.centerYAnchor.constraint(equalTo: shortcutSearchField.centerYAnchor),
+
             shortcutsErrorLabel.leadingAnchor.constraint(equalTo: shortcutsHintLabel.leadingAnchor),
             shortcutsErrorLabel.trailingAnchor.constraint(equalTo: shortcutsHintLabel.trailingAnchor),
-            shortcutsErrorLabel.topAnchor.constraint(equalTo: shortcutsHintLabel.bottomAnchor, constant: 8),
+            shortcutsErrorLabel.topAnchor.constraint(equalTo: shortcutSearchField.bottomAnchor, constant: 7),
 
             shortcutsStackView.leadingAnchor.constraint(equalTo: shortcutsContentView.leadingAnchor, constant: 32),
             shortcutsStackView.trailingAnchor.constraint(equalTo: shortcutsContentView.trailingAnchor, constant: -32),
@@ -1050,10 +1106,39 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         shortcutClearButtons.removeAll(keepingCapacity: true)
         shortcutRestoreButtons.removeAll(keepingCapacity: true)
 
-        for command in ShortcutCommand.allCases {
-            let row = makeShortcutRow(for: command)
-            shortcutsStackView.addArrangedSubview(row)
+        let matchingCommands = ShortcutCommand.allCases.filter {
+            $0.matchesShortcutSearch(
+                shortcutSearchField.stringValue,
+                binding: configuration.shortcuts.bindings[$0]
+            )
         }
+        for section in ShortcutSection.allCases {
+            let sectionCommands = matchingCommands.filter { $0.shortcutSection == section }
+            guard sectionCommands.isEmpty == false else { continue }
+            shortcutsStackView.addArrangedSubview(makeShortcutSectionHeader(section.title))
+            for command in sectionCommands {
+                let row = makeShortcutRow(for: command)
+                shortcutsStackView.addArrangedSubview(row)
+            }
+        }
+    }
+
+    private func makeShortcutSectionHeader(_ title: String) -> NSView {
+        let label = NSTextField(labelWithString: title.uppercased())
+        label.font = .systemFont(ofSize: 10, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+            label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -5),
+            container.heightAnchor.constraint(equalToConstant: 30),
+        ])
+        return container
     }
 
     private func rebuildLibraryFolderRows() {
@@ -1165,13 +1250,41 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         defaultLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         defaultLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let clearButton = NSButton(title: "Clear", target: self, action: #selector(clearShortcut(_:)))
+        let metadataViews: [NSView]
+        if let builtInSequence = command.builtInShortcutSequence {
+            let builtInLabel = NSTextField(labelWithString: "Built-in")
+            builtInLabel.font = .systemFont(ofSize: 10.5)
+            builtInLabel.textColor = .secondaryLabelColor
+            let builtInView = ShortcutSequenceView()
+            builtInView.identifier = NSUserInterfaceItemIdentifier("shortcutBuiltIn.\(command.rawValue)")
+            builtInView.configure(sequences: [builtInSequence])
+            metadataViews = [defaultLabel, builtInLabel, builtInView]
+        } else {
+            metadataViews = [defaultLabel]
+        }
+        let metadataStack = NSStackView(views: metadataViews)
+        metadataStack.orientation = .horizontal
+        metadataStack.alignment = .centerY
+        metadataStack.spacing = 6
+        metadataStack.translatesAutoresizingMaskIntoConstraints = false
+        metadataStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let clearButton = NSButton(
+            image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Clear Shortcut")!,
+            target: self,
+            action: #selector(clearShortcut(_:))
+        )
         clearButton.controlSize = .small
         clearButton.bezelStyle = .inline
+        clearButton.toolTip = "Clear Shortcut"
         clearButton.translatesAutoresizingMaskIntoConstraints = false
         clearButton.identifier = NSUserInterfaceItemIdentifier(command.rawValue)
 
-        let restoreButton = NSButton(title: "Reset", target: self, action: #selector(restoreShortcutDefault(_:)))
+        let restoreButton = NSButton(
+            image: NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Restore Default")!,
+            target: self,
+            action: #selector(restoreShortcutDefault(_:))
+        )
         restoreButton.controlSize = .small
         restoreButton.bezelStyle = .inline
         restoreButton.toolTip = "Restore Default"
@@ -1184,7 +1297,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
 
         row.addSubview(titleLabel)
         row.addSubview(captureButton)
-        row.addSubview(defaultLabel)
+        row.addSubview(metadataStack)
         row.addSubview(clearButton)
         row.addSubview(restoreButton)
         row.addSubview(separator)
@@ -1194,27 +1307,27 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             titleLabel.topAnchor.constraint(equalTo: row.topAnchor, constant: 5),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: captureButton.leadingAnchor, constant: -16),
 
-            defaultLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            defaultLabel.trailingAnchor.constraint(lessThanOrEqualTo: captureButton.leadingAnchor, constant: -16),
-            defaultLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1),
+            metadataStack.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            metadataStack.trailingAnchor.constraint(lessThanOrEqualTo: captureButton.leadingAnchor, constant: -16),
+            metadataStack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1),
 
             captureButton.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor, constant: -8),
             captureButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            captureButton.widthAnchor.constraint(equalToConstant: 116),
+            captureButton.widthAnchor.constraint(equalToConstant: 106),
 
             restoreButton.trailingAnchor.constraint(equalTo: row.trailingAnchor),
             restoreButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            restoreButton.widthAnchor.constraint(equalToConstant: 52),
+            restoreButton.widthAnchor.constraint(equalToConstant: 26),
 
             clearButton.trailingAnchor.constraint(equalTo: restoreButton.leadingAnchor, constant: -8),
             clearButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            clearButton.widthAnchor.constraint(equalToConstant: 44),
+            clearButton.widthAnchor.constraint(equalToConstant: 26),
 
             separator.leadingAnchor.constraint(equalTo: row.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: row.trailingAnchor),
             separator.bottomAnchor.constraint(equalTo: row.bottomAnchor),
 
-            row.heightAnchor.constraint(equalToConstant: 44),
+            row.heightAnchor.constraint(equalToConstant: 50),
         ])
 
         shortcutButtons[command] = captureButton
@@ -1236,14 +1349,28 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         updateShortcut(AppConfiguration.default.shortcuts.bindings[command], for: command)
     }
 
+    @objc
+    private func resetAllShortcuts(_ sender: Any?) {
+        var updatedConfiguration = configuration
+        updatedConfiguration.shortcuts = .default
+        publishConfigurationIfChanged(updatedConfiguration)
+    }
+
     private func updateShortcut(_ shortcut: KeyboardShortcut?, for command: ShortcutCommand) {
         guard isApplyingConfiguration == false else { return }
+
+        if shortcut == ShortcutCommand.commandPaletteShortcut {
+            shortcutsErrorLabel.stringValue = "⌘K is reserved for Command Palette."
+            NSSound.beep()
+            shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
+            return
+        }
 
         if let shortcut,
            let conflict = configuration.shortcuts.bindings.first(where: { $0.key != command && $0.value == shortcut }) {
             shortcutsErrorLabel.stringValue = "“\(shortcut.displayString)” is already used by “\(conflict.key.menuTitle)”."
             NSSound.beep()
-            apply(configuration: configuration)
+            shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
             return
         }
 
@@ -1258,9 +1385,7 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
             apply(configuration: configuration)
             return
         }
-        configuration = updatedConfiguration
         onConfigurationChanged?(updatedConfiguration)
-        apply(configuration: updatedConfiguration)
     }
 
     private func selectItem(in popUpButton: NSPopUpButton, matching rawValue: String) {
@@ -1291,3 +1416,12 @@ private final class SettingsViewController: NSViewController, NSTextFieldDelegat
         }
     }
 }
+
+#if DEBUG
+extension SettingsViewController {
+    func setShortcutSearchForTesting(_ query: String) {
+        shortcutSearchField.stringValue = query
+        controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: shortcutSearchField))
+    }
+}
+#endif

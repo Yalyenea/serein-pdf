@@ -165,6 +165,12 @@ enum ThemeRegistry {
     private static let moonSubtle = rgb(144, 140, 170)
     private static let moonText = rgb(224, 222, 244)
 
+    private static let normalDarkPaper = rgb(37, 37, 37)
+    private static let normalDarkText = rgb(222, 222, 222)
+    private static let normalDarkDivider = rgb(54, 54, 54)
+    private static let normalDarkSelected = rgb(68, 68, 68)
+    private static let normalDarkStroke = rgb(90, 90, 90)
+
     private static let dawnBase = rgb(250, 244, 237)
     private static let dawnSurface = rgb(255, 250, 243)
     private static let dawnHighlight = rgb(233, 223, 218)
@@ -213,25 +219,24 @@ enum ThemeRegistry {
 
     static let darkThemes: [DarkTheme: ThemeDescriptor] = [
         .normal: ThemeDescriptor(
-            pageBackground: .calibratedWhite(0.09),
-            pageForeground: .calibratedWhite(0.95),
+            pageBackground: .srgb(normalDarkPaper),
+            pageForeground: .srgb(normalDarkText),
             primaryText: .semantic(.label),
             secondaryText: .semantic(.secondaryLabel),
             tertiaryText: .semantic(.tertiaryLabel),
-            readerBackdrop: .calibratedWhite(0.09),
-            splitBackground: .calibratedWhite(0.09),
-            paneBackground: .calibratedWhite(0.09),
-            chromeDivider: .calibratedWhite(0.12),
-            selectedChromeBackground: .calibratedWhite(0.19),
-            chromeStroke: .calibratedWhite(0.28),
+            readerBackdrop: .srgb(normalDarkPaper),
+            splitBackground: .srgb(normalDarkPaper),
+            paneBackground: .srgb(normalDarkPaper),
+            chromeDivider: .srgb(normalDarkDivider),
+            selectedChromeBackground: .srgb(normalDarkSelected),
+            chromeStroke: .srgb(normalDarkStroke),
             usesOpaqueSidebar: true,
             prefersFlatPDFChrome: true,
             highlightPalette: .normal,
-            pdfStyle: .remap(
-                background: ThemeRGBComponents(red: 0.09, green: 0.09, blue: 0.09),
-                foreground: ThemeRGBComponents(red: 0.95, green: 0.95, blue: 0.95),
-                accentPreservation: 0.08,
-                backgroundLuminance: 0.84
+            pdfStyle: .darkPaper(
+                background: normalDarkPaper,
+                foreground: normalDarkText,
+                accentPreservation: 0.08
             )
         ),
         .rosePineMoon: ThemeDescriptor(

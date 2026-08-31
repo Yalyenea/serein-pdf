@@ -48,6 +48,46 @@ struct NightModeStyleTests {
 
     @Test
     @MainActor
+    func normalDarkFilterMapsWhiteAndBlackToCharcoalEndpoints() throws {
+        try withThemeSelections(light: .normal, dark: .normal) {
+            let background = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
+            let foreground = resolve(NightModeStyle.pageForegroundColor, in: .darkAqua)
+            let filter = try #require(
+                NightModeStyle.makePDFContentFilters(for: NSAppearance(named: .darkAqua)).first
+            )
+            let vectors = try matrixVectors(from: filter)
+            let transformedWhite = apply(vectors, to: (red: 1, green: 1, blue: 1))
+            let transformedBlack = apply(vectors, to: (red: 0, green: 0, blue: 0))
+
+            assertColor(background, matches: NSColor(srgbRed: 37.0 / 255.0, green: 37.0 / 255.0, blue: 37.0 / 255.0, alpha: 1.0))
+            assertColor(foreground, matches: NSColor(srgbRed: 222.0 / 255.0, green: 222.0 / 255.0, blue: 222.0 / 255.0, alpha: 1.0))
+            assertLinearColor(transformedWhite, matches: background)
+            assertLinearColor(transformedBlack, matches: foreground)
+        }
+    }
+
+    @Test
+    @MainActor
+    func normalDarkChromeUsesCharcoalSurfaces() {
+        withThemeSelections(light: .normal, dark: .normal) {
+            let page = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
+            let split = resolve(SplitViewController.splitBackgroundColor, in: .darkAqua)
+            let pane = resolve(PlaceholderViewController.paneBackgroundColor, in: .darkAqua)
+            let divider = resolve(SplitViewController.dividerBackgroundColor, in: .darkAqua)
+            let selected = resolve(SplitViewController.selectedChromeBackgroundColor, in: .darkAqua)
+            let stroke = resolve(SplitViewController.chromeStrokeColor, in: .darkAqua)
+
+            assertColor(page, matches: NSColor(srgbRed: 37.0 / 255.0, green: 37.0 / 255.0, blue: 37.0 / 255.0, alpha: 1.0))
+            assertColor(split, matches: page)
+            assertColor(pane, matches: page)
+            assertColor(divider, matches: NSColor(srgbRed: 54.0 / 255.0, green: 54.0 / 255.0, blue: 54.0 / 255.0, alpha: 1.0))
+            assertColor(selected, matches: NSColor(srgbRed: 68.0 / 255.0, green: 68.0 / 255.0, blue: 68.0 / 255.0, alpha: 1.0))
+            assertColor(stroke, matches: NSColor(srgbRed: 90.0 / 255.0, green: 90.0 / 255.0, blue: 90.0 / 255.0, alpha: 1.0))
+        }
+    }
+
+    @Test
+    @MainActor
     func rosePineMoonFilterMapsWhiteAndBlackToThemeEndpoints() throws {
         try withThemeSelections(light: .normal, dark: .rosePineMoon) {
             let background = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)

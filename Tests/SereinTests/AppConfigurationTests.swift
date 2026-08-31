@@ -42,6 +42,19 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertTrue(KeyboardShortcut.isSupportedKeyToken("escape"))
     }
 
+    func testParserRejectsReservedCommandPaletteShortcut() {
+        XCTAssertThrowsError(
+            try AppConfigurationParser().parse(
+                "[shortcuts]\nopen_library_pdf = \"command+k\""
+            )
+        ) { error in
+            guard case AppConfigurationError.invalidShortcut("command+k") = error else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+    }
+
     func testLoadTomlOverridesReaderDefaultsAndShortcuts() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -166,6 +166,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case undoLastHighlight = "undo_last_highlight"
     case redoLastHighlight = "redo_last_highlight"
 
+    static let commandPaletteShortcut = KeyboardShortcut(key: "k", modifiers: [.command])
+
     var menuTitle: String {
         switch self {
         case .highlightSelection:
@@ -356,24 +358,105 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         }
     }
 
-    var builtInChordDisplay: String? {
+    var builtInShortcutSequence: KeyboardShortcutSequence? {
+        let suffix: KeyboardShortcut
         switch self {
         case .switchCurrentTheme:
-            "⌘K ⌘T"
+            suffix = KeyboardShortcut(key: "t", modifiers: [.command])
         case .openLibraryPDF:
-            "⌘K ⌘O"
+            suffix = KeyboardShortcut(key: "o", modifiers: [.command])
         case .refreshLibraryIndex:
-            "⌘K ⌘R"
+            suffix = KeyboardShortcut(key: "r", modifiers: [.command])
         case .openLibrarySettings:
-            "⌘K ⌘L"
+            suffix = KeyboardShortcut(key: "l", modifiers: [.command])
         case .openShortcutSettings:
-            "⌘K ⌘S"
+            suffix = KeyboardShortcut(key: "s", modifiers: [.command])
+        case .shareDocument:
+            suffix = KeyboardShortcut(key: "e", modifiers: [.command])
         case .mergeAllWindows:
-            "⌘K ⌘M"
+            suffix = KeyboardShortcut(key: "m", modifiers: [.command])
         case .moveCurrentPDFToNewWindow:
-            "⌘K ⌘N"
+            suffix = KeyboardShortcut(key: "n", modifiers: [.command])
         default:
-            nil
+            return nil
+        }
+        return KeyboardShortcutSequence([Self.commandPaletteShortcut, suffix])
+    }
+
+    var builtInChordDisplay: String? {
+        builtInShortcutSequence?.displayString
+    }
+
+    var shortcutSection: ShortcutSection {
+        switch self {
+        case .highlightSelection, .underlineSelection, .strikethroughSelection,
+             .addComment, .exitHighlightMode, .saveAnnotations, .removeHighlight,
+             .highlightColorPink, .highlightColorYellow, .highlightColorGreen,
+             .undoLastHighlight, .redoLastHighlight, .copyHighlightsMarkdown:
+            .annotations
+        case .toggleNightMode, .toggleReadingFocus, .adjustReadingFocus,
+             .toggleHorizontalPanLock, .switchCurrentTheme, .fitHeight, .fitWidth,
+             .zoomIn, .zoomOut, .singlePage, .singlePageContinuous, .twoUp,
+             .twoUpContinuous, .book, .bookContinuous, .toggleDisplayModeContinuity,
+             .toggleContinuousReading, .toggleAllPagesOverview, .toggleDemoMode:
+            .reading
+        case .pageDown, .pageUp, .halfPageDown, .halfPageUp, .goToFirstPage,
+             .goToLastPage, .navigateBack, .navigateForward, .findAllOpen,
+             .findNextMatch, .findPreviousMatch, .gotoPage:
+            .navigation
+        case .openLibraryPDF, .refreshLibraryIndex, .openLibrarySettings,
+             .openShortcutSettings, .shareDocument, .exportCleanCopy,
+             .copyCurrentPDFPath, .copyCurrentPageAsImage, .sendContextToCodex,
+             .sendCurrentPDFToCodex, .showRecentFilesPalette, .openContainingFolder,
+             .reopenLastClosed, .newBlankTab:
+            .documents
+        case .toggleLeftSidebar, .toggleRightSidebar, .useSidebarTabs,
+             .useTitlebarTabs, .closeCurrentTab, .closeCurrentWindow, .previousTab,
+             .nextTab, .showAllTabs, .newWindow, .mergeAllWindows,
+             .moveCurrentPDFToNewWindow, .toggleImmersiveMode, .toggleReaderSplit,
+             .toggleRightSidebarMode, .swapSidebars:
+            .windows
+        }
+    }
+
+    func matchesShortcutSearch(
+        _ query: String,
+        binding: KeyboardShortcut?,
+        additionalText: String = ""
+    ) -> Bool {
+        let tokens = query
+            .lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        guard tokens.isEmpty == false else { return true }
+        let searchableText = [
+            menuTitle,
+            rawValue.replacingOccurrences(of: "_", with: " "),
+            shortcutSection.title,
+            binding?.displayString ?? "",
+            builtInChordDisplay ?? "",
+            additionalText,
+        ]
+            .joined(separator: " ")
+            .lowercased()
+        return tokens.allSatisfy(searchableText.contains)
+    }
+}
+
+enum ShortcutSection: Int, CaseIterable, Sendable {
+    case annotations
+    case reading
+    case navigation
+    case documents
+    case windows
+
+    var title: String {
+        switch self {
+        case .annotations: "Annotations"
+        case .reading: "Reading"
+        case .navigation: "Navigation & Search"
+        case .documents: "Documents & Library"
+        case .windows: "Tabs & Windows"
         }
     }
 }

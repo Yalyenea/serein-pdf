@@ -132,7 +132,7 @@ flowchart LR
 - 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
 - `rose_pine_dawn` 仅把 PDF 白底映射成接近 Obsidian 的暖纸色,保留正文与图表原色;侧栏使用不透明的扁平主题表面
 - `rose_pine_moon` 把 PDF 白底 / 黑字映射到 Moon 纸面 / 正文端点,保留暖冷强调色方向,并用更深的侧栏底色建立层级
-- `Settings` 的 General / Library / Shortcuts 固定为统一紧凑宽度,只允许高度按页适配;General 按 Appearance / Reading / Layout 分组,Shortcuts 使用双层信息紧凑行且禁止横向滚动
+- `Settings` 的 General / Library / Shortcuts 固定为统一紧凑宽度,只允许高度按页适配;General 按 Appearance / Reading / Layout 分组,Shortcuts 支持搜索与分组,使用双层信息紧凑行,内置二段式快捷键以独立键帽显示且禁止横向滚动
 - 高亮模式提示使用轻量 inline 状态,不使用居中大块 badge
 - 评论预览卡与右栏评论行使用轻选中态、细色条和受限行数,避免永久详情编辑器挤占列表;预览卡按行 wrap(更宽上限),右栏行内不重复 section 的 Page 文案
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
@@ -144,6 +144,8 @@ flowchart LR
 ### 4.3 快捷键总表
 
 配置文件:`~/Library/Application Support/Serein/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`;`access.root_bookmarks` 由 Serein 管理,默认用于跨重装保留 `/Users` 访问授权。`[updates]` 控制 GitHub Releases 自动更新(`auto_check` / 私有仓库所需的 `github_token`)。
+
+`Cmd+K` 保留给 Command Palette;配置项只定义可选的单段直接入口,设为 `none` 不会移除只读的内置二段组合。
 
 **批注**
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
@@ -160,6 +162,7 @@ flowchart LR
 - `Cmd+Z`:撤销最近一次批注新增或删除(上限 50,无 redo)
 
 **阅读**
+- `Cmd+K`:打开 Spotlight 风格 Command Palette;输入文字筛选当前可执行命令,`↑` / `↓` 选择,`Enter` 执行,`Esc` 或再次 `Cmd+K` 关闭;面板打开时可直接按原有第二段组合
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4` 保持 `Single Page` / `Single Page Continuous` / `Two-Up` / `Two-Up Continuous`;`Book` / `Book · Continuous Turn` 默认无快捷键,可从 View 菜单或 Settings 选择
@@ -308,9 +311,12 @@ App/                                      # AppKit 入口、窗口与设置/启�
   AppDelegate.swift                       # 应用委托:菜单、窗口生命周期、配置加载、自动保存驱动
   AppUpdateCoordinator.swift              # GitHub 更新:启动检查、菜单、下载进度、安装重启
   MainWindowController.swift              # 主窗口控制器:工具栏、titlebar tabs 宿主、demo/immersive 模式
-  ReaderShortcutWindow.swift              # 自定义 NSWindow,拦截 keyDown 分发 reader 快捷键与 chord
+  ReaderShortcutWindow.swift              # 自定义 NSWindow,拦截 keyDown 分发 reader 快捷键
   SplitViewController.swift               # 三栏 NSSplitViewController:左 tabs / 中 reader / 右 sidebar
-  SettingsWindowController.swift          # 设置窗口:外观 / 阅读 / 批注 / 快捷键 配置 UI
+  SettingsWindowController.swift          # 设置窗口:外观 / 阅读 / 批注 / 可搜索快捷键配置 UI
+  CommandPaletteController.swift          # Spotlight 风格命令面板与键盘交互
+  CommandPaletteState.swift               # 命令搜索 / 高亮选择状态(纯模型)
+  ShortcutSequenceView.swift              # 单段 / 二段快捷键的紧凑键帽视图
   RecentFilesPaletteController.swift      # Spotlight 风格最近文件启动器的窗口与交互控制器
   RecentFilesPaletteState.swift           # 最近文件启动器的查询匹配与多选状态(纯模型)
   PDFLibraryPaletteController.swift       # PDF Library 二级浏览面板:库 tab / 文件夹 / PDF 列表 / 搜索
@@ -356,7 +362,7 @@ UI/CenterReader/                          # 中栏阅读区
   PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
   ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何
   ReadingFocusControlsViewController.swift # 当前窗口聚焦宽高紧凑调节面板
-  ReaderShortcutsController.swift         # reader 快捷键(j/k/g/…)与 Cmd+K chord 分发
+  ReaderShortcutsController.swift         # reader 快捷键(j/k/g/…)分发
   FindBarView.swift                       # find bar:查询框 + scope / 大小写 / 全词切换 + 匹配导航按钮
 
 UI/RightOutline/                          # 右栏 outline / pages / search / annotations
@@ -411,7 +417,9 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   HighlightExporterTests.swift            # 三种导出格式
   HighlightUndoTests.swift                # 撤销栈上限与 added/removed 还原
   NightModeStyleTests.swift               # 夜间反色映射
-  ReaderShortcutsControllerTests.swift    # reader 快捷键 / chord 分发与文本上下文让路
+  ReaderShortcutsControllerTests.swift    # reader 快捷键分发与文本上下文让路
+  CommandPaletteStateTests.swift          # 命令过滤、快捷键序列与高亮状态
+  CommandPaletteControllerTests.swift     # 命令面板搜索、执行与二段式键处理
   RecentFilesPaletteStateTests.swift      # 启动器模型的过滤 / 多选
   RecentFilesPaletteControllerTests.swift # 启动器控制器交互
   OpenTabsPaletteStateTests.swift         # show all tabs 预览目标与网格选中
