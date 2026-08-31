@@ -470,6 +470,19 @@ struct KeyboardShortcut: Equatable, Sendable {
     }
 }
 
+struct KeyboardShortcutSequence: Equatable, Sendable {
+    let strokes: [KeyboardShortcut]
+
+    init(_ strokes: [KeyboardShortcut]) {
+        precondition(strokes.isEmpty == false)
+        self.strokes = strokes
+    }
+
+    var displayString: String {
+        strokes.map(\.displayString).joined(separator: " → ")
+    }
+}
+
 enum AppConfigurationError: LocalizedError {
     case invalidLine(Int, String)
     case invalidBoolean(String)
@@ -1272,7 +1285,11 @@ struct AppConfigurationParser {
             configuration.shortcuts.bindings.removeValue(forKey: command)
             return
         }
-        configuration.shortcuts.bindings[command] = try KeyboardShortcut.parse(value)
+        let shortcut = try KeyboardShortcut.parse(value)
+        guard shortcut != ShortcutCommand.commandPaletteShortcut else {
+            throw AppConfigurationError.invalidShortcut(value)
+        }
+        configuration.shortcuts.bindings[command] = shortcut
     }
 
     private func parseBool(_ rawValue: String) throws -> Bool {

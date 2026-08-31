@@ -67,26 +67,6 @@ private final class OutlineRowsContainerView: NSView {
     override var isFlipped: Bool { true }
 }
 
-private final class FloatingOutlineSearchFieldCell: NSSearchFieldCell {
-    var strokeColor: NSColor = .clear
-
-    override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
-        NSGraphicsContext.saveGraphicsState()
-        backgroundColor!.setFill()
-        NSBezierPath(roundedRect: cellFrame, xRadius: 6, yRadius: 6).fill()
-        strokeColor.setStroke()
-        let borderPath = NSBezierPath(
-            roundedRect: cellFrame.insetBy(dx: 0.5, dy: 0.5),
-            xRadius: 5.5,
-            yRadius: 5.5
-        )
-        borderPath.lineWidth = 1
-        borderPath.stroke()
-        NSGraphicsContext.restoreGraphicsState()
-        drawInterior(withFrame: cellFrame, in: controlView)
-    }
-}
-
 private final class OutlineRowTextField: NSTextField {
     override func mouseDown(with event: NSEvent) {
         if let rowView = enclosingOutlineRowView {
@@ -400,7 +380,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         container.layer?.backgroundColor = NSColor.clear.cgColor
 
         if isFloatingPresentation {
-            filterField.cell = FloatingOutlineSearchFieldCell(textCell: "")
+            filterField.cell = ThemedSearchFieldCell(textCell: "")
         }
 
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -522,20 +502,8 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
             pageCounterLabel.textColor = NightModeStyle.tertiaryTextColor
             if isFloatingPresentation {
-                let filterBackgroundColor = NightModeStyle.selectedChromeBackgroundColor
-                let filterStrokeColor = NightModeStyle.chromeStrokeColor
-                    .withAlphaComponent(0.32)
-                filterField.backgroundColor = filterBackgroundColor
-                filterField.textColor = NightModeStyle.primaryTextColor
-                let filterCell = filterField.cell as! FloatingOutlineSearchFieldCell
-                filterCell.strokeColor = filterStrokeColor
-                filterField.placeholderAttributedString = NSAttributedString(
-                    string: "Filter headings",
-                    attributes: [
-                        .foregroundColor: NightModeStyle.tertiaryTextColor,
-                    ]
-                )
-                filterField.needsDisplay = true
+                let filterCell = filterField.cell as! ThemedSearchFieldCell
+                filterCell.applyTheme(to: filterField, placeholder: "Filter headings")
             }
         }
         renderOutlineRows()

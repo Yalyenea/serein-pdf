@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var appearanceObservation: NSKeyValueObservation?
     private(set) var temporaryAppearanceMode: AppearanceMode?
     private var readerShortcutsController: ReaderShortcutsController?
+    private var commandPaletteController: CommandPaletteController?
     private var recentFilesPaletteController: RecentFilesPaletteController?
     private var libraryPaletteController: PDFLibraryPaletteController?
     private var openTabsPaletteController: OpenTabsPaletteController?
@@ -72,6 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private let codexShareCoordinator = CodexShareCoordinator()
     private let externalApplicationService = ExternalApplicationService()
     private var cachedShortcutHandlerMap: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler]?
+    private struct CommandWindowContext {
+        let windowID: UUID?
+    }
+    private var commandWindowContext: CommandWindowContext?
     private var appUpdateCoordinator: AppUpdateCoordinator?
     private var mainWindowController: MainWindowController? {
         currentWindowController()
@@ -237,6 +242,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     func applicationDidResignActive(_ notification: Notification) {
+        commandPaletteController?.dismiss(restoreParent: false)
+        recentFilesPaletteController?.close()
+        libraryPaletteController?.close()
         closeOpenTabsPalette()
     }
 
@@ -492,6 +500,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func currentWindowController() -> MainWindowController? {
+        if let commandWindowContext {
+            return commandWindowContext.windowID.flatMap { mainWindowControllers[$0] }
+        }
         if let keyWindow = NSApp.keyWindow,
            let controller = controller(for: keyWindow) {
             return controller
@@ -500,7 +511,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
            let controller = controller(for: mainWindow) {
             return controller
         }
-        return mainWindowControllers.values.first
+        return NSApp.orderedWindows.lazy.compactMap { self.controller(for: $0) }.first
+    }
+
+    private func withCommandWindowContext<Result>(
+        _ windowID: UUID?,
+        perform action: () -> Result
+    ) -> Result {
+        let previousContext = commandWindowContext
+        commandWindowContext = CommandWindowContext(windowID: windowID)
+        defer { commandWindowContext = previousContext }
+        return action()
     }
 
     private func controller(for window: NSWindow?) -> MainWindowController? {
@@ -579,6 +600,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         )
         settingsItem.keyEquivalentModifierMask = [.command]
         settingsItem.target = self
+        let commandPaletteItem = NSMenuItem(
+            title: "Command Palette…",
+            action: #selector(showCommandPalette(_:)),
+            keyEquivalent: ShortcutCommand.commandPaletteShortcut.menuKeyEquivalent
+        )
+        commandPaletteItem.keyEquivalentModifierMask = ShortcutCommand.commandPaletteShortcut.modifierMask
+        commandPaletteItem.target = self
         let librarySettingsItem = makeConfiguredMenuItem(
             title: ShortcutCommand.openLibrarySettings.menuTitle,
             command: .openLibrarySettings,
@@ -590,6 +618,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             action: #selector(openShortcutSettings(_:))
         )
         appMenu.addItem(settingsItem)
+        appMenu.addItem(commandPaletteItem)
         appMenu.addItem(librarySettingsItem)
         appMenu.addItem(shortcutSettingsItem)
         appMenu.addItem(.separator())
@@ -1061,6 +1090,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 command: .bookContinuous,
                 action: #selector(useBookContinuous(_:))
             ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleDisplayModeContinuity.menuTitle,
+                command: .toggleDisplayModeContinuity,
+                action: #selector(toggleDisplayModeContinuity(_:))
+            ),
             .separator(),
             makeConfiguredMenuItem(
                 title: "All Pages Overview",
@@ -1234,14 +1268,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func menuTitle(_ title: String, for command: ShortcutCommand) -> String {
-        guard appConfiguration.shortcuts.bindings[command] == nil,
-              let builtInChordDisplay = command.builtInChordDisplay else { return title }
+        guard let builtInChordDisplay = command.builtInChordDisplay else { return title }
         return "\(title) (\(builtInChordDisplay))"
     }
 
     @objc
     private func closeCurrentTab(_ sender: Any?) {
-        if let keyWindow = NSApp.keyWindow,
+        if commandWindowContext == nil,
+           let keyWindow = NSApp.keyWindow,
            controller(for: keyWindow) == nil {
             keyWindow.performClose(sender)
             return
@@ -1256,6 +1290,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func closeCurrentWindow(_ sender: Any?) {
+        if let commandWindowContext {
+            if let windowID = commandWindowContext.windowID {
+                mainWindowControllers[windowID]?.window?.performClose(sender)
+            } else {
+                NSApp.keyWindow?.performClose(sender)
+            }
+            return
+        }
         if let keyWindow = NSApp.keyWindow {
             keyWindow.performClose(sender)
             return
@@ -1392,7 +1434,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
+    private func showCommandPalette(_ sender: Any?) {
+        if commandPaletteController?.window?.isVisible == true {
+            commandPaletteController?.dismiss(
+                restoreParent: commandPaletteController?.window?.isKeyWindow == true
+            )
+            return
+        }
+
+        if commandPaletteController == nil {
+            commandPaletteController = CommandPaletteController(
+                onInvokeCommand: { [weak self] command, windowID in
+                    guard let self else { return }
+                    self.withCommandWindowContext(windowID) {
+                        self.shortcutHandlerMap()[command]?()
+                    }
+                },
+                onVisibilityChange: { [weak self] _ in
+                    self?.refreshMenuShortcuts()
+                }
+            )
+        }
+        let targetWindowID = commandPaletteTargetWindowID()
+        let availableCommands = availableCommandPaletteCommands(targetWindowID: targetWindowID)
+        recentFilesPaletteController?.close()
+        libraryPaletteController?.close()
+        closeOpenTabsPalette()
+        commandPaletteController?.show(
+            commands: availableCommands.map(\.command),
+            bindings: appConfiguration.shortcuts.bindings,
+            titles: Dictionary(uniqueKeysWithValues: availableCommands.map { ($0.command, $0.title) }),
+            targetWindowID: targetWindowID,
+            relativeTo: NSApp.keyWindow ?? mainWindowController?.window
+        )
+    }
+
+    private func commandPaletteTargetWindowID() -> UUID? {
+        if let keyWindow = NSApp.keyWindow,
+           let controller = controller(for: keyWindow) {
+            return controller.windowID
+        }
+        if let mainWindow = NSApp.mainWindow,
+           let controller = controller(for: mainWindow) {
+            return controller.windowID
+        }
+        return NSApp.orderedWindows.lazy.compactMap { self.controller(for: $0)?.windowID }.first
+    }
+
+    private func availableCommandPaletteCommands(
+        targetWindowID: UUID?
+    ) -> [(command: ShortcutCommand, title: String)] {
+        guard let mainMenu = NSApp.mainMenu else { return [] }
+        return withCommandWindowContext(targetWindowID) {
+            ShortcutCommand.allCases.compactMap { command in
+                guard let item = configuredMenuItem(for: command, in: mainMenu),
+                      validateMenuItem(item) else { return nil }
+                let title = switch command {
+                case .closeCurrentTab, .sendContextToCodex:
+                    item.title
+                default:
+                    command.menuTitle
+                }
+                return (command, title)
+            }
+        }
+    }
+
+    private func configuredMenuItem(for command: ShortcutCommand, in menu: NSMenu) -> NSMenuItem? {
+        for item in menu.items {
+            if item.representedObject as? ShortcutCommand == command {
+                return item
+            }
+            if let submenu = item.submenu,
+               let match = configuredMenuItem(for: command, in: submenu) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    @objc
     private func showRecentFilesPalette(_ sender: Any?) {
+        commandPaletteController?.dismiss(restoreParent: false)
         runRecentFilesCleanupIfNeeded()
         if recentFilesPaletteController == nil {
             recentFilesPaletteController = RecentFilesPaletteController { [weak self] urls in
@@ -1407,6 +1530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func showLibraryPalette(_ sender: Any?) {
+        commandPaletteController?.dismiss(restoreParent: false)
         guard appConfiguration.library.folderURLs.isEmpty == false else {
             presentLibraryMessage(
                 title: "No PDF library folders",
@@ -1434,6 +1558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func showAllTabs(_ sender: Any?) {
+        commandPaletteController?.dismiss(restoreParent: false)
         if openTabsPaletteController?.window?.isVisible == true {
             closeOpenTabsPalette()
             return
@@ -2425,6 +2550,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         NSApp.appearance = effectiveMode.appAppearance
         mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
         settingsWindowController?.window?.appearance = effectiveMode.appAppearance
+        commandPaletteController?.refreshChromeColors()
     }
 
     private func refreshThemeChromeIfFollowingSystem() {
@@ -2432,6 +2558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
               appConfiguration.appearance.mode == .system else { return }
         mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
         settingsWindowController?.window?.appearance = nil
+        commandPaletteController?.refreshChromeColors()
     }
 
     private func refreshMenuShortcuts() {
@@ -2441,11 +2568,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         refreshManagedMenuState(in: menu)
     }
 
+    private func shouldExposeMenuKeyEquivalent(_ shortcut: KeyboardShortcut) -> Bool {
+        guard commandPaletteController?.window?.isVisible == true else { return true }
+        return ShortcutCommand.allCases.contains { command in
+            command.builtInShortcutSequence?.strokes.last == shortcut
+        } == false
+    }
+
     private func refreshMenuShortcuts(in menu: NSMenu) {
         for item in menu.items {
             if let command = item.representedObject as? ShortcutCommand {
                 item.title = menuTitle(command.menuTitle, for: command)
-                if let shortcut = appConfiguration.shortcuts.bindings[command] {
+                if let shortcut = appConfiguration.shortcuts.bindings[command],
+                   shouldExposeMenuKeyEquivalent(shortcut) {
                     item.keyEquivalent = shortcut.menuKeyEquivalent
                     item.keyEquivalentModifierMask = shortcut.modifierMask
                 } else {
@@ -2702,13 +2837,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return controller?.hasRedoableHighlight == true
         case #selector(setHighlightColorPink(_:)):
             menuItem.state = controller?.currentHighlightColor == .pink ? .on : .off
-            return true
+            return controller != nil
         case #selector(setHighlightColorYellow(_:)):
             menuItem.state = controller?.currentHighlightColor == .yellow ? .on : .off
-            return true
+            return controller != nil
         case #selector(setHighlightColorGreen(_:)):
             menuItem.state = controller?.currentHighlightColor == .green ? .on : .off
-            return true
+            return controller != nil
         case #selector(findInCurrentDocument(_:)), #selector(findInAllOpenDocuments(_:)):
             return activePDFSession != nil
         case #selector(showRecentFilesPalette(_:)):
@@ -2738,16 +2873,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return controller?.isFindBarVisible == true
         case #selector(useSidebarTabs(_:)):
             menuItem.state = windowID.map { documentStore.tabPresentationMode(in: $0) == .verticalSidebar } == true ? .on : .off
-            return true
+            return controller != nil
         case #selector(useTitlebarTabs(_:)):
             menuItem.state = windowID.map { documentStore.tabPresentationMode(in: $0) == .horizontalTitlebar } == true ? .on : .off
-            return true
+            return controller != nil
         case #selector(toggleLeftSidebar(_:)):
             menuItem.state = windowID.map { documentStore.isLeftSidebarVisible(in: $0) } == true ? .on : .off
-            return true
+            return controller != nil
         case #selector(toggleRightSidebar(_:)):
             menuItem.state = windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true ? .on : .off
-            return true
+            return controller != nil
         case #selector(closeCurrentTab(_:)):
             if let windowID,
                documentStore.selectedSessionIDs(in: windowID).count > 1 {
@@ -2765,6 +2900,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(fitReaderToHeight(_:)):
             menuItem.state = activePDFSession?.scaleMode == .fitHeight ? .on : .off
+            return activePDFSession != nil
+        case #selector(toggleDisplayModeContinuity(_:)):
             return activePDFSession != nil
         case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
             return activePDFSession != nil

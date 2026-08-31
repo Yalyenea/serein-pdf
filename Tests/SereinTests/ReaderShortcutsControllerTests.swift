@@ -309,81 +309,15 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertTrue(didTogglePanLock)
     }
 
-    func testThemeChordInvokesSwitchCurrentTheme() {
-        var triggeredCommands: [ShortcutCommand] = []
+    func testCommandPaletteShortcutFallsThroughToAppMenu() {
         let controller = ReaderShortcutsController(
             shortcutsProvider: { [:] },
-            handlerProvider: {
-                [.switchCurrentTheme: { triggeredCommands.append(.switchCurrentTheme) }]
-            }
-        )
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifiers: [.command]), in: window))
-        XCTAssertEqual(triggeredCommands, [.switchCurrentTheme])
-    }
-
-    func testCommandTMenuShortcutDoesNotBlockThemeChord() {
-        var triggeredCommands: [ShortcutCommand] = []
-        let controller = ReaderShortcutsController(
-            shortcutsProvider: {
-                [.newBlankTab: KeyboardShortcut(key: "t", modifiers: [.command])]
-            },
-            handlerProvider: {
-                [
-                    .newBlankTab: { triggeredCommands.append(.newBlankTab) },
-                    .switchCurrentTheme: { triggeredCommands.append(.switchCurrentTheme) },
-                ]
-            }
+            handlerProvider: { [:] }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
 
         XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifiers: [.command]), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifiers: [.command]), in: window))
-        XCTAssertEqual(triggeredCommands, [.switchCurrentTheme])
-    }
-
-    func testLibraryChordInvokesOpenLibraryPDF() {
-        var triggeredCommands: [ShortcutCommand] = []
-        let controller = ReaderShortcutsController(
-            shortcutsProvider: { [:] },
-            handlerProvider: {
-                [.openLibraryPDF: { triggeredCommands.append(.openLibraryPDF) }]
-            }
-        )
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "o", modifiers: [.command]), in: window))
-        XCTAssertEqual(triggeredCommands, [.openLibraryPDF])
-    }
-
-    func testAdditionalCommandKChordsInvokeHandlers() {
-        let cases: [(String, ShortcutCommand)] = [
-            ("r", .refreshLibraryIndex),
-            ("l", .openLibrarySettings),
-            ("s", .openShortcutSettings),
-            ("e", .shareDocument),
-            ("m", .mergeAllWindows),
-            ("n", .moveCurrentPDFToNewWindow),
-        ]
-
-        for (key, command) in cases {
-            var triggeredCommands: [ShortcutCommand] = []
-            let controller = ReaderShortcutsController(
-                shortcutsProvider: { [:] },
-                handlerProvider: {
-                    [command: { triggeredCommands.append(command) }]
-                }
-            )
-            let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-
-            XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
-            XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: key, modifiers: [.command]), in: window))
-            XCTAssertEqual(triggeredCommands, [command])
-        }
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
     }
 
     func testReaderWindowChecksShortcutHandlerBeforeMenuKeyEquivalent() {
@@ -518,7 +452,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertTrue(activatedTabs.isEmpty)
     }
 
-    func testThemeChordDoesNotRunWhileEditingText() {
+    func testCommandPaletteShortcutFallsThroughWhileEditingText() {
         var didTrigger = false
         let controller = ReaderShortcutsController(
             shortcutsProvider: { [:] },

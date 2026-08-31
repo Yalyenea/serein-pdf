@@ -1841,6 +1841,89 @@ struct WindowChromeTests {
     }
 
     @Test
+    func settingsShortcutPageShowsFilterAndTwoStageBuiltInShortcut() throws {
+        let controller = SettingsWindowController(configuration: .default) { _ in }
+        defer { controller.close() }
+        controller.showWindow(nil)
+        controller.selectPageForTesting(SettingsPage.shortcuts.rawValue)
+        flushLayout(controller.window)
+
+        let contentView = try #require(controller.window?.contentView)
+        let command = ShortcutCommand.openLibraryPDF
+        let row = try #require(
+            findView(identifier: "shortcutRow.\(command.rawValue)", in: contentView)
+        )
+
+        #expect(findView(identifier: "shortcutSearchField", in: contentView) is NSSearchField)
+        #expect(findView(identifier: "shortcutBuiltIn.\(command.rawValue)", in: row) is ShortcutSequenceView)
+        let labels = textFields(in: row).map(\.stringValue)
+        #expect(labels.contains("Direct shortcut optional"))
+        #expect(labels.contains("Default: None") == false)
+    }
+
+    @Test
+    func settingsShortcutPageRejectsReservedCommandPaletteKey() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) {
+            publishedConfigurations.append($0)
+        }
+        defer { controller.close() }
+        controller.showWindow(nil)
+        controller.selectPageForTesting(SettingsPage.shortcuts.rawValue)
+        flushLayout(controller.window)
+
+        let contentView = try #require(controller.window?.contentView)
+        let captureButton = try #require(
+            findView(
+                identifier: "shortcutCapture.\(ShortcutCommand.openLibraryPDF.rawValue)",
+                in: contentView
+            ) as? NSButton
+        )
+        captureButton.performClick(nil)
+        #expect(
+            controller.window?.performKeyEquivalent(
+                with: makeKeyEvent(
+                    characters: "k",
+                    modifierFlags: [.command],
+                    window: controller.window
+                )
+            ) == true
+        )
+
+        #expect(publishedConfigurations.isEmpty)
+        #expect(
+            textField(identifier: "shortcutsErrorLabel", in: contentView)?.stringValue ==
+                "⌘K is reserved for Command Palette."
+        )
+    }
+
+    @Test
+    func settingsShortcutFilterRefreshesAfterClearingMatchingBinding() throws {
+        let command = ShortcutCommand.openLibraryPDF
+        var configuration = AppConfiguration.default
+        configuration.shortcuts.bindings[command] = KeyboardShortcut(key: "b", modifiers: [.command])
+        var controller: SettingsWindowController!
+        controller = SettingsWindowController(configuration: configuration) { updatedConfiguration in
+            controller.sync(configuration: updatedConfiguration)
+        }
+        defer { controller.close() }
+        controller.showWindow(nil)
+        controller.selectPageForTesting(SettingsPage.shortcuts.rawValue)
+        controller.setShortcutSearchForTesting("⌘B")
+
+        let contentView = try #require(controller.window?.contentView)
+        let rowIdentifier = "shortcutRow.\(command.rawValue)"
+        let row = try #require(findView(identifier: rowIdentifier, in: contentView))
+        let clearButton = try #require(
+            findView(identifier: command.rawValue, in: row) as? NSButton
+        )
+        clearButton.performClick(nil)
+
+        #expect(findView(identifier: rowIdentifier, in: contentView) == nil)
+    }
+
+    @Test
     func settingsWindowCanEditSidebarDefaultWidths() throws {
         _ = NSApplication.shared
         var publishedConfigurations: [AppConfiguration] = []
