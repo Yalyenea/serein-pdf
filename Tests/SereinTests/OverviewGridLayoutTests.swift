@@ -138,4 +138,106 @@ final class OverviewGridLayoutTests: XCTestCase {
         XCTAssertEqual(result.columns, 1)
         XCTAssertGreaterThan(result.cellSize.width, 0)
     }
+
+    // MARK: - visibleCellIndices
+
+    private let gridGeometry = (
+        cellSize: CGSize(width: 120, height: 170),
+        spacing: CGFloat(10),
+        origin: CGPoint(x: 210, y: 10)
+    )
+
+    func testVisibleCellIndicesCoversTopRowsAtScrollTop() {
+        let indices = OverviewGridLayout.visibleCellIndices(
+            pageCount: 60,
+            columns: 3,
+            cellSize: gridGeometry.cellSize,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 0, y: 0, width: 800, height: 600)
+        )
+        // Viewport spans rows 0...3 (stride 180 from y = 10).
+        XCTAssertEqual(indices, Array(0..<12))
+    }
+
+    func testVisibleCellIndicesTracksMidDocumentViewport() {
+        let indices = OverviewGridLayout.visibleCellIndices(
+            pageCount: 60,
+            columns: 3,
+            cellSize: gridGeometry.cellSize,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 0, y: 1810, width: 800, height: 600)
+        )
+        // Visible y ∈ [1810, 2410) → rows 10...13.
+        XCTAssertEqual(indices, Array(30..<42))
+    }
+
+    func testVisibleCellIndicesClampsToPageCountOnLastRow() {
+        let indices = OverviewGridLayout.visibleCellIndices(
+            pageCount: 20,
+            columns: 3,
+            cellSize: gridGeometry.cellSize,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 0, y: 1000, width: 800, height: 600)
+        )
+        // Rows 5...6; the last row only holds 2 of 3 cells.
+        XCTAssertEqual(indices, [15, 16, 17, 18, 19])
+    }
+
+    func testVisibleCellIndicesReturnsEmptyOutsideGrid() {
+        let above = OverviewGridLayout.visibleCellIndices(
+            pageCount: 60,
+            columns: 3,
+            cellSize: gridGeometry.cellSize,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 0, y: -600, width: 800, height: 500)
+        )
+        let below = OverviewGridLayout.visibleCellIndices(
+            pageCount: 60,
+            columns: 3,
+            cellSize: gridGeometry.cellSize,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 0, y: 4000, width: 800, height: 500)
+        )
+        XCTAssertEqual(above, [])
+        XCTAssertEqual(below, [])
+    }
+
+    func testVisibleCellIndicesRespectsPartialColumns() {
+        let indices = OverviewGridLayout.visibleCellIndices(
+            pageCount: 60,
+            columns: 3,
+            cellSize: gridGeometry.cellSize,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 460, y: 0, width: 200, height: 200)
+        )
+        // Only the rightmost column intersects; rows 0...1.
+        XCTAssertEqual(indices, [2, 5])
+    }
+
+    func testVisibleCellIndicesHandlesZeroPagesAndDegenerateCells() {
+        let empty = OverviewGridLayout.visibleCellIndices(
+            pageCount: 0,
+            columns: 3,
+            cellSize: gridGeometry.cellSize,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 0, y: 0, width: 800, height: 600)
+        )
+        let degenerate = OverviewGridLayout.visibleCellIndices(
+            pageCount: 10,
+            columns: 3,
+            cellSize: .zero,
+            spacing: gridGeometry.spacing,
+            origin: gridGeometry.origin,
+            viewport: CGRect(x: 0, y: 0, width: 800, height: 600)
+        )
+        XCTAssertEqual(empty, [])
+        XCTAssertEqual(degenerate, [])
+    }
 }
