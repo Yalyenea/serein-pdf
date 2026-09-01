@@ -46,11 +46,30 @@ final class OverviewGridView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         configureHierarchy()
+        // Scroll-wheel / momentum scrolling changes the clip view bounds;
+        // observe them directly — NSScrollView does not propagate
+        // reflectScrolledClipView to its superview, so overriding it here
+        // would never fire.
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleClipViewBoundsDidChange),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleClipViewBoundsDidChange() {
+        refreshVisibleThumbnails()
     }
 
     func configure(document: PDFDocument?) {
@@ -134,6 +153,10 @@ final class OverviewGridView: NSView {
     private func rebuildItems() {
         itemViews.forEach { $0.removeFromSuperview() }
         itemViews.removeAll(keepingCapacity: true)
+
+        // A fresh document starts at the top; without this the clip view can
+        // keep a stale scroll point from the previous document's geometry.
+        scrollView.contentView.scroll(to: .zero)
 
         let pageCount = document?.pageCount ?? 0
         for index in 0..<pageCount {
@@ -219,12 +242,20 @@ final class OverviewGridView: NSView {
             )
         )
 
+        // Stop work that has left the prefetch window before enqueuing the new
+        // neighborhood. Otherwise rapid scrolling accumulates stale PDFKit
+        // rasterizations that can repopulate far-offscreen cells when done.
+        let obsoletePendingIndices = pendingRenderTickets.keys.filter {
+            wantedIndices.contains($0) == false
+        }
+        for index in obsoletePendingIndices {
+            pendingRenderTickets.removeValue(forKey: index)?.cancel()
+        }
+
         // Far-offscreen bitmaps are the unbounded-memory surface; drop them. The
         // cache brings recent ones back instantly when they scroll in again.
         for (index, item) in itemViews.enumerated() where wantedIndices.contains(index) == false {
-            if pendingRenderTickets[index] == nil {
-                item.clearThumbnail()
-            }
+            item.clearThumbnail()
         }
 
         guard wantedIndices.isEmpty == false else { return }
@@ -291,9 +322,8 @@ final class OverviewGridView: NSView {
 
             DispatchQueue.main.async { [weak self, ticket] in
                 guard let self else { return }
-                if self.pendingRenderTickets[ticket.pageIndex] === ticket {
-                    self.pendingRenderTickets[ticket.pageIndex] = nil
-                }
+                guard self.pendingRenderTickets[ticket.pageIndex] === ticket else { return }
+                self.pendingRenderTickets[ticket.pageIndex] = nil
                 guard self.thumbnailGeneration == ticket.generation,
                       ticket.pageIndex < self.itemViews.count,
                       let image = ticket.takeResult() else { return }
@@ -319,11 +349,6 @@ final class OverviewGridView: NSView {
         if clearDisplayedImages {
             itemViews.forEach { $0.clearThumbnail() }
         }
-    }
-
-    override func reflectScrolledClipView(_ clipView: NSClipView) {
-        super.reflectScrolledClipView(clipView)
-        refreshVisibleThumbnails()
     }
 
     override func layout() {
@@ -354,6 +379,15 @@ extension OverviewGridView {
     func testingScroll(to rect: CGRect) {
         scrollView.contentView.bounds.origin = rect.origin
         refreshVisibleThumbnails()
+    }
+
+    /// Scrolls through the real NSClipView notification path rather than
+    /// manually invoking the thumbnail refresh used by `testingScroll`.
+    @discardableResult
+    func testingClipViewScroll(to point: NSPoint) -> Bool {
+        let before = scrollView.contentView.bounds.origin
+        scrollView.contentView.scroll(to: point)
+        return scrollView.contentView.bounds.origin != before
     }
 
     /// Blocks until queued rasterizations have been applied on the main thread.

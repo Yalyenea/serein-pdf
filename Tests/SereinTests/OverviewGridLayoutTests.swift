@@ -107,6 +107,28 @@ final class OverviewGridLayoutTests: XCTestCase {
         XCTAssertFalse(result.fitsWithoutScroll)
     }
 
+    func testLongDocumentAtMinimumWidthFillsAvailableColumns() {
+        let available = CGSize(width: 1430, height: 893)
+        let result = OverviewGridLayout.computeFitAll(
+            .init(
+                pageCount: 268,
+                availableSize: available,
+                pageAspect: 1.414,
+                cellSpacing: 10,
+                minCellWidth: 56,
+                maxCellWidth: nil
+            )
+        )
+
+        // floor((1430 + 10) / (56 + 10)) = 21. The previous no-fit
+        // tie-break preferred 4 columns because 268 is divisible by 4,
+        // leaving a narrow strip centered in a wide window.
+        XCTAssertEqual(result.columns, 21)
+        XCTAssertEqual(result.cellSize.width, 56, accuracy: 0.5)
+        XCTAssertGreaterThan(result.contentSize.width / available.width, 0.9)
+        XCTAssertFalse(result.fitsWithoutScroll)
+    }
+
     func testManualColumnsRespectsAvailableWidth() {
         let columns = OverviewGridLayout.columnsForManualWidth(
             pageCount: 30,

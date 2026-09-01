@@ -49,15 +49,11 @@ enum OverviewGridLayout {
             let rawW = min(maxCellW, widthFromHeight, maxW)
             guard rawW.isFinite, rawW > 0 else { continue }
 
-            let usedW: CGFloat
-            let fits: Bool
-            if rawW >= minW {
-                usedW = rawW
-                fits = true
-            } else {
-                usedW = minW
-                fits = false
-            }
+            // Candidates below the readable thumbnail floor cannot satisfy
+            // fit-all. Handle that case after the search with a width-filled,
+            // vertically scrollable grid.
+            guard rawW >= minW else { continue }
+            let usedW = rawW
 
             let usedH = usedW * aspect
             let contentW = CGFloat(columns) * usedW + CGFloat(max(columns - 1, 0)) * spacing
@@ -67,7 +63,7 @@ enum OverviewGridLayout {
                 columns: columns,
                 cellSize: CGSize(width: usedW, height: usedH),
                 contentSize: CGSize(width: contentW, height: contentH),
-                fitsWithoutScroll: fits && contentW <= availW + 0.5 && contentH <= availH + 0.5
+                fitsWithoutScroll: contentW <= availW + 0.5 && contentH <= availH + 0.5
             )
 
             if shouldPrefer(candidate, over: best, pageCount: pageCount) {
@@ -79,8 +75,17 @@ enum OverviewGridLayout {
             return best
         }
 
+        // Too many pages to fit at the readable minimum. Fill every column
+        // the viewport can hold so the grid uses the window width and scrolls
+        // only vertically; choosing by last-row slack can collapse a long
+        // document to just a few centered columns.
         let width = minW
-        let columns = max(1, Int(ceil(sqrt(Double(pageCount)))))
+        let columns = columnsForManualWidth(
+            pageCount: pageCount,
+            availableWidth: availW,
+            cellWidth: width,
+            cellSpacing: spacing
+        )
         let rows = Int(ceil(Double(pageCount) / Double(columns)))
         let height = width * aspect
         return Result(

@@ -31,19 +31,19 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0..<6))
     }
 
-    func testScrollingRendersNewNeighborhoodReleasesFarPagesAndRestoresFromCache() {
+    func testClipViewScrollingRendersNewNeighborhoodReleasesFarPagesAndRestoresFromCache() {
         _ = NSApplication.shared
         let grid = makeLaidOutGrid(pageCount: 60)
         grid.testingFlushRenders()
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0...20))
 
         // Viewport y ∈ [1810, 2410): visible rows 10...13, buffered rows 6...16.
-        grid.testingScroll(to: CGRect(origin: CGPoint(x: 0, y: 1810), size: viewportSize))
+        XCTAssertTrue(grid.testingClipViewScroll(to: CGPoint(x: 0, y: 1810)))
         grid.testingFlushRenders()
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(18...50))
 
         // Back to the top: cached pages reappear synchronously, no rasterization.
-        grid.testingScroll(to: CGRect(origin: .zero, size: viewportSize))
+        XCTAssertTrue(grid.testingClipViewScroll(to: .zero))
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0...20))
         XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
     }
@@ -71,6 +71,33 @@ final class OverviewGridViewTests: XCTestCase {
         // on each side ≈ 11 rows × 3 = 33 cells — far below the 60-page total.
         XCTAssertLessThanOrEqual(maxLive, 36)
         XCTAssertFalse(grid.testingThumbnailImageIndices.isEmpty)
+    }
+
+    func testRapidClipViewScrollingCancelsStaleRenderNeighborhoods() {
+        _ = NSApplication.shared
+        let grid = makeLaidOutGrid(pageCount: 600)
+
+        // Move several screens without waiting for the prior neighborhood to
+        // rasterize, matching a fast scrollbar drag through a long document.
+        XCTAssertTrue(grid.testingClipViewScroll(to: CGPoint(x: 0, y: 6_000)))
+        XCTAssertTrue(grid.testingClipViewScroll(to: CGPoint(x: 0, y: 12_000)))
+        XCTAssertTrue(grid.testingClipViewScroll(to: CGPoint(x: 0, y: 24_000)))
+
+        let finalViewport = CGRect(x: 0, y: 24_000, width: 800, height: 600)
+        let expected = Set(
+            OverviewGridLayout.visibleCellIndices(
+                pageCount: 600,
+                columns: 3,
+                cellSize: CGSize(width: 120, height: 170),
+                spacing: 10,
+                origin: CGPoint(x: 210, y: 10),
+                viewport: finalViewport.insetBy(dx: -800, dy: -600)
+            )
+        )
+
+        XCTAssertTrue(grid.testingPendingRenderIndices.isSubset(of: expected))
+        grid.testingFlushRenders()
+        XCTAssertEqual(grid.testingThumbnailImageIndices, expected)
     }
 
     func testZoomingReRendersOnlyVisibleCellsAtNewSize() {
