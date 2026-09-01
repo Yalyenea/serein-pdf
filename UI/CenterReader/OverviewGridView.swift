@@ -1,7 +1,13 @@
 import AppKit
+import os
 import PDFKit
 
 /// Seamless all-pages overview: pages sit on the reader surface with no chrome panel.
+///
+/// Thumbnails rasterize lazily: only cells inside (or one screen near) the
+/// viewport render, off the main thread, at a pixel size capped for memory.
+/// A cost-bounded cache recycles recently visited pages, far-offscreen cells
+/// drop their bitmaps, and leaving overview releases everything immediately.
 final class OverviewGridView: NSView {
     var onPageSelected: ((Int) -> Void)?
 
@@ -13,7 +19,29 @@ final class OverviewGridView: NSView {
     private var cellSize: CGSize = .zero
     private var spacing: CGFloat = OverviewGridLayout.defaultCellSpacing
     private var edgeInset: CGFloat = OverviewGridLayout.defaultEdgeInset
-    private var thumbnailGeneration: Int = 0
+    private var gridOrigin: CGPoint = .zero
+    private var thumbnailGeneration = 0
+    private var lastRenderedPixelSize: CGSize = .zero
+    private var pendingRenderTickets: [Int: OverviewRenderTicket] = [:]
+
+    /// Long-side pixel cap so fit-all cells on huge displays cannot allocate giant bitmaps.
+    private static let maxThumbnailPixelLongSide: CGFloat = 1200
+    /// Byte budget for recycled offscreen thumbnails; live cells are extra.
+    private static let thumbnailCacheCostLimit = 48 * 1024 * 1024
+    private static let maxConcurrentRenders = 2
+
+    private let thumbnailCache: NSCache<NSNumber, NSImage> = {
+        let cache = NSCache<NSNumber, NSImage>()
+        cache.totalCostLimit = thumbnailCacheCostLimit
+        return cache
+    }()
+
+    private let renderQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = maxConcurrentRenders
+        queue.qualityOfService = .userInteractive
+        return queue
+    }()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -28,10 +56,14 @@ final class OverviewGridView: NSView {
     func configure(document: PDFDocument?) {
         let previousID = self.document.map { ObjectIdentifier($0) }
         let nextID = document.map { ObjectIdentifier($0) }
-        self.document = document
-        if previousID != nextID {
-            rebuildItems()
+        guard previousID != nextID else {
+            self.document = document
+            return
         }
+        self.document = document
+        invalidateThumbnails(clearDisplayedImages: false)
+        rebuildItems()
+        refreshVisibleThumbnails()
     }
 
     func applyLayout(
@@ -45,7 +77,7 @@ final class OverviewGridView: NSView {
         self.spacing = max(spacing, 0)
         self.edgeInset = max(edgeInset, 0)
         layoutItems()
-        regenerateThumbnailsIfNeeded()
+        refreshVisibleThumbnails()
     }
 
     func applySurfaceBackground(_ color: NSColor) {
@@ -58,6 +90,17 @@ final class OverviewGridView: NSView {
         pagesContainer.wantsLayer = true
         pagesContainer.layer?.backgroundColor = color.cgColor
         itemViews.forEach { $0.applyBorderAppearance() }
+    }
+
+    override var isHidden: Bool {
+        didSet {
+            guard isHidden != oldValue else { return }
+            if isHidden {
+                invalidateThumbnails(clearDisplayedImages: true)
+            } else {
+                refreshVisibleThumbnails()
+            }
+        }
     }
 
     private func configureHierarchy() {
@@ -103,7 +146,6 @@ final class OverviewGridView: NSView {
             itemViews.append(item)
         }
         layoutItems()
-        regenerateThumbnailsIfNeeded()
     }
 
     private func layoutItems() {
@@ -132,6 +174,7 @@ final class OverviewGridView: NSView {
             CGFloat(rows) * cellSize.height + CGFloat(max(rows - 1, 0)) * spacing
         let originX = max((width - gridWidth) / 2, edgeInset)
         let originY = max((height - gridHeight) / 2, edgeInset)
+        gridOrigin = CGPoint(x: originX, y: originY)
 
         for (index, item) in itemViews.enumerated() {
             let col = index % cols
@@ -142,46 +185,184 @@ final class OverviewGridView: NSView {
         }
     }
 
-    private func regenerateThumbnailsIfNeeded() {
-        guard let document, cellSize.width > 1, cellSize.height > 1 else { return }
-        thumbnailGeneration += 1
-        let generation = thumbnailGeneration
-        let targetSize = cellSize
-        // Retina-quality bitmaps.
-        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        let pixelSize = NSSize(
-            width: max(targetSize.width * scale, 1),
-            height: max(targetSize.height * scale, 1)
+    // MARK: - Lazy thumbnail pipeline
+
+    private func refreshVisibleThumbnails() {
+        guard isHidden == false,
+              let document,
+              document.pageCount > 0,
+              itemViews.isEmpty == false,
+              cellSize.width > 1, cellSize.height > 1 else { return }
+
+        let pixelSize = thumbnailPixelSize()
+        if pixelSize != lastRenderedPixelSize {
+            // Raster scale changed (zoom / resize): drop recycled bitmaps and stop
+            // in-flight renders. Displayed stale thumbnails stay until replaced,
+            // and only cells near the viewport re-render — not the whole document.
+            lastRenderedPixelSize = pixelSize
+            cancelPendingRenders()
+            thumbnailCache.removeAllObjects()
+        }
+
+        let visibleRect = scrollView.contentView.documentVisibleRect
+        guard visibleRect.width > 1, visibleRect.height > 1 else { return }
+        // Prefetch roughly one screen around the viewport.
+        let bufferedRect = visibleRect.insetBy(dx: -visibleRect.width, dy: -visibleRect.height)
+        let wantedIndices = Set(
+            OverviewGridLayout.visibleCellIndices(
+                pageCount: document.pageCount,
+                columns: columns,
+                cellSize: cellSize,
+                spacing: spacing,
+                origin: gridOrigin,
+                viewport: bufferedRect
+            )
         )
 
-        // PDFKit thumbnail generation is main-thread bound; chunk so first paint stays responsive.
-        let pageCount = document.pageCount
-        let chunkSize = 6
-        var nextIndex = 0
-
-        func renderChunk() {
-            guard self.thumbnailGeneration == generation else { return }
-            let end = min(nextIndex + chunkSize, pageCount)
-            while nextIndex < end {
-                let index = nextIndex
-                nextIndex += 1
-                guard index < self.itemViews.count,
-                      let page = document.page(at: index) else { continue }
-                let image = page.thumbnail(of: pixelSize, for: .mediaBox)
-                image.size = targetSize
-                self.itemViews[index].setThumbnail(image)
-            }
-            if nextIndex < pageCount {
-                DispatchQueue.main.async(execute: renderChunk)
+        // Far-offscreen bitmaps are the unbounded-memory surface; drop them. The
+        // cache brings recent ones back instantly when they scroll in again.
+        for (index, item) in itemViews.enumerated() where wantedIndices.contains(index) == false {
+            if pendingRenderTickets[index] == nil {
+                item.clearThumbnail()
             }
         }
 
-        DispatchQueue.main.async(execute: renderChunk)
+        guard wantedIndices.isEmpty == false else { return }
+        let centerIndex = centerVisibleIndex(viewport: visibleRect, pageCount: document.pageCount)
+        for index in wantedIndices.sorted(by: { abs($0 - centerIndex) < abs($1 - centerIndex) }) {
+            guard index < itemViews.count,
+                  pendingRenderTickets[index] == nil,
+                  itemNeedsRender(itemViews[index]) else { continue }
+            // Recently visited pages come back from the cache without rasterizing.
+            if let cached = thumbnailCache.object(forKey: NSNumber(value: index)) {
+                itemViews[index].setThumbnail(cached)
+                continue
+            }
+            enqueueThumbnailRender(index: index, pixelSize: pixelSize)
+        }
+    }
+
+    private func thumbnailPixelSize() -> NSSize {
+        let backingScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let longSide = max(cellSize.width, cellSize.height)
+        let scale = min(backingScale, Self.maxThumbnailPixelLongSide / max(longSide, 1))
+        return NSSize(
+            width: max(cellSize.width * scale, 1),
+            height: max(cellSize.height * scale, 1)
+        )
+    }
+
+    private func centerVisibleIndex(viewport: CGRect, pageCount: Int) -> Int {
+        let strideX = max(cellSize.width + spacing, 1)
+        let strideY = max(cellSize.height + spacing, 1)
+        let row = max(0, Int(floor((viewport.midY - gridOrigin.y) / strideY)))
+        let col = max(0, Int(floor((viewport.midX - gridOrigin.x) / strideX)))
+        return min(row * columns + col, max(pageCount - 1, 0))
+    }
+
+    /// Stale bitmaps (rendered for a previous cell size) stay displayed until
+    /// the replacement arrives, so zoom never blanks the grid.
+    private func itemNeedsRender(_ item: OverviewPageItemView) -> Bool {
+        guard let image = item.thumbnailImage else { return true }
+        return abs(image.size.width - cellSize.width) > 0.5
+            || abs(image.size.height - cellSize.height) > 0.5
+    }
+
+    private func enqueueThumbnailRender(index: Int, pixelSize: NSSize) {
+        guard let document else { return }
+        let ticket = OverviewRenderTicket(
+            document: document,
+            pageIndex: index,
+            pixelSize: pixelSize,
+            pointSize: cellSize,
+            generation: thumbnailGeneration
+        )
+        pendingRenderTickets[index] = ticket
+
+        // PDFKit reads on a stable document are safe off-main (PDFThumbnailView
+        // rasterizes the same way); only the result hops back to the main thread.
+        renderQueue.addOperation { [weak self, ticket] in
+            guard ticket.isCancelled == false,
+                  let page = ticket.document.page(at: ticket.pageIndex) else { return }
+            let image = page.thumbnail(of: ticket.pixelSize, for: .mediaBox)
+            guard ticket.isCancelled == false else { return }
+            image.size = ticket.pointSize
+            ticket.storeResult(image)
+
+            DispatchQueue.main.async { [weak self, ticket] in
+                guard let self else { return }
+                if self.pendingRenderTickets[ticket.pageIndex] === ticket {
+                    self.pendingRenderTickets[ticket.pageIndex] = nil
+                }
+                guard self.thumbnailGeneration == ticket.generation,
+                      ticket.pageIndex < self.itemViews.count,
+                      let image = ticket.takeResult() else { return }
+                self.thumbnailCache.setObject(
+                    image,
+                    forKey: NSNumber(value: ticket.pageIndex),
+                    cost: ticket.costBytes
+                )
+                self.itemViews[ticket.pageIndex].setThumbnail(image)
+            }
+        }
+    }
+
+    private func cancelPendingRenders() {
+        thumbnailGeneration += 1
+        pendingRenderTickets.values.forEach { $0.cancel() }
+        pendingRenderTickets.removeAll()
+    }
+
+    private func invalidateThumbnails(clearDisplayedImages: Bool) {
+        cancelPendingRenders()
+        thumbnailCache.removeAllObjects()
+        if clearDisplayedImages {
+            itemViews.forEach { $0.clearThumbnail() }
+        }
+    }
+
+    override func reflectScrolledClipView(_ clipView: NSClipView) {
+        super.reflectScrolledClipView(clipView)
+        refreshVisibleThumbnails()
     }
 
     override func layout() {
         super.layout()
         layoutItems()
+        refreshVisibleThumbnails()
+    }
+}
+
+// MARK: - Testing support
+
+extension OverviewGridView {
+    var testingThumbnailImageIndices: Set<Int> {
+        Set(itemViews.indices.filter { itemViews[$0].thumbnailImage != nil })
+    }
+
+    var testingPendingRenderIndices: Set<Int> {
+        Set(pendingRenderTickets.keys)
+    }
+
+    func testingThumbnailPointSize(at index: Int) -> CGSize? {
+        guard itemViews.indices.contains(index) else { return nil }
+        return itemViews[index].thumbnailImage?.size
+    }
+
+    /// Moves the viewport without going through the scroll machinery, then
+    /// runs the same refresh a real scroll would trigger.
+    func testingScroll(to rect: CGRect) {
+        scrollView.contentView.bounds.origin = rect.origin
+        refreshVisibleThumbnails()
+    }
+
+    /// Blocks until queued rasterizations have been applied on the main thread.
+    func testingFlushRenders() {
+        renderQueue.waitUntilAllOperationsAreFinished()
+        let deadline = Date().addingTimeInterval(5)
+        while pendingRenderTickets.isEmpty == false && Date() < deadline {
+            RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
     }
 }
 
@@ -193,6 +374,8 @@ private final class OverviewPageItemView: NSView {
 
     private let imageView = NSImageView()
     private let pageLabel = NSTextField(labelWithString: "")
+
+    var thumbnailImage: NSImage? { imageView.image }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -242,6 +425,10 @@ private final class OverviewPageItemView: NSView {
         applyBorderAppearance()
     }
 
+    func clearThumbnail() {
+        imageView.image = nil
+    }
+
     func applyBorderAppearance() {
         // Hairline stroke: soft enough not to compete with page content.
         let stroke = NightModeStyle.chromeStrokeColor.withAlphaComponent(0.55)
@@ -264,4 +451,49 @@ private final class OverviewPageItemView: NSView {
 
 private final class FlippedClipContainer: NSView {
     override var isFlipped: Bool { true }
+}
+
+/// One off-main rasterization request plus its result slot.
+/// `@unchecked Sendable` crosses only the render queue boundary.
+private final class OverviewRenderTicket: @unchecked Sendable {
+    let document: PDFDocument
+    let pageIndex: Int
+    let pixelSize: NSSize
+    let pointSize: CGSize
+    let generation: Int
+    let costBytes: Int
+
+    private let cancelled = OSAllocatedUnfairLock(initialState: false)
+    private let result = OSAllocatedUnfairLock<NSImage?>(initialState: nil)
+
+    init(
+        document: PDFDocument,
+        pageIndex: Int,
+        pixelSize: NSSize,
+        pointSize: CGSize,
+        generation: Int
+    ) {
+        self.document = document
+        self.pageIndex = pageIndex
+        self.pixelSize = pixelSize
+        self.pointSize = pointSize
+        self.generation = generation
+        self.costBytes = Int(pixelSize.width * pixelSize.height) * 4
+    }
+
+    func cancel() {
+        cancelled.withLock { $0 = true }
+    }
+
+    var isCancelled: Bool {
+        cancelled.withLock { $0 }
+    }
+
+    func storeResult(_ image: NSImage) {
+        result.withLock { $0 = image }
+    }
+
+    func takeResult() -> NSImage? {
+        result.withLock { $0 }
+    }
 }

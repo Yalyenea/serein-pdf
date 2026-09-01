@@ -101,6 +101,7 @@ flowchart LR
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
+| 全览性能 | `OverviewGridView` 缩略图只按可视区 ± 一屏懒栅格化(离主线程、2 并发、像素长边上限 1200);`NSCache` 按字节成本回收,远端页释放位图,退出全览立即清空;缩放 / resize 只重渲可视区,滚回近访页走缓存不重渲 |
 | 书籍阅读 | 新增 `book` / `bookContinuous`,与既有 `twoUp` / `twoUpContinuous` 并存;两个书籍状态复用横向 `PDFView.twoUp + displaysAsBook` 布局,封面单页,后续按左右 spread 配对;封面与末尾孤页保留空槽以稳定页面尺寸;Fit Width 按实际页面框与固定安全边距同时约束宽高,手动缩小后只要完整可见也保持双轴居中;Continuous Turn 允许持续手势逐 spread 翻页 |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
 | 空窗策略 | 无 session 时右栏(outline pane)自动折叠,中栏独占窗口;首开文档自动恢复右栏,除非空窗期间用户显式切换过可见性(显式操作让位);左栏常驻并托管 Recent 快捷入口 |

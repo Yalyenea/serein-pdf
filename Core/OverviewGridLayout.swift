@@ -94,6 +94,47 @@ enum OverviewGridLayout {
         )
     }
 
+    /// Indices of grid cells whose frames intersect `viewport`.
+    ///
+    /// Coordinates live in the flipped overview container space: (0,0) is the
+    /// content's top-left and the grid's first cell sits at `origin`.
+    static func visibleCellIndices(
+        pageCount: Int,
+        columns: Int,
+        cellSize: CGSize,
+        spacing: CGFloat,
+        origin: CGPoint,
+        viewport: CGRect
+    ) -> [Int] {
+        let pages = max(pageCount, 0)
+        guard pages > 0, cellSize.width > 0, cellSize.height > 0 else { return [] }
+        let cols = max(columns, 1)
+        let rows = Int(ceil(Double(pages) / Double(cols)))
+
+        let strideX = cellSize.width + spacing
+        let strideY = cellSize.height + spacing
+        guard strideX > 0, strideY > 0 else { return [] }
+
+        // Row r spans y in [origin.y + r * strideY, origin.y + r * strideY + cellSize.height).
+        let firstRow = max(0, Int(floor((viewport.minY - origin.y - cellSize.height) / strideY)) + 1)
+        let lastRow = min(rows - 1, Int(floor((viewport.maxY - origin.y) / strideY)))
+        let firstCol = max(0, Int(floor((viewport.minX - origin.x - cellSize.width) / strideX)) + 1)
+        let lastCol = min(cols - 1, Int(floor((viewport.maxX - origin.x) / strideX)))
+        guard firstRow <= lastRow, firstCol <= lastCol else { return [] }
+
+        var indices: [Int] = []
+        indices.reserveCapacity((lastRow - firstRow + 1) * (lastCol - firstCol + 1))
+        for row in firstRow...lastRow {
+            for col in firstCol...lastCol {
+                let index = row * cols + col
+                if index < pages {
+                    indices.append(index)
+                }
+            }
+        }
+        return indices
+    }
+
     /// Columns that fit a fixed manual cell width.
     static func columnsForManualWidth(
         pageCount: Int,
