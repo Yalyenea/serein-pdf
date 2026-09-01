@@ -31,23 +31,13 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0..<6))
     }
 
-    func testScrollingRendersNewNeighborhoodAndReleasesFarPages() {
+    func testScrollingRendersNewNeighborhoodReleasesFarPagesAndRestoresFromCache() {
         _ = NSApplication.shared
         let grid = makeLaidOutGrid(pageCount: 60)
         grid.testingFlushRenders()
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0...20))
 
         // Viewport y ∈ [1810, 2410): visible rows 10...13, buffered rows 6...16.
-        grid.testingScroll(to: CGRect(origin: CGPoint(x: 0, y: 1810), size: viewportSize))
-        grid.testingFlushRenders()
-
-        XCTAssertEqual(grid.testingThumbnailImageIndices, Set(18...50))
-    }
-
-    func testScrollingBackRestoresPagesFromCacheWithoutRerendering() {
-        _ = NSApplication.shared
-        let grid = makeLaidOutGrid(pageCount: 60)
-        grid.testingFlushRenders()
         grid.testingScroll(to: CGRect(origin: CGPoint(x: 0, y: 1810), size: viewportSize))
         grid.testingFlushRenders()
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(18...50))
@@ -102,9 +92,21 @@ final class OverviewGridViewTests: XCTestCase {
         }
     }
 
-    func testLeavingOverviewReleasesAllThumbnailsAndReentryRendersAgain() {
+    func testHiddenGridLifecycleNeverRendersUntilShownAndReleasesOnHide() {
         _ = NSApplication.shared
-        let grid = makeLaidOutGrid(pageCount: 60)
+        let grid = OverviewGridView(frame: NSRect(origin: .zero, size: viewportSize))
+        grid.isHidden = true
+
+        // configure/applyLayout run while hidden (the real entry sequence
+        // configures before unhiding) — nothing may rasterize.
+        grid.configure(document: TestPDFFixtures.makeBlankDocument(pageCount: 60))
+        grid.applyLayout(columns: 3, cellSize: CGSize(width: 120, height: 170))
+        grid.layoutSubtreeIfNeeded()
+        grid.testingFlushRenders()
+        XCTAssertTrue(grid.testingThumbnailImageIndices.isEmpty)
+
+        // Showing renders; hiding releases everything; showing re-renders.
+        grid.isHidden = false
         grid.testingFlushRenders()
         XCTAssertFalse(grid.testingThumbnailImageIndices.isEmpty)
 
@@ -127,22 +129,6 @@ final class OverviewGridViewTests: XCTestCase {
         grid.testingFlushRenders()
 
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0..<4))
-    }
-
-    func testHiddenGridDoesNotRasterizeUntilShown() {
-        _ = NSApplication.shared
-        let grid = OverviewGridView(frame: NSRect(origin: .zero, size: viewportSize))
-        grid.isHidden = true
-        grid.configure(document: TestPDFFixtures.makeBlankDocument(pageCount: 60))
-        grid.applyLayout(columns: 3, cellSize: CGSize(width: 120, height: 170))
-        grid.layoutSubtreeIfNeeded()
-        grid.testingFlushRenders()
-
-        XCTAssertTrue(grid.testingThumbnailImageIndices.isEmpty)
-
-        grid.isHidden = false
-        grid.testingFlushRenders()
-        XCTAssertFalse(grid.testingThumbnailImageIndices.isEmpty)
     }
 
     private func makeLaidOutGrid(pageCount: Int) -> OverviewGridView {

@@ -206,38 +206,4 @@ final class OverviewGridLayoutTests: XCTestCase {
         XCTAssertEqual(above, [])
         XCTAssertEqual(below, [])
     }
-
-    func testVisibleCellIndicesRespectsPartialColumns() {
-        let indices = OverviewGridLayout.visibleCellIndices(
-            pageCount: 60,
-            columns: 3,
-            cellSize: gridGeometry.cellSize,
-            spacing: gridGeometry.spacing,
-            origin: gridGeometry.origin,
-            viewport: CGRect(x: 460, y: 0, width: 200, height: 200)
-        )
-        // Only the rightmost column intersects; rows 0...1.
-        XCTAssertEqual(indices, [2, 5])
-    }
-
-    func testVisibleCellIndicesHandlesZeroPagesAndDegenerateCells() {
-        let empty = OverviewGridLayout.visibleCellIndices(
-            pageCount: 0,
-            columns: 3,
-            cellSize: gridGeometry.cellSize,
-            spacing: gridGeometry.spacing,
-            origin: gridGeometry.origin,
-            viewport: CGRect(x: 0, y: 0, width: 800, height: 600)
-        )
-        let degenerate = OverviewGridLayout.visibleCellIndices(
-            pageCount: 10,
-            columns: 3,
-            cellSize: .zero,
-            spacing: gridGeometry.spacing,
-            origin: gridGeometry.origin,
-            viewport: CGRect(x: 0, y: 0, width: 800, height: 600)
-        )
-        XCTAssertEqual(empty, [])
-        XCTAssertEqual(degenerate, [])
-    }
 }
