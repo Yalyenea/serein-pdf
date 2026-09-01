@@ -58,6 +58,31 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
     }
 
+    func testScrollingEntireGridKeepsLiveThumbnailsBounded() {
+        _ = NSApplication.shared
+        let grid = makeLaidOutGrid(pageCount: 60)
+        grid.testingFlushRenders()
+
+        // Walk the viewport through every row of the grid. At no point may
+        // more than the viewport neighborhood hold a bitmap, no matter how
+        // many pages have been visited.
+        let stride: CGFloat = 180
+        var maxLive = 0
+        var y: CGFloat = 0
+        let maxY = CGFloat(20) * stride + 20
+        while y <= maxY {
+            grid.testingScroll(to: CGRect(origin: CGPoint(x: 0, y: y), size: viewportSize))
+            grid.testingFlushRenders()
+            maxLive = max(maxLive, grid.testingThumbnailImageIndices.count)
+            y += viewportSize.height
+        }
+
+        // 800x600 viewport, 3 columns: visible 4 rows plus a one-screen buffer
+        // on each side ≈ 11 rows × 3 = 33 cells — far below the 60-page total.
+        XCTAssertLessThanOrEqual(maxLive, 36)
+        XCTAssertFalse(grid.testingThumbnailImageIndices.isEmpty)
+    }
+
     func testZoomingReRendersOnlyVisibleCellsAtNewSize() {
         _ = NSApplication.shared
         let grid = makeLaidOutGrid(pageCount: 60)
