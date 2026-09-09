@@ -552,6 +552,11 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         try activeReaderViewController().saveAnnotations()
     }
 
+    func flushPendingReadingPositions() {
+        primaryReaderViewController.flushPendingReadingPosition()
+        secondaryReaderViewController.flushPendingReadingPosition()
+    }
+
     func focus(on highlight: DocumentHighlightGroup) {
         activeReaderViewController().focus(on: highlight)
     }

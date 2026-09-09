@@ -267,6 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        mainWindowControllers.values.forEach { $0.flushPendingReadingPositions() }
         documentStore?.flushPersistence()
         cleanupTemporaryShareDirectories()
     }
@@ -2553,7 +2554,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             documentStore.updateAppConfiguration(newConfiguration)
             settingsWindowController?.sync(configuration: newConfiguration)
             if libraryFoldersChanged {
-                libraryPaletteController?.invalidateCatalogCache()
+                libraryPaletteController?.invalidateCatalogCache(
+                    folderURLs: newConfiguration.library.folderURLs
+                )
             }
         } catch {
             appConfiguration = previousConfiguration

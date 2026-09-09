@@ -589,6 +589,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         documentStore.setSplitEnabled(false, in: windowID)
     }
 
+    func flushPendingReadingPositions() {
+        splitViewController.flushPendingReadingPositions()
+    }
+
     func prepareForApplicationTermination() -> Bool {
         if allowsTerminationWithoutPrompt {
             allowsTerminationWithoutPrompt = false

@@ -234,6 +234,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         }
     }
 
+    var testingStatusText: String { statusLabel.stringValue }
+
     // MARK: - NSTextFieldDelegate
 
     func controlTextDidChange(_ obj: Notification) {

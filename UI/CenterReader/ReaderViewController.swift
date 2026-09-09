@@ -549,12 +549,6 @@ final class ReaderViewController: NSViewController {
             name: Notification.Name.PDFViewScaleChanged,
             object: pdfView
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleApplicationWillTerminate),
-            name: NSApplication.willTerminateNotification,
-            object: nil
-        )
         syncNightModeFromSystem()
         appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated {
@@ -722,8 +716,7 @@ final class ReaderViewController: NSViewController {
         flushPendingReadingPositionWriteback()
     }
 
-    @objc
-    private func handleApplicationWillTerminate(_ notification: Notification) {
+    func flushPendingReadingPosition() {
         flushPendingReadingPositionWriteback()
     }
 
@@ -1098,7 +1091,11 @@ final class ReaderViewController: NSViewController {
     }
 
     func testingFlushReadingPositionWriteback() {
-        flushPendingReadingPositionWriteback()
+        flushPendingReadingPosition()
+    }
+
+    var testingFindBarStatusText: String {
+        findBarView.testingStatusText
     }
 
     @discardableResult
@@ -2497,9 +2494,6 @@ final class ReaderViewController: NSViewController {
 
     func applySearchResults(_ selections: [PDFSelection], selectedMatchIndex: Int?) {
         pdfView.highlightedSelections = selections
-        if isFindBarVisible {
-            findBarView.setStatus(matchIndex: selectedMatchIndex, totalMatches: selections.count)
-        }
         guard let selectedMatchIndex,
               selections.indices.contains(selectedMatchIndex) else {
             // Leave currentSelection alone when no explicit index — find-next may

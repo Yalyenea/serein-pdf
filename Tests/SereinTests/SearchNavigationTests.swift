@@ -279,6 +279,31 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 2)
     }
 
+    func testApplySearchResultsDoesNotOverwriteFindBarTotal() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "find-bar-total",
+            pages: ["needle alpha needle beta needle"]
+        )
+        let session = try store.open(documentAt: url)
+        let reader = ReaderViewController(documentStore: store, windowID: store.defaultWindowID)
+        reader.targetSessionID = session.id
+        reader.loadViewIfNeeded()
+        reader.showFindBar(scope: .currentDocument)
+        store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
+
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 3)
+        XCTAssertEqual(reader.testingFindBarStatusText, "3 matches")
+
+        let truncated = try XCTUnwrap(
+            reader.pdfView.document?.findString("needle", withOptions: []).first
+        )
+        reader.applySearchResults([truncated], selectedMatchIndex: nil)
+
+        XCTAssertEqual(reader.testingFindBarStatusText, "3 matches")
+    }
+
     func testEmptySearchStateStaysBlankWithoutInstructionalCopy() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(

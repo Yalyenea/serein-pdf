@@ -542,6 +542,10 @@ final class SplitViewController: NSSplitViewController {
         try readerWorkspaceViewController.saveAnnotations()
     }
 
+    func flushPendingReadingPositions() {
+        readerWorkspaceViewController.flushPendingReadingPositions()
+    }
+
     func showFindBar(scope: SearchScope? = nil) {
         readerWorkspaceViewController.showFindBar(scope: scope)
         syncFindStatus()

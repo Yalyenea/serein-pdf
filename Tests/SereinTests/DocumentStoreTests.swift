@@ -1982,6 +1982,55 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSessionID(in: targetWindowID), first.id)
     }
 
+    func testCloseWindowCancelsInFlightSearch() throws {
+        let store = makeStore()
+        let firstWindowID = store.defaultWindowID
+        _ = try store.open(
+            documentAt: makeSearchableTemporaryPDF(named: "close-search-keep", pages: ["alpha"])
+        )
+        let secondWindowID = store.createWindow(copyingFrom: firstWindowID)
+        _ = try store.open(
+            documentAt: makeSearchableTemporaryPDF(
+                named: "close-search-drop",
+                pages: (0..<40).map { "needle \($0)" }
+            ),
+            in: secondWindowID
+        )
+
+        store.updateSearch(query: "needle", scope: .currentDocument, in: secondWindowID)
+        XCTAssertTrue(store.testingIsSearchInFlight(in: secondWindowID))
+
+        store.closeWindow(id: secondWindowID)
+
+        XCTAssertFalse(store.testingIsSearchInFlight(in: secondWindowID))
+        XCTAssertEqual(store.searchSnapshot(in: secondWindowID).totalMatches, 0)
+        XCTAssertFalse(store.searchSnapshot(in: secondWindowID).isSearching)
+    }
+
+    func testMergeAllWindowsCancelsDiscardedWindowSearch() throws {
+        let store = makeStore()
+        let targetWindowID = store.defaultWindowID
+        _ = try store.open(
+            documentAt: makeSearchableTemporaryPDF(named: "merge-search-keep", pages: ["alpha"])
+        )
+        let secondWindowID = store.createWindow(copyingFrom: targetWindowID)
+        _ = try store.open(
+            documentAt: makeSearchableTemporaryPDF(
+                named: "merge-search-drop",
+                pages: (0..<40).map { "needle \($0)" }
+            ),
+            in: secondWindowID
+        )
+
+        store.updateSearch(query: "needle", scope: .currentDocument, in: secondWindowID)
+        XCTAssertTrue(store.testingIsSearchInFlight(in: secondWindowID))
+
+        store.mergeAllWindows(into: targetWindowID)
+
+        XCTAssertFalse(store.testingIsSearchInFlight(in: secondWindowID))
+        XCTAssertEqual(store.searchSnapshot(in: secondWindowID).totalMatches, 0)
+    }
+
     func testMoveActiveSessionToNewWindowDetachesOnlyCurrentPDF() throws {
         let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "detach-window-first"))

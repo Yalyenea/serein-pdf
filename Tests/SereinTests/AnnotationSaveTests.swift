@@ -105,6 +105,23 @@ final class AnnotationSaveTests: XCTestCase {
         XCTAssertTrue(store.session(for: session.id)?.isDirty == true)
     }
 
+    func testCompletedAutoSaveDoesNotReplaceNewerManualSave() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "autosave-stale-manual"))
+        try addHighlightAnnotation(to: session, in: store)
+        store.setDirty(true, for: session.id, now: Date(timeIntervalSinceReferenceDate: 1))
+        let prepared = store.prepareAutoSaveJobs(now: Date(timeIntervalSinceReferenceDate: 1_000))
+        XCTAssertEqual(prepared.jobs.count, 1)
+
+        try addHighlightAnnotation(to: session, in: store)
+        try store.saveAnnotations(for: session.id)
+
+        let results = DocumentStore.performAutoSaveJobs(prepared.jobs)
+        XCTAssertTrue(store.completeAutoSave(results).isEmpty)
+        XCTAssertEqual(store.session(for: session.id)?.isDirty, false)
+        XCTAssertEqual(PDFDocument(url: session.url)?.page(at: 0)?.annotations.count, 2)
+    }
+
     private func makeStore() -> DocumentStore {
         makeIsolatedDocumentStore()
     }

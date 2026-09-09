@@ -40,6 +40,7 @@ struct AnnotationAutoSaveJob: Sendable {
 
 struct AnnotationAutoSaveResult: Sendable {
     let job: AnnotationAutoSaveJob
+    let stagedURL: URL?
     let errorDescription: String?
 }
 

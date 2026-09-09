@@ -26,6 +26,27 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, latest)
     }
 
+    func testWorkspaceFlushCommitsPendingReadingPositions() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "workspace-flush-writeback", pageCount: 4)
+        )
+        let workspace = makeWorkspace(store: store)
+        workspace.primaryReaderViewController.targetSessionID = session.id
+        let latest = ReadingPosition(pageIndex: 1, point: CGPoint(x: 12, y: 180))
+
+        workspace.primaryReaderViewController.testingScheduleReadingPositionWriteback(
+            latest,
+            for: session.id
+        )
+        XCTAssertTrue(workspace.primaryReaderViewController.testingHasPendingReadingPositionWriteback)
+
+        workspace.flushPendingReadingPositions()
+
+        XCTAssertFalse(workspace.primaryReaderViewController.testingHasPendingReadingPositionWriteback)
+        XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, latest)
+    }
+
     func testMultiStepBackAndForwardAcrossPageJumps() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(

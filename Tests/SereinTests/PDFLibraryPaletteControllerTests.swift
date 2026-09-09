@@ -32,4 +32,24 @@ final class PDFLibraryPaletteControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.testingPDFTitles, ["Spectrum"])
     }
+
+    func testInvalidateWhileVisibleRestartsCatalogBuild() async throws {
+        _ = NSApplication.shared
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        try Data("a".utf8).write(to: rootURL.appendingPathComponent("Algebra.pdf"))
+
+        let controller = PDFLibraryPaletteController { _ in }
+        controller.testingShow(folderURLs: [rootURL])
+        defer { controller.close() }
+        XCTAssertTrue(controller.testingIsLoadingCatalog)
+
+        controller.testingInvalidateCatalogCache()
+        XCTAssertTrue(controller.testingIsLoadingCatalog)
+
+        await controller.testingWaitForCatalog()
+        XCTAssertFalse(controller.testingIsLoadingCatalog)
+        XCTAssertEqual(controller.testingPDFTitles, ["Algebra"])
+    }
 }

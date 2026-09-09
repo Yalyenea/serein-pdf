@@ -288,6 +288,7 @@ final class DocumentStore {
         guard windowWorkspaces.count > 1,
               let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         windowWorkspaces.remove(at: index)
+        cancelSearchOperation(in: windowID)
         searchSnapshots.removeValue(forKey: windowID)
         searchOptionsByWindowID.removeValue(forKey: windowID)
         removeUnreferencedSessions()
@@ -318,6 +319,9 @@ final class DocumentStore {
         mergedWorkspace.continuousReadingState = ContinuousReadingState()
         mergedWorkspace.recentlyClosedURLs = Array(mergedRecentlyClosedURLs.suffix(Self.recentlyClosedLimit))
         normalizeWorkspace(&mergedWorkspace, preferredSessionID: targetID)
+        for workspace in windowWorkspaces where workspace.id != targetWindowID {
+            cancelSearchOperation(in: workspace.id)
+        }
         windowWorkspaces = [mergedWorkspace]
         searchSnapshots = searchSnapshots.filter { $0.key == targetWindowID }
         searchOptionsByWindowID = searchOptionsByWindowID.filter { $0.key == targetWindowID }
@@ -624,7 +628,7 @@ final class DocumentStore {
         let previousSearchTargetIDs = Set(
             searchSnapshots[windowID]?.source.targets.map(\.sessionID) ?? []
         )
-        searchOperations.removeValue(forKey: windowID)?.cancel()
+        cancelSearchOperation(in: windowID)
         searchSnapshots.removeValue(forKey: windowID)
 
         var workspace = windowWorkspaces[workspaceIndex]
@@ -1208,7 +1212,7 @@ final class DocumentStore {
         searchOptionsByWindowID[windowID] = options
 
         if trimmed.isEmpty {
-            searchOperations.removeValue(forKey: windowID)?.cancel()
+            cancelSearchOperation(in: windowID)
             let previousTargetIDs = Set(searchSnapshots[windowID]?.source.targets.map(\.sessionID) ?? [])
             searchSnapshots.removeValue(forKey: windowID)
             if windowWorkspaces[index].rightSidebarMode == .search {
@@ -1525,6 +1529,7 @@ final class DocumentStore {
             throw DocumentStoreError.failedToSaveDocument(sessions[sessionIndex].url)
         }
 
+        sessions[sessionIndex].annotationGeneration &+= 1
         sessions[sessionIndex].isDirty = false
         sessions[sessionIndex].dirtySince = nil
         sessions[sessionIndex].fileSnapshot = PDFFileSnapshot(url: sessions[sessionIndex].url)
@@ -1590,11 +1595,23 @@ final class DocumentStore {
         _ jobs: [AnnotationAutoSaveJob]
     ) -> [AnnotationAutoSaveResult] {
         jobs.map { job in
+            let stagedURL = job.url
+                .deletingLastPathComponent()
+                .appendingPathComponent(".\(UUID().uuidString).serein-autosave")
             do {
-                try job.data.write(to: job.url, options: .atomic)
-                return AnnotationAutoSaveResult(job: job, errorDescription: nil)
+                try job.data.write(to: stagedURL, options: .atomic)
+                return AnnotationAutoSaveResult(
+                    job: job,
+                    stagedURL: stagedURL,
+                    errorDescription: nil
+                )
             } catch {
-                return AnnotationAutoSaveResult(job: job, errorDescription: error.localizedDescription)
+                try? FileManager.default.removeItem(at: stagedURL)
+                return AnnotationAutoSaveResult(
+                    job: job,
+                    stagedURL: nil,
+                    errorDescription: error.localizedDescription
+                )
             }
         }
     }
@@ -1604,6 +1621,9 @@ final class DocumentStore {
         var savedSessionIDs: Set<UUID> = []
         for result in results {
             if let errorDescription = result.errorDescription {
+                if let stagedURL = result.stagedURL {
+                    try? FileManager.default.removeItem(at: stagedURL)
+                }
                 errors[result.job.url] = NSError(
                     domain: "Serein.AnnotationAutoSave",
                     code: 1,
@@ -1611,12 +1631,22 @@ final class DocumentStore {
                 )
                 continue
             }
+            guard let stagedURL = result.stagedURL else { continue }
             guard let index = sessions.firstIndex(where: { $0.id == result.job.sessionID }),
-                  sessions[index].annotationGeneration == result.job.annotationGeneration else { continue }
-            sessions[index].isDirty = false
-            sessions[index].dirtySince = nil
-            sessions[index].fileSnapshot = PDFFileSnapshot(url: result.job.url)
-            savedSessionIDs.insert(result.job.sessionID)
+                  sessions[index].annotationGeneration == result.job.annotationGeneration else {
+                try? FileManager.default.removeItem(at: stagedURL)
+                continue
+            }
+            do {
+                _ = try FileManager.default.replaceItemAt(result.job.url, withItemAt: stagedURL)
+                sessions[index].isDirty = false
+                sessions[index].dirtySince = nil
+                sessions[index].fileSnapshot = PDFFileSnapshot(url: result.job.url)
+                savedSessionIDs.insert(result.job.sessionID)
+            } catch {
+                try? FileManager.default.removeItem(at: stagedURL)
+                errors[result.job.url] = error
+            }
         }
         if savedSessionIDs.isEmpty == false {
             prunePDFDocumentCache()
@@ -1628,6 +1658,10 @@ final class DocumentStore {
     func restorePersistedState() throws {
         guard let persistedState = try persistence.loadState() else { return }
 
+        for operation in searchOperations.values {
+            operation.cancel()
+        }
+        searchOperations.removeAll()
         sessions = []
         pdfDocumentCache.removeAll()
         pdfDocumentRecency.removeAll()
@@ -2164,15 +2198,19 @@ final class DocumentStore {
         }
     }
 
+    private func cancelSearchOperation(in windowID: UUID) {
+        searchOperations.removeValue(forKey: windowID)?.cancel()
+    }
+
     func rebuildSearchIfNeeded(in windowID: UUID) {
         guard let workspace = windowWorkspace(for: windowID) else {
-            searchOperations.removeValue(forKey: windowID)?.cancel()
+            cancelSearchOperation(in: windowID)
             searchSnapshots.removeValue(forKey: windowID)
             return
         }
         let query = workspace.searchQuery
         guard query.isEmpty == false else {
-            searchOperations.removeValue(forKey: windowID)?.cancel()
+            cancelSearchOperation(in: windowID)
             searchSnapshots.removeValue(forKey: windowID)
             return
         }
@@ -2192,7 +2230,7 @@ final class DocumentStore {
             }
         )
         guard searchSnapshots[windowID]?.source != source else { return }
-        searchOperations.removeValue(forKey: windowID)?.cancel()
+        cancelSearchOperation(in: windowID)
 
         var cachedMatches: [UUID: [DocumentSearchMatch]] = [:]
         for target in source.targets {
@@ -2252,7 +2290,7 @@ final class DocumentStore {
             snapshot.source.targets.contains { sessionIDs.contains($0.sessionID) } ? windowID : nil
         }
         for windowID in invalidatedWindowIDs {
-            searchOperations.removeValue(forKey: windowID)?.cancel()
+            cancelSearchOperation(in: windowID)
             searchSnapshots.removeValue(forKey: windowID)
         }
     }
@@ -2548,6 +2586,10 @@ final class DocumentStore {
 
         windowWorkspaces[index].leftSidebarWidth = leftWidth
         windowWorkspaces[index].rightSidebarWidth = rightWidth
+    }
+
+    func testingIsSearchInFlight(in windowID: UUID) -> Bool {
+        searchOperations[windowID] != nil
     }
 }
 

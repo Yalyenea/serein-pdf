@@ -144,6 +144,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private var isLoadingCatalog = false
     private var catalogBuildGeneration: UInt64 = 0
     private var catalogBuildTask: Task<Void, Never>?
+    private var libraryFolderURLs: [URL] = []
 
     private let titleLabel = NSTextField(labelWithString: "PDF Library")
     private let secondaryLabel = NSTextField(labelWithString: "")
@@ -197,6 +198,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         catalogBuildGeneration &+= 1
         let generation = catalogBuildGeneration
         let normalizedFolderURLs = PDFLibraryCatalogCache.normalizedFolderURLs(folderURLs)
+        libraryFolderURLs = normalizedFolderURLs
         if normalizedFolderURLs.isEmpty {
             catalog = PDFLibraryCatalog(roots: [], items: [])
             isLoadingCatalog = false
@@ -223,11 +225,32 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         }
     }
 
-    func invalidateCatalogCache() {
+    func invalidateCatalogCache(folderURLs: [URL]? = nil) {
         catalogBuildTask?.cancel()
         catalogBuildTask = nil
         catalogBuildGeneration &+= 1
         catalogCache.invalidate()
+        if let folderURLs {
+            libraryFolderURLs = PDFLibraryCatalogCache.normalizedFolderURLs(folderURLs)
+        }
+        restartCatalogBuildIfVisible()
+    }
+
+    private func restartCatalogBuildIfVisible() {
+        guard window?.isVisible == true else { return }
+        let generation = catalogBuildGeneration
+        if libraryFolderURLs.isEmpty {
+            catalog = PDFLibraryCatalog(roots: [], items: [])
+            isLoadingCatalog = false
+            rebuildSegments()
+            reloadUI()
+            return
+        }
+        catalog = PDFLibraryCatalog(roots: [], items: [])
+        isLoadingCatalog = true
+        rebuildSegments()
+        reloadUI()
+        startCatalogBuild(folderURLs: libraryFolderURLs, generation: generation)
     }
 
     override func close() {
@@ -684,6 +707,10 @@ extension PDFLibraryPaletteController {
 
     func testingShow(folderURLs: [URL]) {
         show(folderURLs: folderURLs, relativeTo: nil)
+    }
+
+    func testingInvalidateCatalogCache(folderURLs: [URL]? = nil) {
+        invalidateCatalogCache(folderURLs: folderURLs)
     }
 
     func testingSetQuery(_ query: String) {
