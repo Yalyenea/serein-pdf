@@ -242,13 +242,18 @@ final class RightSidebarViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID) else { return }
         guard notification.isOnlySidebarVisibilityChange == false else { return }
         // Outline/search/annotations controllers observe the store themselves for content.
         guard notification.isOnlyReadingPositionChange == false else { return }
-        applyStateFromStore()
-        guard notification.isOnlyRightSidebarModeChange == false else { return }
-        let summary = searchResultsViewController.selectionSummary()
-        onSearchSelectionDidChange?(summary.selectedIndex, summary.totalMatches)
+        let change = notification.documentStoreChange
+        if change.intersection([.content, .tabs, .rightSidebarMode]).isEmpty == false {
+            applyStateFromStore()
+        }
+        if change.intersection([.content, .tabs, .search]).isEmpty == false {
+            let summary = searchResultsViewController.selectionSummary()
+            onSearchSelectionDidChange?(summary.selectedIndex, summary.totalMatches)
+        }
     }
 
     /// M12-011: without a PDF document (no active session, or a blank tab) the

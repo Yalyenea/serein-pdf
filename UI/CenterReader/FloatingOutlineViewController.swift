@@ -145,6 +145,11 @@ private final class FloatingOutlineMarkerView: NSView {
 }
 
 final class FloatingOutlineViewController: NSViewController {
+    private struct ActiveLocation: Equatable {
+        let sessionID: UUID
+        let pageIndex: Int
+    }
+
     private struct Item: Hashable {
         let node: OutlineNode
         let level: Int
@@ -166,7 +171,11 @@ final class FloatingOutlineViewController: NSViewController {
     private let topResizeHandle = FloatingOutlineResizeHandleView()
     private let bottomResizeHandle = FloatingOutlineResizeHandleView()
     private var items: [Item] = []
+    private var itemLevels: [Int] = []
     private var activeItemIndex: Int?
+    private var displayedActiveLocation: ActiveLocation?
+    private var displayedSourceFingerprint: OutlineSourceFingerprint?
+    private(set) var outlineFlattenCount = 0
     private var isExpanded = false
     private var isHovered = false
     private var isFilterFieldFocused = false
@@ -346,6 +355,15 @@ final class FloatingOutlineViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID) else { return }
+        if notification.isOnlyReadingPositionChange {
+            refreshActiveItemFromStore()
+            return
+        }
+        let change = notification.documentStoreChange
+        guard change.intersection([.content, .tabs, .sidebarVisibility, .rightSidebarMode, .appearance]).isEmpty == false else {
+            return
+        }
         refreshFromStore()
     }
 
@@ -353,35 +371,62 @@ final class FloatingOutlineViewController: NSViewController {
         guard isViewLoaded else { return }
         guard isSuppressed == false,
               documentStore.isOutlineSidebarVisible(in: windowID) == false else {
-            hideFloatingOutline()
+            hideFloatingOutline(clearItems: false)
             return
         }
 
-        let outlineTree = documentStore.outlineTreeForSidebar(in: windowID)
-        let nextItems = Self.flatten(outlineTree)
-        guard nextItems.isEmpty == false else {
-            hideFloatingOutline()
+        let wasHidden = view.isHidden
+        let sourceFingerprint = OutlineSourceFingerprint.capture(
+            from: documentStore,
+            windowID: windowID
+        )
+        let outlineChanged = displayedSourceFingerprint != sourceFingerprint
+        if outlineChanged {
+            items = Self.flatten(documentStore.outlineTreeForSidebar(in: windowID))
+            itemLevels = items.map(\.level)
+            outlineFlattenCount += 1
+            displayedSourceFingerprint = OutlineSourceFingerprint.capture(
+                from: documentStore,
+                windowID: windowID
+            )
+        }
+        guard items.isEmpty == false else {
+            hideFloatingOutline(clearItems: true)
             return
         }
 
-        items = nextItems
-        let nextActiveItemIndex = resolveActiveItemIndex()
-        let activeItemChanged = activeItemIndex != nextActiveItemIndex
-        activeItemIndex = nextActiveItemIndex
-        markerView.update(levels: items.map(\.level), activeItemIndex: activeItemIndex)
         view.isHidden = false
+        refreshActiveItemFromStore(forceMarkerUpdate: outlineChanged || wasHidden)
 
         // Configuration updates can change the default height without changing the outline.
         reportPreferredGeometryIfNeeded()
+    }
+
+    private func refreshActiveItemFromStore(forceMarkerUpdate: Bool = false) {
+        guard isViewLoaded, view.isHidden == false else { return }
+        let activeLocation = documentStore.activeSession(in: windowID).map {
+            ActiveLocation(sessionID: $0.id, pageIndex: $0.currentPageIndex)
+        }
+        guard forceMarkerUpdate || displayedActiveLocation != activeLocation else { return }
+        displayedActiveLocation = activeLocation
+        let nextActiveItemIndex = resolveActiveItemIndex()
+        let activeItemChanged = activeItemIndex != nextActiveItemIndex
+        guard activeItemChanged || forceMarkerUpdate else { return }
+        activeItemIndex = nextActiveItemIndex
+        markerView.update(levels: itemLevels, activeItemIndex: activeItemIndex)
         if isExpanded, activeItemChanged, outlineViewController.isViewLoaded {
             outlineViewController.view.needsLayout = true
         }
     }
 
-    private func hideFloatingOutline() {
+    private func hideFloatingOutline(clearItems: Bool) {
         setExpanded(false)
-        items = []
+        if clearItems {
+            items = []
+            itemLevels = []
+        }
         activeItemIndex = nil
+        displayedActiveLocation = nil
         markerView.update(levels: [], activeItemIndex: nil)
         view.isHidden = true
         reportPreferredGeometryIfNeeded()

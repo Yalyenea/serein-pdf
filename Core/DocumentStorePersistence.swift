@@ -1,7 +1,8 @@
 import Foundation
+import os
 
-struct PersistedDocumentStoreState: Codable, Equatable {
-    struct SessionReference: Codable, Equatable {
+struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
+    struct SessionReference: Codable, Equatable, Sendable {
         var id: UUID
         var url: URL
         var title: String?
@@ -33,7 +34,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
         }
     }
 
-    struct SplitStateRecord: Codable, Equatable {
+    struct SplitStateRecord: Codable, Equatable, Sendable {
         var isEnabled: Bool
         var primarySessionID: UUID?
         var secondarySessionID: UUID?
@@ -58,7 +59,7 @@ struct PersistedDocumentStoreState: Codable, Equatable {
         }
     }
 
-    struct WindowRecord: Codable, Equatable {
+    struct WindowRecord: Codable, Equatable, Sendable {
         var id: UUID
         var sessionIDs: [UUID]
         var sessionURLs: [URL]
@@ -248,23 +249,171 @@ struct PersistedDocumentStoreState: Codable, Equatable {
 protocol DocumentStorePersistence {
     func loadState() throws -> PersistedDocumentStoreState?
     func saveState(_ state: PersistedDocumentStoreState) throws
+    func flush() throws
 }
 
-struct UserDefaultsDocumentStorePersistence: DocumentStorePersistence {
-    private static let stateKey = "Serein.DocumentStoreState"
-    private let userDefaults: UserDefaults
+final class UserDefaultsDocumentStorePersistence: DocumentStorePersistence, @unchecked Sendable {
+    static let stateKey = "Serein.DocumentStoreState"
+    static let debounceInterval: TimeInterval = 0.25
 
-    init(userDefaults: UserDefaults = .standard) {
+    private static let logger = Logger(subsystem: "local.yfff.Serein", category: "DocumentStorePersistence")
+
+    private let userDefaults: UserDefaults
+    private let sendableUserDefaults: SendableUserDefaults
+    private let debounceInterval: TimeInterval
+    private let lock = NSLock()
+    private let persistenceQueue = DispatchQueue(
+        label: "local.yfff.Serein.DocumentStorePersistence",
+        qos: .utility
+    )
+    private let persistenceQueueKey = DispatchSpecificKey<UInt8>()
+    private var lastPersistedState: PersistedDocumentStoreState?
+    private var pendingState: PersistedDocumentStoreState?
+    private var mutationGeneration: UInt64 = 0
+    private var scheduleGeneration: UInt64 = 0
+    private var flushWorkItem: DispatchWorkItem?
+
+    init(
+        userDefaults: UserDefaults = .standard,
+        debounceInterval: TimeInterval = UserDefaultsDocumentStorePersistence.debounceInterval
+    ) {
         self.userDefaults = userDefaults
+        self.sendableUserDefaults = SendableUserDefaults(userDefaults)
+        self.debounceInterval = max(0, debounceInterval)
+        persistenceQueue.setSpecific(key: persistenceQueueKey, value: 1)
+    }
+
+    deinit {
+        lock.lock()
+        flushWorkItem?.cancel()
+        lock.unlock()
+        try? flush()
     }
 
     func loadState() throws -> PersistedDocumentStoreState? {
+        try flush()
         guard let data = userDefaults.data(forKey: Self.stateKey) else { return nil }
-        return try JSONDecoder().decode(PersistedDocumentStoreState.self, from: data)
+        let state = try JSONDecoder().decode(PersistedDocumentStoreState.self, from: data)
+        lock.lock()
+        lastPersistedState = state
+        lock.unlock()
+        return state
     }
 
     func saveState(_ state: PersistedDocumentStoreState) throws {
+        lock.lock()
+        guard pendingState != state,
+              pendingState != nil || lastPersistedState != state else {
+            lock.unlock()
+            return
+        }
+        pendingState = state
+        mutationGeneration &+= 1
+        let flushImmediately = debounceInterval <= 0
+        scheduleFlushLocked()
+        lock.unlock()
+        if flushImmediately {
+            try flush()
+        }
+    }
+
+    func flush() throws {
+        lock.lock()
+        flushWorkItem?.cancel()
+        flushWorkItem = nil
+        scheduleGeneration &+= 1
+        guard let snapshot = persistenceSnapshotLocked() else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
+        if DispatchQueue.getSpecific(key: persistenceQueueKey) != nil {
+            try Self.write(snapshot.state, to: userDefaults)
+        } else {
+            let completion = DispatchSemaphore(value: 0)
+            let result = PersistenceResult()
+            persistenceQueue.async { [sendableUserDefaults] in
+                do {
+                    try Self.write(snapshot.state, to: sendableUserDefaults.value)
+                } catch {
+                    result.error = error
+                }
+                completion.signal()
+            }
+            completion.wait()
+            if let error = result.error {
+                throw error
+            }
+        }
+        markPersisted(snapshot)
+    }
+
+    private func scheduleFlushLocked() {
+        flushWorkItem?.cancel()
+        guard debounceInterval > 0 else { return }
+        scheduleGeneration &+= 1
+        let scheduledGeneration = scheduleGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.persistScheduled(generation: scheduledGeneration)
+        }
+        flushWorkItem = workItem
+        persistenceQueue.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+    }
+
+    private func persistScheduled(generation scheduledGeneration: UInt64) {
+        lock.lock()
+        guard scheduleGeneration == scheduledGeneration,
+              let snapshot = persistenceSnapshotLocked() else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
+        do {
+            try Self.write(snapshot.state, to: userDefaults)
+            markPersisted(snapshot)
+        } catch {
+            Self.logger.error("Failed to persist document store: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func persistenceSnapshotLocked() -> PersistenceSnapshot? {
+        pendingState.map {
+            PersistenceSnapshot(state: $0, generation: mutationGeneration)
+        }
+    }
+
+    private func markPersisted(_ snapshot: PersistenceSnapshot) {
+        lock.lock()
+        defer { lock.unlock() }
+        lastPersistedState = snapshot.state
+        if mutationGeneration == snapshot.generation,
+           pendingState == snapshot.state {
+            pendingState = nil
+            flushWorkItem = nil
+        }
+    }
+
+    private static func write(_ state: PersistedDocumentStoreState, to userDefaults: UserDefaults) throws {
         let data = try JSONEncoder().encode(state)
         userDefaults.set(data, forKey: Self.stateKey)
+    }
+
+    private struct PersistenceSnapshot: Sendable {
+        let state: PersistedDocumentStoreState
+        let generation: UInt64
+    }
+
+    private final class PersistenceResult: @unchecked Sendable {
+        var error: Error?
+    }
+
+    private final class SendableUserDefaults: @unchecked Sendable {
+        let value: UserDefaults
+
+        init(_ value: UserDefaults) {
+            self.value = value
+        }
     }
 }

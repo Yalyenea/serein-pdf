@@ -22,7 +22,7 @@ extension ReadingStateStore {
     func flush() throws {}
 }
 
-final class UserDefaultsReadingStateStore: ReadingStateStore {
+final class UserDefaultsReadingStateStore: ReadingStateStore, @unchecked Sendable {
     static let maxEntries = 500
     static let debounceInterval: TimeInterval = 0.75
     static let stateKey = "Serein.ReadingState"
@@ -31,13 +31,22 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
     private static let logger = Logger(subsystem: "local.yfff.Serein", category: "ReadingStateStore")
 
     private let userDefaults: UserDefaults
+    private let sendableUserDefaults: SendableUserDefaults
     private let maxEntries: Int
     private let debounceInterval: TimeInterval
+    private let lock = NSLock()
+    private let persistenceQueue = DispatchQueue(
+        label: "local.yfff.Serein.ReadingStateStore.persistence",
+        qos: .utility
+    )
+    private let persistenceQueueKey = DispatchSpecificKey<UInt8>()
     private var cache: [String: PersistedReadingState] = [:]
     /// Most-recently-used keys last.
     private var lruOrder: [String] = []
     private var isCacheLoaded = false
     private var isDirty = false
+    private var mutationGeneration: UInt64 = 0
+    private var scheduleGeneration: UInt64 = 0
     private var flushWorkItem: DispatchWorkItem?
 
     init(
@@ -46,46 +55,102 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
         debounceInterval: TimeInterval = UserDefaultsReadingStateStore.debounceInterval
     ) {
         self.userDefaults = userDefaults
+        self.sendableUserDefaults = SendableUserDefaults(userDefaults)
         self.maxEntries = max(1, maxEntries)
         self.debounceInterval = max(0, debounceInterval)
+        persistenceQueue.setSpecific(key: persistenceQueueKey, value: 1)
     }
 
     deinit {
+        lock.lock()
         flushWorkItem?.cancel()
-        if isDirty {
-            try? writeCacheToUserDefaults()
-        }
+        lock.unlock()
+        try? flush()
     }
 
     func loadState(for url: URL) throws -> PersistedReadingState? {
-        try ensureCacheLoaded()
+        lock.lock()
+        do {
+            try ensureCacheLoadedLocked()
+        } catch {
+            lock.unlock()
+            throw error
+        }
         let key = url.absoluteString
-        guard let state = cache[key] else { return nil }
-        if lruOrder.last != key {
-            touchLRU(key)
-            isDirty = true
-            scheduleFlush()
+        let state = cache[key]
+        if state != nil, lruOrder.last != key {
+            touchLRULocked(key)
+            markDirtyLocked()
+        }
+        let flushImmediately = isDirty && debounceInterval <= 0
+        scheduleFlushLocked()
+        lock.unlock()
+        if flushImmediately {
+            try flush()
         }
         return state
     }
 
     func saveState(_ state: PersistedReadingState) throws {
-        try ensureCacheLoaded()
+        lock.lock()
+        do {
+            try ensureCacheLoadedLocked()
+        } catch {
+            lock.unlock()
+            throw error
+        }
         let key = state.url.absoluteString
+        let cacheChanged = cache[key] != state
+        let lruChanged = lruOrder.last != key
+        guard cacheChanged || lruChanged else {
+            lock.unlock()
+            return
+        }
         cache[key] = state
-        touchLRU(key)
-        pruneIfNeeded()
-        isDirty = true
-        scheduleFlush()
+        touchLRULocked(key)
+        pruneIfNeededLocked()
+        markDirtyLocked()
+        let flushImmediately = debounceInterval <= 0
+        scheduleFlushLocked()
+        lock.unlock()
+        if flushImmediately {
+            try flush()
+        }
     }
 
     func flush() throws {
+        lock.lock()
         flushWorkItem?.cancel()
         flushWorkItem = nil
-        try persistIfDirty()
+        scheduleGeneration &+= 1
+        guard let snapshot = persistenceSnapshotLocked() else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
+        if DispatchQueue.getSpecific(key: persistenceQueueKey) != nil {
+            try Self.write(snapshot, to: userDefaults)
+        } else {
+            let completion = DispatchSemaphore(value: 0)
+            let result = PersistenceResult()
+            persistenceQueue.async { [sendableUserDefaults] in
+                do {
+                    try Self.write(snapshot, to: sendableUserDefaults.value)
+                } catch {
+                    result.error = error
+                }
+                completion.signal()
+            }
+            completion.wait()
+            if let error = result.error {
+                throw error
+            }
+        }
+        markPersisted(generation: snapshot.generation)
     }
 
-    private func ensureCacheLoaded() throws {
+    private func ensureCacheLoadedLocked() throws {
         guard isCacheLoaded == false else { return }
         if let data = userDefaults.data(forKey: Self.stateKey) {
             let decoded = try JSONDecoder().decode([String: PersistedReadingState].self, from: data)
@@ -101,11 +166,10 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
             let needsMigration = userDefaults.data(forKey: Self.lruKey) == nil && decoded.isEmpty == false
             let needsNormalization = lruOrder != persistedOrder
             if lruOrder.count > maxEntries {
-                pruneIfNeeded()
+                pruneIfNeededLocked()
             }
             if needsMigration || needsNormalization || isDirty {
-                try writeCacheToUserDefaults()
-                isDirty = false
+                markDirtyLocked()
             }
         }
         isCacheLoaded = true
@@ -118,12 +182,12 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
         return missingKeys + knownOrder
     }
 
-    private func touchLRU(_ key: String) {
+    private func touchLRULocked(_ key: String) {
         lruOrder.removeAll { $0 == key }
         lruOrder.append(key)
     }
 
-    private func pruneIfNeeded() {
+    private func pruneIfNeededLocked() {
         while lruOrder.count > maxEntries {
             let evicted = lruOrder.removeFirst()
             cache.removeValue(forKey: evicted)
@@ -131,36 +195,82 @@ final class UserDefaultsReadingStateStore: ReadingStateStore {
         }
     }
 
-    private func scheduleFlush() {
-        flushWorkItem?.cancel()
-        if debounceInterval <= 0 {
-            flushIgnoringErrors()
-            return
-        }
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.flushIgnoringErrors()
-        }
-        flushWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+    private func markDirtyLocked() {
+        isDirty = true
+        mutationGeneration &+= 1
     }
 
-    private func flushIgnoringErrors() {
+    private func scheduleFlushLocked() {
+        guard isDirty else { return }
+        flushWorkItem?.cancel()
+        if debounceInterval <= 0 {
+            return
+        }
+        scheduleGeneration &+= 1
+        let scheduledGeneration = scheduleGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.persistScheduled(generation: scheduledGeneration)
+        }
+        flushWorkItem = workItem
+        persistenceQueue.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
+    }
+
+    private func persistScheduled(generation scheduledGeneration: UInt64) {
+        lock.lock()
+        guard self.scheduleGeneration == scheduledGeneration,
+              let snapshot = persistenceSnapshotLocked() else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
         do {
-            try persistIfDirty()
+            try Self.write(snapshot, to: userDefaults)
+            markPersisted(generation: snapshot.generation)
         } catch {
             Self.logger.error("Failed to persist reading state: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    private func persistIfDirty() throws {
-        guard isDirty else { return }
-        try writeCacheToUserDefaults()
-        isDirty = false
+    private func persistenceSnapshotLocked() -> PersistenceSnapshot? {
+        guard isDirty else { return nil }
+        return PersistenceSnapshot(
+            cache: cache,
+            lruOrder: lruOrder,
+            generation: mutationGeneration
+        )
     }
 
-    private func writeCacheToUserDefaults() throws {
+    private func markPersisted(generation: UInt64) {
+        lock.lock()
+        defer { lock.unlock() }
+        if mutationGeneration == generation {
+            isDirty = false
+            flushWorkItem = nil
+        }
+    }
+
+    private static func write(_ snapshot: PersistenceSnapshot, to userDefaults: UserDefaults) throws {
         let encoder = JSONEncoder()
-        userDefaults.set(try encoder.encode(cache), forKey: Self.stateKey)
-        userDefaults.set(try encoder.encode(lruOrder), forKey: Self.lruKey)
+        userDefaults.set(try encoder.encode(snapshot.cache), forKey: Self.stateKey)
+        userDefaults.set(try encoder.encode(snapshot.lruOrder), forKey: Self.lruKey)
+    }
+
+    private struct PersistenceSnapshot: Sendable {
+        let cache: [String: PersistedReadingState]
+        let lruOrder: [String]
+        let generation: UInt64
+    }
+
+    private final class PersistenceResult: @unchecked Sendable {
+        var error: Error?
+    }
+
+    private final class SendableUserDefaults: @unchecked Sendable {
+        let value: UserDefaults
+
+        init(_ value: UserDefaults) {
+            self.value = value
+        }
     }
 }

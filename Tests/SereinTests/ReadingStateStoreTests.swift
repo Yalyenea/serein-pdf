@@ -160,6 +160,27 @@ final class ReadingStateStoreTests: XCTestCase {
         userDefaults.removePersistentDomain(forName: suiteName)
     }
 
+    func testRapidSavesFlushOnlyLatestReadingState() throws {
+        let suiteName = "SereinTests.ReadingStateStore.Coalescing.\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suiteName)!
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+        let store = UserDefaultsReadingStateStore(
+            userDefaults: userDefaults,
+            debounceInterval: 60
+        )
+        let url = URL(fileURLWithPath: "/tmp/coalesced.pdf")
+
+        try store.saveState(makeState(url: url, page: 1))
+        try store.saveState(makeState(url: url, page: 2))
+        try store.saveState(makeState(url: url, page: 3))
+        XCTAssertNil(userDefaults.data(forKey: UserDefaultsReadingStateStore.stateKey))
+
+        try store.flush()
+
+        let peer = UserDefaultsReadingStateStore(userDefaults: userDefaults, debounceInterval: 0)
+        XCTAssertEqual(try peer.loadState(for: url)?.readingPosition.pageIndex, 3)
+    }
+
     private func makeState(url: URL, page: Int) -> PersistedReadingState {
         PersistedReadingState(
             url: url,

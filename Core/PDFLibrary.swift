@@ -1,11 +1,11 @@
 import Foundation
 
-struct PDFLibraryRoot: Equatable {
+struct PDFLibraryRoot: Equatable, Sendable {
     let url: URL
     let title: String
 }
 
-struct PDFLibraryItem: Equatable {
+struct PDFLibraryItem: Equatable, Sendable {
     let url: URL
     let rootURL: URL
     let folderURL: URL
@@ -15,7 +15,7 @@ struct PDFLibraryItem: Equatable {
     let searchableText: String
 }
 
-struct PDFLibraryCatalog: Equatable {
+struct PDFLibraryCatalog: Equatable, Sendable {
     let roots: [PDFLibraryRoot]
     let items: [PDFLibraryItem]
     let rootItemCounts: [URL: Int]
@@ -36,7 +36,8 @@ struct PDFLibraryCatalog: Equatable {
     static func build(
         folderURLs: [URL],
         scanner: PDFLibraryScanner = PDFLibraryScanner(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        shouldCancel: @Sendable () -> Bool = { false }
     ) -> PDFLibraryCatalog {
         var seenRootPaths: Set<String> = []
         var seenPDFPaths: Set<String> = []
@@ -44,6 +45,7 @@ struct PDFLibraryCatalog: Equatable {
         var items: [PDFLibraryItem] = []
 
         for folderURL in folderURLs {
+            guard shouldCancel() == false else { return PDFLibraryCatalog(roots: [], items: []) }
             let rootURL = folderURL.standardizedFileURL
             let rootPath = rootURL.path
             var isDirectory: ObjCBool = false
@@ -53,7 +55,12 @@ struct PDFLibraryCatalog: Equatable {
 
             roots.append(PDFLibraryRoot(url: rootURL, title: Self.title(for: rootURL)))
 
-            for pdfURL in scanner.scan(folderURLs: [rootURL]) {
+            for pdfURL in scanner.scan(
+                folderURLs: [rootURL],
+                sortResults: false,
+                shouldCancel: shouldCancel
+            ) {
+                guard shouldCancel() == false else { return PDFLibraryCatalog(roots: [], items: []) }
                 let pdfPath = pdfURL.path
                 guard seenPDFPaths.insert(pdfPath).inserted else { continue }
                 let folderURL = pdfURL.deletingLastPathComponent().standardizedFileURL
@@ -120,15 +127,27 @@ final class PDFLibraryCatalogCache {
         folderURLs: [URL],
         builder: ([URL]) -> PDFLibraryCatalog = { PDFLibraryCatalog.build(folderURLs: $0) }
     ) -> PDFLibraryCatalog {
-        let normalizedFolderURLs = Self.normalized(folderURLs)
-        if cachedFolderURLs == normalizedFolderURLs, let cachedCatalog {
-            return cachedCatalog
+        let normalizedFolderURLs = Self.normalizedFolderURLs(folderURLs)
+        if let cached = cachedCatalog(folderURLs: normalizedFolderURLs) {
+            return cached
         }
 
         let catalog = builder(normalizedFolderURLs)
-        cachedFolderURLs = normalizedFolderURLs
-        cachedCatalog = catalog
+        store(catalog, folderURLs: normalizedFolderURLs)
         return catalog
+    }
+
+    func cachedCatalog(folderURLs: [URL]) -> PDFLibraryCatalog? {
+        let normalizedFolderURLs = Self.normalizedFolderURLs(folderURLs)
+        if cachedFolderURLs == normalizedFolderURLs, let cachedCatalog {
+            return cachedCatalog
+        }
+        return nil
+    }
+
+    func store(_ catalog: PDFLibraryCatalog, folderURLs: [URL]) {
+        cachedFolderURLs = Self.normalizedFolderURLs(folderURLs)
+        cachedCatalog = catalog
     }
 
     func invalidate() {
@@ -136,7 +155,7 @@ final class PDFLibraryCatalogCache {
         cachedCatalog = nil
     }
 
-    private static func normalized(_ folderURLs: [URL]) -> [URL] {
+    static func normalizedFolderURLs(_ folderURLs: [URL]) -> [URL] {
         var seenPaths: Set<String> = []
         return folderURLs.compactMap { url in
             let standardizedURL = url.standardizedFileURL
@@ -153,25 +172,32 @@ struct PDFLibraryScanner {
         self.fileManager = fileManager
     }
 
-    func scan(folderURLs: [URL]) -> [URL] {
+    func scan(
+        folderURLs: [URL],
+        sortResults: Bool = true,
+        shouldCancel: @Sendable () -> Bool = { false }
+    ) -> [URL] {
         var seenPaths: Set<String> = []
         var pdfURLs: [URL] = []
 
         for folderURL in folderURLs {
+            guard shouldCancel() == false else { return [] }
             let folderPath = folderURL.standardizedFileURL.path
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: folderPath, isDirectory: &isDirectory),
                   isDirectory.boolValue else { continue }
 
-            let resourceKeys: [URLResourceKey] = [.isRegularFileKey]
+            let resourceKeys: Set<URLResourceKey> = [.isRegularFileKey]
             guard let enumerator = fileManager.enumerator(
                 at: folderURL.standardizedFileURL,
-                includingPropertiesForKeys: resourceKeys,
+                includingPropertiesForKeys: Array(resourceKeys),
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             ) else { continue }
 
             for case let url as URL in enumerator {
+                guard shouldCancel() == false else { return [] }
                 guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else { continue }
+                guard (try? url.resourceValues(forKeys: resourceKeys).isRegularFile) == true else { continue }
                 let standardizedURL = url.standardizedFileURL
                 let standardizedPath = standardizedURL.path
                 guard seenPaths.insert(standardizedPath).inserted else { continue }
@@ -179,6 +205,7 @@ struct PDFLibraryScanner {
             }
         }
 
+        guard sortResults else { return pdfURLs }
         return pdfURLs.sorted {
             $0.path.localizedStandardCompare($1.path) == .orderedAscending
         }

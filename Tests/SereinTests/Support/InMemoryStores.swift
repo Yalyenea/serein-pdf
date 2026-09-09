@@ -12,6 +12,8 @@ final class TestInMemoryDocumentStorePersistence: DocumentStorePersistence {
     func saveState(_ state: PersistedDocumentStoreState) throws {
         self.state = state
     }
+
+    func flush() throws {}
 }
 
 final class TestInMemoryReadingStateStore: ReadingStateStore {
@@ -36,8 +38,14 @@ final class TestInMemoryRecentFilesStore: RecentFilesStore {
     }
 
     func recordOpen(for url: URL) throws -> [URL] {
-        recentFiles.removeAll { $0 == url }
-        recentFiles.insert(url, at: 0)
+        try recordOpen(for: [url])
+    }
+
+    func recordOpen(for urls: [URL]) throws -> [URL] {
+        for url in urls {
+            recentFiles.removeAll { $0 == url }
+            recentFiles.insert(url, at: 0)
+        }
         return recentFiles
     }
 
@@ -61,5 +69,24 @@ func makeIsolatedDocumentStore(
         readingStateStore: readingStateStore,
         recentFilesStore: recentFilesStore,
         appConfiguration: appConfiguration
+    )
+}
+
+@MainActor
+func waitForDocumentSearch(
+    in store: DocumentStore,
+    windowID: UUID? = nil,
+    timeout: TimeInterval = 2,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    let targetWindowID = windowID ?? store.defaultWindowID
+    let deadline = Date(timeIntervalSinceNow: timeout)
+    while store.searchSnapshot(in: targetWindowID).isSearching, Date() < deadline {
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+    precondition(
+        store.searchSnapshot(in: targetWindowID).isSearching == false,
+        "Search did not complete before timeout at \(file):\(line)"
     )
 }

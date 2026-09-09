@@ -1,5 +1,41 @@
 import AppKit
 
+struct OutlineSourceFingerprint: Equatable {
+    struct Session: Equatable {
+        let id: UUID
+        let title: String
+        let fileSnapshot: PDFFileSnapshot?
+        let isOutlineLoaded: Bool
+    }
+
+    let isContinuousReading: Bool
+    let sessions: [Session]
+
+    @MainActor
+    static func capture(from documentStore: DocumentStore, windowID: UUID) -> OutlineSourceFingerprint {
+        let isContinuousReading = documentStore.isContinuousReadingEnabled(in: windowID)
+        let sessionIDs: [UUID]
+        if isContinuousReading {
+            sessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
+        } else {
+            sessionIDs = documentStore.activeSessionID(in: windowID).map { [$0] } ?? []
+        }
+        return OutlineSourceFingerprint(
+            isContinuousReading: isContinuousReading,
+            sessions: sessionIDs.compactMap { sessionID in
+                documentStore.session(for: sessionID).map {
+                    Session(
+                        id: $0.id,
+                        title: $0.title,
+                        fileSnapshot: $0.fileSnapshot,
+                        isOutlineLoaded: $0.isOutlineLoaded
+                    )
+                }
+            }
+        )
+    }
+}
+
 private final class OutlineClipView: NSClipView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -326,7 +362,8 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     private let pageCounterLabel = NSTextField(labelWithString: "")
     private var nodes: [OutlineNode] = []
     private var filterQuery = ""
-    private var displayedSessionID: UUID?
+    private var displayedSourceFingerprint: OutlineSourceFingerprint?
+    private(set) var outlineReloadCount = 0
     private var collapsedPaths = Set<[Int]>()
     private var expandablePaths = Set<[Int]>()
     private var selectedPath: [Int]?
@@ -529,42 +566,61 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID) else { return }
         guard notification.isOnlySidebarChromeChange == false else { return }
-        let session = documentStore.activeSession(in: windowID)
-        let sessionID = session?.id
-        let outlineTree = documentStore.outlineTreeForSidebar(in: windowID)
-        if displayedSessionID != sessionID || nodes != outlineTree {
+        if notification.isOnlyReadingPositionChange {
+            updatePageCounter()
+            return
+        }
+        let change = notification.documentStoreChange
+        guard change.intersection([.content, .tabs]).isEmpty == false else { return }
+        let sourceFingerprint = OutlineSourceFingerprint.capture(
+            from: documentStore,
+            windowID: windowID
+        )
+        if displayedSourceFingerprint != sourceFingerprint {
             reloadOutline()
         }
         updatePageCounter()
     }
 
     private func updatePageCounter() {
-        defer { preferredContentHeightDidChange?() }
         guard let session = documentStore.activeSession(in: windowID) else {
-            pageCounterLabel.stringValue = ""
+            updatePageCounterLabel(to: "")
             return
         }
         let total = documentStore.pageCount(for: session.id) ?? 0
         guard total > 0 else {
-            pageCounterLabel.stringValue = ""
+            updatePageCounterLabel(to: "")
             return
         }
         let current = min(max(session.currentPageIndex + 1, 1), total)
+        let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
+        let nextValue: String
         if documentStore.isContinuousReadingEnabled(in: windowID),
-           let index = documentStore.continuousReadingSessionIDs(in: windowID).firstIndex(of: session.id) {
-            pageCounterLabel.stringValue = "\(index + 1) / \(documentStore.continuousReadingSessionIDs(in: windowID).count) · \(current) / \(total)"
+           let index = continuousSessionIDs.firstIndex(of: session.id) {
+            nextValue = "\(index + 1) / \(continuousSessionIDs.count) · \(current) / \(total)"
         } else {
-            pageCounterLabel.stringValue = "\(current) / \(total)"
+            nextValue = "\(current) / \(total)"
         }
+        updatePageCounterLabel(to: nextValue)
+    }
+
+    private func updatePageCounterLabel(to value: String) {
+        guard pageCounterLabel.stringValue != value else { return }
+        pageCounterLabel.stringValue = value
+        preferredContentHeightDidChange?()
     }
 
     private func reloadOutline() {
         guard isViewLoaded else { return }
 
-        let session = documentStore.activeSession(in: windowID)
-        displayedSessionID = session?.id
+        outlineReloadCount += 1
         nodes = documentStore.outlineTreeForSidebar(in: windowID)
+        displayedSourceFingerprint = OutlineSourceFingerprint.capture(
+            from: documentStore,
+            windowID: windowID
+        )
         expandablePaths = Self.expandablePaths(in: nodes)
         collapsedPaths = collapsedPaths.intersection(expandablePaths)
         selectedPath = nil

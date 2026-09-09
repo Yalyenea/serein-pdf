@@ -7,6 +7,28 @@ import Testing
 @MainActor
 struct FloatingOutlineViewControllerTests {
     @Test
+    func readingPositionChangeDoesNotFlattenOutlineAgain() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeFloatingOutlinePDF(named: "stable-floating-outline"))
+        store.setRightSidebarVisible(false)
+        let controller = FloatingOutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        let flattenCount = controller.outlineFlattenCount
+
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 2, point: CGPoint(x: 0, y: 100)),
+            scaleFactor: 1,
+            for: session.id
+        )
+
+        #expect(controller.outlineFlattenCount == flattenCount)
+        #expect(controller.testingIsPresented)
+    }
+
+    @Test
     func floatingOutlinePanelIsTranslucentAndFollowsTheme() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance

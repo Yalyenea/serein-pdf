@@ -19,6 +19,7 @@ final class SearchNavigationTests: XCTestCase {
             options: .default,
             in: store.defaultWindowID
         )
+        waitForSearch(in: store)
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 4)
 
         let wholeWords = SearchOptions(matchesWholeWords: true)
@@ -28,6 +29,7 @@ final class SearchNavigationTests: XCTestCase {
             options: wholeWords,
             in: store.defaultWindowID
         )
+        waitForSearch(in: store)
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).options, wholeWords)
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 2)
 
@@ -41,6 +43,7 @@ final class SearchNavigationTests: XCTestCase {
             options: caseSensitiveWholeWords,
             in: store.defaultWindowID
         )
+        waitForSearch(in: store)
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).options, caseSensitiveWholeWords)
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 1)
     }
@@ -65,6 +68,7 @@ final class SearchNavigationTests: XCTestCase {
             options: options,
             in: store.defaultWindowID
         )
+        waitForSearch(in: store)
 
         let snapshot = store.searchSnapshot(in: store.defaultWindowID)
         XCTAssertEqual(snapshot.options, options)
@@ -89,7 +93,34 @@ final class SearchNavigationTests: XCTestCase {
         reader.onFindActionRequested = { actions.append($0) }
 
         reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
+        waitForSearch(in: store)
         reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
+
+        XCTAssertEqual(actions, [.activateNext])
+    }
+
+    func testRepeatedSubmitDuringAsyncSearchNavigatesOnceAfterCompletion() throws {
+        let store = makeStore()
+        let url = try makeSearchableTemporaryPDF(
+            named: "repeat-submit-in-flight",
+            pages: ["needle alpha needle beta needle"]
+        )
+        let session = try store.open(documentAt: url)
+        let reader = ReaderViewController(documentStore: store, windowID: store.defaultWindowID)
+        reader.targetSessionID = session.id
+        reader.loadViewIfNeeded()
+        reader.showFindBar()
+
+        var actions: [FindNavigationAction] = []
+        reader.onFindActionRequested = { actions.append($0) }
+        let findBar = FindBarView()
+
+        reader.findBar(findBar, didSubmitQuery: "needle", scope: .currentDocument)
+        XCTAssertTrue(store.searchSnapshot(in: store.defaultWindowID).isSearching)
+        reader.findBar(findBar, didSubmitQuery: "needle", scope: .currentDocument)
+        XCTAssertTrue(actions.isEmpty)
+
+        waitForSearch(in: store)
 
         XCTAssertEqual(actions, [.activateNext])
     }
@@ -111,8 +142,10 @@ final class SearchNavigationTests: XCTestCase {
         let findBar = FindBarView()
 
         reader.findBar(findBar, didSubmitQuery: "needle", scope: .currentDocument)
+        waitForSearch(in: store)
         findBar.setSearchOptions(SearchOptions(isCaseSensitive: true))
         reader.findBar(findBar, didSubmitQuery: "needle", scope: .currentDocument)
+        waitForSearch(in: store)
         XCTAssertTrue(actions.isEmpty)
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 1)
 
@@ -128,6 +161,7 @@ final class SearchNavigationTests: XCTestCase {
         )
         _ = try store.open(documentAt: url)
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
 
         let controller = SearchResultsViewController(documentStore: store, windowID: store.defaultWindowID)
         controller.loadViewIfNeeded()
@@ -146,6 +180,7 @@ final class SearchNavigationTests: XCTestCase {
         )
         _ = try store.open(documentAt: url)
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
 
         let controller = SearchResultsViewController(documentStore: store, windowID: store.defaultWindowID)
         controller.loadViewIfNeeded()
@@ -176,6 +211,7 @@ final class SearchNavigationTests: XCTestCase {
         )
         let session = try store.open(documentAt: url)
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
 
         let controller = SearchResultsViewController(documentStore: store, windowID: store.defaultWindowID)
         controller.loadViewIfNeeded()
@@ -207,10 +243,12 @@ final class SearchNavigationTests: XCTestCase {
         reader.loadViewIfNeeded()
 
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .currentDocument)
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 1)
 
         reader.showFindBar(scope: .allOpen)
+        waitForSearch(in: store)
 
         XCTAssertTrue(reader.isFindBarVisible)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .allOpen)
@@ -233,6 +271,7 @@ final class SearchNavigationTests: XCTestCase {
         )
 
         reader.showFindBar(scope: .currentDocument)
+        waitForSearch(in: store)
 
         XCTAssertTrue(reader.isFindBarVisible)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .currentDocument)
@@ -261,6 +300,7 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertTrue(emptyLabel.stringValue.isEmpty)
 
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
         controller.view.layoutSubtreeIfNeeded()
 
         XCTAssertTrue(emptyLabel.isHidden)
@@ -288,6 +328,7 @@ final class SearchNavigationTests: XCTestCase {
         )
 
         reader.showFindBar(scope: .allOpen)
+        waitForSearch(in: store)
 
         XCTAssertTrue(reader.isFindBarVisible)
         XCTAssertEqual(store.searchScope(in: store.defaultWindowID), .allOpen)
@@ -308,6 +349,7 @@ final class SearchNavigationTests: XCTestCase {
         split.rightSidebarViewController.loadViewIfNeeded()
         split.rightSidebarViewController.searchResultsViewController.loadViewIfNeeded()
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
 
         let searchVC = split.rightSidebarViewController.searchResultsViewController
         XCTAssertTrue(split.findNextMatch())
@@ -335,6 +377,7 @@ final class SearchNavigationTests: XCTestCase {
         reader.showFindBar()
 
         reader.findBar(FindBarView(), didSubmitQuery: "needle", scope: .currentDocument)
+        waitForSearch(in: store)
         XCTAssertNil(
             split.rightSidebarViewController.searchResultsViewController.selectionSummary().selectedIndex
         )
@@ -369,6 +412,7 @@ final class SearchNavigationTests: XCTestCase {
             windowController.window?.contentViewController as? SplitViewController
         )
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
         flushSearchNavigationLayout(windowController.window)
         let match = try XCTUnwrap(
             store.searchSnapshot(in: store.defaultWindowID).sections.flatMap(\.matches).first
@@ -410,6 +454,7 @@ final class SearchNavigationTests: XCTestCase {
         )
         let reader = split.readerViewController
         store.updateSearch(query: "needle", scope: .allOpen, in: store.defaultWindowID)
+        waitForSearch(in: store)
         flushSearchNavigationLayout(windowController.window)
         let matches = store.searchSnapshot(in: store.defaultWindowID).sections.flatMap(\.matches)
         XCTAssertEqual(matches.map(\.sessionID), [firstSession.id, secondSession.id])
@@ -440,8 +485,9 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(store.session(for: firstSession.id)?.lastReadPosition, backPosition)
         let livePosition = try XCTUnwrap(reader.testingCurrentReadingPosition)
         XCTAssertEqual(livePosition.pageIndex, backPosition.pageIndex)
-        let backTargetPage = try XCTUnwrap(firstMatch.selection.pages.first)
-        let backTargetBounds = firstMatch.selection.bounds(for: backTargetPage)
+        let backTargetSelection = try XCTUnwrap(store.searchSelection(for: firstMatch))
+        let backTargetPage = try XCTUnwrap(backTargetSelection.pages.first)
+        let backTargetBounds = backTargetSelection.bounds(for: backTargetPage)
         XCTAssertTrue(
             reader.pdfView.bounds.intersects(
                 reader.pdfView.convert(backTargetBounds, from: backTargetPage)
@@ -463,11 +509,32 @@ final class SearchNavigationTests: XCTestCase {
         let searchVC = split.rightSidebarViewController.searchResultsViewController
         searchVC.loadViewIfNeeded()
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForSearch(in: store)
 
         XCTAssertEqual(searchVC.selectNextMatch()?.matchIndex, 0)
         store.activate(sessionID: session.id, in: store.defaultWindowID, targetPane: nil)
         XCTAssertEqual(searchVC.selectedMatch()?.matchIndex, 0)
         XCTAssertEqual(searchVC.selectNextMatch()?.matchIndex, 1)
+    }
+
+    private func waitForSearch(
+        in store: DocumentStore,
+        windowID: UUID? = nil,
+        timeout: TimeInterval = 2,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let targetWindowID = windowID ?? store.defaultWindowID
+        let deadline = Date(timeIntervalSinceNow: timeout)
+        while store.searchSnapshot(in: targetWindowID).isSearching, Date() < deadline {
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+        }
+        XCTAssertFalse(
+            store.searchSnapshot(in: targetWindowID).isSearching,
+            "Search did not complete before timeout",
+            file: file,
+            line: line
+        )
     }
 
     private func makeStore() -> DocumentStore {
@@ -487,12 +554,13 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(reader.displayedSessionID, sessionID)
         XCTAssertTrue(reader.pdfView.document === (try store.pdfDocument(for: sessionID)))
 
-        let expectedPage = try XCTUnwrap(match.selection.pages.first)
-        let expectedBounds = match.selection.bounds(for: expectedPage)
+        let expectedSelection = try XCTUnwrap(store.searchSelection(for: match))
+        let expectedPage = try XCTUnwrap(expectedSelection.pages.first)
+        let expectedBounds = expectedSelection.bounds(for: expectedPage)
         let actualSelection = try XCTUnwrap(reader.pdfView.currentSelection)
         let actualPage = try XCTUnwrap(actualSelection.pages.first)
         XCTAssertEqual(reader.pdfView.document?.index(for: actualPage), match.pageIndex)
-        XCTAssertEqual(actualSelection.string, match.selection.string)
+        XCTAssertEqual(actualSelection.string, expectedSelection.string)
         let actualBounds = actualSelection.bounds(for: actualPage)
         XCTAssertEqual(actualBounds.minX, expectedBounds.minX, accuracy: 0.5)
         XCTAssertEqual(actualBounds.minY, expectedBounds.minY, accuracy: 0.5)

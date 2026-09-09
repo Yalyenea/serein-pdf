@@ -13,8 +13,12 @@ final class OverviewGridView: NSView {
 
     private let scrollView = NSScrollView()
     private let pagesContainer = FlippedClipContainer()
-    private var itemViews: [OverviewPageItemView] = []
+    /// Only the viewport neighborhood owns views. Long documents therefore keep
+    /// a bounded number of AppKit/layer objects instead of one pair per page.
+    private var visibleItemViews: [Int: OverviewPageItemView] = [:]
+    private var reusableItemViews: [OverviewPageItemView] = []
     private var document: PDFDocument?
+    private var pageCount: Int = 0
     private var columns: Int = 1
     private var cellSize: CGSize = .zero
     private var spacing: CGFloat = OverviewGridLayout.defaultCellSpacing
@@ -39,7 +43,7 @@ final class OverviewGridView: NSView {
     private let renderQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = maxConcurrentRenders
-        queue.qualityOfService = .userInteractive
+        queue.qualityOfService = .userInitiated
         return queue
     }()
 
@@ -108,7 +112,7 @@ final class OverviewGridView: NSView {
         scrollView.contentView.backgroundColor = color
         pagesContainer.wantsLayer = true
         pagesContainer.layer?.backgroundColor = color.cgColor
-        itemViews.forEach { $0.applyBorderAppearance() }
+        visibleItemViews.values.forEach { $0.applyBorderAppearance() }
     }
 
     override var isHidden: Bool {
@@ -151,30 +155,20 @@ final class OverviewGridView: NSView {
     }
 
     private func rebuildItems() {
-        itemViews.forEach { $0.removeFromSuperview() }
-        itemViews.removeAll(keepingCapacity: true)
+        recycleAllItems()
 
         // A fresh document starts at the top; without this the clip view can
         // keep a stale scroll point from the previous document's geometry.
         scrollView.contentView.scroll(to: .zero)
 
-        let pageCount = document?.pageCount ?? 0
-        for index in 0..<pageCount {
-            let item = OverviewPageItemView()
-            item.pageIndex = index
-            item.onSelect = { [weak self] pageIndex in
-                self?.onPageSelected?(pageIndex)
-            }
-            pagesContainer.addSubview(item)
-            itemViews.append(item)
-        }
+        pageCount = document?.pageCount ?? 0
         layoutItems()
     }
 
     private func layoutItems() {
-        let pageCount = itemViews.count
         guard pageCount > 0, cellSize.width > 1, cellSize.height > 1 else {
             pagesContainer.frame = .zero
+            recycleAllItems()
             return
         }
 
@@ -199,12 +193,8 @@ final class OverviewGridView: NSView {
         let originY = max((height - gridHeight) / 2, edgeInset)
         gridOrigin = CGPoint(x: originX, y: originY)
 
-        for (index, item) in itemViews.enumerated() {
-            let col = index % cols
-            let row = index / cols
-            let x = originX + CGFloat(col) * (cellSize.width + spacing)
-            let y = originY + CGFloat(row) * (cellSize.height + spacing)
-            item.frame = NSRect(x: x, y: y, width: cellSize.width, height: cellSize.height)
+        for (index, item) in visibleItemViews {
+            item.frame = itemFrame(at: index)
         }
     }
 
@@ -212,9 +202,8 @@ final class OverviewGridView: NSView {
 
     private func refreshVisibleThumbnails() {
         guard isHidden == false,
-              let document,
-              document.pageCount > 0,
-              itemViews.isEmpty == false,
+              document != nil,
+              pageCount > 0,
               cellSize.width > 1, cellSize.height > 1 else { return }
 
         let pixelSize = thumbnailPixelSize()
@@ -233,7 +222,7 @@ final class OverviewGridView: NSView {
         let bufferedRect = visibleRect.insetBy(dx: -visibleRect.width, dy: -visibleRect.height)
         let wantedIndices = Set(
             OverviewGridLayout.visibleCellIndices(
-                pageCount: document.pageCount,
+                pageCount: pageCount,
                 columns: columns,
                 cellSize: cellSize,
                 spacing: spacing,
@@ -241,6 +230,8 @@ final class OverviewGridView: NSView {
                 viewport: bufferedRect
             )
         )
+
+        reconcileVisibleItems(with: wantedIndices)
 
         // Stop work that has left the prefetch window before enqueuing the new
         // neighborhood. Otherwise rapid scrolling accumulates stale PDFKit
@@ -252,25 +243,63 @@ final class OverviewGridView: NSView {
             pendingRenderTickets.removeValue(forKey: index)?.cancel()
         }
 
-        // Far-offscreen bitmaps are the unbounded-memory surface; drop them. The
-        // cache brings recent ones back instantly when they scroll in again.
-        for (index, item) in itemViews.enumerated() where wantedIndices.contains(index) == false {
-            item.clearThumbnail()
-        }
-
         guard wantedIndices.isEmpty == false else { return }
-        let centerIndex = centerVisibleIndex(viewport: visibleRect, pageCount: document.pageCount)
+        let centerIndex = centerVisibleIndex(viewport: visibleRect, pageCount: pageCount)
         for index in wantedIndices.sorted(by: { abs($0 - centerIndex) < abs($1 - centerIndex) }) {
-            guard index < itemViews.count,
+            guard let item = visibleItemViews[index],
                   pendingRenderTickets[index] == nil,
-                  itemNeedsRender(itemViews[index]) else { continue }
+                  itemNeedsRender(item) else { continue }
             // Recently visited pages come back from the cache without rasterizing.
             if let cached = thumbnailCache.object(forKey: NSNumber(value: index)) {
-                itemViews[index].setThumbnail(cached)
+                item.setThumbnail(cached)
                 continue
             }
             enqueueThumbnailRender(index: index, pixelSize: pixelSize)
         }
+    }
+
+    private func reconcileVisibleItems(with wantedIndices: Set<Int>) {
+        let obsoleteIndices = visibleItemViews.keys.filter { wantedIndices.contains($0) == false }
+        for index in obsoleteIndices {
+            guard let item = visibleItemViews.removeValue(forKey: index) else { continue }
+            item.clearThumbnail()
+            item.removeFromSuperview()
+            reusableItemViews.append(item)
+        }
+
+        for index in wantedIndices where visibleItemViews[index] == nil {
+            let item = reusableItemViews.popLast() ?? makeItemView()
+            item.pageIndex = index
+            item.frame = itemFrame(at: index)
+            pagesContainer.addSubview(item)
+            visibleItemViews[index] = item
+        }
+    }
+
+    private func makeItemView() -> OverviewPageItemView {
+        let item = OverviewPageItemView()
+        item.onSelect = { [weak self] pageIndex in
+            self?.onPageSelected?(pageIndex)
+        }
+        return item
+    }
+
+    private func recycleAllItems() {
+        for item in visibleItemViews.values {
+            item.clearThumbnail()
+            item.removeFromSuperview()
+            reusableItemViews.append(item)
+        }
+        visibleItemViews.removeAll(keepingCapacity: true)
+    }
+
+    private func itemFrame(at index: Int) -> NSRect {
+        let cols = max(columns, 1)
+        let col = index % cols
+        let row = index / cols
+        let x = gridOrigin.x + CGFloat(col) * (cellSize.width + spacing)
+        let y = gridOrigin.y + CGFloat(row) * (cellSize.height + spacing)
+        return NSRect(x: x, y: y, width: cellSize.width, height: cellSize.height)
     }
 
     private func thumbnailPixelSize() -> NSSize {
@@ -313,9 +342,12 @@ final class OverviewGridView: NSView {
         // PDFKit reads on a stable document are safe off-main (PDFThumbnailView
         // rasterizes the same way); only the result hops back to the main thread.
         renderQueue.addOperation { [weak self, ticket] in
-            guard ticket.isCancelled == false,
-                  let page = ticket.document.page(at: ticket.pageIndex) else { return }
-            let image = page.thumbnail(of: ticket.pixelSize, for: .mediaBox)
+            guard ticket.isCancelled == false else { return }
+            let image: NSImage? = autoreleasepool {
+                guard let page = ticket.document.page(at: ticket.pageIndex) else { return nil }
+                return page.thumbnail(of: ticket.pixelSize, for: .mediaBox)
+            }
+            guard let image else { return }
             guard ticket.isCancelled == false else { return }
             image.size = ticket.pointSize
             ticket.storeResult(image)
@@ -325,14 +357,13 @@ final class OverviewGridView: NSView {
                 guard self.pendingRenderTickets[ticket.pageIndex] === ticket else { return }
                 self.pendingRenderTickets[ticket.pageIndex] = nil
                 guard self.thumbnailGeneration == ticket.generation,
-                      ticket.pageIndex < self.itemViews.count,
                       let image = ticket.takeResult() else { return }
                 self.thumbnailCache.setObject(
                     image,
                     forKey: NSNumber(value: ticket.pageIndex),
                     cost: ticket.costBytes
                 )
-                self.itemViews[ticket.pageIndex].setThumbnail(image)
+                self.visibleItemViews[ticket.pageIndex]?.setThumbnail(image)
             }
         }
     }
@@ -347,8 +378,14 @@ final class OverviewGridView: NSView {
         cancelPendingRenders()
         thumbnailCache.removeAllObjects()
         if clearDisplayedImages {
-            itemViews.forEach { $0.clearThumbnail() }
+            visibleItemViews.values.forEach { $0.clearThumbnail() }
         }
+    }
+
+    /// The reader calls this when overview presentation ends so the auxiliary
+    /// grid cannot keep the session's PDFDocument pinned.
+    func releaseDocument() {
+        configure(document: nil)
     }
 
     override func layout() {
@@ -362,7 +399,9 @@ final class OverviewGridView: NSView {
 
 extension OverviewGridView {
     var testingThumbnailImageIndices: Set<Int> {
-        Set(itemViews.indices.filter { itemViews[$0].thumbnailImage != nil })
+        Set(visibleItemViews.compactMap { index, item in
+            item.thumbnailImage == nil ? nil : index
+        })
     }
 
     var testingPendingRenderIndices: Set<Int> {
@@ -370,9 +409,12 @@ extension OverviewGridView {
     }
 
     func testingThumbnailPointSize(at index: Int) -> CGSize? {
-        guard itemViews.indices.contains(index) else { return nil }
-        return itemViews[index].thumbnailImage?.size
+        visibleItemViews[index]?.thumbnailImage?.size
     }
+
+    var testingLiveItemViewCount: Int { visibleItemViews.count }
+
+    var testingHasDocument: Bool { document != nil }
 
     /// Moves the viewport without going through the scroll machinery, then
     /// runs the same refresh a real scroll would trigger.

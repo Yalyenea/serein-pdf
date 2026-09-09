@@ -34,6 +34,15 @@ final class PDFLibraryScannerTests: XCTestCase {
         XCTAssertEqual(urls, [pdfURL.standardizedFileURL])
     }
 
+    func testScanIgnoresDirectoryWithPDFExtension() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fakePDFDirectory = rootURL.appendingPathComponent("Archive.pdf", isDirectory: true)
+        try FileManager.default.createDirectory(at: fakePDFDirectory, withIntermediateDirectories: true)
+
+        XCTAssertEqual(PDFLibraryScanner().scan(folderURLs: [rootURL]), [])
+    }
+
     func testCatalogKeepsRootAndRelativeFolderMetadata() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

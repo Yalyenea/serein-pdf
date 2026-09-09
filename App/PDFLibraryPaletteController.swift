@@ -141,6 +141,9 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private var folderRows: [PDFLibraryFolderRow] = []
     private var filteredItems: [PDFLibraryItem] = []
     private var isApplyingSelection = false
+    private var isLoadingCatalog = false
+    private var catalogBuildGeneration: UInt64 = 0
+    private var catalogBuildTask: Task<Void, Never>?
 
     private let titleLabel = NSTextField(labelWithString: "PDF Library")
     private let secondaryLabel = NSTextField(labelWithString: "")
@@ -190,7 +193,20 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     }
 
     func show(folderURLs: [URL], relativeTo parentWindow: NSWindow?) {
-        catalog = catalogCache.catalog(folderURLs: folderURLs)
+        catalogBuildTask?.cancel()
+        catalogBuildGeneration &+= 1
+        let generation = catalogBuildGeneration
+        let normalizedFolderURLs = PDFLibraryCatalogCache.normalizedFolderURLs(folderURLs)
+        if normalizedFolderURLs.isEmpty {
+            catalog = PDFLibraryCatalog(roots: [], items: [])
+            isLoadingCatalog = false
+        } else if let cachedCatalog = catalogCache.cachedCatalog(folderURLs: normalizedFolderURLs) {
+            catalog = cachedCatalog
+            isLoadingCatalog = false
+        } else {
+            catalog = PDFLibraryCatalog(roots: [], items: [])
+            isLoadingCatalog = true
+        }
         selectedSegmentIndex = 0
         selectedFolderScope = .all
         queryField.stringValue = ""
@@ -201,10 +217,46 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         window?.makeKeyAndOrderFront(nil)
         focusQueryField()
         NSApp.activate(ignoringOtherApps: true)
+
+        if isLoadingCatalog {
+            startCatalogBuild(folderURLs: normalizedFolderURLs, generation: generation)
+        }
     }
 
     func invalidateCatalogCache() {
+        catalogBuildTask?.cancel()
+        catalogBuildTask = nil
+        catalogBuildGeneration &+= 1
         catalogCache.invalidate()
+    }
+
+    override func close() {
+        catalogBuildTask?.cancel()
+        catalogBuildTask = nil
+        catalogBuildGeneration &+= 1
+        isLoadingCatalog = false
+        super.close()
+    }
+
+    private func startCatalogBuild(folderURLs: [URL], generation: UInt64) {
+        catalogBuildTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let catalog = PDFLibraryCatalog.build(
+                folderURLs: folderURLs,
+                shouldCancel: { Task.isCancelled }
+            )
+            guard Task.isCancelled == false else { return }
+            await MainActor.run { [weak self] in
+                guard let self,
+                      self.catalogBuildGeneration == generation else { return }
+                self.catalogBuildTask = nil
+                self.catalogCache.store(catalog, folderURLs: folderURLs)
+                self.catalog = catalog
+                self.isLoadingCatalog = false
+                self.rebuildSegments()
+                self.reloadUI()
+                self.focusQueryField()
+            }
+        }
     }
 
     private func buildInterface(in panel: NSPanel) {
@@ -364,7 +416,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             }
         }
         filteredItems = makeFilteredItems()
-        secondaryLabel.stringValue = "\(filteredItems.count) PDFs"
+        secondaryLabel.stringValue = isLoadingCatalog ? "Scanning…" : "\(filteredItems.count) PDFs"
         emptyLabel.stringValue = emptyMessage()
         emptyLabel.isHidden = filteredItems.isEmpty == false
         pdfsScrollView.isHidden = filteredItems.isEmpty
@@ -445,6 +497,9 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     }
 
     private func emptyMessage() -> String {
+        if isLoadingCatalog {
+            return "Scanning PDF library…"
+        }
         if catalog.roots.isEmpty {
             return "No library folders configured."
         }
@@ -625,6 +680,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
 extension PDFLibraryPaletteController {
     var testingFolderRowTitles: [String] { folderRows.map(\.title) }
     var testingPDFTitles: [String] { filteredItems.map(\.title) }
+    var testingIsLoadingCatalog: Bool { isLoadingCatalog }
 
     func testingShow(folderURLs: [URL]) {
         show(folderURLs: folderURLs, relativeTo: nil)
@@ -633,6 +689,10 @@ extension PDFLibraryPaletteController {
     func testingSetQuery(_ query: String) {
         queryField.stringValue = query
         controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: queryField))
+    }
+
+    func testingWaitForCatalog() async {
+        await catalogBuildTask?.value
     }
 }
 #endif

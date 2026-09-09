@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class PDFLibraryPaletteControllerTests: XCTestCase {
-    func testShowBuildsFolderRowsAndFiltersPDFs() throws {
+    func testShowBuildsFolderRowsAndFiltersPDFs() async throws {
         _ = NSApplication.shared
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -18,6 +18,9 @@ final class PDFLibraryPaletteControllerTests: XCTestCase {
         let controller = PDFLibraryPaletteController { _ in }
         controller.testingShow(folderURLs: [rootURL])
         defer { controller.close() }
+        XCTAssertTrue(controller.testingIsLoadingCatalog)
+
+        await controller.testingWaitForCatalog()
 
         XCTAssertEqual(
             controller.testingFolderRowTitles,

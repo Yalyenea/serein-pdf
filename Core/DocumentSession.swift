@@ -31,6 +31,18 @@ enum AnnotationSavePolicy: String, CaseIterable, Equatable, Codable, Sendable {
     }
 }
 
+struct AnnotationAutoSaveJob: Sendable {
+    let sessionID: UUID
+    let url: URL
+    let annotationGeneration: UInt64
+    let data: Data
+}
+
+struct AnnotationAutoSaveResult: Sendable {
+    let job: AnnotationAutoSaveJob
+    let errorDescription: String?
+}
+
 struct DocumentSession {
     private static let blankURLScheme = "serein-blank"
 
@@ -47,11 +59,13 @@ struct DocumentSession {
     var needsInitialReadingPosition: Bool
     var outlineTree: [OutlineNode]
     var isOutlineLoaded: Bool
+    var firstPagePosition: ReadingPosition?
     var isDirty: Bool
     var dirtySince: Date?
     var sidebarState: SidebarState
     var tabPresentationState: TabPresentationState
     var annotationSavePolicy: AnnotationSavePolicy
+    var annotationGeneration: UInt64 = 0
     var undoStack: [HighlightUndoOperation] = []
     var redoStack: [HighlightUndoOperation] = []
     var searchCache: DocumentSearchCache = DocumentSearchCache()
@@ -95,6 +109,16 @@ struct DocumentSession {
         needsInitialReadingPosition = isBlank == false && lastReadPosition == nil
         self.outlineTree = outlineTree
         self.isOutlineLoaded = isOutlineLoaded
+        if isBlank {
+            firstPagePosition = nil
+        } else if let firstPage = pdfDocument?.page(at: 0) {
+            firstPagePosition = ReadingPosition.pageTop(
+                pageIndex: 0,
+                pageBounds: firstPage.bounds(for: .cropBox)
+            )
+        } else {
+            firstPagePosition = nil
+        }
         self.isDirty = isDirty
         self.dirtySince = dirtySince
         self.sidebarState = sidebarState

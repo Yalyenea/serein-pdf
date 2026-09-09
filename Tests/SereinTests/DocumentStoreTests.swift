@@ -303,6 +303,23 @@ final class DocumentStoreTests: XCTestCase {
         ])
     }
 
+    func testContinuousOutlineSnapshotDoesNotReloadEvictedGroupDocuments() throws {
+        let store = makeStore()
+        let sessions = try store.open(
+            documentsAt: (0..<6).map { try makeTemporaryPDF(named: "outline-cache-\($0)") },
+            in: store.defaultWindowID
+        )
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
+        XCTAssertEqual(store.outlineTreeForSidebar(in: store.defaultWindowID).count, 6)
+        store.discardCleanBackgroundDocuments()
+        let loadedBefore = Set(sessions.filter { store.isPDFDocumentLoaded(for: $0.id) }.map(\.id))
+
+        XCTAssertEqual(store.outlineTreeForSidebar(in: store.defaultWindowID).count, 6)
+
+        let loadedAfter = Set(sessions.filter { store.isPDFDocumentLoaded(for: $0.id) }.map(\.id))
+        XCTAssertEqual(loadedAfter, loadedBefore)
+    }
+
     func testPDFDocumentCacheEvictsCleanBackgroundDocumentsButKeepsDirtyOnes() throws {
         let store = makeStore()
         let urls = try (0..<5).map { try makeTemporaryPDF(named: "lru-\($0)") }
@@ -329,6 +346,7 @@ final class DocumentStoreTests: XCTestCase {
         _ = store.outlineTree(for: session.id)
         _ = store.annotationSections(in: store.defaultWindowID)
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForDocumentSearch(in: store)
         XCTAssertEqual(store.session(for: session.id)?.isOutlineLoaded, true)
         XCTAssertEqual(store.session(for: session.id)?.isAnnotationCacheLoaded, true)
         XCTAssertEqual(store.session(for: session.id)?.searchCache.matches.count, 1)
@@ -1430,7 +1448,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.session(for: session.id)?.isAnnotationCacheLoaded, false)
     }
 
-    func testAnnotationHitBuildsOnlyTargetGroupWithoutLoadingFullCache() throws {
+    func testAnnotationHitBuildsIndexedCacheOnceAndReusesItForRemoval() throws {
         let store = makeStore()
         let url = try makeSearchableTemporaryPDF(
             named: "annotation-hover-target",
@@ -1447,9 +1465,10 @@ final class DocumentStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(group.records.count, records.count)
-        XCTAssertFalse(store.session(for: session.id)?.isAnnotationCacheLoaded ?? true)
+        XCTAssertTrue(store.session(for: session.id)?.isAnnotationCacheLoaded == true)
         XCTAssertTrue(store.removeHighlightGroup(group, in: session.id))
-        XCTAssertFalse(store.session(for: session.id)?.isAnnotationCacheLoaded ?? true)
+        XCTAssertTrue(store.session(for: session.id)?.isAnnotationCacheLoaded == true)
+        XCTAssertTrue(store.annotationGroups(for: session.id).isEmpty)
         XCTAssertTrue(document.page(at: 0)?.annotations.filter { $0.type == "Highlight" }.isEmpty == true)
     }
 
@@ -1500,7 +1519,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.annotationGroups(for: session.id).first?.snippet, "alpha")
     }
 
-    func testHasHighlightsRecognizesTextMarkupWithoutBuildingAnnotationCache() throws {
+    func testHasHighlightsRecognizesTextMarkupAndCachesTheScan() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "highlight-menu-validation"))
         let annotation = PDFAnnotation(
@@ -1512,7 +1531,7 @@ final class DocumentStoreTests: XCTestCase {
         try store.pdfDocument(for: session.id).page(at: 0)?.addAnnotation(annotation)
 
         XCTAssertTrue(store.hasHighlights(for: session.id))
-        XCTAssertFalse(store.session(for: session.id)?.isAnnotationCacheLoaded ?? true)
+        XCTAssertTrue(store.session(for: session.id)?.isAnnotationCacheLoaded == true)
     }
 
     func testUpdateCommentPersistsAcrossHighlightGroupAndMarksSessionDirty() throws {
@@ -2134,6 +2153,7 @@ final class DocumentStoreTests: XCTestCase {
         _ = try store.open(documentAt: betaURL)
 
         store.updateSearch(query: "needle", scope: .allOpen, in: store.defaultWindowID)
+        waitForDocumentSearch(in: store)
 
         let snapshot = store.searchSnapshot(in: store.defaultWindowID)
         let sections = snapshot.sections
@@ -2157,6 +2177,7 @@ final class DocumentStoreTests: XCTestCase {
         _ = try store.open(documentAt: secondURL)
 
         store.updateSearch(query: "token", scope: .allOpen, in: store.defaultWindowID)
+        waitForDocumentSearch(in: store)
         XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), .search)
         XCTAssertGreaterThan(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 0)
 
@@ -2185,6 +2206,8 @@ final class DocumentStoreTests: XCTestCase {
 
         store.updateSearch(query: "alpha", scope: .currentDocument, in: firstWindowID)
         store.updateSearch(query: "beta", scope: .currentDocument, in: secondWindowID)
+        waitForDocumentSearch(in: store, windowID: firstWindowID)
+        waitForDocumentSearch(in: store, windowID: secondWindowID)
 
         XCTAssertEqual(store.searchSnapshot(in: firstWindowID).query, "alpha")
         XCTAssertEqual(store.searchSnapshot(in: firstWindowID).totalMatches, 1)
@@ -2209,8 +2232,61 @@ final class DocumentStoreTests: XCTestCase {
         _ = try store.open(documentAt: url)
 
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
+        waitForDocumentSearch(in: store)
 
         XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 160)
+    }
+
+    func testAllOpenSearchDoesNotLoadOrPinReaderPDFDocuments() throws {
+        let store = makeStore()
+        let urls = try (0..<6).map { index in
+            try makeSearchableTemporaryPDF(
+                named: "search-memory-\(index)",
+                pages: ["shared needle \(index)"]
+            )
+        }
+        let sessions = try store.open(documentsAt: urls, in: store.defaultWindowID)
+
+        store.updateSearch(query: "needle", scope: .allOpen, in: store.defaultWindowID)
+        waitForDocumentSearch(in: store)
+
+        XCTAssertEqual(store.searchSnapshot(in: store.defaultWindowID).totalMatches, 6)
+        XCTAssertTrue(sessions.allSatisfy { store.isPDFDocumentLoaded(for: $0.id) == false })
+    }
+
+    func testNewSearchCancelsPreviousGeneration() throws {
+        let store = makeStore()
+        let pages = (0..<80).map { _ in "oldterm oldterm newterm" }
+        _ = try store.open(
+            documentAt: makeSearchableTemporaryPDF(named: "search-cancel", pages: pages)
+        )
+
+        store.updateSearch(query: "oldterm", scope: .currentDocument, in: store.defaultWindowID)
+        store.updateSearch(query: "newterm", scope: .currentDocument, in: store.defaultWindowID)
+        waitForDocumentSearch(in: store)
+
+        let snapshot = store.searchSnapshot(in: store.defaultWindowID)
+        XCTAssertEqual(snapshot.query, "newterm")
+        XCTAssertEqual(snapshot.totalMatches, 80)
+        XCTAssertTrue(snapshot.sections.flatMap(\.matches).allSatisfy { $0.matchedText == "newterm" })
+    }
+
+    func testMemoryPressureDiscardsOnlyCleanBackgroundDocuments() throws {
+        let store = makeStore()
+        let sessions = try store.open(
+            documentsAt: (0..<3).map { try makeTemporaryPDF(named: "pressure-\($0)") },
+            in: store.defaultWindowID
+        )
+        for session in sessions {
+            _ = try store.pdfDocument(for: session.id)
+        }
+        store.setDirty(true, for: sessions[0].id)
+
+        store.discardCleanBackgroundDocuments()
+
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[0].id))
+        XCTAssertFalse(store.isPDFDocumentLoaded(for: sessions[1].id))
+        XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[2].id))
     }
 
     func testRestorePersistedStateDefaultsWindowsBackToSinglePane() throws {

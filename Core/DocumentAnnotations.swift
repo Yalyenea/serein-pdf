@@ -28,27 +28,58 @@ struct DocumentHighlightSection {
 }
 
 struct DocumentHighlightCache {
-    var groups: [DocumentHighlightGroup] = []
+    private(set) var groups: [DocumentHighlightGroup]
+    private var groupIndexByID: [String: Int]
+    private var groupIDByAnnotationID: [ObjectIdentifier: String]
+
+    init(groups: [DocumentHighlightGroup] = []) {
+        self.groups = groups
+        groupIndexByID = [:]
+        groupIDByAnnotationID = [:]
+        rebuildIndexes()
+    }
+
+    func group(containing annotation: PDFAnnotation) -> DocumentHighlightGroup? {
+        guard let groupID = groupIDByAnnotationID[ObjectIdentifier(annotation)],
+              let groupIndex = groupIndexByID[groupID],
+              groups.indices.contains(groupIndex) else { return nil }
+        return groups[groupIndex]
+    }
 
     mutating func upsert(_ updatedGroups: [DocumentHighlightGroup]) {
         guard updatedGroups.isEmpty == false else { return }
 
         for group in updatedGroups {
-            if let index = groups.firstIndex(where: { $0.groupID == group.groupID }) {
+            if let index = groupIndexByID[group.groupID] {
                 groups[index] = group
             } else {
                 groups.append(group)
             }
         }
+        rebuildIndexes()
     }
 
     mutating func removeGroups(withIDs groupIDs: Set<String>) {
         guard groupIDs.isEmpty == false else { return }
         groups.removeAll { groupIDs.contains($0.groupID) }
+        rebuildIndexes()
     }
 
     mutating func clear() {
         groups.removeAll(keepingCapacity: false)
+        groupIndexByID.removeAll(keepingCapacity: false)
+        groupIDByAnnotationID.removeAll(keepingCapacity: false)
+    }
+
+    private mutating func rebuildIndexes() {
+        groupIndexByID.removeAll(keepingCapacity: true)
+        groupIDByAnnotationID.removeAll(keepingCapacity: true)
+        for (index, group) in groups.enumerated() {
+            groupIndexByID[group.groupID] = index
+            for record in group.records {
+                groupIDByAnnotationID[ObjectIdentifier(record.annotation)] = group.groupID
+            }
+        }
     }
 }
 

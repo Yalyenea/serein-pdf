@@ -213,7 +213,11 @@ final class VerticalTabsViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.isLightweightStoreChange == false else { return }
+        guard notification.affects(windowID: windowID) else { return }
+        let change = notification.documentStoreChange
+        guard change.intersection([.content, .tabs, .annotations, .recentFiles, .appearance]).isEmpty == false else {
+            return
+        }
         rebuildList()
         applyEmptyState()
     }
@@ -335,9 +339,7 @@ final class VerticalTabsViewController: NSViewController {
             documentStore.selectSessionRange(through: sessionID, in: windowID)
             return
         }
-        documentStore.selectSessions([sessionID], in: windowID)
-        documentStore.clearSearch(in: windowID)
-        documentStore.activate(sessionID: sessionID, in: windowID)
+        documentStore.activateTab(sessionID: sessionID, in: windowID)
     }
 
     private func selectForContextMenuIfNeeded(_ sessionID: UUID) {

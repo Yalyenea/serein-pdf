@@ -20,9 +20,26 @@ struct DocumentStoreChange: OptionSet, Sendable {
     static let content = DocumentStoreChange(rawValue: 1 << 2)
     /// Page/zoom/reading-position writeback; does not reshape tabs or search results.
     static let readingPosition = DocumentStoreChange(rawValue: 1 << 3)
-    static let all: DocumentStoreChange = [.sidebarVisibility, .rightSidebarMode, .content, .readingPosition]
+    static let search = DocumentStoreChange(rawValue: 1 << 4)
+    static let annotations = DocumentStoreChange(rawValue: 1 << 5)
+    static let recentFiles = DocumentStoreChange(rawValue: 1 << 6)
+    static let appearance = DocumentStoreChange(rawValue: 1 << 7)
+    static let tabs = DocumentStoreChange(rawValue: 1 << 8)
+    static let all: DocumentStoreChange = [
+        .sidebarVisibility,
+        .rightSidebarMode,
+        .content,
+        .readingPosition,
+        .search,
+        .annotations,
+        .recentFiles,
+        .appearance,
+        .tabs,
+    ]
 
     static let notificationUserInfoKey = "DocumentStore.change"
+    static let windowIDsUserInfoKey = "DocumentStore.windowIDs"
+    static let sessionIDsUserInfoKey = "DocumentStore.sessionIDs"
 
     init(rawValue: Int) {
         self.rawValue = rawValue
@@ -59,7 +76,21 @@ extension Notification {
 
     /// Chrome or reading-position only: tabs / search lists can skip full rebuild.
     var isLightweightStoreChange: Bool {
-        documentStoreChange.containsOnly([.sidebarVisibility, .rightSidebarMode, .readingPosition])
+        documentStoreChange.containsOnly([.sidebarVisibility, .rightSidebarMode, .readingPosition, .search])
+    }
+
+    func affects(windowID: UUID) -> Bool {
+        guard let windowIDs = userInfo?[DocumentStoreChange.windowIDsUserInfoKey] as? Set<UUID> else {
+            return true
+        }
+        return windowIDs.contains(windowID)
+    }
+
+    func affects(sessionID: UUID) -> Bool {
+        guard let sessionIDs = userInfo?[DocumentStoreChange.sessionIDsUserInfoKey] as? Set<UUID> else {
+            return true
+        }
+        return sessionIDs.contains(sessionID)
     }
 }
 
@@ -85,10 +116,14 @@ final class DocumentStore {
     private var pdfDocumentCache: [UUID: PDFDocument] = [:]
     private var pdfDocumentRecency: [UUID] = []
     private var searchSnapshots: [UUID: SearchSnapshot] = [:]
+    private var searchOperations: [UUID: DocumentSearchOperation] = [:]
+    private var outlineSnapshots: [UUID: [OutlineNode]] = [:]
     private var searchOptionsByWindowID: [UUID: SearchOptions] = [:]
     private let fileMonitor = PDFFileMonitor()
+    private var memoryPressureSource: DispatchSourceMemoryPressure?
     private static let recentlyClosedLimit = 10
     private static let livePDFDocumentLimit = 4
+    private static let highlightedSearchSelectionLimit = 1_000
     static let undoStackLimit = 50
     var noteRecentDocumentURL: ((URL) -> Void)?
 
@@ -115,6 +150,15 @@ final class DocumentStore {
         fileMonitor.onChange = { [weak self] url in
             self?.refreshExternallyChangedFile(at: url)
         }
+        let memoryPressureSource = DispatchSource.makeMemoryPressureSource(
+            eventMask: [.warning, .critical],
+            queue: .main
+        )
+        memoryPressureSource.setEventHandler { [weak self] in
+            self?.discardCleanBackgroundDocuments()
+        }
+        memoryPressureSource.resume()
+        self.memoryPressureSource = memoryPressureSource
     }
 
     var defaultWindowID: UUID {
@@ -236,7 +280,7 @@ final class DocumentStore {
         )
         normalizeWorkspace(&copy)
         windowWorkspaces.append(copy)
-        notifyChange()
+        notifyChange(.content, windowIDs: [copy.id])
         return copy.id
     }
 
@@ -248,7 +292,7 @@ final class DocumentStore {
         searchOptionsByWindowID.removeValue(forKey: windowID)
         removeUnreferencedSessions()
         prunePDFDocumentCache()
-        notifyChange()
+        notifyChange(.content)
     }
 
     func mergeAllWindows(into targetWindowID: UUID) {
@@ -278,7 +322,7 @@ final class DocumentStore {
         searchSnapshots = searchSnapshots.filter { $0.key == targetWindowID }
         searchOptionsByWindowID = searchOptionsByWindowID.filter { $0.key == targetWindowID }
         rebuildSearchIfNeeded(in: targetWindowID)
-        notifyChange()
+        notifyChange(.content)
     }
 
     func moveActiveSessionToNewWindow(from sourceWindowID: UUID) -> UUID? {
@@ -321,7 +365,7 @@ final class DocumentStore {
             return nil
         }
 
-        notifyChange()
+        notifyChange(.content, windowIDs: [sourceWindowID, destination.id])
         return destination.id
     }
 
@@ -340,7 +384,7 @@ final class DocumentStore {
                 toWorkspaceAt: destinationIndex
               ) else { return false }
 
-        notifyChange()
+        notifyChange(.content, windowIDs: [sourceWindowID, destinationWindowID])
         return true
     }
 
@@ -439,7 +483,7 @@ final class DocumentStore {
         guard let location = openLocation(for: url) else { return nil }
         selectSessions([location.sessionID], in: location.windowID, notify: false)
         activateSession(sessionID: location.sessionID, in: location.windowID, targetPane: nil, notify: false)
-        notifyChange()
+        notifyChange(.tabs, windowIDs: [location.windowID])
         return location
     }
 
@@ -463,8 +507,10 @@ final class DocumentStore {
         guard newSessions.isEmpty == false else { return [] }
 
         sessions.append(contentsOf: newSessions)
+        recentDocumentURLs = (
+            try? recentFilesStore.recordOpen(for: newSessions.map(\.url))
+        ) ?? recentDocumentURLs
         for session in newSessions {
-            recentDocumentURLs = (try? recentFilesStore.recordOpen(for: session.url)) ?? recentDocumentURLs
             noteRecentDocumentURL?(session.url)
             attach(sessionID: session.id, to: windowID)
         }
@@ -476,7 +522,7 @@ final class DocumentStore {
             activateSession(sessionID: activeSessionID, in: windowID, targetPane: targetPane, notify: false)
         }
         syncPDFFileMonitor()
-        notifyChange()
+        notifyChange([.content, .tabs, .recentFiles], windowIDs: [windowID])
         return newSessions
     }
 
@@ -496,7 +542,7 @@ final class DocumentStore {
             windowWorkspaces[workspaceIndex].continuousReadingState = ContinuousReadingState()
         }
         activateSession(sessionID: session.id, in: targetWindowID, targetPane: targetPane, notify: false)
-        notifyChange()
+        notifyChange([.content, .tabs], windowIDs: [targetWindowID])
         return session
     }
 
@@ -504,7 +550,7 @@ final class DocumentStore {
         let refreshedRecentURLs = (try? recentFilesStore.loadRecentFiles()) ?? recentDocumentURLs
         guard refreshedRecentURLs != recentDocumentURLs else { return }
         recentDocumentURLs = refreshedRecentURLs
-        notifyChange()
+        notifyChange(.recentFiles, persistState: false)
     }
 
     func close(sessionID: UUID) {
@@ -536,7 +582,7 @@ final class DocumentStore {
         normalizeWorkspace(&windowWorkspaces[workspaceIndex], preferredSessionID: preferredSessionID)
         removeUnreferencedSessions()
         rebuildSearchIfNeeded(in: windowID)
-        notifyChange()
+        notifyChange([.content, .tabs], windowIDs: [windowID])
     }
 
     func popRecentlyClosed() -> URL? {
@@ -547,7 +593,7 @@ final class DocumentStore {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
               windowWorkspaces[index].recentlyClosedURLs.isEmpty == false else { return nil }
         let url = windowWorkspaces[index].recentlyClosedURLs.removeLast()
-        notifyChange()
+        notifyChange(.content, windowIDs: [windowID])
         return url
     }
 
@@ -566,6 +612,41 @@ final class DocumentStore {
 
     func activate(sessionID: UUID, in windowID: UUID, targetPane: ReaderPane? = nil) {
         activateSession(sessionID: sessionID, in: windowID, targetPane: targetPane, notify: true)
+    }
+
+    /// Activates a user-facing tab as one store mutation so selection, search
+    /// teardown and reader activation publish a single coherent snapshot.
+    func activateTab(sessionID: UUID, in windowID: UUID, targetPane: ReaderPane? = nil) {
+        guard session(for: sessionID) != nil,
+              let workspaceIndex = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              windowWorkspaces[workspaceIndex].sessionIDs.contains(sessionID) else { return }
+
+        let previousSearchTargetIDs = Set(
+            searchSnapshots[windowID]?.source.targets.map(\.sessionID) ?? []
+        )
+        searchOperations.removeValue(forKey: windowID)?.cancel()
+        searchSnapshots.removeValue(forKey: windowID)
+
+        var workspace = windowWorkspaces[workspaceIndex]
+        workspace.selectedSessionIDs = [sessionID]
+        workspace.searchQuery = ""
+        if workspace.rightSidebarMode == .search {
+            workspace.rightSidebarMode = .outline
+        }
+        if let targetPane {
+            _ = activateSessionForSplitEdit(
+                sessionID: sessionID,
+                targetPane: targetPane,
+                in: &workspace
+            )
+        } else {
+            activateSessionForTabNavigation(sessionID: sessionID, in: &workspace)
+        }
+        normalizeWorkspace(&workspace)
+        windowWorkspaces[workspaceIndex] = workspace
+        clearUnusedSearchCaches(for: previousSearchTargetIDs)
+        prunePDFDocumentCache()
+        notifyChange([.tabs, .search, .rightSidebarMode], windowIDs: [windowID])
     }
 
     private func activateSession(sessionID: UUID, in windowID: UUID, targetPane: ReaderPane?, notify: Bool) {
@@ -588,7 +669,7 @@ final class DocumentStore {
         windowWorkspaces[workspaceIndex] = workspace
         rebuildSearchIfNeeded(in: windowID)
         if notify {
-            notifyChange()
+            notifyChange(.tabs, windowIDs: [windowID])
         }
     }
 
@@ -603,7 +684,7 @@ final class DocumentStore {
               let currentIndex = workspace.sessionIDs.firstIndex(of: tabSessionID),
               workspace.sessionIDs.count > 1 else { return }
         let previousIndex = (currentIndex - 1 + workspace.sessionIDs.count) % workspace.sessionIDs.count
-        activate(sessionID: workspace.sessionIDs[previousIndex], in: windowID)
+        activateTab(sessionID: workspace.sessionIDs[previousIndex], in: windowID)
     }
 
     func activateNextSession() {
@@ -617,7 +698,7 @@ final class DocumentStore {
               let currentIndex = workspace.sessionIDs.firstIndex(of: tabSessionID),
               workspace.sessionIDs.count > 1 else { return }
         let nextIndex = (currentIndex + 1) % workspace.sessionIDs.count
-        activate(sessionID: workspace.sessionIDs[nextIndex], in: windowID)
+        activateTab(sessionID: workspace.sessionIDs[nextIndex], in: windowID)
     }
 
     func selectedSessionIDs(in windowID: UUID) -> Set<UUID> {
@@ -640,7 +721,7 @@ final class DocumentStore {
         guard windowWorkspaces[index].selectedSessionIDs != selected else { return }
         windowWorkspaces[index].selectedSessionIDs = selected
         if notify {
-            notifyChange()
+            notifyChange(.tabs, windowIDs: [windowID], persistState: false)
         }
     }
 
@@ -654,7 +735,7 @@ final class DocumentStore {
             selected.insert(sessionID)
         }
         windowWorkspaces[index].selectedSessionIDs = selected
-        notifyChange()
+        notifyChange(.tabs, windowIDs: [windowID], persistState: false)
     }
 
     func selectSessionRange(through sessionID: UUID, in windowID: UUID) {
@@ -673,7 +754,7 @@ final class DocumentStore {
               let anchorIndex = workspace.sessionIDs.firstIndex(of: anchorID) else { return }
         let bounds = min(anchorIndex, targetIndex)...max(anchorIndex, targetIndex)
         windowWorkspaces[index].selectedSessionIDs = Set(workspace.sessionIDs[bounds])
-        notifyChange()
+        notifyChange(.tabs, windowIDs: [windowID], persistState: false)
     }
 
     func isContinuousReadingEnabled(in windowID: UUID) -> Bool {
@@ -700,7 +781,7 @@ final class DocumentStore {
            let firstSessionID = orderedSelection.first {
             activateSession(sessionID: firstSessionID, in: windowID, targetPane: nil, notify: false)
         }
-        notifyChange()
+        notifyChange([.content, .tabs], windowIDs: [windowID])
         return true
     }
 
@@ -708,7 +789,7 @@ final class DocumentStore {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
               windowWorkspaces[index].continuousReadingState.isEnabled else { return }
         windowWorkspaces[index].continuousReadingState = ContinuousReadingState()
-        notifyChange()
+        notifyChange([.content, .tabs], windowIDs: [windowID])
     }
 
     @discardableResult
@@ -784,7 +865,7 @@ final class DocumentStore {
         windowWorkspaces[workspaceIndex] = workspace
         removeUnreferencedSessions()
         rebuildSearchIfNeeded(in: windowID)
-        notifyChange()
+        notifyChange([.tabs, .readingPosition], windowIDs: [windowID], sessionIDs: [resolvedSessionID])
         return resolvedSessionID
     }
 
@@ -801,7 +882,7 @@ final class DocumentStore {
         workspace.focusedPane = resolvedPane
         windowWorkspaces[index] = workspace
         rebuildSearchIfNeeded(in: windowID)
-        notifyChange()
+        notifyChange(.tabs, windowIDs: [windowID])
     }
 
     func setSplitEnabled(_ isEnabled: Bool, in windowID: UUID) {
@@ -833,14 +914,14 @@ final class DocumentStore {
         windowWorkspaces[index] = workspace
         removeUnreferencedSessions()
         rebuildSearchIfNeeded(in: windowID)
-        notifyChange()
+        notifyChange([.content, .tabs], windowIDs: [windowID])
     }
 
     func setSplitLayout(_ layout: ReaderSplitLayout, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
               windowWorkspaces[index].splitLayout != layout else { return }
         windowWorkspaces[index].splitLayout = layout
-        notifyChange()
+        notifyChange(.tabs, windowIDs: [windowID])
     }
 
     func setTabPresentationMode(_ mode: TabPresentationMode) {
@@ -862,7 +943,7 @@ final class DocumentStore {
         }
 
         windowWorkspaces[index] = workspace
-        notifyChange()
+        notifyChange([.tabs, .sidebarVisibility], windowIDs: [windowID])
     }
 
     func session(for id: UUID) -> DocumentSession? {
@@ -875,6 +956,22 @@ final class DocumentStore {
 
     func loadedPDFDocument(for sessionID: UUID) -> PDFDocument? {
         pdfDocumentCache[sessionID]
+    }
+
+    func discardCleanBackgroundDocuments() {
+        let pinned = pinnedPDFDocumentIDs()
+        let victims = pdfDocumentCache.keys.filter { sessionID in
+            guard pinned.contains(sessionID) == false,
+                  let session = session(for: sessionID) else { return false }
+            return session.isDirty == false
+        }
+        for sessionID in victims {
+            discardPDFDocumentCache(for: sessionID)
+            guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { continue }
+            sessions[index].searchCache.clear()
+            sessions[index].annotationCache.clear()
+            sessions[index].isAnnotationCacheLoaded = false
+        }
     }
 
     @discardableResult
@@ -899,6 +996,13 @@ final class DocumentStore {
         touchPDFDocument(sessionID)
         sessions[sessionIndex].pageCount = document.pageCount
         sessions[sessionIndex].fileSnapshot = PDFFileSnapshot(url: url)
+        if sessions[sessionIndex].firstPagePosition == nil,
+           let firstPage = document.page(at: 0) {
+            sessions[sessionIndex].firstPagePosition = ReadingPosition.pageTop(
+                pageIndex: 0,
+                pageBounds: firstPage.bounds(for: .cropBox)
+            )
+        }
         clampReadingPositionIfNeeded(for: sessionIndex, in: document)
         prunePDFDocumentCache()
         return document
@@ -911,36 +1015,41 @@ final class DocumentStore {
             return sessions[sessionIndex].outlineTree
         }
         guard let document = try? pdfDocument(for: sessionID) else { return [] }
-        let outlineTree = OutlineExtractor.extract(from: document)
+        let outlineTree = OutlineExtractor.extract(from: document).withSourceSessionID(sessionID)
         sessions[sessionIndex].outlineTree = outlineTree
         sessions[sessionIndex].isOutlineLoaded = true
         return outlineTree
     }
 
     func outlineTreeForSidebar(in windowID: UUID) -> [OutlineNode] {
+        if let cached = outlineSnapshots[windowID] {
+            return cached
+        }
         guard let workspace = windowWorkspace(for: windowID) else { return [] }
         if workspace.continuousReadingState.isEnabled {
-            return workspace.continuousReadingState.orderedSessionIDs.compactMap { sessionID in
-                guard let session = session(for: sessionID),
-                      let document = try? pdfDocument(for: sessionID),
-                      let firstPage = document.page(at: 0) else { return nil }
-                let firstPosition = ReadingPosition.pageTop(
-                    pageIndex: 0,
-                    pageBounds: firstPage.bounds(for: .cropBox)
-                )
+            let roots: [OutlineNode] = workspace.continuousReadingState.orderedSessionIDs.compactMap { sessionID in
+                guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return nil }
+                if sessions[sessionIndex].firstPagePosition == nil {
+                    _ = try? pdfDocument(for: sessionID)
+                }
+                guard let firstPosition = sessions[sessionIndex].firstPagePosition else { return nil }
                 return OutlineNode(
-                    title: session.title,
+                    title: sessions[sessionIndex].title,
                     pageIndex: firstPosition.pageIndex,
                     destinationPoint: firstPosition.point,
-                    children: outlineTree(for: sessionID).withSourceSessionID(sessionID),
+                    children: outlineTree(for: sessionID),
                     sourceSessionID: sessionID,
                     isDocumentRoot: true
                 )
             }
+            outlineSnapshots[windowID] = roots
+            return roots
         }
 
         guard let sessionID = workspace.activeSessionID else { return [] }
-        return outlineTree(for: sessionID).withSourceSessionID(sessionID)
+        let roots = outlineTree(for: sessionID)
+        outlineSnapshots[windowID] = roots
+        return roots
     }
 
     func pageCount(for sessionID: UUID) -> Int? {
@@ -967,7 +1076,7 @@ final class DocumentStore {
             invalidateCleanSessionAfterExternalChange(at: index, snapshot: snapshot)
         }
         invalidateSearchSnapshots(referencing: invalidatedSessionIDs)
-        notifyChange()
+        notifyChange(.content, sessionIDs: invalidatedSessionIDs)
     }
 
     func updateCurrentPage(index: Int, for sessionID: UUID) {
@@ -985,7 +1094,7 @@ final class DocumentStore {
         sessions[sessionIndex].lastReadPosition = position
         sessions[sessionIndex].needsInitialReadingPosition = false
         persistReadingState(for: sessions[sessionIndex])
-        notifyChange(.readingPosition)
+        notifyChange(.readingPosition, sessionIDs: [sessionID])
     }
 
     func setDisplayMode(_ mode: ReaderDisplayMode, for sessionID: UUID) {
@@ -993,7 +1102,7 @@ final class DocumentStore {
         guard sessions[sessionIndex].displayMode != mode else { return }
         sessions[sessionIndex].displayMode = mode
         persistReadingState(for: sessions[sessionIndex])
-        notifyChange()
+        notifyChange(.content, sessionIDs: [sessionID])
     }
 
     func toggleDisplayModeContinuity(for sessionID: UUID) {
@@ -1012,9 +1121,9 @@ final class DocumentStore {
         sessions[sessionIndex].zoomScale = scaleFactor
         persistReadingState(for: sessions[sessionIndex])
         if modeChanged {
-            notifyChange()
+            notifyChange(.content, sessionIDs: [sessionID])
         } else if mode == .manual {
-            notifyChange(.readingPosition)
+            notifyChange(.readingPosition, sessionIDs: [sessionID])
         }
     }
 
@@ -1032,7 +1141,7 @@ final class DocumentStore {
         sessions[sessionIndex].zoomScale = scaleFactor
         persistReadingState(for: sessions[sessionIndex])
         if pageChanged || scaleChanged {
-            notifyChange(.readingPosition)
+            notifyChange(.readingPosition, sessionIDs: [sessionID])
         }
     }
 
@@ -1051,7 +1160,7 @@ final class DocumentStore {
         if explicitlyControlsOutline {
             outlineAutoHiddenWindowIDs.remove(windowID)
         }
-        notifyChange(.sidebarVisibility)
+        notifyChange(.sidebarVisibility, windowIDs: [windowID])
     }
 
     func setRightSidebarVisible(_ isVisible: Bool) {
@@ -1071,14 +1180,14 @@ final class DocumentStore {
         if explicitlyControlsOutline {
             outlineAutoHiddenWindowIDs.remove(windowID)
         }
-        notifyChange(.sidebarVisibility)
+        notifyChange(.sidebarVisibility, windowIDs: [windowID])
     }
 
     func setRightSidebarMode(_ mode: RightSidebarMode, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         guard windowWorkspaces[index].rightSidebarMode != mode else { return }
         windowWorkspaces[index].rightSidebarMode = mode
-        notifyChange(.rightSidebarMode)
+        notifyChange(.rightSidebarMode, windowIDs: [windowID])
     }
 
     func toggleRightSidebarMode(in windowID: UUID) {
@@ -1099,18 +1208,21 @@ final class DocumentStore {
         searchOptionsByWindowID[windowID] = options
 
         if trimmed.isEmpty {
+            searchOperations.removeValue(forKey: windowID)?.cancel()
+            let previousTargetIDs = Set(searchSnapshots[windowID]?.source.targets.map(\.sessionID) ?? [])
             searchSnapshots.removeValue(forKey: windowID)
             if windowWorkspaces[index].rightSidebarMode == .search {
                 windowWorkspaces[index].rightSidebarMode = .outline
             }
+            clearUnusedSearchCaches(for: previousTargetIDs)
             prunePDFDocumentCache()
-            notifyChange()
+            notifyChange([.search, .rightSidebarMode], windowIDs: [windowID])
             return
         }
 
         rebuildSearchIfNeeded(in: windowID)
         windowWorkspaces[index].rightSidebarMode = .search
-        notifyChange()
+        notifyChange([.search, .rightSidebarMode], windowIDs: [windowID])
     }
 
     func clearSearch(in windowID: UUID) {
@@ -1128,6 +1240,36 @@ final class DocumentStore {
             scope: searchScope(in: windowID),
             options: searchOptions(in: windowID)
         )
+    }
+
+    func searchSelection(for match: SearchSidebarMatch) -> PDFSelection? {
+        searchSelection(
+            pageIndex: match.pageIndex,
+            textRange: match.textRange,
+            sessionID: match.sessionID
+        )
+    }
+
+    func searchSelections(for sessionID: UUID, in windowID: UUID) -> [PDFSelection] {
+        searchSnapshot(in: windowID).matches(for: sessionID)
+            .prefix(Self.highlightedSearchSelectionLimit)
+            .compactMap { match in
+            searchSelection(
+                pageIndex: match.pageIndex,
+                textRange: match.textRange,
+                sessionID: sessionID
+            )
+            }
+    }
+
+    private func searchSelection(
+        pageIndex: Int,
+        textRange: NSRange,
+        sessionID: UUID
+    ) -> PDFSelection? {
+        guard let document = try? pdfDocument(for: sessionID),
+              let page = document.page(at: pageIndex) else { return nil }
+        return page.selection(for: textRange)
     }
 
     func annotationSections(in windowID: UUID) -> [DocumentHighlightSection] {
@@ -1166,13 +1308,9 @@ final class DocumentStore {
         for sessionID: UUID
     ) -> DocumentHighlightGroup? {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return nil }
-        if sessions[sessionIndex].isAnnotationCacheLoaded {
-            return sessions[sessionIndex].annotationCache.groups.first { group in
-                group.records.contains { $0.annotation === annotation }
-            }
-        }
-        guard let document = loadedPDFDocument(for: sessionID) else { return nil }
-        return HighlightService.buildHighlightGroup(containing: annotation, in: document)
+        ensureAnnotationCacheLoaded(for: sessionIndex)
+        guard let refreshedIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return nil }
+        return sessions[refreshedIndex].annotationCache.group(containing: annotation)
     }
 
     @discardableResult
@@ -1190,18 +1328,9 @@ final class DocumentStore {
     }
 
     func hasHighlights(for sessionID: UUID) -> Bool {
-        guard let session = sessions.first(where: { $0.id == sessionID }) else { return false }
-        if session.isAnnotationCacheLoaded {
-            return session.annotationCache.groups.isEmpty == false
-        }
-        guard let document = loadedPDFDocument(for: sessionID) else { return false }
-        for pageIndex in 0..<document.pageCount {
-            guard let page = document.page(at: pageIndex) else { continue }
-            if page.annotations.contains(where: HighlightService.isMarkupAnnotation) {
-                return true
-            }
-        }
-        return false
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return false }
+        ensureAnnotationCacheLoaded(for: sessionIndex)
+        return sessions.first(where: { $0.id == sessionID })?.annotationCache.groups.isEmpty == false
     }
 
     func setDirty(_ isDirty: Bool, for sessionID: UUID, now: Date = Date()) {
@@ -1213,7 +1342,7 @@ final class DocumentStore {
         if isDirty == false {
             prunePDFDocumentCache()
         }
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
     }
 
     func noteHighlightsAdded(_ records: [HighlightAnnotationRecord], for sessionID: UUID, now: Date = Date()) {
@@ -1224,7 +1353,7 @@ final class DocumentStore {
         trimUndoStack(for: sessionIndex)
         markAnnotationsDirty(for: sessionIndex, now: now)
         upsertCachedAnnotationGroups(from: records, for: sessionIndex)
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
     }
 
     func noteHighlightsRemoved(_ records: [HighlightAnnotationRecord], for sessionID: UUID, now: Date = Date()) {
@@ -1235,7 +1364,7 @@ final class DocumentStore {
         trimUndoStack(for: sessionIndex)
         markAnnotationsDirty(for: sessionIndex, now: now)
         removeCachedAnnotationGroups(for: records, from: sessionIndex)
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
     }
 
     @discardableResult
@@ -1248,7 +1377,7 @@ final class DocumentStore {
 
         markAnnotationsDirty(for: sessionIndex, now: now)
         upsertCachedAnnotationGroups(from: group.records, for: sessionIndex)
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
         return true
     }
 
@@ -1270,7 +1399,7 @@ final class DocumentStore {
 
         markAnnotationsDirty(for: sessionIndex, now: now)
         upsertCachedAnnotationGroups(from: group.records, for: sessionIndex)
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
         return true
     }
 
@@ -1312,7 +1441,7 @@ final class DocumentStore {
         case let .removed(records):
             upsertCachedAnnotationGroups(from: records, for: sessionIndex)
         }
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
         return true
     }
 
@@ -1337,7 +1466,7 @@ final class DocumentStore {
         case let .removed(records):
             removeCachedAnnotationGroups(for: records, from: sessionIndex)
         }
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
         return true
     }
 
@@ -1345,7 +1474,7 @@ final class DocumentStore {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[sessionIndex].annotationSavePolicy != policy else { return }
         sessions[sessionIndex].annotationSavePolicy = policy
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
     }
 
     func updateAppConfiguration(_ configuration: AppConfiguration) {
@@ -1384,7 +1513,7 @@ final class DocumentStore {
             }
         }
 
-        notifyChange()
+        notifyChange(.appearance)
     }
 
     func saveAnnotations(for sessionID: UUID) throws {
@@ -1400,7 +1529,7 @@ final class DocumentStore {
         sessions[sessionIndex].dirtySince = nil
         sessions[sessionIndex].fileSnapshot = PDFFileSnapshot(url: sessions[sessionIndex].url)
         prunePDFDocumentCache()
-        notifyChange()
+        notifyChange(.annotations, sessionIDs: [sessionID])
     }
 
     func currentPageImage(for sessionID: UUID) throws -> NSImage {
@@ -1426,17 +1555,72 @@ final class DocumentStore {
 
     @discardableResult
     func autoSaveDirtySessions(now: Date = Date()) -> [URL: Error] {
+        let prepared = prepareAutoSaveJobs(now: now)
+        let results = Self.performAutoSaveJobs(prepared.jobs)
+        var errors = prepared.errors
+        errors.merge(completeAutoSave(results)) { _, latest in latest }
+        return errors
+    }
+
+    func prepareAutoSaveJobs(now: Date = Date()) -> (jobs: [AnnotationAutoSaveJob], errors: [URL: Error]) {
+        var jobs: [AnnotationAutoSaveJob] = []
         var errors: [URL: Error] = [:]
         for session in sessions where session.isDirty && session.isBlank == false {
             guard let interval = session.annotationSavePolicy.autoSaveInterval,
                   let dirtySince = session.dirtySince,
                   now.timeIntervalSince(dirtySince) >= interval else { continue }
-
-            do {
-                try saveAnnotations(for: session.id)
-            } catch {
-                errors[session.url] = error
+            guard let document = loadedPDFDocument(for: session.id),
+                  let data = document.dataRepresentation() else {
+                errors[session.url] = DocumentStoreError.failedToSaveDocument(session.url)
+                continue
             }
+            jobs.append(
+                AnnotationAutoSaveJob(
+                    sessionID: session.id,
+                    url: session.url,
+                    annotationGeneration: session.annotationGeneration,
+                    data: data
+                )
+            )
+        }
+        return (jobs, errors)
+    }
+
+    nonisolated static func performAutoSaveJobs(
+        _ jobs: [AnnotationAutoSaveJob]
+    ) -> [AnnotationAutoSaveResult] {
+        jobs.map { job in
+            do {
+                try job.data.write(to: job.url, options: .atomic)
+                return AnnotationAutoSaveResult(job: job, errorDescription: nil)
+            } catch {
+                return AnnotationAutoSaveResult(job: job, errorDescription: error.localizedDescription)
+            }
+        }
+    }
+
+    func completeAutoSave(_ results: [AnnotationAutoSaveResult]) -> [URL: Error] {
+        var errors: [URL: Error] = [:]
+        var savedSessionIDs: Set<UUID> = []
+        for result in results {
+            if let errorDescription = result.errorDescription {
+                errors[result.job.url] = NSError(
+                    domain: "Serein.AnnotationAutoSave",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: errorDescription]
+                )
+                continue
+            }
+            guard let index = sessions.firstIndex(where: { $0.id == result.job.sessionID }),
+                  sessions[index].annotationGeneration == result.job.annotationGeneration else { continue }
+            sessions[index].isDirty = false
+            sessions[index].dirtySince = nil
+            sessions[index].fileSnapshot = PDFFileSnapshot(url: result.job.url)
+            savedSessionIDs.insert(result.job.sessionID)
+        }
+        if savedSessionIDs.isEmpty == false {
+            prunePDFDocumentCache()
+            notifyChange(.annotations, sessionIDs: savedSessionIDs)
         }
         return errors
     }
@@ -1876,6 +2060,7 @@ final class DocumentStore {
     private func markAnnotationsDirty(for sessionIndex: Int, now: Date) {
         sessions[sessionIndex].isDirty = true
         sessions[sessionIndex].dirtySince = sessions[sessionIndex].dirtySince ?? now
+        sessions[sessionIndex].annotationGeneration &+= 1
     }
 
     private func rebuildAnnotationCache(for sessionIndex: Int) {
@@ -1907,6 +2092,7 @@ final class DocumentStore {
         sessions[sessionIndex].pageCount = nil
         sessions[sessionIndex].outlineTree = []
         sessions[sessionIndex].isOutlineLoaded = false
+        sessions[sessionIndex].firstPagePosition = nil
         sessions[sessionIndex].searchCache.clear()
         sessions[sessionIndex].annotationCache.clear()
         sessions[sessionIndex].isAnnotationCacheLoaded = false
@@ -1959,13 +2145,6 @@ final class DocumentStore {
             if workspace.isSplitEnabled, let secondary = workspace.secondarySessionID {
                 pinned.insert(secondary)
             }
-            if let splitPair = workspace.splitPair {
-                pinned.insert(splitPair.primarySessionID)
-                pinned.insert(splitPair.secondarySessionID)
-            }
-            if workspace.searchQuery.isEmpty == false {
-                pinned.formUnion(searchTargetSessionIDs(in: workspace))
-            }
         }
         return pinned
     }
@@ -1987,11 +2166,13 @@ final class DocumentStore {
 
     func rebuildSearchIfNeeded(in windowID: UUID) {
         guard let workspace = windowWorkspace(for: windowID) else {
+            searchOperations.removeValue(forKey: windowID)?.cancel()
             searchSnapshots.removeValue(forKey: windowID)
             return
         }
         let query = workspace.searchQuery
         guard query.isEmpty == false else {
+            searchOperations.removeValue(forKey: windowID)?.cancel()
             searchSnapshots.removeValue(forKey: windowID)
             return
         }
@@ -2005,56 +2186,56 @@ final class DocumentStore {
                 return SearchSnapshotSource.Target(
                     sessionID: sessionID,
                     sessionTitle: session.title,
+                    url: session.url,
                     fileSnapshot: session.fileSnapshot
                 )
             }
         )
         guard searchSnapshots[windowID]?.source != source else { return }
+        searchOperations.removeValue(forKey: windowID)?.cancel()
 
-        var matchesBySessionID: [UUID: [DocumentSearchMatch]] = [:]
+        var cachedMatches: [UUID: [DocumentSearchMatch]] = [:]
         for target in source.targets {
-            rebuildSearchCache(for: target.sessionID, query: query, options: source.options)
             guard let session = session(for: target.sessionID),
                   session.searchCache.query == query,
                   session.searchCache.options == source.options else { continue }
-            matchesBySessionID[target.sessionID] = session.searchCache.matches
+            cachedMatches[target.sessionID] = session.searchCache.matches
         }
 
-        let sections: [SearchSidebarSection]
-        switch source.scope {
-        case .currentDocument:
-            guard let sessionID = source.targets.first?.sessionID,
-                  let session = session(for: sessionID) else {
-                sections = []
-                break
-            }
-            let grouped = Dictionary(grouping: matchesBySessionID[sessionID, default: []]) { $0.pageIndex }
-            sections = grouped.keys.sorted().map { pageIndex in
-                SearchSidebarSection(
-                    title: "Page \(pageIndex + 1)",
-                    matches: grouped[pageIndex, default: []].map {
-                        searchSidebarMatch(from: $0, session: session)
-                    }
-                )
-            }
-        case .allOpen:
-            sections = source.targets.compactMap { target in
-                guard let session = session(for: target.sessionID),
-                      let matches = matchesBySessionID[target.sessionID],
-                      matches.isEmpty == false else { return nil }
-                return SearchSidebarSection(
-                    title: session.title,
-                    matches: matches.map { searchSidebarMatch(from: $0, session: session) }
-                )
-            }
-        }
-
-        searchSnapshots[windowID] = SearchSnapshot(
+        let operation = DocumentSearchOperation(
             source: source,
-            sections: sections,
-            matchesBySessionID: matchesBySessionID,
-            totalMatches: matchesBySessionID.values.reduce(0) { $0 + $1.count }
+            cachedMatchesBySessionID: cachedMatches
         )
+        operation.onUpdate = { [weak self, weak operation] matchesBySessionID, isSearching in
+            guard let self,
+                  let operation,
+                  self.searchOperations[windowID] === operation else { return }
+            for target in source.targets {
+                guard let matches = matchesBySessionID[target.sessionID],
+                      let index = self.sessions.firstIndex(where: { $0.id == target.sessionID }) else { continue }
+                self.sessions[index].searchCache = DocumentSearchCache(
+                    query: source.query,
+                    options: source.options,
+                    matches: matches
+                )
+            }
+            self.searchSnapshots[windowID] = SearchSnapshot.make(
+                source: source,
+                matchesBySessionID: matchesBySessionID,
+                isSearching: isSearching
+            )
+            self.notifyChange(.search, windowIDs: [windowID], persistState: false)
+            if isSearching == false {
+                self.searchOperations.removeValue(forKey: windowID)
+            }
+        }
+        searchOperations[windowID] = operation
+        searchSnapshots[windowID] = SearchSnapshot.make(
+            source: source,
+            matchesBySessionID: cachedMatches,
+            isSearching: source.targets.count > cachedMatches.count
+        )
+        operation.start()
     }
 
     private func searchTargetSessionIDs(in workspace: WindowWorkspace) -> [UUID] {
@@ -2071,41 +2252,20 @@ final class DocumentStore {
             snapshot.source.targets.contains { sessionIDs.contains($0.sessionID) } ? windowID : nil
         }
         for windowID in invalidatedWindowIDs {
+            searchOperations.removeValue(forKey: windowID)?.cancel()
             searchSnapshots.removeValue(forKey: windowID)
         }
     }
 
-    private func searchSidebarMatch(
-        from match: DocumentSearchMatch,
-        session: DocumentSession
-    ) -> SearchSidebarMatch {
-        SearchSidebarMatch(
-            sessionID: session.id,
-            sessionTitle: session.title,
-            matchIndex: match.matchIndex,
-            pageIndex: match.pageIndex,
-            matchedText: match.matchedText,
-            previewText: match.previewText,
-            selection: match.selection
-        )
-    }
-
-    private func rebuildSearchCache(
-        for sessionID: UUID,
-        query: String,
-        options: SearchOptions
-    ) {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        if sessions[index].searchCache.query == query,
-           sessions[index].searchCache.options == options {
-            return
+    private func clearUnusedSearchCaches(for sessionIDs: Set<UUID>) {
+        let referencedSessionIDs = Set(searchSnapshots.values.flatMap { snapshot in
+            snapshot.source.targets.map(\.sessionID)
+        })
+        for index in sessions.indices
+            where sessionIDs.contains(sessions[index].id)
+                && referencedSessionIDs.contains(sessions[index].id) == false {
+            sessions[index].searchCache.clear()
         }
-        guard let document = try? pdfDocument(for: sessionID) else { return }
-        sessions[index].searchCache = DocumentSearchCache(
-            query: query,
-            options: options,
-            matches: DocumentSearchService.buildMatches(for: query, options: options, in: document)
-        )
     }
 
     private func restoredSessionIDs(
@@ -2142,17 +2302,45 @@ final class DocumentStore {
         } catch {
             Self.logger.error("Failed to flush reading state: \(error.localizedDescription, privacy: .public)")
         }
+        do {
+            try persistence.flush()
+        } catch {
+            Self.logger.error("Failed to flush document state: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
-    private func notifyChange(_ change: DocumentStoreChange = .all) {
+    private func notifyChange(
+        _ change: DocumentStoreChange = .all,
+        windowIDs: Set<UUID>? = nil,
+        sessionIDs: Set<UUID>? = nil,
+        persistState: Bool? = nil
+    ) {
+        if change.contains(.content) || change.contains(.tabs) {
+            if let windowIDs {
+                for windowID in windowIDs {
+                    outlineSnapshots.removeValue(forKey: windowID)
+                }
+            } else {
+                outlineSnapshots.removeAll(keepingCapacity: true)
+            }
+        }
         // Reading position lives in ReadingStateStore; skip rewriting the session/window snapshot.
-        if change.containsOnly(.readingPosition) == false {
+        let shouldPersist = persistState
+            ?? change.containsOnly([.readingPosition, .annotations]) == false
+        if shouldPersist {
             persistDocumentStoreState()
+        }
+        var userInfo: [String: Any] = [DocumentStoreChange.notificationUserInfoKey: change.rawValue]
+        if let windowIDs {
+            userInfo[DocumentStoreChange.windowIDsUserInfoKey] = windowIDs
+        }
+        if let sessionIDs {
+            userInfo[DocumentStoreChange.sessionIDsUserInfoKey] = sessionIDs
         }
         NotificationCenter.default.post(
             name: .documentStoreDidChange,
             object: self,
-            userInfo: [DocumentStoreChange.notificationUserInfoKey: change.rawValue]
+            userInfo: userInfo
         )
     }
 
@@ -2306,7 +2494,7 @@ final class DocumentStore {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[index].isBlank == false else {
             sessions[index].title = title.isEmpty ? "Untitled" : title
-            notifyChange()
+            notifyChange(.tabs, sessionIDs: [sessionID])
             return
         }
         let oldURL = sessions[index].url
@@ -2314,7 +2502,7 @@ final class DocumentStore {
 
         guard oldURL != newURL else {
             sessions[index].title = title
-            notifyChange()
+            notifyChange(.tabs, sessionIDs: [sessionID])
             return
         }
 
@@ -2323,7 +2511,7 @@ final class DocumentStore {
         } catch {
             NSLog("Serein failed to rename file: %@", error.localizedDescription)
             sessions[index].title = title
-            notifyChange()
+            notifyChange(.tabs, sessionIDs: [sessionID])
             return
         }
 
@@ -2348,7 +2536,7 @@ final class DocumentStore {
             }
         }
 
-        notifyChange()
+        notifyChange([.content, .tabs, .recentFiles], sessionIDs: [sessionID])
     }
 
     func updateSidebarWidths(left leftWidth: CGFloat, right rightWidth: CGFloat, in windowID: UUID) {

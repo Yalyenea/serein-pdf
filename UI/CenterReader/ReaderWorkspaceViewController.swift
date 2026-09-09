@@ -3,7 +3,10 @@ import PDFKit
 
 private final class ReaderPaneHostView: NSView {
     var isFocused: Bool = false {
-        didSet { updateAppearance() }
+        didSet {
+            guard oldValue != isFocused else { return }
+            updateAppearance()
+        }
     }
 
     override init(frame frameRect: NSRect) {
@@ -62,6 +65,11 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     private var appliedSplitEnabled: Bool?
     private var appliedSplitLayout: ReaderSplitLayout?
     private var appliedSecondarySessionID: UUID?
+    private var displayedPrimarySessionID: UUID?
+    private var displayedSecondarySessionID: UUID?
+    private var appliedFocusedPane: ReaderPane?
+    private var appliedReadingFocusSettings: ReadingFocusSettings?
+    private var appliedSearchSource: SearchSnapshotSource?
     private var pendingSplitGeometryUpdate = false
     private var splitGeometryUpdateScheduled = false
     private var floatingOutlineWidthConstraint: NSLayoutConstraint!
@@ -83,6 +91,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             windowID: windowID
         )
         super.init(nibName: nil, bundle: nil)
+        secondaryReaderViewController.setLocalEventMonitoringEnabled(false)
         title = "Reader Workspace"
         addChild(primaryReaderViewController)
         addChild(secondaryReaderViewController)
@@ -557,52 +566,75 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID) else { return }
         guard notification.isOnlySidebarChromeChange == false else { return }
         // Page/zoom writeback does not change pane layout or search highlight session targets.
         guard notification.isOnlyReadingPositionChange == false else { return }
-        syncFromStore()
+        let change = notification.documentStoreChange
+        guard change.intersection([.content, .tabs, .search, .appearance]).isEmpty == false else {
+            return
+        }
+        syncFromStore(forceSearchRefresh: change.containsOnly(.search))
     }
 
-    private func syncFromStore() {
+    private func syncFromStore(forceSearchRefresh: Bool = true) {
         applyReadingFocusSettings()
-        primaryReaderViewController.targetSessionID = documentStore.displayedSessionID(for: .primary, in: windowID)
-        secondaryReaderViewController.targetSessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
+        let primarySessionID = documentStore.displayedSessionID(for: .primary, in: windowID)
+        let secondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
+        let primarySessionChanged = displayedPrimarySessionID != primarySessionID
+        let secondaryTargetChanged = displayedSecondarySessionID != secondarySessionID
+        if primarySessionChanged {
+            displayedPrimarySessionID = primarySessionID
+            primaryReaderViewController.targetSessionID = primarySessionID
+        }
+        if secondaryTargetChanged {
+            displayedSecondarySessionID = secondarySessionID
+            secondaryReaderViewController.targetSessionID = secondarySessionID
+        }
 
-        syncSearchHighlights(
-            for: primaryReaderViewController,
-            sessionID: documentStore.displayedSessionID(for: .primary, in: windowID)
-        )
-        syncSearchHighlights(
-            for: secondaryReaderViewController,
-            sessionID: documentStore.displayedSessionID(for: .secondary, in: windowID)
-        )
+        documentStore.rebuildSearchIfNeeded(in: windowID)
+        let searchSource = documentStore.searchSnapshot(in: windowID).source
+        if forceSearchRefresh || appliedSearchSource != searchSource || primarySessionChanged || secondaryTargetChanged {
+            appliedSearchSource = searchSource
+            syncSearchHighlights(for: primaryReaderViewController, sessionID: primarySessionID)
+            syncSearchHighlights(for: secondaryReaderViewController, sessionID: secondarySessionID)
+        }
 
         let splitEnabled = documentStore.isSplitEnabled(in: windowID)
         let splitLayout = documentStore.splitLayout(in: windowID)
-        let secondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
         let splitStateChanged = appliedSplitEnabled != splitEnabled
         let splitLayoutChanged = appliedSplitLayout != splitLayout
         let secondarySessionChanged = appliedSecondarySessionID != secondarySessionID
         if splitStateChanged || splitLayoutChanged {
             applySplitLayout(splitLayout, splitEnabled: splitEnabled)
         }
-        secondaryHostView.isHidden = !splitEnabled
-        if splitEnabled, splitView.subviews.count > 1 {
-            splitView.subviews[1].isHidden = false
+        let secondaryShouldBeHidden = !splitEnabled
+        if secondaryHostView.isHidden != secondaryShouldBeHidden {
+            secondaryHostView.isHidden = secondaryShouldBeHidden
         }
+        primaryReaderViewController.setLocalEventMonitoringEnabled(true)
+        secondaryReaderViewController.setLocalEventMonitoringEnabled(splitEnabled)
         if splitStateChanged || splitLayoutChanged || (splitEnabled && secondarySessionChanged) {
             requestSplitGeometryUpdate()
         }
 
         let focusedPane = documentStore.focusedPane(in: windowID)
+        let focusedPaneChanged = appliedFocusedPane != focusedPane
+        appliedFocusedPane = focusedPane
         primaryHostView.isFocused = focusedPane == .primary || splitEnabled == false
         secondaryHostView.isFocused = splitEnabled && focusedPane == .secondary
-        syncSplitCandidateView()
-        onFocusedReaderDidChange?(activeReaderViewController().pdfView)
+        if splitStateChanged || primarySessionChanged || secondaryTargetChanged {
+            syncSplitCandidateView()
+        }
+        if focusedPaneChanged || splitStateChanged || primarySessionChanged || secondaryTargetChanged {
+            onFocusedReaderDidChange?(activeReaderViewController().pdfView)
+        }
     }
 
     private func applyReadingFocusSettings() {
         let settings = readingFocusSettings
+        guard appliedReadingFocusSettings != settings else { return }
+        appliedReadingFocusSettings = settings
         primaryReaderViewController.setReadingFocusSettings(settings)
         secondaryReaderViewController.setReadingFocusSettings(settings)
     }
@@ -672,7 +704,6 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     }
 
     private func syncSearchHighlights(for reader: ReaderViewController, sessionID: UUID?) {
-        documentStore.rebuildSearchIfNeeded(in: windowID)
         let snapshot = documentStore.searchSnapshot(in: windowID)
         guard let sessionID,
               snapshot.query.isEmpty == false else {
@@ -680,7 +711,10 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             return
         }
 
-        reader.applySearchResults(snapshot.matches(for: sessionID), selectedMatchIndex: nil)
+        reader.applySearchResults(
+            documentStore.searchSelections(for: sessionID, in: windowID),
+            selectedMatchIndex: nil
+        )
     }
 
     private func embed(_ controller: NSViewController, in hostView: NSView) {

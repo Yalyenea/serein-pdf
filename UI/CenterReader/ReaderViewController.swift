@@ -154,18 +154,18 @@ private enum ScrollWheelHorizontalStripper {
     }
 }
 
-/// Clip view that hard-locks horizontal origin (belt after event stripping) and
-/// preserves margin centering when the document is smaller than the viewport.
+/// Constrains scrolling before bounds change, preserving centered page margins.
 private final class PDFReaderClipView: NSClipView {
+    // The reader maintains centered margins and scroll limits on the main
+    // thread. Concurrent scrolling can display a different position before
+    // those constraints run, then visibly snap back when bounds synchronize.
+    override class var isCompatibleWithResponsiveScrolling: Bool { false }
+
     /// When non-nil, every horizontal scroll/bounds change is forced to this X.
     var forcedOriginX: CGFloat?
 
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
         var bounds = super.constrainBoundsRect(proposedBounds)
-        if let forcedOriginX {
-            bounds.origin.x = forcedOriginX
-            return bounds
-        }
         // AppKit pins origin to documentView.frame.min when content is smaller
         // than the clip, which cancels centering done via frame.origin. Keep
         // origin at zero so those frame offsets stay visible as margins.
@@ -176,37 +176,45 @@ private final class PDFReaderClipView: NSClipView {
         if documentView.frame.height <= bounds.height + 0.5 {
             bounds.origin.y = 0
         }
+        if let forcedOriginX {
+            bounds.origin.x = forcedOriginX
+        }
         return bounds
     }
 
     override func scroll(to newOrigin: NSPoint) {
-        applyLockedOrigin(clampedOrigin(for: newOrigin), proposed: newOrigin) { origin in
+        applyConstrainedOrigin(clampedOrigin(for: newOrigin), proposed: newOrigin) { origin in
             super.scroll(to: origin)
         }
     }
 
     override func setBoundsOrigin(_ newOrigin: NSPoint) {
-        applyLockedOrigin(clampedOrigin(for: newOrigin), proposed: newOrigin) { origin in
+        // PDFKit also sets bounds while rebuilding page geometry. Constrain
+        // scrolling in scroll(to:), without clipping those layout adjustments.
+        let origin = NSPoint(x: forcedOriginX ?? newOrigin.x, y: newOrigin.y)
+        applyConstrainedOrigin(origin, proposed: newOrigin) { origin in
             super.setBoundsOrigin(origin)
         }
     }
 
     private func clampedOrigin(for origin: NSPoint) -> NSPoint {
-        guard let forcedOriginX else { return origin }
-        return NSPoint(x: forcedOriginX, y: origin.y)
+        constrainBoundsRect(NSRect(origin: origin, size: bounds.size)).origin
     }
 
-    private func applyLockedOrigin(
+    private func applyConstrainedOrigin(
         _ origin: NSPoint,
         proposed: NSPoint,
         apply: (NSPoint) -> Void
     ) {
-        // Horizontal lock fights PDFKit/AppKit mid-gesture; implicit layer
-        // actions would flash the rejected X for a frame.
-        guard origin.x != proposed.x else {
+        // Reject boundary overscroll before observers or layer actions can
+        // display it; correcting it in boundsDidChange causes a visible jitter.
+        guard origin != proposed else {
             apply(origin)
             return
         }
+        // PDFKit's scaled page edges can differ by floating-point roundoff.
+        guard abs(origin.x - bounds.origin.x) > 0.000001
+            || abs(origin.y - bounds.origin.y) > 0.000001 else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         apply(origin)
@@ -408,6 +416,7 @@ final class ReaderViewController: NSViewController {
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
     nonisolated(unsafe) private var panLockScrollMonitor: Any?
     nonisolated(unsafe) private var magnificationMonitor: Any?
+    private var wantsLocalEventMonitoring = true
     private var bookPageTurnScrollAccumulator: CGFloat = 0
     private var lastBookPageTurnScrollTimestamp: TimeInterval?
     private var lastBookPageTurnTimestamp: TimeInterval?
@@ -420,10 +429,28 @@ final class ReaderViewController: NSViewController {
     private var lastAppliedFitBoundsWidth: CGFloat = 0
     private var lastAppliedFitBoundsHeight: CGFloat = 0
     private var isDocumentRecenteringScheduled = false
+    private var isPDFLayoutMaintenanceScheduled = false
+    private weak var cachedPDFScrollView: NSScrollView?
+    private weak var cachedPDFDocumentView: NSView?
+    private var cachedPDFScrollBackgroundViews: [NSView] = []
+    private var cachedPDFPageViews: [NSView] = []
+    private var needsPDFPrivateViewDiscovery = true
+    private var pdfPrivateViewDiscoveryPassesRemaining = 2
+    private var pdfPrivateViewGeneration = 0
+    private var lastThemeFilterSignature: String?
     private weak var observedPDFClipView: NSClipView?
     private var lastObservedPDFClipBounds: NSRect?
     private var isApplyingScrollClamp = false
     private var lastSubmittedSearchKey: SubmittedSearchKey?
+    private var pendingFindNavigationAfterSearch: SubmittedSearchKey?
+    private struct PendingReadingPositionWriteback {
+        let sessionID: UUID
+        let position: ReadingPosition
+        let scaleFactor: CGFloat
+    }
+    private var pendingReadingPositionWriteback: PendingReadingPositionWriteback?
+    private var readingPositionWritebackWorkItem: DispatchWorkItem?
+    private static let readingPositionWritebackDelay: TimeInterval = 0.08
     private var switchTitleToastHideWorkItem: DispatchWorkItem?
     private(set) var isReadingFocusModeEnabled = false
     private(set) var isHorizontalPanLocked = false
@@ -431,6 +458,8 @@ final class ReaderViewController: NSViewController {
     var targetSessionID: UUID? {
         didSet {
             guard oldValue != targetSessionID else { return }
+            pendingFindNavigationAfterSearch = nil
+            flushPendingReadingPositionWriteback()
             refreshDisplayedDocument()
         }
     }
@@ -456,10 +485,7 @@ final class ReaderViewController: NSViewController {
         super.viewDidLoad()
 
         pdfView.onLayoutCompleted = { [weak self] in
-            self?.syncPDFMarginBackground()
-            self?.applyThemeFilter()
-            self?.pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
-            self?.scheduleDocumentRecentering()
+            self?.syncPDFMarginBackgroundAfterPDFKitLayout()
         }
         pdfView.onInternalLinkNavigationRequested = { [weak self] destination in
             self?.navigate(toInternalLink: destination) ?? false
@@ -523,6 +549,12 @@ final class ReaderViewController: NSViewController {
             name: Notification.Name.PDFViewScaleChanged,
             object: pdfView
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleApplicationWillTerminate),
+            name: NSApplication.willTerminateNotification,
+            object: nil
+        )
         syncNightModeFromSystem()
         appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated {
@@ -531,42 +563,7 @@ final class ReaderViewController: NSViewController {
                 self.applyReaderAppearance()
             }
         }
-        leftMouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            MainActor.assumeIsolated {
-                self?.requestFocusIfNeeded(event: event)
-            }
-            return event
-        }
-        leftMouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
-            MainActor.assumeIsolated {
-                self?.applyHighlightOnMouseUpIfNeeded(event: event)
-            }
-            return event
-        }
-        // Strip horizontal deltas before any view (including PDFKit's scroll view) sees them.
-        panLockScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self else { return event }
-            var rewritten: NSEvent? = event
-            MainActor.assumeIsolated {
-                rewritten = self.rewriteScrollEventIfNeeded(event)
-            }
-            return rewritten
-        }
-        // PDFKit delivers trackpad pinch to its private document view, so
-        // PDFView.magnify(with:) never runs. Pin fit modes to manual before
-        // the scale-changed notification tries to snap back to fit-width.
-        // While pan-locked, swallow the gesture so scale cannot drift X.
-        magnificationMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .smartMagnify]) { [weak self] event in
-            guard let self else { return event }
-            var rewritten: NSEvent? = event
-            MainActor.assumeIsolated {
-                rewritten = self.rewriteMagnificationEventIfPanLocked(event)
-                if rewritten != nil {
-                    self.handleMagnificationEventIfNeeded(event)
-                }
-            }
-            return rewritten
-        }
+        syncLocalEventMonitoring()
         refreshDisplayedDocument()
         configurePDFScrollBehaviorIfNeeded()
         applyReaderAppearance()
@@ -575,6 +572,86 @@ final class ReaderViewController: NSViewController {
     private func syncNightModeFromSystem() {
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         readerState.isNightModeEnabled = isDark
+    }
+
+    /// Hidden secondary readers do not need four app-wide event taps. The
+    /// workspace toggles this with pane visibility; calls are idempotent.
+    func setLocalEventMonitoringEnabled(_ isEnabled: Bool) {
+        guard wantsLocalEventMonitoring != isEnabled else { return }
+        wantsLocalEventMonitoring = isEnabled
+        guard isViewLoaded else { return }
+        syncLocalEventMonitoring()
+    }
+
+    private func syncLocalEventMonitoring() {
+        if wantsLocalEventMonitoring {
+            installLocalEventMonitoringIfNeeded()
+        } else {
+            removeLocalEventMonitoring()
+        }
+    }
+
+    private func installLocalEventMonitoringIfNeeded() {
+        if leftMouseDownMonitor == nil {
+            leftMouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                MainActor.assumeIsolated {
+                    self?.requestFocusIfNeeded(event: event)
+                }
+                return event
+            }
+        }
+        if leftMouseUpMonitor == nil {
+            leftMouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+                MainActor.assumeIsolated {
+                    self?.applyHighlightOnMouseUpIfNeeded(event: event)
+                }
+                return event
+            }
+        }
+        if panLockScrollMonitor == nil {
+            // Strip horizontal deltas before PDFKit's scroll view sees them.
+            panLockScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self else { return event }
+                var rewritten: NSEvent? = event
+                MainActor.assumeIsolated {
+                    rewritten = self.rewriteScrollEventIfNeeded(event)
+                }
+                return rewritten
+            }
+        }
+        if magnificationMonitor == nil {
+            // PDFKit delivers trackpad pinch to its private document view.
+            magnificationMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .smartMagnify]) { [weak self] event in
+                guard let self else { return event }
+                var rewritten: NSEvent? = event
+                MainActor.assumeIsolated {
+                    rewritten = self.rewriteMagnificationEventIfPanLocked(event)
+                    if rewritten != nil {
+                        self.handleMagnificationEventIfNeeded(event)
+                    }
+                }
+                return rewritten
+            }
+        }
+    }
+
+    nonisolated private func removeLocalEventMonitoring() {
+        if let monitor = leftMouseDownMonitor {
+            NSEvent.removeMonitor(monitor)
+            leftMouseDownMonitor = nil
+        }
+        if let monitor = leftMouseUpMonitor {
+            NSEvent.removeMonitor(monitor)
+            leftMouseUpMonitor = nil
+        }
+        if let monitor = panLockScrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            panLockScrollMonitor = nil
+        }
+        if let monitor = magnificationMonitor {
+            NSEvent.removeMonitor(monitor)
+            magnificationMonitor = nil
+        }
     }
 
     override func viewDidLayout() {
@@ -637,18 +714,17 @@ final class ReaderViewController: NSViewController {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        if let monitor = leftMouseDownMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = leftMouseUpMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = panLockScrollMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = magnificationMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
+        removeLocalEventMonitoring()
+    }
+
+    override func viewWillDisappear() {
+        super.viewWillDisappear()
+        flushPendingReadingPositionWriteback()
+    }
+
+    @objc
+    private func handleApplicationWillTerminate(_ notification: Notification) {
+        flushPendingReadingPositionWriteback()
     }
 
     override func loadView() {
@@ -1006,6 +1082,24 @@ final class ReaderViewController: NSViewController {
     var testingNavigationForwardPageIndices: [Int] { navigationForwardStack.map(\.position.pageIndex) }
     /// Test seam: live PDFKit viewport anchor.
     var testingCurrentReadingPosition: ReadingPosition? { currentReadingPosition() }
+    var testingHasPendingReadingPositionWriteback: Bool {
+        pendingReadingPositionWriteback != nil
+    }
+
+    func testingScheduleReadingPositionWriteback(
+        _ position: ReadingPosition,
+        for sessionID: UUID
+    ) {
+        scheduleReadingPositionWriteback(
+            position,
+            scaleFactor: pdfView.scaleFactor,
+            for: sessionID
+        )
+    }
+
+    func testingFlushReadingPositionWriteback() {
+        flushPendingReadingPositionWriteback()
+    }
 
     @discardableResult
     func goToPage(_ pageIndex: Int) -> Bool {
@@ -1212,6 +1306,7 @@ final class ReaderViewController: NSViewController {
         point: NSPoint,
         storePosition: ReadingPosition
     ) {
+        flushPendingReadingPositionWriteback()
         let destination = PDFDestination(page: page, at: point)
         // Suppress PDFViewPageChanged during jump: at go(to:) time the clipView
         // hasn't updated yet, so currentReadingPosition() would capture stale
@@ -1387,6 +1482,7 @@ final class ReaderViewController: NSViewController {
         guard active != isAllPagesOverviewActive else { return }
 
         if active {
+            flushPendingReadingPositionWriteback()
             onOverviewPresentationDidChange?(true)
             overviewSavedLeftSidebar = documentStore.isLeftSidebarVisible(in: windowID)
             overviewSavedRightSidebar = documentStore.isRightSidebarVisible(in: windowID)
@@ -1403,6 +1499,7 @@ final class ReaderViewController: NSViewController {
             reflowOverviewGrid(force: true)
         } else {
             overviewGridView.isHidden = true
+            overviewGridView.releaseDocument()
             pdfContainerView.isHidden = false
             syncReadingFocusAvailability()
             overviewManualCellWidth = nil
@@ -1875,6 +1972,7 @@ final class ReaderViewController: NSViewController {
 
     func refreshThemeAppearance() {
         syncNightModeFromSystem()
+        lastThemeFilterSignature = nil
         applyReaderAppearance()
     }
 
@@ -1961,6 +2059,7 @@ final class ReaderViewController: NSViewController {
         documentStore.clearSearch(in: windowID)
         clearSearchResults()
         lastSubmittedSearchKey = nil
+        pendingFindNavigationAfterSearch = nil
         pdfView.window?.makeFirstResponder(pdfView)
     }
 
@@ -1995,6 +2094,12 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID) else { return }
+        if notification.documentStoreChange.containsOnly(.search) {
+            syncFindBarStatus()
+            completePendingFindNavigationIfNeeded()
+            return
+        }
         guard notification.isOnlySidebarChromeChange == false else { return }
         // Store notifications are synchronous; do not sample PDFKit while a
         // programmatic document/viewport restore is still settling.
@@ -2014,15 +2119,35 @@ final class ReaderViewController: NSViewController {
         if notification.isOnlyReadingPositionChange == false {
             syncFindBarStatus()
         }
+        if notification.documentStoreChange.contains(.search) {
+            completePendingFindNavigationIfNeeded()
+        }
+    }
+
+    private func completePendingFindNavigationIfNeeded() {
+        guard let pendingKey = pendingFindNavigationAfterSearch else { return }
+        let snapshot = documentStore.searchSnapshot(in: windowID)
+        guard snapshot.isSearching == false,
+              snapshot.query == pendingKey.query,
+              snapshot.scope == pendingKey.scope,
+              snapshot.options == pendingKey.options else { return }
+        pendingFindNavigationAfterSearch = nil
+        guard snapshot.totalMatches > 0 else { return }
+        onFindActionRequested?(.activateNext)
     }
 
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
         annotationInteraction.clearPreview()
+        markPDFPrivateViewTreeDirty()
         guard isApplyingStoreState == false,
               isNavigatingHistory == false,
               let session = targetSession(),
               session.id == displayedSessionID else { return }
+
+        // A page boundary is a durable navigation stop. Commit any trailing
+        // scroll sample from the previous page before recording the new page.
+        flushPendingReadingPositionWriteback()
 
         guard let page = pdfView.currentPage,
               let document = pdfView.document else { return }
@@ -2048,10 +2173,13 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewScaleChanged(_ notification: Notification) {
+        markPDFPrivateViewTreeDirty()
         guard isApplyingProgrammaticScale == false,
               isApplyingStoreState == false,
               let session = targetSession(),
               session.id == displayedSessionID else { return }
+
+        flushPendingReadingPositionWriteback()
 
         // PDFKit uses the same notification for user zoom and layout-driven scale
         // changes. Trackpad pinch is pinned to manual by the magnification
@@ -2179,6 +2307,7 @@ final class ReaderViewController: NSViewController {
 
         guard let session = targetSession() else {
             pdfView.document = nil
+            markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
             syncReadingFocusAvailability()
             showDefaultEmptyState()
@@ -2194,6 +2323,7 @@ final class ReaderViewController: NSViewController {
 
         if session.isBlank {
             pdfView.document = nil
+            markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
             syncReadingFocusAvailability()
             showDefaultEmptyState()
@@ -2215,6 +2345,7 @@ final class ReaderViewController: NSViewController {
             document = try documentStore.pdfDocument(for: session.id)
         } catch {
             pdfView.document = nil
+            markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
             syncReadingFocusAvailability()
             showErrorEmptyState(error.localizedDescription)
@@ -2234,6 +2365,7 @@ final class ReaderViewController: NSViewController {
         if documentChanged {
             resetBookPageTurnState()
             pdfView.document = document
+            markPDFPrivateViewTreeDirty(resetRoots: true)
             displayedSessionID = refreshedSession.id
             displayedReadingPosition = nil
             displayedDisplayMode = nil
@@ -2363,18 +2495,18 @@ final class ReaderViewController: NSViewController {
         return abs(lhs.point.x - rhs.point.x) > 0.5 || abs(lhs.point.y - rhs.point.y) > 0.5
     }
 
-    func applySearchResults(_ matches: [DocumentSearchMatch], selectedMatchIndex: Int?) {
-        pdfView.highlightedSelections = matches.map(\.selection)
+    func applySearchResults(_ selections: [PDFSelection], selectedMatchIndex: Int?) {
+        pdfView.highlightedSelections = selections
         if isFindBarVisible {
-            findBarView.setStatus(matchIndex: selectedMatchIndex, totalMatches: matches.count)
+            findBarView.setStatus(matchIndex: selectedMatchIndex, totalMatches: selections.count)
         }
         guard let selectedMatchIndex,
-              matches.indices.contains(selectedMatchIndex) else {
+              selections.indices.contains(selectedMatchIndex) else {
             // Leave currentSelection alone when no explicit index — find-next may
             // have just called go(to:) and a store refresh must not wipe it.
             return
         }
-        pdfView.setCurrentSelection(matches[selectedMatchIndex].selection, animate: false)
+        pdfView.setCurrentSelection(selections[selectedMatchIndex], animate: false)
     }
 
     func clearSearchResults() {
@@ -2453,6 +2585,7 @@ final class ReaderViewController: NSViewController {
         guard displayedDisplayMode != session.displayMode else { return false }
 
         resetBookPageTurnState()
+        markPDFPrivateViewTreeDirty()
         if session.displayMode.usesBookLayout, isHorizontalPanLocked {
             setHorizontalPanLockEnabled(false)
         }
@@ -2775,19 +2908,29 @@ final class ReaderViewController: NSViewController {
     }
 
     private func pdfScrollView() -> NSScrollView? {
-        pdfView.subviews.first { $0 is NSScrollView } as? NSScrollView
+        if let cachedPDFScrollView, cachedPDFScrollView.superview != nil {
+            return cachedPDFScrollView
+        }
+        let scrollView = pdfView.subviews.first { $0 is NSScrollView } as? NSScrollView
+        cachedPDFScrollView = scrollView
+        return scrollView
     }
 
     private func pdfScrollBackgroundViews() -> [NSView] {
         guard let scrollView = pdfScrollView() else { return [] }
+        let documentView = pdfDocumentView()
         var matches: [NSView] = []
         var pending = scrollView.subviews
         while let view = pending.popLast() {
             if String(describing: type(of: view)).contains("ContentBackgroundView") {
                 matches.append(view)
             }
-            pending.append(contentsOf: view.subviews)
+            // Background tiles live in scroll chrome. Excluding PDFKit's
+            // document subtree makes this walk tiny and independent of pages.
+            guard view !== documentView else { continue }
+            pending.append(contentsOf: view.subviews.filter { $0 !== documentView })
         }
+        cachedPDFScrollBackgroundViews = matches
         return matches
     }
 
@@ -2833,6 +2976,7 @@ final class ReaderViewController: NSViewController {
         if let documentView {
             scrollView.documentView = documentView
         }
+        markPDFPrivateViewTreeDirty(resetRoots: true)
     }
 
     private func syncHorizontalPanLockConstraint() {
@@ -2881,13 +3025,60 @@ final class ReaderViewController: NSViewController {
             document: document
         ) else { return }
         displayedReadingPosition = position
-        documentStore.updateReadingPosition(
+        scheduleReadingPositionWriteback(
             position,
             scaleFactor: pdfView.scaleFactor,
             for: session.id
         )
+        // Navigation history reflects the live viewport immediately even though
+        // persistence is trailing-throttled.
         completeExternalNavigation(
             target: NavigationHistoryEntry(sessionID: session.id, position: position)
+        )
+    }
+
+    private func scheduleReadingPositionWriteback(
+        _ position: ReadingPosition,
+        scaleFactor: CGFloat,
+        for sessionID: UUID
+    ) {
+        pendingReadingPositionWriteback = PendingReadingPositionWriteback(
+            sessionID: sessionID,
+            position: position,
+            scaleFactor: scaleFactor
+        )
+        readingPositionWritebackWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                self?.flushPendingReadingPositionWriteback()
+            }
+        }
+        readingPositionWritebackWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.readingPositionWritebackDelay,
+            execute: workItem
+        )
+    }
+
+    private func flushPendingReadingPositionWriteback() {
+        readingPositionWritebackWorkItem?.cancel()
+        readingPositionWritebackWorkItem = nil
+        guard let pending = pendingReadingPositionWriteback else { return }
+        pendingReadingPositionWriteback = nil
+        guard documentStore.session(for: pending.sessionID) != nil else { return }
+        let wasApplyingStoreState = isApplyingStoreState
+        isApplyingStoreState = true
+        documentStore.updateReadingPosition(
+            pending.position,
+            scaleFactor: pending.scaleFactor,
+            for: pending.sessionID
+        )
+        isApplyingStoreState = wasApplyingStoreState
+        completeExternalNavigation(
+            target: NavigationHistoryEntry(
+                sessionID: pending.sessionID,
+                position: pending.position
+            )
         )
     }
 
@@ -2916,24 +3107,60 @@ final class ReaderViewController: NSViewController {
     }
 
     private func pdfDocumentView() -> NSView? {
-        pdfClipView()?.documentView
+        let documentView = pdfClipView()?.documentView
+        if cachedPDFDocumentView !== documentView {
+            cachedPDFDocumentView = documentView
+            needsPDFPrivateViewDiscovery = true
+            lastThemeFilterSignature = nil
+        }
+        return documentView
     }
 
     private func pdfPageViews() -> [NSView] {
-        guard let documentView = pdfDocumentView() else { return [] }
-        var matches: [NSView] = []
-        var pending = documentView.subviews
+        discoverPDFPrivateViewsIfNeeded()
+        return cachedPDFPageViews
+    }
+
+    private func discoverPDFPrivateViewsIfNeeded() {
+        guard needsPDFPrivateViewDiscovery else { return }
+        needsPDFPrivateViewDiscovery = false
+
+        cachedPDFScrollBackgroundViews.removeAll(keepingCapacity: true)
+        cachedPDFPageViews.removeAll(keepingCapacity: true)
+        guard let scrollView = pdfScrollView() else {
+            pdfPrivateViewGeneration += 1
+            return
+        }
+
+        var pending = scrollView.subviews
         while let view = pending.popLast() {
-            if String(describing: type(of: view)).contains("PDFPageView") {
-                matches.append(view)
+            let typeName = String(describing: type(of: view))
+            if typeName.contains("ContentBackgroundView") {
+                cachedPDFScrollBackgroundViews.append(view)
+            }
+            if typeName.contains("PDFPageView") {
+                cachedPDFPageViews.append(view)
             }
             pending.append(contentsOf: view.subviews)
         }
-        return matches
+        pdfPrivateViewGeneration += 1
+    }
+
+    private func markPDFPrivateViewTreeDirty(resetRoots: Bool = false) {
+        needsPDFPrivateViewDiscovery = true
+        pdfPrivateViewDiscoveryPassesRemaining = 2
+        cachedPDFScrollBackgroundViews.removeAll(keepingCapacity: true)
+        cachedPDFPageViews.removeAll(keepingCapacity: true)
+        lastThemeFilterSignature = nil
+        if resetRoots {
+            cachedPDFScrollView = nil
+            cachedPDFDocumentView = nil
+        }
     }
 
     private func syncPDFMarginBackground() {
         let appearance = NSApp.effectiveAppearance
+        discoverPDFPrivateViewsIfNeeded()
         appearance.performAsCurrentDrawingAppearance {
             let backgroundColor = NightModeStyle.pageBackgroundColor.usingColorSpace(.sRGB)
                 ?? NightModeStyle.pageBackgroundColor
@@ -2966,9 +3193,24 @@ final class ReaderViewController: NSViewController {
     }
 
     private func syncPDFMarginBackgroundAfterPDFKitLayout() {
+        if pdfPrivateViewDiscoveryPassesRemaining > 0 {
+            pdfPrivateViewDiscoveryPassesRemaining -= 1
+            needsPDFPrivateViewDiscovery = true
+        }
         syncPDFMarginBackground()
+        schedulePDFLayoutMaintenance()
+    }
+
+    private func schedulePDFLayoutMaintenance() {
+        guard isPDFLayoutMaintenanceScheduled == false else { return }
+        isPDFLayoutMaintenanceScheduled = true
         DispatchQueue.main.async { [weak self] in
-            self?.syncPDFMarginBackground()
+            guard let self else { return }
+            self.isPDFLayoutMaintenanceScheduled = false
+            self.applyThemeFilter()
+            self.pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
+            self.scheduleDocumentRecentering()
+            self.syncPDFMarginBackground()
         }
     }
 
@@ -3185,11 +3427,11 @@ final class ReaderViewController: NSViewController {
             ),
             type: type
         )
-        guard let firstRecord = appliedRecords.first else { return nil }
+        guard appliedRecords.isEmpty == false else { return nil }
 
         documentStore.noteHighlightsAdded(appliedRecords, for: session.id)
         pdfView.currentSelection = nil
-        return documentStore.annotationGroup(containing: firstRecord.annotation, for: session.id)
+        return HighlightService.buildHighlightGroups(from: appliedRecords).first
     }
 
     private func applyReaderAppearance() {
@@ -3198,8 +3440,14 @@ final class ReaderViewController: NSViewController {
         appearance.performAsCurrentDrawingAppearance {
             let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
             let usesFlatPDFChrome = NightModeStyle.prefersFlatPDFChrome(for: appearance)
-            pdfView.displaysPageBreaks = !isNightModeEnabled
-            pdfView.pageShadowsEnabled = !isNightModeEnabled && !usesFlatPDFChrome
+            let displaysPageBreaks = !isNightModeEnabled
+            let showsPageShadows = !isNightModeEnabled && !usesFlatPDFChrome
+            if pdfView.displaysPageBreaks != displaysPageBreaks {
+                pdfView.displaysPageBreaks = displaysPageBreaks
+            }
+            if pdfView.pageShadowsEnabled != showsPageShadows {
+                pdfView.pageShadowsEnabled = showsPageShadows
+            }
             view.layer?.backgroundColor = pageBackground.cgColor
             pdfView.backgroundColor = .clear
             pdfView.layer?.backgroundColor = NSColor.clear.cgColor
@@ -3314,6 +3562,11 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyThemeFilter() {
+        discoverPDFPrivateViewsIfNeeded()
+        let appearance = NSApp.effectiveAppearance
+        let signature = "\(appearance.name.rawValue)|\(readerState.isNightModeEnabled)|\(pdfPrivateViewGeneration)"
+        guard signature != lastThemeFilterSignature else { return }
+        lastThemeFilterSignature = signature
         let filters = NightModeStyle.makePDFContentFilters(for: NSApp.effectiveAppearance)
         pdfView.contentFilters = filters
         pdfDocumentView()?.contentFilters = []
@@ -3344,6 +3597,17 @@ extension ReaderViewController {
 
     var testingPDFViewIsHidden: Bool {
         pdfView.isHidden
+    }
+
+    var testingOverviewRetainsDocument: Bool {
+        overviewGridView.testingHasDocument
+    }
+
+    var testingLocalEventMonitoringIsInstalled: Bool {
+        leftMouseDownMonitor != nil
+            && leftMouseUpMonitor != nil
+            && panLockScrollMonitor != nil
+            && magnificationMonitor != nil
     }
 
     func testingBeginUserMagnification() {
@@ -3418,6 +3682,7 @@ extension ReaderViewController: FindBarDelegate {
 
         if trimmed.isEmpty {
             lastSubmittedSearchKey = nil
+            pendingFindNavigationAfterSearch = nil
             if currentQuery.isEmpty == false || currentScope != scope || currentOptions != options {
                 documentStore.updateSearch(
                     query: "",
@@ -3433,13 +3698,22 @@ extension ReaderViewController: FindBarDelegate {
         if lastSubmittedSearchKey == submittedKey,
            currentQuery == trimmed,
            currentScope == scope,
-           currentOptions == options,
-           documentStore.searchSnapshot(in: windowID).totalMatches > 0 {
-            onFindActionRequested?(.activateNext)
-            return
+           currentOptions == options {
+            let snapshot = documentStore.searchSnapshot(in: windowID)
+            if snapshot.isSearching {
+                pendingFindNavigationAfterSearch = submittedKey
+                syncFindBarStatus()
+                return
+            }
+            if snapshot.totalMatches > 0 {
+                pendingFindNavigationAfterSearch = nil
+                onFindActionRequested?(.activateNext)
+                return
+            }
         }
 
         if trimmed != currentQuery || scope != currentScope || options != currentOptions {
+            pendingFindNavigationAfterSearch = nil
             documentStore.updateSearch(
                 query: trimmed,
                 scope: scope,

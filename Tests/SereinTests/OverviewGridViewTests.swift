@@ -19,6 +19,7 @@ final class OverviewGridViewTests: XCTestCase {
         // 3 columns × stride 180: viewport rows 0...3, one-screen prefetch
         // extends to row 6 → indices 0...20 out of 60 pages.
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0...20))
+        XCTAssertEqual(grid.testingLiveItemViewCount, 21)
         XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
     }
 
@@ -41,6 +42,7 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertTrue(grid.testingClipViewScroll(to: CGPoint(x: 0, y: 1810)))
         grid.testingFlushRenders()
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(18...50))
+        XCTAssertEqual(grid.testingLiveItemViewCount, 33)
 
         // Back to the top: cached pages reappear synchronously, no rasterization.
         XCTAssertTrue(grid.testingClipViewScroll(to: .zero))
@@ -156,6 +158,24 @@ final class OverviewGridViewTests: XCTestCase {
         grid.testingFlushRenders()
 
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0..<4))
+    }
+
+    func testReleaseDocumentDropsCellsAndPreventsFurtherRendering() {
+        _ = NSApplication.shared
+        let grid = makeLaidOutGrid(pageCount: 60)
+        grid.testingFlushRenders()
+        XCTAssertTrue(grid.testingHasDocument)
+        XCTAssertFalse(grid.testingThumbnailImageIndices.isEmpty)
+
+        grid.releaseDocument()
+
+        XCTAssertFalse(grid.testingHasDocument)
+        XCTAssertEqual(grid.testingLiveItemViewCount, 0)
+        XCTAssertTrue(grid.testingThumbnailImageIndices.isEmpty)
+        XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
+        grid.testingScroll(to: CGRect(origin: CGPoint(x: 0, y: 1_800), size: viewportSize))
+        grid.testingFlushRenders()
+        XCTAssertTrue(grid.testingThumbnailImageIndices.isEmpty)
     }
 
     private func makeLaidOutGrid(pageCount: Int) -> OverviewGridView {

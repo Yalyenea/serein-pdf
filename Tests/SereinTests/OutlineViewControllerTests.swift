@@ -6,6 +6,26 @@ import Testing
 @MainActor
 struct OutlineViewControllerTests {
     @Test
+    func readingPositionChangeDoesNotReloadOutlineTree() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "stable-outline"))
+        let controller = OutlineViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        let reloadCount = controller.outlineReloadCount
+
+        store.updateReadingPosition(
+            ReadingPosition(pageIndex: 1, point: CGPoint(x: 0, y: 100)),
+            scaleFactor: 1,
+            for: session.id
+        )
+
+        #expect(controller.outlineReloadCount == reloadCount)
+    }
+
+    @Test
     func outlineContentTracksSidebarWidth() throws {
         let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "width-outline"))

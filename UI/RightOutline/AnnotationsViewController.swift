@@ -371,6 +371,12 @@ final class AnnotationHighlightCellView: NSTableCellView {
 }
 
 final class AnnotationsViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
+    private struct SourceFingerprint: Equatable {
+        let sessionID: UUID?
+        let fileSnapshot: PDFFileSnapshot?
+        let isCacheLoaded: Bool
+    }
+
     private static let horizontalInset: CGFloat = 2
     private static let textInset: CGFloat = 10
 
@@ -390,6 +396,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     private var editingGroupID: String?
     private var editingSessionID: UUID?
     private var lastMeasuredTableWidth: CGFloat = 0
+    private var displayedSourceFingerprint: SourceFingerprint?
 
     var selectedGroupID: String? {
         currentGroupID ?? selectedGroup()?.groupID
@@ -522,7 +529,12 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.isLightweightStoreChange == false else { return }
+        guard notification.affects(windowID: windowID) else { return }
+        let change = notification.documentStoreChange
+        guard change.intersection([.content, .tabs, .annotations]).isEmpty == false else { return }
+        if change == .all, displayedSourceFingerprint == sourceFingerprint() {
+            return
+        }
         if let editingGroupID {
             _ = commitEditing(groupID: editingGroupID)
         }
@@ -647,6 +659,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         rows = documentStore.annotationSections(in: windowID).flatMap { section in
             [AnnotationRow.section(section.title)] + section.highlights.map { .highlight($0) }
         }
+        displayedSourceFingerprint = sourceFingerprint()
         if let editingGroupID, group(for: editingGroupID) == nil {
             self.editingGroupID = nil
             editingSessionID = nil
@@ -669,6 +682,15 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             currentGroupID = nil
             onSelectionDidChange?(nil)
         }
+    }
+
+    private func sourceFingerprint() -> SourceFingerprint {
+        let session = documentStore.activeSession(in: windowID)
+        return SourceFingerprint(
+            sessionID: session?.id,
+            fileSnapshot: session?.fileSnapshot,
+            isCacheLoaded: session?.isAnnotationCacheLoaded == true
+        )
     }
 
     private func emptyStateText() -> String {

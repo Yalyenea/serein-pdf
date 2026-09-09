@@ -66,6 +66,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     private var rows: [SearchResultsRow] = []
     /// Survives `reloadData` / store churn better than `tableView.selectedRow` alone.
     private var selectedMatchKey: SearchSelectionKey?
+    private var displayedSearchSource: SearchSnapshotSource?
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
@@ -202,7 +203,13 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.isLightweightStoreChange == false else { return }
+        guard notification.affects(windowID: windowID) else { return }
+        let change = notification.documentStoreChange
+        guard change.intersection([.content, .tabs, .search]).isEmpty == false else { return }
+        if change == .all {
+            documentStore.rebuildSearchIfNeeded(in: windowID)
+            guard displayedSearchSource != documentStore.searchSnapshot(in: windowID).source else { return }
+        }
         rebuildRows()
     }
 
@@ -219,10 +226,12 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     private func rebuildRows() {
         guard isViewLoaded else { return }
         documentStore.rebuildSearchIfNeeded(in: windowID)
+        let snapshot = documentStore.searchSnapshot(in: windowID)
+        displayedSearchSource = snapshot.source
         let previousSelection = selectedMatchKey ?? selectedMatch().map {
             SearchSelectionKey(sessionID: $0.sessionID, matchIndex: $0.matchIndex)
         }
-        rows = documentStore.searchSnapshot(in: windowID).sections.flatMap { section in
+        rows = snapshot.sections.flatMap { section in
             [SearchResultsRow.section(section.title)] + section.matches.map { .match($0) }
         }
         tableView.reloadData()

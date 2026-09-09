@@ -8,6 +8,14 @@ private final class SeamlessSplitView: NSSplitView {
 }
 
 final class SplitViewController: NSSplitViewController {
+    private struct ChromeLayoutState: Equatable {
+        let sidebarsSwapped: Bool
+        let isLeftSidebarVisible: Bool
+        let isRightSidebarVisible: Bool
+        let leftSidebarWidth: CGFloat
+        let rightSidebarWidth: CGFloat
+    }
+
     private static let legacyAutosaveNames = [
         "MainSplitView",
         "SereinSplit.v2",
@@ -28,6 +36,7 @@ final class SplitViewController: NSSplitViewController {
     /// True while collapse/width is driven from store — ignore reverse sync from split geometry.
     private var isApplyingChromeLayout = false
     private var pendingSidebarWidthApply = false
+    private var appliedChromeLayoutState: ChromeLayoutState?
 
     var readerViewController: ReaderViewController {
         readerWorkspaceViewController.activeReaderViewController()
@@ -180,6 +189,7 @@ final class SplitViewController: NSSplitViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID) else { return }
         if notification.isOnlySidebarVisibilityChange {
             // Visibility is store-owned. Collapse + preferred widths + reader reflow
             // must run as one chrome pass so sidebars never "overlay" the PDF.
@@ -192,10 +202,12 @@ final class SplitViewController: NSSplitViewController {
         if notification.isOnlyReadingPositionChange {
             return
         }
+        let change = notification.documentStoreChange
+        guard change.intersection([.content, .tabs, .appearance]).isEmpty == false else { return }
 
-        refreshChromeColors()
         rebuildSplitItemsIfSwapChanged()
-        applyChromeLayout()
+        guard appliedChromeLayoutState != chromeLayoutState() else { return }
+        applyChromeLayout(syncRightSidebarMode: false)
     }
 
     private func rebuildSplitItemsIfSwapChanged() {
@@ -259,6 +271,18 @@ final class SplitViewController: NSSplitViewController {
         if syncRightSidebarMode {
             rightSidebarViewController.applyStateFromStore()
         }
+        appliedChromeLayoutState = chromeLayoutState()
+    }
+
+    private func chromeLayoutState() -> ChromeLayoutState {
+        let widths = documentStore.sidebarWidths(in: windowID)
+        return ChromeLayoutState(
+            sidebarsSwapped: documentStore.appConfiguration.layout.sidebarsSwapped,
+            isLeftSidebarVisible: documentStore.isLeftSidebarVisible(in: windowID),
+            isRightSidebarVisible: documentStore.isRightSidebarVisible(in: windowID),
+            leftSidebarWidth: widths.left,
+            rightSidebarWidth: widths.right
+        )
     }
 
     private func applyStoreState(syncRightSidebarMode: Bool = true) {
@@ -646,8 +670,9 @@ final class SplitViewController: NSSplitViewController {
             let targetPane = isSplit ? documentStore.focusedPane(in: windowID) : nil
             documentStore.activate(sessionID: match.sessionID, in: windowID, targetPane: targetPane)
         }
+        guard let selection = documentStore.searchSelection(for: match) else { return }
         readerWorkspaceViewController.activeReaderViewController().go(
-            to: match.selection,
+            to: selection,
             recordHistory: alreadyShowingMatch
         )
         syncFindStatus()

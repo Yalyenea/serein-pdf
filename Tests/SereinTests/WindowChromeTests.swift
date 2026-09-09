@@ -355,9 +355,11 @@ struct WindowChromeTests {
 
         controller.setAllPagesOverviewActive(true)
         #expect(controller.testingReadingFocusIsEnabled == false)
+        #expect(controller.testingOverviewRetainsDocument)
 
         controller.setAllPagesOverviewActive(false)
         #expect(controller.testingReadingFocusIsEnabled)
+        #expect(controller.testingOverviewRetainsDocument == false)
 
         controller.setReadingFocusModeEnabled(false)
         #expect(controller.testingReadingFocusIsEnabled == false)
@@ -1673,6 +1675,8 @@ struct WindowChromeTests {
 
         #expect(store.isSplitEnabled(in: controller.windowID) == false)
         #expect(workspaceSplitView.subviews[1].isHidden)
+        #expect(splitController.readerWorkspaceViewController.primaryReaderViewController.testingLocalEventMonitoringIsInstalled)
+        #expect(splitController.readerWorkspaceViewController.secondaryReaderViewController.testingLocalEventMonitoringIsInstalled == false)
         #expect(
             workspaceSplitView.isSubviewCollapsed(workspaceSplitView.subviews[1]) ||
             workspaceSplitView.subviews[1].frame.width < 1
@@ -1714,6 +1718,8 @@ struct WindowChromeTests {
 
         let primaryReader = splitController.readerWorkspaceViewController.primaryReaderViewController
         let secondaryReader = splitController.readerWorkspaceViewController.secondaryReaderViewController
+        #expect(primaryReader.testingLocalEventMonitoringIsInstalled)
+        #expect(secondaryReader.testingLocalEventMonitoringIsInstalled)
         guard let primarySessionID = store.displayedSessionID(for: .primary, in: controller.windowID),
               let secondarySessionID = store.displayedSessionID(for: .secondary, in: controller.windowID),
               let primaryExpectedScale = fitWidthScaleExpected(for: primaryReader.pdfView),

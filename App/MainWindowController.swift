@@ -5,6 +5,18 @@ extension NSToolbarItem.Identifier {
 }
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
+    private struct WindowChromeState: Equatable {
+        let tabPresentationMode: TabPresentationMode
+        let tabsOnRight: Bool
+        let isTabsPaneVisible: Bool
+        let isImmersiveModeEnabled: Bool
+    }
+
+    private struct WindowTitleState: Equatable {
+        let title: String
+        let representedURL: URL?
+    }
+
     static let defaultContentSize = NSSize(width: 1480, height: 960)
     static let minimumWindowSize = NSSize(width: 560, height: 360)
 
@@ -16,6 +28,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var allowsTerminationWithoutPrompt = false
     private var demoModeSnapshot: DemoModeSnapshot?
     private var immersiveModeSnapshot: ImmersiveModeSnapshot?
+    private var appliedWindowChromeState: WindowChromeState?
+    private var appliedWindowTitleState: WindowTitleState?
     var shouldCloseHandler: ((MainWindowController) -> Bool)?
     var didCloseHandler: ((MainWindowController) -> Void)?
 
@@ -95,14 +109,19 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID) else { return }
         guard notification.isOnlySidebarChromeChange == false else {
             applyWindowChromeState()
             return
         }
         guard notification.isOnlyReadingPositionChange == false else { return }
-        refreshThemeAppearance()
-        applyWindowChromeState()
-        refreshWindowTitle()
+        let change = notification.documentStoreChange
+        if change.intersection([.content, .tabs, .appearance]).isEmpty == false {
+            applyWindowChromeState()
+        }
+        if change.intersection([.content, .tabs]).isEmpty == false {
+            refreshWindowTitle()
+        }
     }
 
     private func configureTitlebarTabsItemIfNeeded() {
@@ -118,8 +137,16 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let tabsPaneVisible = tabsOnRight
             ? documentStore.isRightSidebarVisible(in: windowID)
             : documentStore.isLeftSidebarVisible(in: windowID)
+        let state = WindowChromeState(
+            tabPresentationMode: documentStore.tabPresentationMode(in: windowID),
+            tabsOnRight: tabsOnRight,
+            isTabsPaneVisible: tabsPaneVisible,
+            isImmersiveModeEnabled: isImmersiveModeEnabled
+        )
+        guard appliedWindowChromeState != state else { return }
+        appliedWindowChromeState = state
         let shouldShowTitlebarTabs =
-            documentStore.tabPresentationMode(in: windowID) == .horizontalTitlebar &&
+            state.tabPresentationMode == .horizontalTitlebar &&
             !tabsPaneVisible &&
             !isImmersiveModeEnabled
 
@@ -162,17 +189,17 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func refreshWindowTitle() {
         guard let window else { return }
-        guard let session = documentStore.activeSession(in: windowID),
-              session.isBlank == false else {
-            window.title = "Serein"
-            window.representedURL = nil
-            window.representedFilename = ""
-            return
+        let state: WindowTitleState
+        if let session = documentStore.activeSession(in: windowID), session.isBlank == false {
+            state = WindowTitleState(title: session.title, representedURL: session.url)
+        } else {
+            state = WindowTitleState(title: "Serein", representedURL: nil)
         }
-
-        window.title = session.title
-        window.representedURL = session.url
-        window.representedFilename = session.url.path
+        guard appliedWindowTitleState != state else { return }
+        appliedWindowTitleState = state
+        window.title = state.title
+        window.representedURL = state.representedURL
+        window.representedFilename = state.representedURL?.path ?? ""
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -418,9 +445,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         guard sessions.indices.contains(index) else { return }
 
         let sessionID = sessions[index].id
-        documentStore.selectSessions([sessionID], in: windowID)
-        documentStore.clearSearch(in: windowID)
-        documentStore.activate(sessionID: sessionID, in: windowID)
+        documentStore.activateTab(sessionID: sessionID, in: windowID)
     }
 
     func installSidebarRecentOpenHandler(_ handler: @escaping (URL, UUID) -> Void) {

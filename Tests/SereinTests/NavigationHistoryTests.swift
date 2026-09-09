@@ -5,6 +5,27 @@ import XCTest
 
 @MainActor
 final class NavigationHistoryTests: XCTestCase {
+    func testScrollPositionWritebackIsTrailingAndFlushesLatestSample() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "nav-scroll-writeback", pageCount: 4)
+        )
+        let reader = makeReader(store: store, sessionID: session.id)
+        let first = ReadingPosition(pageIndex: 1, point: CGPoint(x: 12, y: 320))
+        let latest = ReadingPosition(pageIndex: 1, point: CGPoint(x: 12, y: 180))
+
+        reader.testingScheduleReadingPositionWriteback(first, for: session.id)
+        reader.testingScheduleReadingPositionWriteback(latest, for: session.id)
+
+        XCTAssertTrue(reader.testingHasPendingReadingPositionWriteback)
+        XCTAssertNotEqual(store.session(for: session.id)?.lastReadPosition, latest)
+
+        reader.testingFlushReadingPositionWriteback()
+
+        XCTAssertFalse(reader.testingHasPendingReadingPositionWriteback)
+        XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, latest)
+    }
+
     func testMultiStepBackAndForwardAcrossPageJumps() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(

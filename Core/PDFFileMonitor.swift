@@ -20,46 +20,43 @@ struct PDFFileSnapshot: Equatable, Sendable {
 final class PDFFileMonitor {
     typealias ChangeHandler = (URL) -> Void
 
-    private final class DirectoryMonitor: @unchecked Sendable {
-        let descriptor: CInt
-        let source: DispatchSourceFileSystemObject
-        var fileURLs: Set<URL>
-        var pendingScan: DispatchWorkItem?
-
-        init(descriptor: CInt, source: DispatchSourceFileSystemObject, fileURLs: Set<URL>) {
-            self.descriptor = descriptor
-            self.source = source
-            self.fileURLs = fileURLs
-        }
+    private enum FileState: Equatable, Sendable {
+        case missing
+        case existing(PDFFileSnapshot)
     }
 
-    private final class FileMonitor: @unchecked Sendable {
-        let descriptor: CInt
+    private final class DirectoryMonitor: @unchecked Sendable {
         let source: DispatchSourceFileSystemObject
+        var fileURLs: Set<URL>
+        var snapshots: [URL: FileState] = [:]
+        var scanGeneration: UInt64 = 0
         var pendingScan: DispatchWorkItem?
 
-        init(descriptor: CInt, source: DispatchSourceFileSystemObject) {
-            self.descriptor = descriptor
+        init(source: DispatchSourceFileSystemObject, fileURLs: Set<URL>) {
             self.source = source
+            self.fileURLs = fileURLs
         }
     }
 
     var onChange: ChangeHandler?
 
     private let debounceInterval: TimeInterval
+    private let pollingInterval: TimeInterval
+    private let snapshotQueue = DispatchQueue(
+        label: "local.yfff.Serein.PDFFileMonitor.snapshots",
+        qos: .utility
+    )
     private var monitors: [URL: DirectoryMonitor] = [:]
-    private var fileMonitors: [URL: FileMonitor] = [:]
+    private var pollingTimer: DispatchSourceTimer?
 
-    init(debounceInterval: TimeInterval = 0.25) {
-        self.debounceInterval = debounceInterval
+    init(debounceInterval: TimeInterval = 0.25, pollingInterval: TimeInterval = 1.0) {
+        self.debounceInterval = max(0, debounceInterval)
+        self.pollingInterval = max(0.1, pollingInterval)
     }
 
     deinit {
+        pollingTimer?.cancel()
         for monitor in monitors.values {
-            monitor.pendingScan?.cancel()
-            monitor.source.cancel()
-        }
-        for monitor in fileMonitors.values {
             monitor.pendingScan?.cancel()
             monitor.source.cancel()
         }
@@ -78,18 +75,17 @@ final class PDFFileMonitor {
         for (directoryURL, fileURLs) in groupedURLs {
             let uniqueFileURLs = Set(fileURLs)
             if let monitor = monitors[directoryURL] {
-                let obsoleteFileURLs = monitor.fileURLs.subtracting(uniqueFileURLs)
-                for fileURL in obsoleteFileURLs {
-                    stopMonitoringFile(fileURL)
-                }
+                guard monitor.fileURLs != uniqueFileURLs else { continue }
                 monitor.fileURLs = uniqueFileURLs
-                for fileURL in uniqueFileURLs where fileMonitors[fileURL] == nil {
-                    startMonitoringFile(fileURL)
-                }
+                monitor.snapshots = monitor.snapshots.filter { uniqueFileURLs.contains($0.key) }
+                monitor.scanGeneration &+= 1
+                scheduleScan(for: directoryURL, delay: 0)
             } else {
                 startMonitoring(directoryURL, fileURLs: uniqueFileURLs)
             }
         }
+
+        updatePollingTimer()
     }
 
     private func startMonitoring(_ directoryURL: URL, fileURLs: Set<URL>) {
@@ -98,7 +94,7 @@ final class PDFFileMonitor {
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor,
-            eventMask: [.write, .delete, .rename],
+            eventMask: [.write, .attrib, .delete, .rename],
             queue: .main
         )
         source.setEventHandler { [weak self] in
@@ -107,86 +103,103 @@ final class PDFFileMonitor {
         source.setCancelHandler {
             close(descriptor)
         }
-        monitors[directoryURL] = DirectoryMonitor(
-            descriptor: descriptor,
-            source: source,
-            fileURLs: fileURLs
-        )
-        for fileURL in fileURLs {
-            startMonitoringFile(fileURL)
-        }
+        monitors[directoryURL] = DirectoryMonitor(source: source, fileURLs: fileURLs)
         source.resume()
+        scheduleScan(for: directoryURL, delay: 0)
     }
 
     private func stopMonitoring(_ directoryURL: URL) {
         guard let monitor = monitors.removeValue(forKey: directoryURL) else { return }
         monitor.pendingScan?.cancel()
         monitor.source.cancel()
-        for fileURL in monitor.fileURLs {
-            stopMonitoringFile(fileURL)
-        }
     }
 
-    private func startMonitoringFile(_ fileURL: URL) {
-        let descriptor = open(fileURL.path, O_EVTONLY)
-        guard descriptor >= 0 else { return }
-
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: descriptor,
-            eventMask: [.write, .extend, .attrib, .delete, .rename],
-            queue: .main
-        )
-        source.setEventHandler { [weak self] in
-            self?.scheduleScan(forFileAt: fileURL)
-        }
-        source.setCancelHandler {
-            close(descriptor)
-        }
-        fileMonitors[fileURL] = FileMonitor(descriptor: descriptor, source: source)
-        source.resume()
-    }
-
-    private func stopMonitoringFile(_ fileURL: URL) {
-        guard let monitor = fileMonitors.removeValue(forKey: fileURL) else { return }
-        monitor.pendingScan?.cancel()
-        monitor.source.cancel()
-    }
-
-    private func restartMonitoringFile(_ fileURL: URL) {
-        stopMonitoringFile(fileURL)
-        startMonitoringFile(fileURL)
-    }
-
-    private func scheduleScan(for directoryURL: URL) {
-        monitors[directoryURL]?.pendingScan?.cancel()
-        let scan = DispatchWorkItem { [weak self] in
-            self?.emitChanges(in: directoryURL)
-        }
-        monitors[directoryURL]?.pendingScan = scan
-        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: scan)
-    }
-
-    private func scheduleScan(forFileAt fileURL: URL) {
-        fileMonitors[fileURL]?.pendingScan?.cancel()
-        let scan = DispatchWorkItem { [weak self] in
-            self?.emitChange(forFileAt: fileURL)
-        }
-        fileMonitors[fileURL]?.pendingScan = scan
-        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: scan)
-    }
-
-    private func emitChanges(in directoryURL: URL) {
+    private func scheduleScan(for directoryURL: URL, delay: TimeInterval? = nil) {
         guard let monitor = monitors[directoryURL] else { return }
-        monitors[directoryURL]?.pendingScan = nil
+        monitor.pendingScan?.cancel()
+        if delay == 0 {
+            monitor.pendingScan = nil
+            beginScan(for: directoryURL)
+            return
+        }
+        let scan = DispatchWorkItem { [weak self] in
+            self?.beginScan(for: directoryURL)
+        }
+        monitor.pendingScan = scan
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + (delay ?? debounceInterval),
+            execute: scan
+        )
+    }
+
+    private func beginScan(for directoryURL: URL) {
+        guard let monitor = monitors[directoryURL] else { return }
+        monitor.pendingScan = nil
+        monitor.scanGeneration &+= 1
+        let generation = monitor.scanGeneration
+        let fileURLs = monitor.fileURLs
+        let previousSnapshots = monitor.snapshots
+
+        snapshotQueue.async { [weak self] in
+            let snapshots = Self.captureStates(for: fileURLs)
+            Task { @MainActor [weak self] in
+                self?.apply(
+                    snapshots,
+                    previousSnapshots: previousSnapshots,
+                    generation: generation,
+                    to: directoryURL
+                )
+            }
+        }
+    }
+
+    private func apply(
+        _ snapshots: [URL: FileState],
+        previousSnapshots: [URL: FileState],
+        generation: UInt64,
+        to directoryURL: URL
+    ) {
+        guard let monitor = monitors[directoryURL],
+              monitor.scanGeneration == generation else { return }
+        monitor.snapshots = snapshots
+
         for fileURL in monitor.fileURLs {
-            restartMonitoringFile(fileURL)
+            guard let previous = previousSnapshots[fileURL],
+                  let current = snapshots[fileURL],
+                  previous != current else { continue }
             onChange?(fileURL)
         }
     }
 
-    private func emitChange(forFileAt fileURL: URL) {
-        fileMonitors[fileURL]?.pendingScan = nil
-        onChange?(fileURL)
+    private func updatePollingTimer() {
+        guard monitors.isEmpty == false else {
+            pollingTimer?.cancel()
+            pollingTimer = nil
+            return
+        }
+        guard pollingTimer == nil else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(
+            deadline: .now() + pollingInterval,
+            repeating: pollingInterval,
+            leeway: .milliseconds(100)
+        )
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            for directoryURL in self.monitors.keys {
+                self.scheduleScan(for: directoryURL, delay: 0)
+            }
+        }
+        pollingTimer = timer
+        timer.resume()
+    }
+
+    nonisolated private static func captureStates(for fileURLs: Set<URL>) -> [URL: FileState] {
+        Dictionary(uniqueKeysWithValues: fileURLs.map { fileURL in
+            let state = PDFFileSnapshot(url: fileURL).map(FileState.existing) ?? .missing
+            return (fileURL, state)
+        })
     }
 
     private func normalizedFileURL(_ url: URL) -> URL {

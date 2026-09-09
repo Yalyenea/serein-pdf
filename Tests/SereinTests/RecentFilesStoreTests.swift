@@ -31,6 +31,37 @@ final class RecentFilesStoreTests: XCTestCase {
         XCTAssertEqual(recentFiles, [third, second])
     }
 
+    func testRecordOpenBatchWritesNewestOrderOnce() throws {
+        let userDefaults = makeUserDefaults()
+        let store = UserDefaultsRecentFilesStore(maxCount: 5, userDefaults: userDefaults)
+        let first = try makeTemporaryFile(named: "first.pdf")
+        let second = try makeTemporaryFile(named: "second.pdf")
+        let third = try makeTemporaryFile(named: "third.pdf")
+
+        let recentFiles = try store.recordOpen(for: [first, second, first, third])
+
+        XCTAssertEqual(recentFiles, [third, first, second])
+        XCTAssertEqual(try store.loadRecentFiles(), [third, first, second])
+    }
+
+    func testRecordOpenDoesNotPruneStoredLinksUntilExplicitLoad() throws {
+        let userDefaults = makeUserDefaults()
+        let store = UserDefaultsRecentFilesStore(userDefaults: userDefaults)
+        let existing = try makeTemporaryFile(named: "existing.pdf")
+        let newest = try makeTemporaryFile(named: "newest.pdf")
+        let missing = existing.deletingLastPathComponent().appendingPathComponent("missing.pdf")
+        userDefaults.set(try JSONEncoder().encode([missing, existing]), forKey: "Serein.RecentFiles")
+
+        _ = try store.recordOpen(for: newest)
+
+        let stored = try JSONDecoder().decode(
+            [URL].self,
+            from: try XCTUnwrap(userDefaults.data(forKey: "Serein.RecentFiles"))
+        )
+        XCTAssertEqual(stored, [newest, missing, existing])
+        XCTAssertEqual(try store.loadRecentFiles(), [newest, existing])
+    }
+
     func testDefaultCapacityKeepsTwoHundredNewestFiles() throws {
         let userDefaults = makeUserDefaults()
         let store = UserDefaultsRecentFilesStore(userDefaults: userDefaults)

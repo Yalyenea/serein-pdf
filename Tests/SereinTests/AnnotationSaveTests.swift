@@ -79,6 +79,32 @@ final class AnnotationSaveTests: XCTestCase {
         XCTAssertEqual(PDFDocument(url: session.url)?.page(at: 0)?.annotations.count, 1)
     }
 
+    func testCompletedAutoSaveDoesNotClearNewerAnnotationChanges() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "autosave-generation"))
+        let document = try store.pdfDocument(for: session.id)
+        let page = try XCTUnwrap(document.page(at: 0))
+        let annotation = PDFAnnotation(
+            bounds: NSRect(x: 10, y: 10, width: 60, height: 16),
+            forType: .highlight,
+            withProperties: nil
+        )
+        page.addAnnotation(annotation)
+        store.noteHighlightsAdded(
+            [HighlightAnnotationRecord(pageIndex: 0, annotation: annotation)],
+            for: session.id,
+            now: Date(timeIntervalSinceReferenceDate: 1)
+        )
+        let prepared = store.prepareAutoSaveJobs(now: Date(timeIntervalSinceReferenceDate: 1_000))
+        let group = try XCTUnwrap(store.annotationGroups(for: session.id).first)
+        XCTAssertTrue(store.updateComment("newer", forHighlightGroup: group.groupID, in: session.id))
+
+        let results = DocumentStore.performAutoSaveJobs(prepared.jobs)
+        XCTAssertTrue(store.completeAutoSave(results).isEmpty)
+
+        XCTAssertTrue(store.session(for: session.id)?.isDirty == true)
+    }
+
     private func makeStore() -> DocumentStore {
         makeIsolatedDocumentStore()
     }

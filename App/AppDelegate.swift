@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var sharingServicePicker: NSSharingServicePicker?
     private var temporaryShareDirectories: [URL] = []
     private let recentFilesMenu = NSMenu(title: "Open Recent")
+    private var displayedRecentDocumentURLs: [URL]?
     private let windowMenu = NSMenu(title: "Window")
     private let moveCurrentPDFToWindowMenu = NSMenu(title: "Move Current PDF to Window")
     private let moveCurrentPDFToWindowItem = NSMenuItem(
@@ -64,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private let openWithMenu = NSMenu(title: "Open With")
     private let openWithItem = NSMenuItem(title: "Open With", action: nil, keyEquivalent: "")
     private var autoSaveTimer: Timer?
+    private var isAutoSaveRunning = false
     private var lastRecentFilesCleanupDate: Date?
     private var reportedAutoSaveFailureURLs: Set<URL> = []
     private var pendingOpenURLs: [URL] = []
@@ -203,7 +205,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func runAutoSave() {
-        let errors = documentStore.autoSaveDirtySessions()
+        runRecentFilesCleanupIfNeeded()
+        guard isAutoSaveRunning == false else { return }
+        let prepared = documentStore.prepareAutoSaveJobs()
+        reportAutoSaveErrors(prepared.errors)
+        guard prepared.jobs.isEmpty == false else { return }
+
+        isAutoSaveRunning = true
+        Task { [weak self] in
+            let results = await Task.detached(priority: .utility) {
+                DocumentStore.performAutoSaveJobs(prepared.jobs)
+            }.value
+            guard let self else { return }
+            self.isAutoSaveRunning = false
+            self.reportAutoSaveErrors(self.documentStore.completeAutoSave(results))
+        }
+    }
+
+    private func reportAutoSaveErrors(_ errors: [URL: Error]) {
         if errors.isEmpty == false {
             let freshErrors = errors.filter { reportedAutoSaveFailureURLs.contains($0.key) == false }
             if freshErrors.isEmpty == false {
@@ -212,7 +231,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 NSLog("Serein auto-save failed for: %@", errors.keys.map(\.lastPathComponent).joined(separator: ", "))
             }
         }
-        runRecentFilesCleanupIfNeeded()
     }
 
     private func runRecentFilesCleanupIfNeeded() {
@@ -349,17 +367,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        if notification.isOnlyReadingPositionChange {
-            return
+        guard notification.isLightweightStoreChange == false else { return }
+        let change = notification.documentStoreChange
+        if change.contains(.annotations) {
+            let dirtyURLs = Set(documentStore.sessions.filter(\.isDirty).map(\.url))
+            reportedAutoSaveFailureURLs.formIntersection(dirtyURLs)
         }
-        guard notification.isOnlySidebarChromeChange == false else {
-            refreshManagedMenuState()
-            return
+        if change.contains(.recentFiles) {
+            updateRecentFilesMenu()
         }
-        let dirtyURLs = Set(documentStore.sessions.filter(\.isDirty).map(\.url))
-        reportedAutoSaveFailureURLs.formIntersection(dirtyURLs)
-        updateRecentFilesMenu()
-        refreshManagedMenuState()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -1308,14 +1324,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func activatePreviousTab(_ sender: Any?) {
         guard let controller = mainWindowController else { return }
-        documentStore.clearSearch(in: controller.windowID)
         documentStore.activatePreviousSession(in: controller.windowID)
     }
 
     @objc
     private func activateNextTab(_ sender: Any?) {
         guard let controller = mainWindowController else { return }
-        documentStore.clearSearch(in: controller.windowID)
         documentStore.activateNextSession(in: controller.windowID)
     }
 
@@ -1572,12 +1586,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             openTabsPaletteController = OpenTabsPaletteController { [weak self] sessionID, alternatePane in
                 guard let self,
                       let windowID = self.openTabsPaletteWindowID else { return }
-                self.documentStore.clearSearch(in: windowID)
+                guard alternatePane else {
+                    self.documentStore.activateTab(sessionID: sessionID, in: windowID)
+                    return
+                }
                 let focusedPane = self.documentStore.focusedPane(in: windowID)
-                let targetPane = alternatePane
-                    ? (self.documentStore.isSplitEnabled(in: windowID) ? focusedPane : focusedPane.other)
-                    : nil
-                self.documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
+                let targetPane = self.documentStore.isSplitEnabled(in: windowID)
+                    ? focusedPane
+                    : focusedPane.other
+                self.documentStore.activateTab(
+                    sessionID: sessionID,
+                    in: windowID,
+                    targetPane: targetPane
+                )
             }
         }
         openTabsPaletteController?.show(
@@ -2326,16 +2347,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func updateRecentFilesMenu() {
+        let recentDocumentURLs = documentStore.recentDocumentURLs
+        guard displayedRecentDocumentURLs != recentDocumentURLs else { return }
+        displayedRecentDocumentURLs = recentDocumentURLs
         recentFilesMenu.removeAllItems()
 
-        if documentStore.recentDocumentURLs.isEmpty {
+        if recentDocumentURLs.isEmpty {
             let emptyItem = NSMenuItem(title: "No Recent Files", action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
             recentFilesMenu.addItem(emptyItem)
             return
         }
 
-        for url in documentStore.recentDocumentURLs {
+        for url in recentDocumentURLs {
             let item = NSMenuItem(
                 title: url.deletingPathExtension().lastPathComponent,
                 action: #selector(openRecentDocument(_:)),
@@ -2710,6 +2734,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return documents.isEmpty ? nil : documents
     }
 
+    /// Menu validation must remain metadata-only. An unloaded annotation cache is
+    /// treated as potentially containing highlights; the explicit export action
+    /// resolves the exact groups after the user chooses it.
+    private func mayHaveHighlights(_ session: DocumentSession) -> Bool {
+        guard session.isBlank == false else { return false }
+        guard session.isAnnotationCacheLoaded else { return true }
+        return session.annotationCache.groups.isEmpty == false
+    }
+
     private func promptForHighlightExportFormat() -> HighlightExportFormat? {
         let alert = NSAlert()
         alert.messageText = "Export Highlights"
@@ -2824,9 +2857,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(shareDocument(_:)), #selector(exportCleanCopy(_:)):
             return activePDFSession != nil
         case #selector(exportHighlights(_:)), #selector(copyHighlightsMarkdown(_:)):
-            return activePDFSession.map { documentStore.hasHighlights(for: $0.id) } == true
+            return activePDFSession.map(mayHaveHighlights) == true
         case #selector(exportAllOpenHighlights(_:)):
-            return currentAllOpenHighlightExportContext() != nil
+            guard let windowID else { return false }
+            return documentStore.sessions(in: windowID).contains(where: mayHaveHighlights)
         case #selector(removeHighlightUnderCursorAction(_:)):
             return activePDFSession != nil
         case #selector(undoLastHighlightAction(_:)):
