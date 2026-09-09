@@ -1470,6 +1470,54 @@ struct WindowChromeTests {
     }
 
     @Test
+    func referencePreviewClosesWhenReadingContextChanges() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let fixture = try makeTemporaryPDFWithInternalLink(named: "reference-preview-lifecycle")
+        let session = try store.open(documentAt: fixture.url)
+        flushLayout(controller.window)
+        let window = try #require(controller.window)
+        let split = try #require(window.contentViewController as? SplitViewController)
+        let reader = split.readerViewController
+        let targetPage = try #require(reader.pdfView.document?.page(at: fixture.targetPageIndex))
+        let destination = PDFDestination(page: targetPage, at: fixture.targetPoint)
+        let origin = session.lastReadPosition
+
+        func showPreview() throws {
+            let bounds = reader.pdfView.visibleRect
+            let anchor = NSRect(x: bounds.midX, y: bounds.midY, width: 16, height: 12)
+            #expect(reader.pdfView.onInternalLinkPreviewRequested?(destination, anchor) == true)
+            #expect(reader.testingReferencePreviewContent != nil)
+        }
+
+        try showPreview()
+        reader.testingReferencePreviewContent?.cancelOperation(nil)
+        #expect(reader.testingReferencePreviewContent == nil)
+        #expect(session.lastReadPosition == origin)
+        #expect(reader.testingNavigationBackPositions.isEmpty)
+
+        try showPreview()
+        reader.setAllPagesOverviewActive(true)
+        #expect(reader.testingReferencePreviewContent == nil)
+        reader.setAllPagesOverviewActive(false)
+        flushLayout(window)
+
+        try showPreview()
+        reader.setLocalEventMonitoringEnabled(false)
+        #expect(reader.testingReferencePreviewContent == nil)
+        reader.setLocalEventMonitoringEnabled(true)
+
+        try showPreview()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "reference-preview-other"))
+        flushLayout(window)
+        #expect(reader.testingReferencePreviewContent == nil)
+        #expect(session.lastReadPosition == origin)
+        #expect(reader.testingNavigationBackPositions.isEmpty)
+    }
+
+    @Test
     func repeatedSelectionNavigationDoesNotCreateSelfHistory() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
@@ -3712,6 +3760,14 @@ private func assertInternalLinkNavigationStaysCentered(in mode: ReaderDisplayMod
 
     reader.pdfView.mouseDown(with: mouseDownEvent(in: window, at: linkPointInWindow))
     flushLayout(window)
+
+    let preview = try #require(reader.testingReferencePreviewContent)
+    #expect(preview.destination.page === reader.pdfView.document?.page(at: fixture.targetPageIndex))
+    #expect(store.session(for: session.id)?.lastReadPosition == sourcePosition)
+    #expect(reader.testingNavigationBackPositions.isEmpty)
+    preview.onNavigate?()
+    flushLayout(window)
+    #expect(reader.testingReferencePreviewContent == nil)
 
     let target = ReadingPosition(pageIndex: fixture.targetPageIndex, point: fixture.targetPoint)
     #expect(store.session(for: session.id)?.lastReadPosition == target)

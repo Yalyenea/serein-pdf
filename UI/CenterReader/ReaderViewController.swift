@@ -225,6 +225,7 @@ private final class PDFReaderClipView: NSClipView {
 final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
     var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
+    var onInternalLinkPreviewRequested: ((PDFDestination, NSRect) -> Bool)?
     var onAnnotationActivationRequested: ((NSEvent) -> Bool)?
     var onUserMagnificationRequested: (() -> Void)?
     var shouldAllowUserMagnification: (() -> Bool)?
@@ -312,9 +313,14 @@ final class ReaderPDFView: PDFView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if let destination = internalLinkDestination(at: event),
-           onInternalLinkNavigationRequested?(destination) == true {
-            return
+        if let link = internalLink(at: event) {
+            if !event.modifierFlags.contains(.option),
+               onInternalLinkPreviewRequested?(link.destination, link.rect) == true {
+                return
+            }
+            if onInternalLinkNavigationRequested?(link.destination) == true {
+                return
+            }
         }
         if event.clickCount == 2,
            onAnnotationActivationRequested?(event) == true {
@@ -351,11 +357,16 @@ final class ReaderPDFView: PDFView {
         shouldAllowUserMagnification?() ?? true
     }
 
-    private func internalLinkDestination(at event: NSEvent) -> PDFDestination? {
+    private func internalLink(at event: NSEvent) -> (destination: PDFDestination, rect: NSRect)? {
         let pointInView = convert(event.locationInWindow, from: nil)
         guard let page = page(for: pointInView, nearest: false) else { return nil }
         let pointOnPage = convert(pointInView, to: page)
-        return (page.annotation(at: pointOnPage)?.action as? PDFActionGoTo)?.destination
+        guard let annotation = page.annotations.first(where: {
+            $0.type == "Link" && $0.bounds.contains(pointOnPage)
+        }), let destination = (annotation.action as? PDFActionGoTo)?.destination ?? annotation.destination,
+              let targetPage = destination.page,
+              targetPage.document === document else { return nil }
+        return (destination, convert(annotation.bounds, from: page))
     }
 }
 
@@ -392,6 +403,7 @@ final class ReaderViewController: NSViewController {
         pdfView: pdfView
     )
     private let overviewGridView = OverviewGridView()
+    private let referencePreview = ReaderReferencePreviewController()
     private let findBarView = FindBarView()
     private var findBarTopConstraint: NSLayoutConstraint?
     private var pdfContainerTopConstraint: NSLayoutConstraint?
@@ -488,7 +500,18 @@ final class ReaderViewController: NSViewController {
             self?.syncPDFMarginBackgroundAfterPDFKitLayout()
         }
         pdfView.onInternalLinkNavigationRequested = { [weak self] destination in
-            self?.navigate(toInternalLink: destination) ?? false
+            self?.referencePreview.close()
+            return self?.navigate(toInternalLink: destination) ?? false
+        }
+        pdfView.onInternalLinkPreviewRequested = { [weak self] destination, rect in
+            guard let self else { return false }
+            self.onFocusRequested?()
+            self.annotationInteraction.clearPreview()
+            self.annotationInteraction.dismissCommentEditor()
+            return self.referencePreview.show(destination: destination, anchor: rect, in: self.pdfView)
+        }
+        referencePreview.onNavigate = { [weak self] destination in
+            _ = self?.navigate(toInternalLink: destination)
         }
         pdfView.onUserMagnificationRequested = { [weak self] in
             self?.beginUserMagnification()
@@ -581,6 +604,7 @@ final class ReaderViewController: NSViewController {
         if wantsLocalEventMonitoring {
             installLocalEventMonitoringIfNeeded()
         } else {
+            referencePreview.close()
             removeLocalEventMonitoring()
         }
     }
@@ -713,6 +737,7 @@ final class ReaderViewController: NSViewController {
 
     override func viewWillDisappear() {
         super.viewWillDisappear()
+        referencePreview.close()
         flushPendingReadingPositionWriteback()
     }
 
@@ -1067,6 +1092,7 @@ final class ReaderViewController: NSViewController {
 
     /// Test seam: owned history page indices (back stack, oldest → newest).
     var testingNavigationBackPageIndices: [Int] { navigationBackStack.map(\.position.pageIndex) }
+    var testingReferencePreviewContent: ReferencePreviewViewController? { referencePreview.content }
     /// Test seam: owned history positions (back stack, oldest → newest).
     var testingNavigationBackPositions: [ReadingPosition] { navigationBackStack.map(\.position) }
     /// Test seam: owned history session IDs (back stack, oldest → newest).
@@ -1479,6 +1505,7 @@ final class ReaderViewController: NSViewController {
         guard active != isAllPagesOverviewActive else { return }
 
         if active {
+            referencePreview.close()
             flushPendingReadingPositionWriteback()
             onOverviewPresentationDidChange?(true)
             overviewSavedLeftSidebar = documentStore.isLeftSidebarVisible(in: windowID)
@@ -2135,6 +2162,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
+        referencePreview.close()
         annotationInteraction.clearPreview()
         markPDFPrivateViewTreeDirty()
         guard isApplyingStoreState == false,
@@ -2298,11 +2326,13 @@ final class ReaderViewController: NSViewController {
         defer { annotationInteraction.activeSessionID = displayedSessionID }
 
         if displayedSessionID != targetSessionID {
+            referencePreview.close()
             annotationInteraction.sessionDidChange()
             resetBookPageTurnState()
         }
 
         guard let session = targetSession() else {
+            referencePreview.close()
             pdfView.document = nil
             markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
@@ -2319,6 +2349,7 @@ final class ReaderViewController: NSViewController {
         }
 
         if session.isBlank {
+            referencePreview.close()
             pdfView.document = nil
             markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
@@ -2341,6 +2372,7 @@ final class ReaderViewController: NSViewController {
         do {
             document = try documentStore.pdfDocument(for: session.id)
         } catch {
+            referencePreview.close()
             pdfView.document = nil
             markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
@@ -2360,6 +2392,7 @@ final class ReaderViewController: NSViewController {
         defer { isApplyingStoreState = false }
 
         if documentChanged {
+            referencePreview.close()
             resetBookPageTurnState()
             pdfView.document = document
             markPDFPrivateViewTreeDirty(resetRoots: true)
@@ -2993,6 +3026,7 @@ final class ReaderViewController: NSViewController {
     @objc
     private func handlePDFClipViewBoundsDidChange(_ notification: Notification) {
         guard let clipView = notification.object as? NSClipView else { return }
+        referencePreview.close()
         annotationInteraction.clearPreview()
         let previousBounds = lastObservedPDFClipBounds
         lastObservedPDFClipBounds = clipView.bounds
@@ -3556,6 +3590,7 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyThemeFilter() {
+        referencePreview.applyTheme()
         discoverPDFPrivateViewsIfNeeded()
         let appearance = NSApp.effectiveAppearance
         let signature = "\(appearance.name.rawValue)|\(readerState.isNightModeEnabled)|\(pdfPrivateViewGeneration)"
