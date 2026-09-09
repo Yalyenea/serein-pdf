@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reading
+- Clicking an internal PDF link opens a pane-local preview of the destination. Option-click, or Jump in the preview, still performs the centered navigation and records history.
+
 ### Performance
 - All-pages overview (`Cmd+Shift+O`) rasterizes lazily instead of up front: only pages within one screen of the viewport render, off the main thread two at a time, and thumbnails are capped at 1200px on the long side. Offscreen pages release their bitmaps, a cost-bounded `NSCache` restores recently visited pages without re-rasterizing, zooming / resizing re-renders only visible cells, and leaving the overview frees every thumbnail immediately.
 
