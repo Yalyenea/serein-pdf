@@ -10,6 +10,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Reading
 - Clicking an internal PDF link opens a pane-local preview of the destination. Option-click, or Jump in the preview, still performs the centered navigation and records history.
+- Add temporary pen (`P`), laser (`R`), and pointer (`V`) tools to demo mode (`Cmd+L`), with a bottom toolbar that can stay pinned or auto-hide. `Esc` returns to the pointer before exiting demo mode.
+- Keep presentation ink attached to its page and separate in each window. `Cmd+Z` undoes the current page's last stroke, and `E` clears that page. Ink remains while turning pages, clears when leaving demo mode or switching documents, and is never written to the PDF.
 
 ### Performance
 - All-pages overview (`Cmd+Shift+O`) rasterizes lazily instead of up front: only pages within one screen of the viewport render, off the main thread two at a time, and thumbnails are capped at 1200px on the long side. Offscreen pages release their bitmaps, a cost-bounded `NSCache` restores recently visited pages without re-rasterizing, zooming / resizing re-renders only visible cells, and leaving the overview frees every thumbnail immediately.

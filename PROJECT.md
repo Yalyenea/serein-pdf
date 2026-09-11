@@ -101,6 +101,7 @@ flowchart LR
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
+| 演示工具 | 演示模式提供指针、临时笔与激光;墨迹按 PDF 页坐标保存在当前阅读区,翻页保留并随页面定位,各窗口独立,退出演示或切换文档时清空,不写入 PDF;底部工具栏可固定或自动隐藏 |
 | 全览性能 | `OverviewGridView` 缩略图只按可视区 ± 一屏懒栅格化(离主线程、2 并发、像素长边上限 1200);`NSCache` 按字节成本回收,远端页释放位图,退出全览立即清空;缩放 / resize 只重渲可视区,滚回近访页走缓存不重渲 |
 | 书籍阅读 | 新增 `book` / `bookContinuous`,与既有 `twoUp` / `twoUpContinuous` 并存;两个书籍状态复用横向 `PDFView.twoUp + displaysAsBook` 布局,封面单页,后续按左右 spread 配对;封面与末尾孤页保留空槽以稳定页面尺寸;Fit Width 按实际页面框与固定安全边距同时约束宽高,手动缩小后只要完整可见也保持双轴居中;Continuous Turn 允许持续手势逐 spread 翻页 |
 | 左右互换 | `layout.sidebarsSwapped` 翻转时 split items 重排,window-level 宽度 / 可见状态原子对调 |
@@ -154,7 +155,7 @@ flowchart LR
 - `S`:有选区 → 立即加删除线;无选区 → 进入删除线模式
 - `Cmd+Option+M`:有选区 → 创建高亮并进入评论编辑;无选区且命中高亮 → 编辑已有评论
 - 高亮模式内 `1` / `2` / `3`:切换粉 / 黄 / 绿;文本输入框优先接收数字
-- `Esc`:退出批注模式 / 关闭 Find bar / 退出全览 / 退出演示模式
+- `Esc`:退出批注模式 / 关闭 Find bar / 退出全览;演示时先将笔或激光切回指针,再按退出演示
 - `D`:删除鼠标所在批注(多行整组删除)
 - `Cmd+S`:写回源 PDF
 - `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights
@@ -215,6 +216,8 @@ flowchart LR
 - `Cmd+Ctrl+\`:切换同窗分屏;次级 pane 显示紧凑候选,首项为同一个 PDF;`View` 菜单可在左右 / 上下布局间切换(新窗口与重启恢复默认单屏)
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,视口自适应铺满页网格,缩放后为手动尺寸,`Esc` 退出)
 - `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
+- 演示中 `P` / `R`:切换临时笔 / 激光,重复按键回到指针;`V`:回到指针;`Cmd+Z`:撤销当前页最后一笔;`E`:清空当前页墨迹;`Esc`:先回到指针,再按退出演示
+- 演示工具栏默认固定在底部;取消固定后自动隐藏,移到阅读区底部中央或点击展开按钮即可显示;激光移动轨迹会自动淡出
 - `Cmd+Ctrl+L`:双侧栏都关闭时打开两个侧栏;否则关闭两个侧栏与 tab chrome
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
 

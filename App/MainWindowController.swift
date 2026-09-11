@@ -67,6 +67,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.numberedTabShortcutHandler = { [weak self] oneBasedIndex in
             self?.activateNumberedTab(oneBasedIndex)
         }
+        window.presentationShortcutHandler = { [weak self] event in
+            self?.handlePresentationShortcut(event) ?? false
+        }
         window.delegate = self
         toolbar.delegate = self
         shouldCascadeWindows = true
@@ -353,15 +356,23 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func toggleDemoMode() {
-        guard documentStore.activeSession(in: windowID) != nil else { return }
-
         if let snapshot = demoModeSnapshot {
             demoModeSnapshot = nil
             restoreDemoMode(from: snapshot)
             return
         }
 
+        guard documentStore.activeSession(in: windowID)?.isBlank == false else { return }
         enterDemoMode()
+    }
+
+    func handlePresentationShortcut(_ event: NSEvent) -> Bool {
+        guard isDemoModeEnabled,
+              ReaderShortcutsController.shouldHandlePlainShortcut(for: window?.firstResponder) else {
+            return false
+        }
+        return splitViewController.readerWorkspaceViewController
+            .activeReaderViewController().handlePresentationShortcut(event)
     }
 
     func toggleImmersiveMode() {
@@ -377,11 +388,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func enterDemoMode() {
+        hideFindBar()
+        setAllPagesOverviewActive(false)
         demoModeSnapshot = DemoModeSnapshot(
             wasFullScreen: window?.styleMask.contains(.fullScreen) == true,
             wasImmersiveModeEnabled: isImmersiveModeEnabled,
             readerState: currentDemoReaderState()
         )
+        splitViewController.readerWorkspaceViewController.setPresentationEnabled(true)
         if isImmersiveModeEnabled == false {
             enterImmersiveMode()
         }
@@ -394,6 +408,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func restoreDemoMode(from snapshot: DemoModeSnapshot) {
+        splitViewController.readerWorkspaceViewController.setPresentationEnabled(false)
         restoreDemoReaderState(snapshot.readerState)
         if snapshot.wasImmersiveModeEnabled == false, let immersiveModeSnapshot {
             self.immersiveModeSnapshot = nil
@@ -423,8 +438,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
-        guard let snapshot = demoModeSnapshot,
-              snapshot.wasFullScreen == false else { return }
+        guard let snapshot = demoModeSnapshot else { return }
         demoModeSnapshot = nil
         restoreDemoMode(from: snapshot)
     }
@@ -669,6 +683,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowWillClose(_ notification: Notification) {
+        splitViewController.readerWorkspaceViewController.setPresentationEnabled(false)
         didCloseHandler?(self)
     }
 
@@ -693,6 +708,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             return true
         }
         if isDemoModeEnabled {
+            if splitViewController.readerWorkspaceViewController.activeReaderViewController()
+                .exitPresentationTool() {
+                return true
+            }
             toggleDemoMode()
             return true
         }

@@ -2,6 +2,7 @@ import AppKit
 
 final class PDFContainerView: NSView {
     let readingFocusOverlay = ReadingFocusOverlayView()
+    let presentationOverlay = PresentationAnnotationOverlayView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -23,6 +24,14 @@ final class PDFContainerView: NSView {
             readingFocusOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
             readingFocusOverlay.topAnchor.constraint(equalTo: topAnchor),
             readingFocusOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        presentationOverlay.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(presentationOverlay)
+        NSLayoutConstraint.activate([
+            presentationOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            presentationOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            presentationOverlay.topAnchor.constraint(equalTo: topAnchor),
+            presentationOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
     }
 

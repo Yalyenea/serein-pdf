@@ -390,6 +390,7 @@ final class ReaderViewController: NSViewController {
     /// When true for a groupID, hover preview is suppressed (e.g. same row selected in Annotations sidebar).
     var shouldSuppressAnnotationPreview: ((String) -> Bool)?
     private let pdfContainerView = PDFContainerView()
+    var presentationOverlay: PresentationAnnotationOverlayView { pdfContainerView.presentationOverlay }
     private let emptyStateContainer = NSStackView()
     private let emptyStateErrorLabel = NSTextField(wrappingLabelWithString: "")
     private let highlightModeIndicator = NSStackView()
@@ -520,7 +521,8 @@ final class ReaderViewController: NSViewController {
             self?.shouldLockHorizontalPan == false
         }
         pdfView.onPointerMoved = { [weak self] event in
-            self?.annotationInteraction.handlePointerMoved(event)
+            guard let self, self.presentationOverlay.isPresentationEnabled == false else { return }
+            self.annotationInteraction.handlePointerMoved(event)
         }
         pdfView.contextMenuProvider = { [weak self] event in
             self?.annotationInteraction.makeContextMenu(for: event)
@@ -553,6 +555,14 @@ final class ReaderViewController: NSViewController {
             self?.readingFocusPageBounds(at: point)
         }
         pdfContainerView.setReadingFocusSettings(readingFocusSettings)
+        presentationOverlay.pdfView = pdfView
+        presentationOverlay.onInteraction = { [weak self] in
+            self?.onFocusRequested?()
+            self?.exitHighlightMode()
+            self?.annotationInteraction.clearPreview()
+            self?.annotationInteraction.dismissCommentEditor()
+            self?.referencePreview.close()
+        }
 
         NotificationCenter.default.addObserver(
             self,
@@ -674,6 +684,7 @@ final class ReaderViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        presentationOverlay.refreshGeometry()
         if isAllPagesOverviewActive {
             reflowOverviewGrid()
         }
@@ -1657,6 +1668,7 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func triggerAnnotationShortcut(_ type: AnnotationMarkupType) -> Bool {
+        guard presentationOverlay.isPresentationEnabled == false else { return false }
         if highlightCurrentSelection(type: type) {
             return true
         }
@@ -1669,6 +1681,30 @@ final class ReaderViewController: NSViewController {
     func exitHighlightMode() {
         readerState.annotationMode = nil
         updateHighlightModeIndicator()
+    }
+
+    func setPresentationEnabled(_ enabled: Bool) {
+        loadViewIfNeeded()
+        if enabled {
+            exitHighlightMode()
+            annotationInteraction.clearPreview()
+            annotationInteraction.dismissCommentEditor()
+            referencePreview.close()
+        }
+        presentationOverlay.setPresentationEnabled(enabled)
+        syncReadingFocusAvailability()
+    }
+
+    func handlePresentationShortcut(_ event: NSEvent) -> Bool {
+        guard isAllPagesOverviewActive == false, pdfView.isHidden == false else { return false }
+        return presentationOverlay.handleKeyEvent(event)
+    }
+
+    func exitPresentationTool() -> Bool {
+        guard presentationOverlay.isPresentationEnabled,
+              presentationOverlay.tool != .pointer else { return false }
+        presentationOverlay.selectTool(.pointer)
+        return true
     }
 
     func setHighlightColor(_ color: HighlightColor) {
@@ -1959,6 +1995,10 @@ final class ReaderViewController: NSViewController {
 
     @discardableResult
     func undoLastHighlight() -> Bool {
+        if presentationOverlay.isPresentationEnabled {
+            presentationOverlay.undoCurrentPage()
+            return true
+        }
         guard let session = targetSession(),
               session.id == displayedSessionID else { return false }
         let didUndo = documentStore.undoLastHighlight(for: session.id)
@@ -1969,17 +2009,22 @@ final class ReaderViewController: NSViewController {
     }
 
     var hasUndoableHighlight: Bool {
+        if presentationOverlay.isPresentationEnabled {
+            return presentationOverlay.strokes.contains { $0.page === pdfView.currentPage }
+        }
         guard let sessionID = targetSessionID else { return false }
         return documentStore.hasUndoableHighlight(for: sessionID)
     }
 
     var hasRedoableHighlight: Bool {
+        guard presentationOverlay.isPresentationEnabled == false else { return false }
         guard let sessionID = targetSessionID else { return false }
         return documentStore.hasRedoableHighlight(for: sessionID)
     }
 
     @discardableResult
     func redoLastHighlight() -> Bool {
+        guard presentationOverlay.isPresentationEnabled == false else { return false }
         guard let session = targetSession(),
               session.id == displayedSessionID else { return false }
         let didRedo = documentStore.redoLastHighlight(for: session.id)
@@ -2162,6 +2207,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
+        presentationOverlay.refreshGeometry()
         referencePreview.close()
         annotationInteraction.clearPreview()
         markPDFPrivateViewTreeDirty()
@@ -2198,6 +2244,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewScaleChanged(_ notification: Notification) {
+        presentationOverlay.refreshGeometry()
         markPDFPrivateViewTreeDirty()
         guard isApplyingProgrammaticScale == false,
               isApplyingStoreState == false,
@@ -2282,7 +2329,8 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyHighlightOnMouseUpIfNeeded(event: NSEvent) {
-        guard readerState.isAnnotationModeEnabled,
+        guard presentationOverlay.isPresentationEnabled == false,
+              readerState.isAnnotationModeEnabled,
               isApplyingHighlightSelection == false,
               let window = pdfView.window,
               event.window === window else { return }
@@ -2323,9 +2371,13 @@ final class ReaderViewController: NSViewController {
 
     private func refreshDisplayedDocument() {
         guard isViewLoaded else { return }
-        defer { annotationInteraction.activeSessionID = displayedSessionID }
+        defer {
+            annotationInteraction.activeSessionID = displayedSessionID
+            presentationOverlay.refreshGeometry()
+        }
 
         if displayedSessionID != targetSessionID {
+            presentationOverlay.resetDocument()
             referencePreview.close()
             annotationInteraction.sessionDidChange()
             resetBookPageTurnState()
@@ -2392,6 +2444,7 @@ final class ReaderViewController: NSViewController {
         defer { isApplyingStoreState = false }
 
         if documentChanged {
+            presentationOverlay.resetDocument()
             referencePreview.close()
             resetBookPageTurnState()
             pdfView.document = document
@@ -3025,6 +3078,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFClipViewBoundsDidChange(_ notification: Notification) {
+        presentationOverlay.refreshGeometry()
         guard let clipView = notification.object as? NSClipView else { return }
         referencePreview.close()
         annotationInteraction.clearPreview()
@@ -3237,6 +3291,7 @@ final class ReaderViewController: NSViewController {
             self.isPDFLayoutMaintenanceScheduled = false
             self.applyThemeFilter()
             self.pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
+            self.presentationOverlay.refreshGeometry()
             self.scheduleDocumentRecentering()
             self.syncPDFMarginBackground()
         }
@@ -3497,7 +3552,9 @@ final class ReaderViewController: NSViewController {
     }
 
     private func syncReadingFocusAvailability() {
+        presentationOverlay.refreshGeometry()
         let isAvailable = isAllPagesOverviewActive == false
+            && presentationOverlay.isPresentationEnabled == false
             && isReadingFocusModeEnabled
             && pdfContainerView.isHidden == false
             && pdfView.isHidden == false

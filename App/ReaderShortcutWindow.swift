@@ -3,10 +3,15 @@ import IOKit
 
 final class ReaderShortcutWindow: NSWindow {
     var plainShortcutHandler: ((NSEvent, NSWindow) -> Bool)?
+    var presentationShortcutHandler: ((NSEvent) -> Bool)?
     var numberedTabShortcutHandler: ((Int) -> Void)?
     var reservesTransparentTitlebarDragArea = true
 
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown,
+           presentationShortcutHandler?(event) == true {
+            return
+        }
         if shouldHandleTransparentTitlebarDrag(with: event) {
             performDrag(with: event)
             return
@@ -25,6 +30,9 @@ final class ReaderShortcutWindow: NSWindow {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if presentationShortcutHandler?(event) == true {
+            return true
+        }
         if handlePhysicalCommandNumberShortcut(with: event) {
             return true
         }

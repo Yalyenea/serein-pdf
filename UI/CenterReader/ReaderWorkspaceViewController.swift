@@ -46,6 +46,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     let floatingOutlineViewController: FloatingOutlineViewController
     var onFocusedReaderDidChange: ((PDFView) -> Void)?
     private(set) var isReadingFocusModeEnabled = false
+    private(set) var isPresentationEnabled = false
     private(set) var readingFocusSettingsOverride: ReadingFocusSettings?
     private var readingFocusControlsPopover: NSPopover?
     private weak var readingFocusControlsReader: ReaderViewController?
@@ -136,13 +137,13 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         primaryReaderViewController.onOverviewPresentationDidChange = { [weak self] active in
             guard let self else { return }
             self.floatingOutlineViewController.setSuppressed(
-                active || self.secondaryReaderViewController.isAllPagesOverviewActive
+                self.isPresentationEnabled || active || self.secondaryReaderViewController.isAllPagesOverviewActive
             )
         }
         secondaryReaderViewController.onOverviewPresentationDidChange = { [weak self] active in
             guard let self else { return }
             self.floatingOutlineViewController.setSuppressed(
-                active || self.primaryReaderViewController.isAllPagesOverviewActive
+                self.isPresentationEnabled || active || self.primaryReaderViewController.isAllPagesOverviewActive
             )
         }
         NotificationCenter.default.addObserver(
@@ -237,6 +238,16 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         documentStore.focusedPane(in: windowID) == .secondary && documentStore.isSplitEnabled(in: windowID)
             ? secondaryReaderViewController
             : primaryReaderViewController
+    }
+
+    func setPresentationEnabled(_ enabled: Bool) {
+        isPresentationEnabled = enabled
+        primaryReaderViewController.setPresentationEnabled(enabled)
+        secondaryReaderViewController.setPresentationEnabled(enabled)
+        floatingOutlineViewController.setSuppressed(
+            enabled || primaryReaderViewController.isAllPagesOverviewActive
+                || secondaryReaderViewController.isAllPagesOverviewActive
+        )
     }
 
     var testingSplitView: NSSplitView {

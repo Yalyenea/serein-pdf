@@ -208,7 +208,8 @@ final class ReadingFocusOverlayViewTests: XCTestCase {
         container.embedPDFView(content)
         container.layoutSubtreeIfNeeded()
 
-        XCTAssertTrue(container.subviews.last === container.readingFocusOverlay)
+        XCTAssertTrue(container.subviews.last === container.presentationOverlay)
+        XCTAssertEqual(container.presentationOverlay.frame, container.bounds)
         XCTAssertEqual(container.readingFocusOverlay.frame, container.bounds)
         XCTAssertNil(
             container.readingFocusOverlay.hitTest(NSPoint(x: 320, y: 240))
