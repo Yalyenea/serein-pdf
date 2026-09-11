@@ -3463,6 +3463,7 @@ final class ReaderViewController: NSViewController {
     }
 
     private func applyReaderAppearance() {
+        annotationInteraction.refreshThemeAppearance()
         let isNightModeEnabled = readerState.isNightModeEnabled
         let appearance = NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {

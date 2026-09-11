@@ -5,6 +5,7 @@ final class AnnotationPreviewView: NSView {
     private let metadataLabel = NSTextField(labelWithString: "")
     private let snippetLabel = NSTextField(wrappingLabelWithString: "")
     private let commentLabel = NSTextField(wrappingLabelWithString: "")
+    private var highlightColor: HighlightColor = .default
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -66,7 +67,7 @@ final class AnnotationPreviewView: NSView {
         }
         snippetLabel.stringValue = group.snippet
         commentLabel.stringValue = comment
-        colorBar.layer?.backgroundColor = group.color.nsColor.cgColor
+        highlightColor = group.color
         refreshColors()
         return true
     }
@@ -135,8 +136,9 @@ final class AnnotationPreviewView: NSView {
         return min(ceil(bounds.height), lineHeight * CGFloat(maximumLines))
     }
 
-    private func refreshColors() {
+    func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
+            colorBar.layer?.backgroundColor = NightModeStyle.highlightColor(for: highlightColor, appearance: effectiveAppearance).cgColor
             layer?.backgroundColor = NightModeStyle.paneBackgroundColor.withAlphaComponent(0.98).cgColor
             layer?.borderWidth = 1
             layer?.borderColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.16).cgColor

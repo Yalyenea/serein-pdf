@@ -28,7 +28,7 @@ final class ReaderAnnotationInteractionController: NSObject {
     private var previewAnchor: NSRect?
     private var previewShowWorkItem: DispatchWorkItem?
     private var focusHideWorkItem: DispatchWorkItem?
-    private var commentEditorPopover: NSPopover?
+    private var commentEditorPanel: AnnotationCommentPanel?
 
     init(documentStore: DocumentStore, pdfView: ReaderPDFView) {
         self.documentStore = documentStore
@@ -46,6 +46,11 @@ final class ReaderAnnotationInteractionController: NSObject {
 
     func layoutOverlay() {
         positionPreviewIfNeeded()
+    }
+
+    func refreshThemeAppearance() {
+        previewView.refreshColors()
+        commentEditorPanel?.refreshThemeAppearance()
     }
 
     func handlePointerMoved(_ event: NSEvent?) {
@@ -234,19 +239,16 @@ final class ReaderAnnotationInteractionController: NSObject {
             self?.dismissCommentEditor()
         }
 
-        let popover = NSPopover()
-        popover.behavior = .semitransient
-        popover.animates = true
-        popover.contentViewController = editor
-        commentEditorPopover = popover
-
         guard let hostView else { return }
-        popover.show(relativeTo: anchorRect(for: group), of: hostView, preferredEdge: .maxY)
+        let panel = AnnotationCommentPanel(editor: editor)
+        commentEditorPanel = panel
+        panel.show(relativeTo: anchorRect(for: group), of: hostView)
     }
 
     func dismissCommentEditor() {
-        commentEditorPopover?.close()
-        commentEditorPopover = nil
+        let panel = commentEditorPanel
+        commentEditorPanel = nil
+        panel?.close()
     }
 
     @discardableResult

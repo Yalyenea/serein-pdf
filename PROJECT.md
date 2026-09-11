@@ -88,7 +88,7 @@ flowchart LR
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
 | 批注存储 | Serein 多行 highlight / underline / strikeout 仅以 UUID `userName` 组成 group 并共享 comment;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 批注摘要 | 只使用 PDFKit 文本层生成 snippet；无文本层时显示 `Untitled Highlight`，不做 OCR / 页面栅格化 |
-| 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);正文 / `Cmd+Option+M` / 右键用阅读区旁 popover 编辑,不强制打开右栏;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
+| 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);正文 / `Cmd+Option+M` / 右键用批注旁的无边框 `NSPanel` 编辑,不强制打开右栏;面板采用 6pt 圆角、紧凑底边距,编辑区随内容增高并在上限后滚动,面板及预览卡随主题刷新;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
 | 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF;`serein://open?file=<encoded file URL>` 仅接收单个本地可读 PDF 并复用同一打开管线 |
 | Codex 交接 | `Ctrl+Cmd+C` 按上下文发送:有选区时通过 `codex://new?prompt=…` 预填新任务,无选区时导出当前页临时 PNG;`Ctrl+Cmd+Shift+C` 使用原 PDF;文件通过 macOS 打开事件交给 `com.openai.codex`;Settings 可关闭整个集成;不传 workspace `path`,Codex 客户端可能自行把文件父目录作为 workspace |
@@ -360,7 +360,7 @@ UI/CenterReader/                          # 中栏阅读区
   FloatingOutlineViewController.swift     # 右栏隐藏时的 Notion 式目录 rail + hover / 高度拖拽 overlay
   ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
   ReaderReferencePreviewController.swift  # 内链单击预览目标页;Option-click / Jump 才真正跳转
-  ReaderAnnotationInteractionController.swift # 高亮 hit-test、hover 预览、菜单、评论 popover 与 pulse
+  ReaderAnnotationInteractionController.swift # 高亮 hit-test、hover 预览、菜单、评论面板与 pulse
   PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
   ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何
   ReadingFocusControlsViewController.swift # 当前窗口聚焦宽高紧凑调节面板

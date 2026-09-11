@@ -4,6 +4,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Annotations
+- Comment editing uses a compact panel with 6pt corners and tighter bottom spacing. Remove the empty snippet row and nested input background; let the editor grow with its contents and scroll once it reaches its height limit.
+- Refresh open comment panels and hover previews when the theme changes, including the highlight color strip and editor controls.
+
 ### Reading
 - Clicking an internal PDF link opens a pane-local preview of the destination. Option-click, or Jump in the preview, still performs the centered navigation and records history.
 
