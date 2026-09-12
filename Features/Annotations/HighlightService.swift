@@ -238,12 +238,27 @@ enum HighlightService {
             ? nil
             : comment
         var didChange = false
+        var changedAnnotationsByPage: [PDFPage: Set<PDFAnnotation>] = [:]
 
         for (index, record) in records.sorted(by: recordSortOrder).enumerated() {
             let contents = index == 0 ? normalizedComment : nil
             guard record.annotation.contents != contents else { continue }
             record.annotation.contents = contents
+            if let page = record.annotation.page {
+                changedAnnotationsByPage[page, default: []].insert(record.annotation)
+            }
             didChange = true
+        }
+
+        // PDFKit does not rebuild comment icons when /Contents changes, even
+        // after annotationsChanged(on:). Reattach the affected suffix so its
+        // native views refresh without changing annotation identity or stacking.
+        for (page, changedAnnotations) in changedAnnotationsByPage {
+            let annotations = page.annotations
+            guard let firstChangedIndex = annotations.firstIndex(where: changedAnnotations.contains) else { continue }
+            let suffix = annotations[firstChangedIndex...]
+            suffix.forEach(page.removeAnnotation)
+            suffix.forEach(page.addAnnotation)
         }
 
         return didChange
