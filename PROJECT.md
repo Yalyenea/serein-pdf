@@ -176,7 +176,7 @@ flowchart LR
 - `Ctrl+D` / `Ctrl+U`:下滚 / 上滚半页;非连续模式先走完当前 PDF,到边界才切换连续阅读组中的相邻 PDF
 - `G` / `g`:跳到真实文末页底 / 文首页顶
 - `Cmd+Option+G`:跳转到页 N(越界给轻量提示)
-- `Cmd+[` / `Cmd+]`:按 pane 保存 `sessionID + ReadingPosition` 的精确历史;支持同页不同坐标、跨 PDF Outline / Search 与反复后退 / 前进;PDF 内链单击预览目标页,预览使用 6pt 圆角无标题栏面板、铺满宽度,右上角仅保留跳转图标;预览副本不显示评论入口,源批注保持不变;Option-click 或预览中跳转图标才居中跳转并入栈,普通滚动和顺序翻页不入栈
+- `Cmd+[` / `Cmd+]`:按 pane 保存 `sessionID + ReadingPosition` 的精确历史;支持同页不同坐标、跨 PDF Outline / Search 与反复后退 / 前进;PDF 内链单击预览目标页,预览使用 6pt 圆角无标题栏面板、铺满宽度;预览内继续点击内链时原地替换页面,左上角后退 / 前进恢复预览的页码、滚动与缩放,后退后点新链接会清除前进分支;预览历史独立于主阅读区,关闭后清空;每次仅复制当前页且不显示评论入口,源批注保持不变;阅读区 Option-click 或预览右上角跳转图标才把当前目标居中跳转并入主历史栈,普通滚动和顺序翻页不入栈
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar(有 PDF 选中文本时立即带入搜索)/ 下一 / 上一 匹配
 - Find bar 内 `Aa` / `Word`:切换区分大小写 / 全词匹配;`↑` / `↓` / `Enter` 选择上一 / 下一结果 / 首次提交搜索;同一 query + scope + options 连续 `Enter` 继续跳转
 - `F`:开启 / 关闭鼠标跟随阅读聚焦;遮罩按真实 PDF 页宽定位且不阻断选择、链接、拖拽与滚动
@@ -362,7 +362,7 @@ UI/CenterReader/                          # 中栏阅读区
   ReaderWorkspaceViewController.swift     # 中栏 workspace:单 / 双 Reader 分屏 + 焦点 pane
   FloatingOutlineViewController.swift     # 右栏隐藏时的 Notion 式目录 rail + hover / 高度拖拽 overlay
   ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
-  ReaderReferencePreviewController.swift  # 内链单击预览目标页;Option-click / Jump 才真正跳转
+  ReaderReferencePreviewController.swift  # 内链预览与独立前进后退;Option-click / 当前预览 Jump 才真正跳转
   ReaderAnnotationInteractionController.swift # 高亮 hit-test、hover 预览、菜单、评论面板与 pulse
   PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
   ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何

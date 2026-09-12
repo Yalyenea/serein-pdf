@@ -3766,7 +3766,10 @@ private func assertInternalLinkNavigationStaysCentered(in mode: ReaderDisplayMod
     #expect(preview.destination.page === reader.pdfView.document?.page(at: fixture.targetPageIndex))
     #expect(store.session(for: session.id)?.lastReadPosition == sourcePosition)
     #expect(reader.testingNavigationBackPositions.isEmpty)
-    preview.onNavigate?()
+    let jumpButton = try #require(preview.view.subviews.compactMap { $0 as? NSButton }.first {
+        $0.identifier?.rawValue == "referencePreviewJump"
+    })
+    jumpButton.performClick(nil)
     flushLayout(window)
     #expect(reader.testingReferencePreviewContent == nil)
 

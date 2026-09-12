@@ -16,7 +16,7 @@ final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
         guard let content = ReferencePreviewViewController(destination: destination, document: document) else { return false }
         close()
         content.onClose = { [weak self] in self?.close() }
-        content.onNavigate = { [weak self, weak source] in
+        content.onNavigate = { [weak self, weak source] destination in
             guard let self else { return }
             self.close()
             guard source?.document === document else { return }
@@ -87,9 +87,11 @@ private final class ReferencePreviewPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Keep preview interaction limited to reading, selection, and copying.
+/// Resolve links against the source page; the displayed document contains only a copy.
 private final class ReferencePDFView: PDFView {
     var onCancel: (() -> Void)?
+    var onInternalLink: ((PDFDestination) -> Void)?
+    weak var sourcePage: PDFPage?
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
@@ -101,11 +103,18 @@ private final class ReferencePDFView: PDFView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if let page = page(for: point, nearest: false),
-           page.annotations.contains(where: {
+        if let page = page(for: point, nearest: false), let sourcePage,
+           let annotation = sourcePage.annotations.first(where: {
                ($0.type == "Link" || $0.type == "Widget")
                    && $0.bounds.contains(convert(point, to: page))
-           }) { return }
+           }) {
+            if event.clickCount == 1, annotation.type == "Link",
+               let destination = (annotation.action as? PDFActionGoTo)?.destination ?? annotation.destination,
+               destination.page?.document === sourcePage.document {
+                onInternalLink?(destination)
+            }
+            return
+        }
         super.mouseDown(with: event)
     }
 
@@ -114,24 +123,52 @@ private final class ReferencePDFView: PDFView {
 
 @MainActor
 final class ReferencePreviewViewController: NSViewController {
-    var onNavigate: (() -> Void)?
+    private struct Viewport {
+        let bounds: NSRect
+        let scaleFactor: CGFloat
+    }
+
+    private struct Visit {
+        let destination: PDFDestination
+        var viewport: Viewport?
+    }
+
+    var onNavigate: ((PDFDestination) -> Void)?
     var onClose: (() -> Void)?
-    let destination: PDFDestination
-    private let previewDocument: PDFDocument
-    private let previewPage: PDFPage
-    private let pageTitle: String
+    private(set) var destination: PDFDestination
+    private let sourceDocument: PDFDocument
+    private var previewDocument: PDFDocument
+    private var previewPage: PDFPage
     private let preview = ReferencePDFView()
     private let jump = NSButton()
+    private let back = NSButton()
+    private let forward = NSButton()
     private var hasPositioned = false
+    private var visits: [Visit]
+    private var visitIndex = 0
+
+    var canGoBack: Bool { visitIndex > 0 }
+    var canGoForward: Bool { visitIndex + 1 < visits.count }
+
+    private var pageTitle: String {
+        guard let page = destination.page else { return "" }
+        return page.label ?? String(sourceDocument.index(for: page) + 1)
+    }
 
     init?(destination: PDFDestination, document: PDFDocument) {
-        guard let page = destination.page, page.document === document,
-              let copy = page.copy() as? PDFPage else { return nil }
+        guard let copy = Self.copyPage(for: destination, in: document) else { return nil }
         self.destination = destination
-        pageTitle = page.label ?? String(document.index(for: page) + 1)
+        sourceDocument = document
+        visits = [Visit(destination: destination)]
         previewPage = copy
         previewDocument = PDFDocument()
         previewDocument.insert(copy, at: 0)
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    private static func copyPage(for destination: PDFDestination, in document: PDFDocument) -> PDFPage? {
+        guard let page = destination.page, page.document === document,
+              let copy = page.copy() as? PDFPage else { return nil }
         for annotation in copy.annotations {
             if annotation.type == "Widget" {
                 annotation.isReadOnly = true
@@ -143,7 +180,7 @@ final class ReferencePreviewViewController: NSViewController {
                 }
             }
         }
-        super.init(nibName: nil, bundle: nil)
+        return copy
     }
 
     @available(*, unavailable)
@@ -156,6 +193,7 @@ final class ReferencePreviewViewController: NSViewController {
         view.layer?.masksToBounds = true
         view.setAccessibilityLabel("Reference · Page \(pageTitle)")
         jump.title = ""
+        jump.identifier = NSUserInterfaceItemIdentifier("referencePreviewJump")
         jump.image = NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: "Jump to reference")
         jump.setAccessibilityLabel("Jump to reference · Page \(pageTitle)")
         jump.imagePosition = .imageOnly
@@ -166,18 +204,32 @@ final class ReferencePreviewViewController: NSViewController {
         jump.wantsLayer = true
         jump.layer?.cornerRadius = 4
         jump.focusRingType = .none
+        configureHistoryButton(back, identifier: "referencePreviewBack", symbol: "chevron.left",
+                               label: "Back", action: #selector(goBack))
+        configureHistoryButton(forward, identifier: "referencePreviewForward", symbol: "chevron.right",
+                               label: "Forward", action: #selector(goForward))
         preview.displayMode = .singlePage
         preview.displayBox = .cropBox
         preview.displaysPageBreaks = false
         preview.pageBreakMargins = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         preview.autoScales = false
         preview.document = previewDocument
+        preview.sourcePage = destination.page
         preview.onCancel = { [weak self] in self?.onClose?() }
-        for child in [preview, jump] {
+        preview.onInternalLink = { [weak self] destination in self?.navigate(to: destination) }
+        for child in [preview, back, forward, jump] {
             child.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(child)
         }
         NSLayoutConstraint.activate([
+            back.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
+            back.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 6),
+            back.widthAnchor.constraint(equalToConstant: 24),
+            back.heightAnchor.constraint(equalToConstant: 24),
+            forward.topAnchor.constraint(equalTo: back.topAnchor),
+            forward.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 2),
+            forward.widthAnchor.constraint(equalToConstant: 24),
+            forward.heightAnchor.constraint(equalToConstant: 24),
             jump.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
             jump.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
             jump.widthAnchor.constraint(equalToConstant: 24),
@@ -187,7 +239,74 @@ final class ReferencePreviewViewController: NSViewController {
             preview.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             preview.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+        refreshNavigationControls()
         applyTheme()
+    }
+
+    private func configureHistoryButton(_ button: NSButton, identifier: String, symbol: String,
+                                        label: String, action: Selector) {
+        button.identifier = NSUserInterfaceItemIdentifier(identifier)
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        button.imagePosition = .imageOnly
+        button.isBordered = false
+        button.target = self
+        button.action = action
+        button.toolTip = label
+        button.setAccessibilityLabel(label)
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 4
+        button.focusRingType = .none
+    }
+
+    @discardableResult
+    func navigate(to destination: PDFDestination) -> Bool {
+        guard let copy = Self.copyPage(for: destination, in: sourceDocument) else { return false }
+        captureViewport()
+        visits.removeSubrange((visitIndex + 1)..<visits.count)
+        visits.append(Visit(destination: destination))
+        visitIndex = visits.count - 1
+        display(destination: destination, copy: copy)
+        return true
+    }
+
+    @objc func goBack() { moveInHistory(to: visitIndex - 1) }
+    @objc func goForward() { moveInHistory(to: visitIndex + 1) }
+
+    private func moveInHistory(to index: Int) {
+        guard visits.indices.contains(index), index != visitIndex,
+              let copy = Self.copyPage(for: visits[index].destination, in: sourceDocument) else { return }
+        captureViewport()
+        visitIndex = index
+        display(destination: visits[index].destination, copy: copy)
+    }
+
+    private func captureViewport() {
+        guard isViewLoaded, hasPositioned else { return }
+        visits[visitIndex].viewport = Viewport(bounds: preview.convert(preview.bounds, to: previewPage),
+                                             scaleFactor: preview.scaleFactor)
+    }
+
+    private func display(destination: PDFDestination, copy: PDFPage) {
+        self.destination = destination
+        previewPage = copy
+        let document = PDFDocument()
+        document.insert(copy, at: 0)
+        preview.sourcePage = destination.page
+        preview.document = document
+        previewDocument = document
+        hasPositioned = false
+        guard isViewLoaded else { return }
+        refreshNavigationControls()
+        positionReference()
+        view.window?.makeFirstResponder(preview)
+    }
+
+    private func refreshNavigationControls() {
+        view.setAccessibilityLabel("Reference · Page \(pageTitle)")
+        jump.setAccessibilityLabel("Jump to reference · Page \(pageTitle)")
+        jump.toolTip = "Jump to reference · Page \(pageTitle)"
+        back.isEnabled = canGoBack
+        forward.isEnabled = canGoForward
     }
 
     override func viewDidAppear() {
@@ -215,6 +334,13 @@ final class ReferencePreviewViewController: NSViewController {
         let viewport = scrollView.contentView.bounds.size
         preview.scaleFactor *= viewport.width / width
         preview.layoutDocumentView()
+
+        if let viewport = visits[visitIndex].viewport {
+            preview.scaleFactor = viewport.scaleFactor
+            preview.layoutDocumentView()
+            preview.go(to: viewport.bounds, on: page)
+            return
+        }
 
         // PDF null coordinates mean the page edge. Work in view coordinates so
         // the crop remains upright for rotated pages as well.
@@ -244,13 +370,15 @@ final class ReferencePreviewViewController: NSViewController {
         guard isViewLoaded else { return }
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = NightModeStyle.readerBackdropColor.cgColor
-            jump.contentTintColor = NightModeStyle.secondaryTextColor
-            jump.layer?.backgroundColor = NightModeStyle.paneBackgroundColor.withAlphaComponent(0.92).cgColor
+            for button in [back, forward, jump] {
+                button.contentTintColor = NightModeStyle.secondaryTextColor
+                button.layer?.backgroundColor = NightModeStyle.paneBackgroundColor.withAlphaComponent(0.92).cgColor
+            }
             preview.backgroundColor = NightModeStyle.readerBackdropColor
             preview.contentFilters = NightModeStyle.makePDFContentFilters(for: view.effectiveAppearance)
         }
     }
 
     override func cancelOperation(_ sender: Any?) { onClose?() }
-    @objc private func jumpToReference() { onNavigate?() }
+    @objc private func jumpToReference() { onNavigate?(destination) }
 }

@@ -16,7 +16,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Refresh open comment panels and hover previews when the theme changes, including the highlight color strip and editor controls.
 
 ### Reading
-- Reference previews fill the available width in a 6pt-corner panel, with no header and a single jump icon. Suppress comment popups in the copied preview page while preserving the source annotations.
+- Reference previews fill the available width in a 6pt-corner panel without a header. Follow internal links in the same preview, with Back/Forward arrows at the top left and Jump at the top right. Preview history restores scroll and zoom; following a new link after going back replaces the forward branch. Only Jump navigates the main reader, using the current preview target. Suppress comment popups in each copied page while preserving the source annotations.
 - Clicking an internal PDF link opens a pane-local preview of the destination. Option-click, or Jump in the preview, still performs the centered navigation and records history.
 - Add temporary pen (`P`), laser (`R`), and pointer (`V`) tools to demo mode (`Cmd+L`), with a bottom toolbar that can stay pinned or auto-hide. `Esc` returns to the pointer before exiting demo mode.
 - Keep presentation ink attached to its page and separate in each window. `Cmd+Z` undoes the current page's last stroke, and `E` clears that page. Ink remains while turning pages, clears when leaving demo mode or switching documents, and is never written to the PDF.
