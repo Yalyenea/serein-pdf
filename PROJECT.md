@@ -86,9 +86,9 @@ flowchart LR
 | 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
 | PDF 热重载 | `DocumentStore` 监听已打开 PDF 文件及其父目录;原地写入或原子替换后只重载 clean sessions,优先恢复 PDFView 实时页码;dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
-| 批注存储 | Serein 多行 highlight / underline / strikeout 仅以 UUID `userName` 组成 group 并共享 comment;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
+| 批注存储 | Serein 多行 highlight / underline / strikeout 仅以 UUID `userName` 组成 group,共享评论仅写入首条批注的标准 `/Contents`,显示一个评论图标;打开旧文件时合并组内相同评论,保留不同内容及外部批注;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 批注摘要 | 只使用 PDFKit 文本层生成 snippet；无文本层时显示 `Untitled Highlight`，不做 OCR / 页面栅格化 |
-| 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);正文 / `Cmd+Option+M` / 右键用批注旁的无边框 `NSPanel` 编辑,不强制打开右栏;面板采用 6pt 圆角、紧凑底边距,编辑区随内容增高并在上限后滚动,面板及预览卡随主题刷新;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
+| 评论交互 | 有评论的高亮 hover 延迟显示轻量预览卡(无评论不弹;右栏同条已选中时抑制);单击评论图标 / 双击高亮 / `Cmd+Option+M` / 右键用批注旁的无边框 `NSPanel` 编辑,不强制打开右栏;高亮及评论图标的点击与右键由应用接管,不打开 PDFKit 黄色评论编辑器;面板采用 6pt 圆角、紧凑底边距,编辑区随内容增高并在上限后滚动,面板及预览卡随主题刷新;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
 | 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF;`serein://open?file=<encoded file URL>` 仅接收单个本地可读 PDF 并复用同一打开管线 |
 | Codex 交接 | `Ctrl+Cmd+C` 按上下文发送:有选区时通过 `codex://new?prompt=…` 预填新任务,无选区时导出当前页临时 PNG;`Ctrl+Cmd+Shift+C` 使用原 PDF;文件通过 macOS 打开事件交给 `com.openai.codex`;Settings 可关闭整个集成;不传 workspace `path`,Codex 客户端可能自行把文件父目录作为 workspace |
@@ -176,7 +176,7 @@ flowchart LR
 - `Ctrl+D` / `Ctrl+U`:下滚 / 上滚半页;非连续模式先走完当前 PDF,到边界才切换连续阅读组中的相邻 PDF
 - `G` / `g`:跳到真实文末页底 / 文首页顶
 - `Cmd+Option+G`:跳转到页 N(越界给轻量提示)
-- `Cmd+[` / `Cmd+]`:按 pane 保存 `sessionID + ReadingPosition` 的精确历史;支持同页不同坐标、跨 PDF Outline / Search 与反复后退 / 前进;PDF 内链单击预览目标页,Option-click 或预览中 Jump 才居中跳转并入栈,普通滚动和顺序翻页不入栈
+- `Cmd+[` / `Cmd+]`:按 pane 保存 `sessionID + ReadingPosition` 的精确历史;支持同页不同坐标、跨 PDF Outline / Search 与反复后退 / 前进;PDF 内链单击预览目标页,预览使用 6pt 圆角无标题栏面板、铺满宽度,右上角仅保留跳转图标;预览副本不显示评论入口,源批注保持不变;Option-click 或预览中跳转图标才居中跳转并入栈,普通滚动和顺序翻页不入栈
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar(有 PDF 选中文本时立即带入搜索)/ 下一 / 上一 匹配
 - Find bar 内 `Aa` / `Word`:切换区分大小写 / 全词匹配;`↑` / `↓` / `Enter` 选择上一 / 下一结果 / 首次提交搜索;同一 query + scope + options 连续 `Enter` 继续跳转
 - `F`:开启 / 关闭鼠标跟随阅读聚焦;遮罩按真实 PDF 页宽定位且不阻断选择、链接、拖拽与滚动

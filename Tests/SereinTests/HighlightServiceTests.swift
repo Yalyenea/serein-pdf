@@ -276,7 +276,7 @@ final class HighlightServiceTests: XCTestCase {
 
         XCTAssertTrue(HighlightService.updateComment("Shared", for: group.records))
         XCTAssertEqual(first.contents, "Shared")
-        XCTAssertEqual(second.contents, "Shared")
+        XCTAssertNil(second.contents)
 
         let removed = HighlightService.removeHighlightGroup(containing: first, in: document)
         XCTAssertEqual(removed.count, 2)
@@ -303,6 +303,49 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(group.records.count, 2)
         XCTAssertTrue(group.records.contains { $0.annotation === first })
         XCTAssertTrue(group.records.contains { $0.annotation === second })
+    }
+
+    func testMultilineCommentHasOneOwnerAndSurvivesSaveAndRemoval() throws {
+        let document = TestPDFFixtures.makeBlankDocument(pageCount: 2)
+        let groupID = UUID().uuidString
+        let first = makeHighlight(on: try XCTUnwrap(document.page(at: 0)), bounds: NSRect(x: 24, y: 100, width: 80, height: 18))
+        let second = makeHighlight(on: try XCTUnwrap(document.page(at: 1)), bounds: NSRect(x: 24, y: 70, width: 80, height: 18))
+        first.userName = groupID
+        second.userName = groupID
+        let records = try XCTUnwrap(HighlightService.buildHighlightGroups(in: document).first).records
+
+        XCTAssertTrue(HighlightService.updateComment("跨页评论", for: records.reversed()))
+        XCTAssertEqual(first.contents, "跨页评论")
+        XCTAssertNil(second.contents)
+        XCTAssertFalse(HighlightService.updateComment("跨页评论", for: records))
+
+        let saved = try XCTUnwrap(PDFDocument(data: try XCTUnwrap(document.dataRepresentation())))
+        let restored = try XCTUnwrap(HighlightService.buildHighlightGroups(in: saved).first)
+        XCTAssertEqual(restored.comment, "跨页评论")
+        XCTAssertEqual(restored.records.compactMap(\.annotation.contents), ["跨页评论"])
+        XCTAssertEqual(restored.records.count, 2)
+        XCTAssertTrue(HighlightService.updateComment("", for: restored.records))
+        XCTAssertTrue(restored.records.compactMap(\.annotation.contents).isEmpty)
+    }
+
+    func testLegacyCommentsConsolidateWithoutMergingExternalOrDifferentNotes() throws {
+        let document = TestPDFFixtures.makeBlankDocument(pageCount: 1)
+        let page = try XCTUnwrap(document.page(at: 0))
+        let groupID = UUID().uuidString
+        for (index, comment) in ["Same", "Same", "Distinct"].enumerated() {
+            let annotation = makeHighlight(on: page, bounds: NSRect(x: 24, y: 200 - index * 30, width: 80, height: 18))
+            annotation.userName = groupID
+            annotation.contents = comment
+        }
+        let external = makeHighlight(on: page, bounds: NSRect(x: 24, y: 40, width: 80, height: 18))
+        external.userName = "External author"
+        external.contents = "Same"
+
+        HighlightService.consolidateComments(in: document)
+
+        XCTAssertEqual(page.annotations.compactMap(\.contents), ["Same", "Distinct", "Same"])
+        XCTAssertEqual(HighlightService.buildHighlightGroups(in: document).count, 2)
+        XCTAssertEqual(page.annotations.count, 4)
     }
 
     func testBuildHighlightGroupContainingExternalAnnotationOnlyUsesHitAnnotation() throws {

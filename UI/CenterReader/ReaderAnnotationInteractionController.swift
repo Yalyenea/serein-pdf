@@ -188,8 +188,10 @@ final class ReaderAnnotationInteractionController: NSObject {
     }
 
     func activateAnnotation(at event: NSEvent) -> Bool {
-        guard let group = annotationHit(at: event.locationInWindow)?.group else { return false }
-        onRevealRequested?(group)
+        guard let hit = annotationHit(at: event.locationInWindow),
+              event.clickCount == 2 || hit.isCommentIcon else { return false }
+        onFocusRequested?()
+        presentCommentEditor(for: hit.group)
         return true
     }
 
@@ -324,11 +326,12 @@ final class ReaderAnnotationInteractionController: NSObject {
               page.document === document else { return nil }
 
         let pointOnPage = pdfView.convert(pointInPDF, to: page)
-        guard let annotation = HighlightService.highlightAnnotation(at: pointOnPage, on: page),
+        let commentAnnotation = HighlightService.commentAnnotation(at: pointOnPage, on: page)
+        guard let annotation = commentAnnotation ?? HighlightService.highlightAnnotation(at: pointOnPage, on: page),
               let group = documentStore.annotationGroup(containing: annotation, for: session.id) else {
             return nil
         }
-        return HighlightAnnotationHit(annotation: annotation, page: page, group: group)
+        return HighlightAnnotationHit(annotation: annotation, page: page, group: group, isCommentIcon: commentAnnotation != nil)
     }
 
     private func positionPreviewIfNeeded() {
@@ -475,6 +478,7 @@ private struct HighlightAnnotationHit {
     let annotation: PDFAnnotation
     let page: PDFPage
     let group: DocumentHighlightGroup
+    let isCommentIcon: Bool
 }
 
 private final class AnnotationFocusPulseView: NSView {

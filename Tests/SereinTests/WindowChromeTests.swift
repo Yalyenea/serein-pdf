@@ -3739,6 +3739,7 @@ private func assertInternalLinkNavigationStaysCentered(in mode: ReaderDisplayMod
     let fixture = try makeTemporaryPDFWithInternalLink(named: "internal-link-\(mode.rawValue)")
     let session = try store.open(documentAt: fixture.url)
     store.setDisplayMode(mode, for: session.id)
+    prepareMainWindowForLayoutTests(controller)
     flushLayout(controller.window)
 
     let window = try #require(controller.window)

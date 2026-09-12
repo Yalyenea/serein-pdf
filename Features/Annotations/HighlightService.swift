@@ -157,6 +157,37 @@ enum HighlightService {
         }
     }
 
+    // PDFKit positions markup comment icons just beyond the upper-right corner
+    // in page space. Include the gap so clicks cannot reach its note editor.
+    static func commentIconBounds(for annotation: PDFAnnotation) -> NSRect {
+        NSRect(x: annotation.bounds.maxX, y: annotation.bounds.maxY, width: 20, height: 20)
+    }
+
+    static func commentAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
+        page.annotations.last {
+            isMarkupAnnotation($0)
+                && $0.contents?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                && commentIconBounds(for: $0).contains(pointOnPage)
+        }
+    }
+
+    /// Older Serein files repeated the same comment on every line. Keep one
+    /// standard /Contents entry without discarding distinct externally edited notes.
+    static func consolidateComments(in document: PDFDocument) {
+        var commentsByGroup: [String: Set<String>] = [:]
+        for pageIndex in 0..<document.pageCount {
+            guard let page = document.page(at: pageIndex) else { continue }
+            for annotation in page.annotations.sorted(by: annotationSortOrder) {
+                guard isMarkupAnnotation(annotation),
+                      let groupID = sereinGroupID(for: annotation),
+                      let comment = annotation.contents, comment.isEmpty == false else { continue }
+                if commentsByGroup[groupID, default: []].insert(comment).inserted == false {
+                    annotation.contents = nil
+                }
+            }
+        }
+    }
+
     /// Removes the given annotation plus any Serein siblings sharing its UUID group id.
     /// External annotations use their own `/NM` identity and are removed individually.
     /// Returns the removed annotations with their original page indexes, in page order.
@@ -208,8 +239,10 @@ enum HighlightService {
             : comment
         var didChange = false
 
-        for record in records where record.annotation.contents != normalizedComment {
-            record.annotation.contents = normalizedComment
+        for (index, record) in records.sorted(by: recordSortOrder).enumerated() {
+            let contents = index == 0 ? normalizedComment : nil
+            guard record.annotation.contents != contents else { continue }
+            record.annotation.contents = contents
             didChange = true
         }
 
