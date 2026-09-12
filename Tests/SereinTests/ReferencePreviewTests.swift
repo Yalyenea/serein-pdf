@@ -134,6 +134,18 @@ final class ReferencePreviewTests: XCTestCase {
         sourceWidget.widgetStringValue = "Original value"
         sourceWidget.isReadOnly = false
         fixture.targetPage.addAnnotation(sourceWidget)
+        let sourceHighlight = PDFAnnotation(
+            bounds: NSRect(x: 100, y: 480, width: 120, height: 20),
+            forType: .highlight, withProperties: nil
+        )
+        let sourcePopup = PDFAnnotation(
+            bounds: NSRect(x: 240, y: 480, width: 180, height: 100),
+            forType: .popup, withProperties: nil
+        )
+        sourceHighlight.contents = "Keep the original comment"
+        sourceHighlight.popup = sourcePopup
+        fixture.targetPage.addAnnotation(sourceHighlight)
+        fixture.targetPage.addAnnotation(sourcePopup)
         let preview = try makePreview(destination: fixture.destination, document: document)
         defer { preview.window.close() }
 
@@ -152,6 +164,13 @@ final class ReferencePreviewTests: XCTestCase {
         XCTAssertTrue(copiedWidget.isReadOnly)
         XCTAssertEqual(copiedWidget.widgetStringValue, "Original value")
         XCTAssertFalse(sourceWidget.isReadOnly)
+        let copiedHighlight = try XCTUnwrap(previewPage.annotations.first { $0.type == "Highlight" })
+        XCTAssertTrue(copiedHighlight.contents?.isEmpty ?? true)
+        XCTAssertNil(copiedHighlight.popup)
+        XCTAssertFalse(previewPage.annotations.contains { $0.type == "Popup" })
+        XCTAssertEqual(sourceHighlight.contents, "Keep the original comment")
+        XCTAssertTrue(sourceHighlight.popup === sourcePopup)
+        XCTAssertTrue(sourcePopup.page === fixture.targetPage)
 
         copiedWidget.widgetStringValue = "Preview-only change"
 
@@ -175,9 +194,12 @@ final class ReferencePreviewTests: XCTestCase {
             defer { preview.window.close() }
             let page = try XCTUnwrap(preview.pdfView.currentPage)
             let targetInPreview = preview.pdfView.convert(point, from: page)
+            let pageInPreview = preview.pdfView.convert(cropBox, from: page)
 
             XCTAssertEqual(page.rotation, rotation)
             XCTAssertEqual(page.bounds(for: .cropBox), cropBox)
+            XCTAssertEqual(pageInPreview.width, preview.pdfView.bounds.width, accuracy: 1)
+            XCTAssertEqual(pageInPreview.minX, preview.pdfView.bounds.minX, accuracy: 1)
             XCTAssertTrue(
                 preview.pdfView.visibleRect.insetBy(dx: -1, dy: -1).contains(targetInPreview),
                 "Target \(targetInPreview) is outside \(preview.pdfView.visibleRect) at rotation \(rotation)"

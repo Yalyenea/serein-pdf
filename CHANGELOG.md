@@ -5,10 +5,13 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Annotations
+- Keep one comment icon per multiline highlight by storing the shared comment on its first annotation. Consolidate identical comments in older Serein groups on open while preserving distinct notes and external annotations.
+- Clicking a comment icon or double-clicking a highlight opens Serein's comment panel. Handle annotation clicks and context menus without opening PDFKit's yellow note editor.
 - Comment editing uses a compact panel with 6pt corners and tighter bottom spacing. Remove the empty snippet row and nested input background; let the editor grow with its contents and scroll once it reaches its height limit.
 - Refresh open comment panels and hover previews when the theme changes, including the highlight color strip and editor controls.
 
 ### Reading
+- Reference previews fill the available width in a 6pt-corner panel, with no header and a single jump icon. Suppress comment popups in the copied preview page while preserving the source annotations.
 - Clicking an internal PDF link opens a pane-local preview of the destination. Option-click, or Jump in the preview, still performs the centered navigation and records history.
 - Add temporary pen (`P`), laser (`R`), and pointer (`V`) tools to demo mode (`Cmd+L`), with a bottom toolbar that can stay pinned or auto-hide. `Esc` returns to the pointer before exiting demo mode.
 - Keep presentation ink attached to its page and separate in each window. `Cmd+Z` undoes the current page's last stroke, and `E` clears that page. Ink remains while turning pages, clears when leaving demo mode or switching documents, and is never written to the PDF.

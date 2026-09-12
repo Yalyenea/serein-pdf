@@ -292,10 +292,33 @@ final class ReaderPDFView: PDFView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        Self.mergeContextMenus(
-            custom: contextMenuProvider?(event),
+        let custom = contextMenuProvider?(event)
+        if managedAnnotation(at: convert(event.locationInWindow, from: nil)) != nil {
+            return custom
+        }
+        return Self.mergeContextMenus(
+            custom: custom,
             native: super.menu(for: event)
         )
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let event = NSApp.currentEvent,
+           event.type != .leftMouseDown, event.type != .rightMouseDown {
+            return super.hitTest(point)
+        }
+        let localPoint = convert(point, from: superview)
+        if bounds.contains(localPoint), managedAnnotation(at: localPoint) != nil {
+            return self
+        }
+        return super.hitTest(point)
+    }
+
+    private func managedAnnotation(at point: NSPoint) -> PDFAnnotation? {
+        guard let page = page(for: point, nearest: false) else { return nil }
+        let pagePoint = convert(point, to: page)
+        return HighlightService.commentAnnotation(at: pagePoint, on: page)
+            ?? HighlightService.highlightAnnotation(at: pagePoint, on: page)
     }
 
     static func mergeContextMenus(custom: NSMenu?, native: NSMenu?) -> NSMenu? {
@@ -322,8 +345,7 @@ final class ReaderPDFView: PDFView {
                 return
             }
         }
-        if event.clickCount == 2,
-           onAnnotationActivationRequested?(event) == true {
+        if onAnnotationActivationRequested?(event) == true {
             return
         }
         super.mouseDown(with: event)
@@ -2183,6 +2205,11 @@ final class ReaderViewController: NSViewController {
         }
         if syncDisplayedStateWithoutRefreshIfPossible() == false {
             refreshDisplayedDocument()
+        }
+        if notification.documentStoreChange.contains(.annotations) {
+            for page in pdfView.visiblePages {
+                pdfView.annotationsChanged(on: page)
+            }
         }
         // Page/zoom writeback does not change find results; skip search recompute.
         if notification.isOnlyReadingPositionChange == false {

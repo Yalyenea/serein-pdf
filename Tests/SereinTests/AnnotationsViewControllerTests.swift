@@ -495,7 +495,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertNotEqual(previousMode, .annotations)
     }
 
-    func testDoubleClickHighlightRevealsAnnotationsSidebar() throws {
+    func testDoubleClickHighlightOpensOwnCommentPanel() throws {
         let store = makeStore()
         let url = try TestPDFFixtures.makeSearchablePDF(
             named: "reader-reveal-annotation",
@@ -540,9 +540,10 @@ final class AnnotationsViewControllerTests: XCTestCase {
 
         reader.pdfView.mouseDown(with: event)
 
-        XCTAssertTrue(store.isRightSidebarVisible(in: store.defaultWindowID))
-        XCTAssertEqual(store.rightSidebarMode(in: store.defaultWindowID), .annotations)
-        XCTAssertEqual(split.rightSidebarViewController.selectedAnnotationGroupID, group.groupID)
+        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+        let panel = try XCTUnwrap(windowController.window?.childWindows?.compactMap { $0 as? AnnotationCommentPanel }.first)
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertEqual(store.annotationGroups(for: session.id).first?.groupID, group.groupID)
     }
 
     func testSidebarContextMenuCanRecolorAndDelete() throws {

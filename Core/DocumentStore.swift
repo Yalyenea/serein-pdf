@@ -996,6 +996,8 @@ final class DocumentStore {
             throw DocumentStoreError.unreadableDocument(url)
         }
 
+        HighlightService.consolidateComments(in: document)
+
         pdfDocumentCache[sessionID] = document
         touchPDFDocument(sessionID)
         sessions[sessionIndex].pageCount = document.pageCount

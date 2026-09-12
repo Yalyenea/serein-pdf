@@ -3,10 +3,10 @@ import PDFKit
 
 /// A pane-local preview. Only the explicit jump enters the reader's history.
 @MainActor
-final class ReaderReferencePreviewController: NSObject, NSPopoverDelegate {
+final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
     var onNavigate: ((PDFDestination) -> Void)?
     private(set) var content: ReferencePreviewViewController?
-    private var popover: NSPopover?
+    private var panel: ReferencePreviewPanel?
 
     @discardableResult
     func show(destination: PDFDestination, anchor: NSRect, in source: PDFView) -> Bool {
@@ -27,35 +27,78 @@ final class ReaderReferencePreviewController: NSObject, NSPopoverDelegate {
             width: min(580, max(280, available.width - 80)),
             height: min(360, max(200, available.height - 120))
         )
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = false
-        popover.delegate = self
-        popover.contentViewController = content
+        guard let owner = source.window else { return false }
+        let panel = ReferencePreviewPanel(
+            contentRect: NSRect(origin: .zero, size: content.preferredContentSize),
+            styleMask: .borderless, backing: .buffered, defer: false
+        )
+        panel.isReleasedWhenClosed = false
+        panel.isRestorable = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.hidesOnDeactivate = true
+        panel.collectionBehavior = .fullScreenAuxiliary
+        panel.appearance = source.effectiveAppearance
+        panel.contentViewController = content
+        panel.delegate = self
+        let screenFrame = (owner.screen?.visibleFrame ?? owner.frame).insetBy(dx: 8, dy: 8)
+        let anchorFrame = owner.convertToScreen(source.convert(anchor.intersection(source.visibleRect), to: nil))
+        let size = content.preferredContentSize
+        let y = anchorFrame.maxY + 6 + size.height <= screenFrame.maxY
+            ? anchorFrame.maxY + 6 : anchorFrame.minY - 6 - size.height
+        panel.setFrameOrigin(NSPoint(
+            x: min(max(anchorFrame.midX - size.width / 2, screenFrame.minX), screenFrame.maxX - size.width),
+            y: min(max(y, screenFrame.minY), screenFrame.maxY - size.height)
+        ))
         self.content = content
-        self.popover = popover
-        popover.show(relativeTo: anchor.intersection(source.visibleRect), of: source, preferredEdge: .minY)
+        self.panel = panel
+        owner.addChildWindow(panel, ordered: .above)
+        NotificationCenter.default.addObserver(self, selector: #selector(dismissPreview), name: NSWindow.willCloseNotification, object: owner)
+        NotificationCenter.default.addObserver(self, selector: #selector(dismissPreview), name: NSApplication.didResignActiveNotification, object: NSApp)
+        panel.makeKeyAndOrderFront(nil)
         return true
     }
 
     func close() {
-        popover?.close()
-        popover = nil
+        guard let panel else { return }
+        self.panel = nil
         content = nil
+        NotificationCenter.default.removeObserver(self)
+        let owner = panel.parent
+        let restoreFocus = panel.isKeyWindow
+        panel.delegate = nil
+        owner?.removeChildWindow(panel)
+        panel.close()
+        if restoreFocus, owner?.isVisible == true { owner?.makeKey() }
     }
 
-    func popoverDidClose(_ notification: Notification) {
-        popover = nil
-        content = nil
-    }
+    func windowDidResignKey(_ notification: Notification) { close() }
+    @objc private func dismissPreview(_ notification: Notification) { close() }
 
     func applyTheme() {
+        panel?.appearance = panel?.parent?.effectiveAppearance
         content?.applyTheme()
     }
 }
 
+private final class ReferencePreviewPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 /// Keep preview interaction limited to reading, selection, and copying.
 private final class ReferencePDFView: PDFView {
+    var onCancel: (() -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onCancel?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if let page = page(for: point, nearest: false),
@@ -78,7 +121,7 @@ final class ReferencePreviewViewController: NSViewController {
     private let previewPage: PDFPage
     private let pageTitle: String
     private let preview = ReferencePDFView()
-    private let pageLabel = NSTextField(labelWithString: "")
+    private let jump = NSButton()
     private var hasPositioned = false
 
     init?(destination: PDFDestination, document: PDFDocument) {
@@ -89,8 +132,16 @@ final class ReferencePreviewViewController: NSViewController {
         previewPage = copy
         previewDocument = PDFDocument()
         previewDocument.insert(copy, at: 0)
-        for annotation in copy.annotations where annotation.type == "Widget" {
-            annotation.isReadOnly = true
+        for annotation in copy.annotations {
+            if annotation.type == "Widget" {
+                annotation.isReadOnly = true
+            } else if HighlightService.isMarkupAnnotation(annotation) {
+                annotation.contents = nil
+                if let popup = annotation.popup {
+                    copy.removeAnnotation(popup)
+                    annotation.popup = nil
+                }
+            }
         }
         super.init(nibName: nil, bundle: nil)
     }
@@ -101,37 +152,37 @@ final class ReferencePreviewViewController: NSViewController {
     override func loadView() {
         view = NSView(frame: NSRect(origin: .zero, size: preferredContentSize))
         view.wantsLayer = true
-        pageLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        pageLabel.stringValue = "Reference · Page \(pageTitle)"
-        let jump = NSButton(title: "Jump to Reference", target: self, action: #selector(jumpToReference))
-        jump.bezelStyle = .inline
-        jump.font = .systemFont(ofSize: 11)
-        jump.toolTip = "Option-click a reference to jump directly"
-        let close = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close preview")!, target: self, action: #selector(closePreview))
-        close.isBordered = false
-        close.keyEquivalent = "\u{1b}"
-        close.keyEquivalentModifierMask = []
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let header = NSStackView(views: [pageLabel, spacer, jump, close])
-        header.spacing = 10
-        header.alignment = .centerY
+        view.layer?.cornerRadius = 6
+        view.layer?.masksToBounds = true
+        view.setAccessibilityLabel("Reference · Page \(pageTitle)")
+        jump.title = ""
+        jump.image = NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: "Jump to reference")
+        jump.setAccessibilityLabel("Jump to reference · Page \(pageTitle)")
+        jump.imagePosition = .imageOnly
+        jump.isBordered = false
+        jump.target = self
+        jump.action = #selector(jumpToReference)
+        jump.toolTip = "Jump to reference · Page \(pageTitle) (Option-click a link to jump directly)"
+        jump.wantsLayer = true
+        jump.layer?.cornerRadius = 4
+        jump.focusRingType = .none
         preview.displayMode = .singlePage
         preview.displayBox = .cropBox
         preview.displaysPageBreaks = false
+        preview.pageBreakMargins = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         preview.autoScales = false
         preview.document = previewDocument
-        for child in [header, preview] {
+        preview.onCancel = { [weak self] in self?.onClose?() }
+        for child in [preview, jump] {
             child.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(child)
         }
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
-            header.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
-            header.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
-            header.heightAnchor.constraint(equalToConstant: 22),
-            close.widthAnchor.constraint(equalToConstant: 18),
-            preview.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 7),
+            jump.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
+            jump.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
+            jump.widthAnchor.constraint(equalToConstant: 24),
+            jump.heightAnchor.constraint(equalToConstant: 24),
+            preview.topAnchor.constraint(equalTo: view.topAnchor),
             preview.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             preview.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             preview.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -142,6 +193,7 @@ final class ReferencePreviewViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         positionReference()
+        view.window?.makeFirstResponder(preview)
     }
 
     func positionReference() {
@@ -149,13 +201,19 @@ final class ReferencePreviewViewController: NSViewController {
         let page = previewPage
         view.layoutSubtreeIfNeeded()
         guard preview.bounds.width > 24, preview.bounds.height > 24 else { return }
-        hasPositioned = true
         preview.go(to: page)
         preview.layoutDocumentView()
+        guard let scrollView = preview.documentView?.enclosingScrollView else { return }
+        scrollView.scrollerStyle = .overlay
+        scrollView.hasHorizontalScroller = false
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        scrollView.tile()
         let pageBounds = page.bounds(for: .cropBox)
         let width = preview.convert(pageBounds, from: page).width
         guard width > 0 else { return }
-        preview.scaleFactor *= (preview.bounds.width - 24) / width
+        hasPositioned = true
+        let viewport = scrollView.contentView.bounds.size
+        preview.scaleFactor *= viewport.width / width
         preview.layoutDocumentView()
 
         // PDF null coordinates mean the page edge. Work in view coordinates so
@@ -166,7 +224,7 @@ final class ReferencePreviewViewController: NSViewController {
         )
         let target = preview.convert(point, from: page)
         let pageRect = preview.convert(pageBounds, from: page)
-        let height = min(preview.bounds.height - 16, pageRect.height)
+        let height = min(viewport.height, pageRect.height)
         let desiredY = preview.isFlipped ? target.y - 24 : target.y - height + 24
         let rect = NSRect(
             x: pageRect.minX,
@@ -184,15 +242,15 @@ final class ReferencePreviewViewController: NSViewController {
 
     func applyTheme() {
         guard isViewLoaded else { return }
-        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = NightModeStyle.readerBackdropColor.cgColor
-            pageLabel.textColor = NightModeStyle.secondaryTextColor
+            jump.contentTintColor = NightModeStyle.secondaryTextColor
+            jump.layer?.backgroundColor = NightModeStyle.paneBackgroundColor.withAlphaComponent(0.92).cgColor
             preview.backgroundColor = NightModeStyle.readerBackdropColor
-            preview.contentFilters = NightModeStyle.makePDFContentFilters(for: NSApp.effectiveAppearance)
+            preview.contentFilters = NightModeStyle.makePDFContentFilters(for: view.effectiveAppearance)
         }
     }
 
     override func cancelOperation(_ sender: Any?) { onClose?() }
     @objc private func jumpToReference() { onNavigate?() }
-    @objc private func closePreview() { onClose?() }
 }
