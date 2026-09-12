@@ -393,13 +393,6 @@ final class RightSidebarViewController: NSViewController {
         documentStore.setRightSidebarMode(newMode, in: windowID)
     }
 
-    func revealAnnotation(_ groupID: String, focusEditor: Bool) {
-        loadViewIfNeeded()
-        setMode(.annotations)
-        applyMode()
-        annotationsViewController.reveal(groupID: groupID, focusEditor: focusEditor)
-    }
-
     var selectedAnnotationGroupID: String? {
         annotationsViewController.isViewLoaded ? annotationsViewController.selectedGroupID : nil
     }

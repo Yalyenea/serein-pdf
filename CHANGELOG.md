@@ -16,6 +16,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Refresh open comment panels and hover previews when the theme changes, including the highlight color strip and editor controls.
 
 ### Reading
+- Preserve the viewport and manual zoom when zoom commands or new highlights arrive before pending reading-position updates have been written back.
 - Reference previews fill the available width in a 6pt-corner panel without a header. Follow internal links in the same preview, with Back/Forward arrows at the top left and Jump at the top right. Preview history restores scroll and zoom; following a new link after going back replaces the forward branch. Only Jump navigates the main reader, using the current preview target. Suppress comment popups in each copied page while preserving the source annotations.
 - Clicking an internal PDF link opens a pane-local preview of the destination. Option-click, or Jump in the preview, still performs the centered navigation and records history.
 - Add temporary pen (`P`), laser (`R`), and pointer (`V`) tools to demo mode (`Cmd+L`), with a bottom toolbar that can stay pinned or auto-hide. `Esc` returns to the pointer before exiting demo mode.
@@ -27,6 +28,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Detach Pages thumbnails while their sidebar is hidden or showing another mode. Cancelling queued overview renders releases their PDFs and completed bitmaps immediately.
 - Remove pointer tracking while reading focus is disabled and reuse its drawing paths when geometry is unchanged.
 - Skip rebuilding reading-history LRU order when saving progress for the current most-recent document.
+
+### Maintenance
+- Remove unused search and installer paths, obsolete views and callbacks, duplicate session state, and unused theme modes. Consolidate palette state updates and legacy session decoding.
+- Share test fixtures and view queries, merge duplicate cases, and cover legacy session JSON decoding. Dispatch button actions directly in window tests to avoid premature test-runner exits caused by AppKit click animations.
 
 ## [0.6.2] - 2026-08-30
 

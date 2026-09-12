@@ -53,8 +53,9 @@ dark_theme = "rose_pine_moon"   # 当前: normal | rose_pine_moon
 | 位置 | 职责 |
 | --- | --- |
 | `Core/AppConfiguration.swift` | `AppearanceMode`、`LightTheme`、`DarkTheme` 枚举与 TOML 读写 |
-| `Features/Theme/NightModeStyle.swift` | 真正的主题引擎：`ThemeDescriptor`、`PDFStyle`、CIColorMatrix、dynamic colors |
-| `Features/Theme/ThemeManager.swift` | 薄包装（阅读状态相关） |
+| `Features/Theme/ThemeRegistry.swift` | `ThemeDescriptor`、`ThemePDFStyle` 与主题定义 |
+| `Features/Theme/NightModeStyle.swift` | CIColorMatrix 与主题颜色入口 |
+| `Features/Theme/ThemeManager.swift` | 主题快照与 dynamic colors |
 | `Features/Annotations/HighlightColor.swift` | `HighlightPalette` × 粉黄绿 手写 sRGB |
 | `App/SettingsWindowController.swift` | 主题 popup UI |
 | `App/AppDelegate.swift` | `switchCurrentTheme`、菜单 |
@@ -66,7 +67,7 @@ pageBackground / pageForeground
 primaryText / secondaryText / tertiaryText
 readerBackdrop / splitBackground / paneBackground
 chromeDivider / selectedChromeBackground / chromeStroke
-usesOpaqueSidebar / prefersFlatPDFChrome
+prefersFlatPDFChrome
 highlightPalette
 pdfStyle
 ```
@@ -76,10 +77,8 @@ pdfStyle
 | 策略 | 用途 | 典型主题 |
 | --- | --- | --- |
 | `.none` | 不滤镜 | Light `Normal` |
-| `.classicInvert` | 经典反色（历史路径） | 视需要 |
 | `.paper(background)` | 只替白纸，保留正文/彩图色 | Rose Pine Dawn |
-| `.darkPaper(bg, fg, accentPreservation)` | 暗纸端点映射 | Rose Pine Moon |
-| `.remap(bg, fg, accentPreservation, backgroundLuminance)` | 更通用的亮度轴重映射 | Dark `Normal` |
+| `.darkPaper(bg, fg, accentPreservation)` | 暗纸端点映射 | Dark `Normal`、Rose Pine Moon |
 
 **结论：** 多主题的难点不在菜单，而在为每个 variant 选对 `PDFStyle` 并调好端点色与 `accentPreservation`。
 
@@ -157,7 +156,6 @@ Rosewash / Codex 已有的 6 色表可直接作为 `base/surface/overlay/muted/t
 | chromeDivider | `overlay` 或略深 UI 色 |
 | selectedChromeBackground | `overlay` @ 0.4–0.6 alpha 或实色 overlay |
 | chromeStroke | 介于 overlay 与 muted |
-| usesOpaqueSidebar | `true` |
 | prefersFlatPDFChrome | `true` |
 | pdfStyle | `.paper(background: surface)` |
 
@@ -170,11 +168,10 @@ Rosewash / Codex 已有的 6 色表可直接作为 `base/surface/overlay/muted/t
 | 壳层底 | `base` |
 | chromeDivider / selected | `overlay` |
 | chromeStroke | `muted` |
-| usesOpaqueSidebar | `true` |
 | prefersFlatPDFChrome | `true` |
-| pdfStyle | `.darkPaper(bg: surface, fg: text, accentPreservation: 0.75–0.90)` 或 `.remap(...)`（按观感二选一，默认 darkPaper） |
+| pdfStyle | `.darkPaper(bg: surface, fg: text, accentPreservation: 0.75–0.90)` |
 
-**Normal：** 保持现有手写 descriptor（系统 label 色、light `.none`、dark `.remap`），不走 token 推导。
+**Normal：** 保持现有手写 descriptor（系统 label 色、light `.none`、dark `.darkPaper`），不走 token 推导。
 
 允许 variant 级 **optional override**（仅当推导不达标时手写个别字段），避免每个主题整份 descriptor 拷贝。
 

@@ -27,9 +27,9 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             defer: false
         )
 
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifiers: []), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "2", modifiers: []), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "3", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifierFlags: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "2", modifierFlags: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "3", modifierFlags: []), in: window))
         XCTAssertEqual(
             triggeredCommands,
             [.highlightColorPink, .highlightColorYellow, .highlightColorGreen]
@@ -59,10 +59,10 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             defer: false
         )
 
-        XCTAssertFalse(disabledController.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifiers: []), in: window))
+        XCTAssertFalse(disabledController.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifierFlags: []), in: window))
         XCTAssertFalse(
             enabledController.handleShortcutEvent(
-                for: makeKeyEvent(characters: "1", modifiers: [.command]),
+                for: makeKeyEvent(characters: "1", modifierFlags: [.command]),
                 in: window
             )
         )
@@ -88,7 +88,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         window.contentView = textView
         window.makeFirstResponder(textView)
 
-        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifiers: []), in: window))
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "1", modifierFlags: []), in: window))
         XCTAssertFalse(didTrigger)
     }
 
@@ -103,7 +103,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-        let event = makeKeyEvent(characters: "i", modifiers: [])
+        let event = makeKeyEvent(characters: "i", modifierFlags: [])
 
         XCTAssertTrue(controller.handlePlainShortcut(for: event, in: window))
         XCTAssertEqual(triggeredCommands, [.toggleNightMode])
@@ -128,7 +128,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
 
         XCTAssertTrue(
             controller.handlePlainShortcut(
-                for: makeKeyEvent(characters: "f", modifiers: []),
+                for: makeKeyEvent(characters: "f", modifierFlags: []),
                 in: window
             )
         )
@@ -154,7 +154,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
 
         XCTAssertTrue(
             controller.handlePlainShortcut(
-                for: makeKeyEvent(characters: "l", modifiers: []),
+                for: makeKeyEvent(characters: "l", modifierFlags: []),
                 in: window
             )
         )
@@ -166,7 +166,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         let event = makeKeyEvent(
             characters: "ƒ",
             charactersIgnoringModifiers: "f",
-            modifiers: [.option]
+            modifierFlags: [.option]
         )
 
         XCTAssertTrue(shortcut.matches(event: event))
@@ -186,7 +186,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         let textView = NSTextView()
         window.contentView = textView
         window.makeFirstResponder(textView)
-        let event = makeKeyEvent(characters: "a", modifiers: [])
+        let event = makeKeyEvent(characters: "a", modifierFlags: [])
 
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
         XCTAssertFalse(didTrigger)
@@ -200,7 +200,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             handlerProvider: { [:] }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-        let event = makeKeyEvent(characters: "f", modifiers: [])
+        let event = makeKeyEvent(characters: "f", modifierFlags: [])
 
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
     }
@@ -216,7 +216,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-        let event = makeKeyEvent(characters: "c", modifiers: [])
+        let event = makeKeyEvent(characters: "c", modifierFlags: [])
 
         XCTAssertTrue(controller.handlePlainShortcut(for: event, in: window))
         XCTAssertEqual(triggeredCommands, [.toggleDisplayModeContinuity])
@@ -231,7 +231,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-        let event = makeKeyEvent(characters: "c", modifiers: [])
+        let event = makeKeyEvent(characters: "c", modifierFlags: [])
 
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
         XCTAssertFalse(didTrigger)
@@ -254,10 +254,10 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             defer: false
         )
 
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "h", modifiers: []), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F702}", modifiers: []), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "l", modifiers: []), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F703}", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "h", modifierFlags: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F702}", modifierFlags: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "l", modifierFlags: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F703}", modifierFlags: []), in: window))
         XCTAssertEqual(directions, [-1, -1, 1, 1])
     }
 
@@ -280,7 +280,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
 
         XCTAssertFalse(
             controller.handleShortcutEvent(
-                for: makeKeyEvent(characters: "h", modifiers: [.command]),
+                for: makeKeyEvent(characters: "h", modifierFlags: [.command]),
                 in: window
             )
         )
@@ -305,7 +305,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             defer: false
         )
 
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "l", modifiers: []), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "l", modifierFlags: []), in: window))
         XCTAssertTrue(didTogglePanLock)
     }
 
@@ -316,8 +316,8 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
 
-        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifiers: [.command]), in: window))
-        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifierFlags: [.command]), in: window))
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifierFlags: [.command]), in: window))
     }
 
     func testReaderWindowChecksShortcutHandlerBeforeMenuKeyEquivalent() {
@@ -333,7 +333,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             return true
         }
 
-        XCTAssertTrue(window.performKeyEquivalent(with: makeKeyEvent(characters: "o", modifiers: [.command])))
+        XCTAssertTrue(window.performKeyEquivalent(with: makeKeyEvent(characters: "o", modifierFlags: [.command])))
         XCTAssertEqual(handledEvents, ["o"])
     }
 
@@ -365,12 +365,12 @@ final class ReaderShortcutsControllerTests: XCTestCase {
 
         XCTAssertTrue(
             window.performKeyEquivalent(
-                with: makeKeyEvent(characters: "[", modifiers: [.command])
+                with: makeKeyEvent(characters: "[", modifierFlags: [.command])
             )
         )
         XCTAssertTrue(
             window.performKeyEquivalent(
-                with: makeKeyEvent(characters: "]", modifiers: [.command])
+                with: makeKeyEvent(characters: "]", modifierFlags: [.command])
             )
         )
         XCTAssertEqual(triggeredCommands, [.navigateBack, .navigateForward])
@@ -445,7 +445,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         )
         XCTAssertFalse(
             window.handlePhysicalCommandNumberShortcut(
-                with: makeKeyEvent(characters: "5", modifiers: [.command])
+                with: makeKeyEvent(characters: "5", modifierFlags: [.command])
             )
         )
 
@@ -465,7 +465,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         window.contentView = textView
         window.makeFirstResponder(textView)
 
-        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifiers: [.command]), in: window))
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "k", modifierFlags: [.command]), in: window))
         XCTAssertFalse(didTrigger)
     }
 
@@ -490,8 +490,8 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         window.contentView = textView
         window.makeFirstResponder(textView)
 
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifiers: [.command]), in: window))
-        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifiers: [.command, .shift]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifierFlags: [.command]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifierFlags: [.command, .shift]), in: window))
         XCTAssertEqual(triggered, [.findNextMatch, .findPreviousMatch])
     }
 
@@ -517,25 +517,6 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertTrue(shortcut.isPlainShortcut)
     }
 
-    private func makeKeyEvent(
-        characters: String,
-        charactersIgnoringModifiers: String? = nil,
-        modifiers: NSEvent.ModifierFlags
-    ) -> NSEvent {
-        NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: modifiers,
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            characters: characters,
-            charactersIgnoringModifiers: charactersIgnoringModifiers ?? characters,
-            isARepeat: false,
-            keyCode: 0
-        )!
-    }
-
     private func makePhysicalCommandNumberEvent(
         _ number: Int,
         left: Bool = false,
@@ -550,7 +531,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         }
         return makeKeyEvent(
             characters: String(number),
-            modifiers: NSEvent.ModifierFlags(rawValue: rawModifiers)
+            modifierFlags: NSEvent.ModifierFlags(rawValue: rawModifiers)
         )
     }
 }

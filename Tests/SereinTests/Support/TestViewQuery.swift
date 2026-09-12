@@ -38,3 +38,25 @@ func findTextField(matching stringValue: String, in root: NSView) -> NSTextField
     }
     return nil
 }
+
+@MainActor
+func findView(identifier: String, in root: NSView) -> NSView? {
+    if root.identifier?.rawValue == identifier {
+        return root
+    }
+    for subview in root.subviews {
+        if let match = findView(identifier: identifier, in: subview) {
+            return match
+        }
+    }
+    return nil
+}
+
+@MainActor
+func findAllDescendants<T: NSView>(of type: T.Type, in root: NSView) -> [T] {
+    var matches = (root as? T).map { [$0] } ?? []
+    for subview in root.subviews {
+        matches.append(contentsOf: findAllDescendants(of: type, in: subview))
+    }
+    return matches
+}

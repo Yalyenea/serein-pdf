@@ -567,19 +567,6 @@ private func setOutlineFilter(_ query: String, in controller: OutlineViewControl
 }
 
 @MainActor
-private func findView(identifier: String, in root: NSView) -> NSView? {
-    if root.identifier?.rawValue == identifier {
-        return root
-    }
-    for subview in root.subviews {
-        if let match = findView(identifier: identifier, in: subview) {
-            return match
-        }
-    }
-    return nil
-}
-
-@MainActor
 private func hasPinnedEdgeConstraint(
     for view: NSView,
     in container: NSView,

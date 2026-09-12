@@ -269,6 +269,7 @@ flowchart LR
 - 监听已打开 PDF 的外部改写;clean session 清理缓存并触发 UI 重读,Reader 在替换 document 前捕获实时阅读位并恢复;dirty session 不自动刷新
 - 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
 - `DocumentStoreChange` 区分 chrome / content / `readingPosition`;翻页与缩放写回不触发 tab / search / annotations 列表全量重建,也不重写 workspace 快照
+- Reader 在缩放命令与新增高亮通知前完成待写回阅读状态,避免刷新时恢复旧位置或旧缩放
 - `searchSnapshot(in:)` 纯读；query / scope / options、pane 焦点、tab 与热重载边界显式调用 `rebuildSearchIfNeeded(in:)`
 - `ReadingStateStore` 每文档阅读位:上限 500(LRU)、磁盘写入 debounce、退出时 flush;失败走 `os.Logger`
 - 提供 tab 模式切换
@@ -377,7 +378,7 @@ UI/RightOutline/                          # 右栏 outline / pages / search / an
   AnnotationsViewController.swift         # 批注列表与 comment 编辑
 
 UI/Shared/                                # 跨栏复用视图
-  PlaceholderViewController.swift         # 侧栏空状态 / 占位视图
+  SidebarMaterialView.swift               # 侧栏主题表面
 
 Features/Annotations/                     # 高亮批注功能域
   HighlightColor.swift                    # 高亮颜色枚举(pink / yellow / green)与相近色匹配

@@ -7,11 +7,10 @@ final class RecentFilesPaletteStateTests: XCTestCase {
         let beta = URL(fileURLWithPath: "/tmp/Notes/BetaSummary.pdf")
         var state = RecentFilesPaletteState(recentURLs: [alpha, beta])
 
-        state.appendToQuery("alpha")
+        state.query = "alpha"
         XCTAssertEqual(state.filteredItems.map(\.url), [alpha])
 
-        state = RecentFilesPaletteState(recentURLs: [alpha, beta])
-        state.appendToQuery("notes")
+        state.query = "notes"
         XCTAssertEqual(state.filteredItems.map(\.url), [beta])
     }
 
@@ -20,11 +19,10 @@ final class RecentFilesPaletteStateTests: XCTestCase {
         let note = URL(fileURLWithPath: "/tmp/notes/beamspace.pdf")
         var state = RecentFilesPaletteState(recentURLs: [paper, note])
 
-        state.appendToQuery("毫米波")
+        state.query = "毫米波"
         XCTAssertEqual(state.filteredItems.map(\.url), [paper])
 
-        state = RecentFilesPaletteState(recentURLs: [paper, note])
-        state.appendToQuery("论文")
+        state.query = "论文"
         XCTAssertEqual(state.filteredItems.map(\.url), [paper])
     }
 

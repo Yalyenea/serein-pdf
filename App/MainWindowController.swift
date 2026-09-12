@@ -765,11 +765,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         try splitViewController.saveAnnotations()
     }
 
-    @discardableResult
-    func searchCurrentDocument(for query: String) -> Bool {
-        splitViewController.readerViewController.search(for: query)
-    }
-
     func showFindBar(scope: SearchScope? = nil) {
         splitViewController.showFindBar(scope: scope)
     }

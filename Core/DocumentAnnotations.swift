@@ -14,12 +14,6 @@ struct DocumentHighlightGroup {
     var normalizedComment: String {
         comment.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
-    var commentPreview: String {
-        let trimmed = normalizedComment
-        guard trimmed.isEmpty == false else { return "No comment" }
-        return trimmed.replacingOccurrences(of: "\n", with: " ")
-    }
 }
 
 struct DocumentHighlightSection {

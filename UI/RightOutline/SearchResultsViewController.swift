@@ -62,7 +62,6 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
     private let scrollView = NSScrollView()
     private let tableView = NSTableView()
     private let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SearchResultColumn"))
-    private let emptyStateLabel = NSTextField(labelWithString: "")
     private var rows: [SearchResultsRow] = []
     /// Survives `reloadData` / store churn better than `tableView.selectedRow` alone.
     private var selectedMatchKey: SearchSelectionKey?
@@ -131,26 +130,13 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         scrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         scrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        emptyStateLabel.font = .systemFont(ofSize: 12)
-        emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
-        emptyStateLabel.maximumNumberOfLines = 0
-        emptyStateLabel.alignment = .center
-        emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        emptyStateLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        emptyStateLabel.identifier = NSUserInterfaceItemIdentifier("searchEmptyStateLabel")
-
         container.addSubview(scrollView)
-        container.addSubview(emptyStateLabel)
 
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: Self.contentInset),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -Self.contentInset),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            emptyStateLabel.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
-            emptyStateLabel.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
-            emptyStateLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
 
         view = container
@@ -160,7 +146,6 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = NSColor.clear.cgColor
             tableView.backgroundColor = .clear
-            emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         }
         tableView.reloadData()
     }
@@ -177,11 +162,6 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         guard let match = selectedMatch() else { return nil }
         onActivateMatch?(match)
         return match
-    }
-
-    func selectFirstMatch() -> SearchSidebarMatch? {
-        guard let row = firstMatchRow() else { return nil }
-        return selectRow(row)
     }
 
     func selectedMatch() -> SearchSidebarMatch? {
@@ -235,7 +215,6 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
             [SearchResultsRow.section(section.title)] + section.matches.map { .match($0) }
         }
         tableView.reloadData()
-        emptyStateLabel.isHidden = true
 
         if let previousSelection,
            let row = rowIndex(for: previousSelection) {

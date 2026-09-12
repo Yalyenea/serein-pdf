@@ -72,14 +72,12 @@ struct NightModeStyleTests {
         withThemeSelections(light: .normal, dark: .normal) {
             let page = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
             let split = resolve(SplitViewController.splitBackgroundColor, in: .darkAqua)
-            let pane = resolve(PlaceholderViewController.paneBackgroundColor, in: .darkAqua)
             let divider = resolve(SplitViewController.dividerBackgroundColor, in: .darkAqua)
             let selected = resolve(SplitViewController.selectedChromeBackgroundColor, in: .darkAqua)
             let stroke = resolve(SplitViewController.chromeStrokeColor, in: .darkAqua)
 
             assertColor(page, matches: NSColor(srgbRed: 37.0 / 255.0, green: 37.0 / 255.0, blue: 37.0 / 255.0, alpha: 1.0))
             assertColor(split, matches: page)
-            assertColor(pane, matches: page)
             assertColor(divider, matches: NSColor(srgbRed: 54.0 / 255.0, green: 54.0 / 255.0, blue: 54.0 / 255.0, alpha: 1.0))
             assertColor(selected, matches: NSColor(srgbRed: 68.0 / 255.0, green: 68.0 / 255.0, blue: 68.0 / 255.0, alpha: 1.0))
             assertColor(stroke, matches: NSColor(srgbRed: 90.0 / 255.0, green: 90.0 / 255.0, blue: 90.0 / 255.0, alpha: 1.0))
@@ -137,21 +135,18 @@ struct NightModeStyleTests {
             let secondary = resolve(NightModeStyle.secondaryTextColor, in: .darkAqua)
             let tertiary = resolve(NightModeStyle.tertiaryTextColor, in: .darkAqua)
             let split = resolve(SplitViewController.splitBackgroundColor, in: .darkAqua)
-            let pane = resolve(PlaceholderViewController.paneBackgroundColor, in: .darkAqua)
             let divider = resolve(SplitViewController.dividerBackgroundColor, in: .darkAqua)
             let selected = resolve(SplitViewController.selectedChromeBackgroundColor, in: .darkAqua)
             let stroke = resolve(SplitViewController.chromeStrokeColor, in: .darkAqua)
 
             assertColor(page, matches: NSColor(srgbRed: 42.0 / 255.0, green: 39.0 / 255.0, blue: 63.0 / 255.0, alpha: 1.0))
             assertColor(split, matches: NSColor(srgbRed: 35.0 / 255.0, green: 33.0 / 255.0, blue: 54.0 / 255.0, alpha: 1.0))
-            assertColor(pane, matches: split)
             assertColor(primary, matches: NSColor(srgbRed: 224.0 / 255.0, green: 222.0 / 255.0, blue: 244.0 / 255.0, alpha: 1.0))
             assertColor(secondary, matches: NSColor(srgbRed: 144.0 / 255.0, green: 140.0 / 255.0, blue: 170.0 / 255.0, alpha: 1.0))
             assertColor(tertiary, matches: NSColor(srgbRed: 110.0 / 255.0, green: 106.0 / 255.0, blue: 134.0 / 255.0, alpha: 1.0))
             assertColor(divider, matches: NSColor(srgbRed: 57.0 / 255.0, green: 53.0 / 255.0, blue: 82.0 / 255.0, alpha: 1.0))
             assertColor(selected, matches: divider)
             assertColor(stroke, matches: NSColor(srgbRed: 110.0 / 255.0, green: 106.0 / 255.0, blue: 134.0 / 255.0, alpha: 1.0))
-            #expect(NightModeStyle.usesOpaqueSidebar(for: NSAppearance(named: .darkAqua)))
         }
     }
 
@@ -166,7 +161,6 @@ struct NightModeStyleTests {
             let secondary = resolve(NightModeStyle.secondaryTextColor, in: .aqua)
             let tertiary = resolve(NightModeStyle.tertiaryTextColor, in: .aqua)
             let split = resolve(SplitViewController.splitBackgroundColor, in: .aqua)
-            let pane = resolve(PlaceholderViewController.paneBackgroundColor, in: .aqua)
             let divider = resolve(SplitViewController.dividerBackgroundColor, in: .aqua)
             let selected = resolve(SplitViewController.selectedChromeBackgroundColor, in: .aqua)
             let stroke = resolve(SplitViewController.chromeStrokeColor, in: .aqua)
@@ -180,7 +174,6 @@ struct NightModeStyleTests {
             assertColor(backdrop, matches: NSColor(srgbRed: 250.0 / 255.0, green: 244.0 / 255.0, blue: 237.0 / 255.0, alpha: 1.0))
             assertColor(page, matches: NSColor(srgbRed: 1.0, green: 250.0 / 255.0, blue: 243.0 / 255.0, alpha: 1.0))
             assertColor(split, matches: backdrop)
-            assertColor(pane, matches: backdrop)
             assertColor(foreground, matches: primary)
             assertColor(primary, matches: NSColor(srgbRed: 87.0 / 255.0, green: 82.0 / 255.0, blue: 121.0 / 255.0, alpha: 1.0))
             assertColor(secondary, matches: NSColor(srgbRed: 121.0 / 255.0, green: 117.0 / 255.0, blue: 147.0 / 255.0, alpha: 1.0))
@@ -196,7 +189,6 @@ struct NightModeStyleTests {
             #expect(greenVector.x == 0 && greenVector.z == 0)
             #expect(blueVector.x == 0 && blueVector.y == 0)
             #expect(biasVector.x == 0 && biasVector.y == 0 && biasVector.z == 0)
-            #expect(NightModeStyle.usesOpaqueSidebar(for: NSAppearance(named: .aqua)))
             #expect(NightModeStyle.prefersFlatPDFChrome(for: NSAppearance(named: .aqua)))
         }
     }

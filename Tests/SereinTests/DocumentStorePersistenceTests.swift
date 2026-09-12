@@ -3,6 +3,56 @@ import XCTest
 @testable import Serein
 
 final class DocumentStorePersistenceTests: XCTestCase {
+    func testLegacyJSONWithoutWindowsPreservesReaderStateAndSuppliesDefaults() throws {
+        let legacyJSON = """
+        {
+            "sessions": [{ "url": "file:///tmp/legacy.pdf" }],
+            "activeSessionURL": "file:///tmp/legacy.pdf",
+            "tabPresentationMode": "horizontalTitlebar",
+            "isLeftSidebarVisible": false,
+            "isRightSidebarVisible": false
+        }
+        """
+        let state = try JSONDecoder().decode(
+            PersistedDocumentStoreState.self,
+            from: Data(legacyJSON.utf8)
+        )
+        let url = URL(fileURLWithPath: "/tmp/legacy.pdf")
+        XCTAssertEqual(state.sessions.map(\.url), [url])
+        XCTAssertNil(state.sessions.first?.title)
+        XCTAssertEqual(state.activeSessionURL, url)
+        XCTAssertEqual(state.tabPresentationMode, .horizontalTitlebar)
+        XCTAssertFalse(state.isLeftSidebarVisible)
+        XCTAssertFalse(state.isRightSidebarVisible)
+        XCTAssertEqual(state.windows.count, 1)
+        let window = try XCTUnwrap(state.windows.first)
+        XCTAssertEqual(window.sessionURLs, [url])
+        XCTAssertTrue(window.sessionIDs.isEmpty)
+        XCTAssertTrue(window.continuousReadingSessionIDs.isEmpty)
+        XCTAssertEqual(window.rightSidebarMode, .outline)
+        XCTAssertEqual(window.searchQuery, "")
+        XCTAssertEqual(window.searchScope, .currentDocument)
+        XCTAssertTrue(window.recentlyClosedURLs.isEmpty)
+        XCTAssertFalse(window.splitState.isEnabled)
+        XCTAssertEqual(window.splitState.primarySessionURL, url)
+        XCTAssertNil(window.splitState.primarySessionID)
+        XCTAssertNil(window.splitState.secondarySessionID)
+        XCTAssertNil(window.splitState.secondarySessionURL)
+        XCTAssertEqual(window.splitState.focusedPane, .primary)
+
+        let minimal = try JSONDecoder().decode(
+            PersistedDocumentStoreState.self,
+            from: Data(#"{"sessions": []}"#.utf8)
+        )
+        XCTAssertTrue(minimal.sessions.isEmpty)
+        XCTAssertEqual(minimal.windows.count, 1)
+        XCTAssertNil(minimal.activeSessionURL)
+        XCTAssertEqual(minimal.tabPresentationMode, .verticalSidebar)
+        XCTAssertTrue(minimal.isLeftSidebarVisible)
+        XCTAssertTrue(minimal.isRightSidebarVisible)
+        XCTAssertEqual(minimal.windows.first?.sessionURLs, [])
+    }
+
     func testDebouncedSavesCoalesceAndFlushLatestState() throws {
         let suiteName = "SereinTests.DocumentStorePersistence.\(UUID().uuidString)"
         let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

@@ -41,7 +41,7 @@ struct RecentFilesPaletteState {
     private(set) var selectedURLs: [URL]
     private(set) var highlightedIndex: Int?
     var query: String {
-        didSet { rebuildFilteredItems(resetHighlight: true) }
+        didSet { rebuildFilteredItems() }
     }
 
     init(recentURLs: [URL]) {
@@ -61,19 +61,8 @@ struct RecentFilesPaletteState {
 
     mutating func replaceRecentURLs(_ urls: [URL]) {
         allItems = urls.map(RecentFilesPaletteItem.init(url:))
-        query = ""
         selectedURLs = []
-        rebuildFilteredItems(resetHighlight: true)
-    }
-
-    mutating func appendToQuery(_ string: String) {
-        guard string.isEmpty == false else { return }
-        query.append(string)
-    }
-
-    mutating func deleteBackward() {
-        guard query.isEmpty == false else { return }
-        query.removeLast()
+        query = ""
     }
 
     mutating func moveHighlight(delta: Int) {
@@ -117,22 +106,12 @@ struct RecentFilesPaletteState {
         return highlightedItem.map { [$0.url] } ?? []
     }
 
-    private mutating func rebuildFilteredItems(resetHighlight: Bool) {
+    private mutating func rebuildFilteredItems() {
         filteredItems = allItems.filter { $0.matches(query: query) }
         selectedURLs = selectedURLs.filter { url in
             filteredItems.contains { $0.url == url }
         }
 
-        guard filteredItems.isEmpty == false else {
-            highlightedIndex = nil
-            return
-        }
-
-        if resetHighlight == false,
-           let highlightedIndex,
-           filteredItems.indices.contains(highlightedIndex) {
-            return
-        }
-        highlightedIndex = 0
+        highlightedIndex = filteredItems.isEmpty ? nil : 0
     }
 }

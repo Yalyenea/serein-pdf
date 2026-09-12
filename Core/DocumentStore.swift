@@ -769,10 +769,6 @@ final class DocumentStore {
         windowWorkspace(for: windowID)?.continuousReadingState.orderedSessionIDs ?? []
     }
 
-    func isSessionInContinuousReading(_ sessionID: UUID, in windowID: UUID) -> Bool {
-        continuousReadingSessionIDs(in: windowID).contains(sessionID)
-    }
-
     @discardableResult
     func startContinuousReadingFromSelectedSessions(in windowID: UUID) -> Bool {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return false }

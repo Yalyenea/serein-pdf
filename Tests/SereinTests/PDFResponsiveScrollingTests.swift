@@ -15,7 +15,6 @@ struct PDFResponsiveScrollingTests {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent(".tmp/pdf-responsive-tests/\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        TestPDFFixtures.registerRoot(root)
         let url = root.appendingPathComponent("rapid-scroll.pdf")
         let fixture = TestPDFFixtures.makeBlankDocument(
             pageCount: 4, pageSize: NSSize(width: 720, height: 1800)

@@ -874,15 +874,3 @@ private func flushAnnotationNavigationLayout(_ window: NSWindow?) {
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
     window?.layoutIfNeeded()
 }
-
-@MainActor
-private func findAllDescendants<T: NSView>(of type: T.Type, in root: NSView) -> [T] {
-    var matches: [T] = []
-    if let root = root as? T {
-        matches.append(root)
-    }
-    for subview in root.subviews {
-        matches.append(contentsOf: findAllDescendants(of: type, in: subview))
-    }
-    return matches
-}

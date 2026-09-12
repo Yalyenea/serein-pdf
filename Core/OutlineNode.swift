@@ -13,8 +13,6 @@ struct OutlineNode: Hashable, Sendable {
     var sourceSessionID: UUID?
     var isDocumentRoot: Bool
 
-    static let empty: [OutlineNode] = []
-
     init(
         title: String,
         pageIndex: Int?,

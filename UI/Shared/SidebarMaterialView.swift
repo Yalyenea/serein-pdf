@@ -62,9 +62,6 @@ class SidebarMaterialView: NSVisualEffectView {
     }
 
     private func configureMaterial() {
-        material = .contentBackground
-        blendingMode = .withinWindow
-        state = .active
         wantsLayer = true
         layer?.masksToBounds = true
 

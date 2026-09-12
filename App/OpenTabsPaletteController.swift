@@ -101,7 +101,6 @@ private final class OpenTabsPaletteTileView: NSView {
         paneBadgeLabel.stringValue = item.paneBadge ?? ""
         paneBadgeLabel.isHidden = item.paneBadge == nil
         paneBadgeLabel.textColor = item.isFocusedPane ? HighlightColor.pink.nsColor : .secondaryLabelColor
-        updateSelection(isSelected: false, isActive: item.isActive)
     }
 
     func updateSelection(isSelected: Bool, isActive: Bool) {
@@ -455,11 +454,5 @@ extension OpenTabsPaletteController {
         collectionView(collectionView, didSelectItemsAt: [IndexPath(item: index, section: 0)])
     }
 
-    func testingSelectItem(at index: Int) {
-        state.setHighlightedIndex(index)
-        isApplyingSelection = true
-        applyHighlightedSelection()
-        isApplyingSelection = false
-    }
 }
 #endif

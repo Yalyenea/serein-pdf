@@ -1,15 +1,6 @@
 import Foundation
 import PDFKit
 
-struct SidebarState: Equatable, Sendable {
-    var isLeftSidebarVisible: Bool = true
-    var isRightSidebarVisible: Bool = true
-}
-
-struct TabPresentationState: Equatable, Sendable {
-    var mode: TabPresentationMode = .verticalSidebar
-}
-
 enum AnnotationSavePolicy: String, CaseIterable, Equatable, Codable, Sendable {
     case after10Minutes = "after_10_minutes"
     case never
@@ -63,8 +54,6 @@ struct DocumentSession {
     var firstPagePosition: ReadingPosition?
     var isDirty: Bool
     var dirtySince: Date?
-    var sidebarState: SidebarState
-    var tabPresentationState: TabPresentationState
     var annotationSavePolicy: AnnotationSavePolicy
     var annotationGeneration: UInt64 = 0
     var undoStack: [HighlightUndoOperation] = []
@@ -90,8 +79,6 @@ struct DocumentSession {
         isOutlineLoaded: Bool = false,
         isDirty: Bool = false,
         dirtySince: Date? = nil,
-        sidebarState: SidebarState = SidebarState(),
-        tabPresentationState: TabPresentationState = TabPresentationState(),
         annotationSavePolicy: AnnotationSavePolicy = .default,
         annotationCache: DocumentHighlightCache = DocumentHighlightCache(),
         isAnnotationCacheLoaded: Bool = false,
@@ -122,8 +109,6 @@ struct DocumentSession {
         }
         self.isDirty = isDirty
         self.dirtySince = dirtySince
-        self.sidebarState = sidebarState
-        self.tabPresentationState = tabPresentationState
         self.annotationSavePolicy = annotationSavePolicy
         self.annotationCache = annotationCache
         self.isAnnotationCacheLoaded = isAnnotationCacheLoaded

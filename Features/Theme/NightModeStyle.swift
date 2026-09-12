@@ -59,10 +59,6 @@ enum NightModeStyle {
         ThemeManager.shared.snapshot.dynamicColor(for: .chromeStroke)
     }
 
-    static func usesOpaqueSidebar(for appearance: NSAppearance? = nil) -> Bool {
-        activeDescriptor(for: appearance).usesOpaqueSidebar
-    }
-
     static func prefersFlatPDFChrome(for appearance: NSAppearance? = nil) -> Bool {
         activeDescriptor(for: appearance).prefersFlatPDFChrome
     }
@@ -75,16 +71,6 @@ enum NightModeStyle {
         switch activeDescriptor(for: appearance).pdfStyle {
         case .none:
             return []
-        case .classicInvert:
-            guard let filter = CIFilter(name: "CIColorMatrix") else { return [] }
-            let scale: CGFloat = -1.0
-            let bias: CGFloat = 0.95
-            filter.setValue(CIVector(x: scale, y: 0, z: 0, w: 0), forKey: "inputRVector")
-            filter.setValue(CIVector(x: 0, y: scale, z: 0, w: 0), forKey: "inputGVector")
-            filter.setValue(CIVector(x: 0, y: 0, z: scale, w: 0), forKey: "inputBVector")
-            filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 1), forKey: "inputAVector")
-            filter.setValue(CIVector(x: bias, y: bias, z: bias, w: 0), forKey: "inputBiasVector")
-            return [filter]
         case .paper(let background):
             guard let filter = CIFilter(name: "CIColorMatrix") else { return [] }
             let linearBackground = background.linearized
@@ -105,25 +91,7 @@ enum NightModeStyle {
                 let filter = makeRemapFilter(
                     background: background.linearized,
                     foreground: foreground.linearized,
-                    accentPreservation: accentPreservation,
-                    backgroundLuminance: 1.0
-                )
-            else {
-                return []
-            }
-            return [filter]
-        case .remap(
-            let background,
-            let foreground,
-            let accentPreservation,
-            let backgroundLuminance
-        ):
-            guard
-                let filter = makeRemapFilter(
-                    background: background,
-                    foreground: foreground,
-                    accentPreservation: accentPreservation,
-                    backgroundLuminance: backgroundLuminance
+                    accentPreservation: accentPreservation
                 )
             else {
                 return []
@@ -139,15 +107,13 @@ enum NightModeStyle {
     private static func makeRemapFilter(
         background: ThemeRGBComponents,
         foreground: ThemeRGBComponents,
-        accentPreservation: CGFloat,
-        backgroundLuminance: CGFloat
+        accentPreservation: CGFloat
     ) -> CIFilter? {
         guard let filter = CIFilter(name: "CIColorMatrix") else { return nil }
         let rows = colorMatrixRows(
             background: background,
             foreground: foreground,
-            accentPreservation: accentPreservation,
-            backgroundLuminance: backgroundLuminance
+            accentPreservation: accentPreservation
         )
         filter.setValue(
             CIVector(x: rows.red.red, y: rows.red.green, z: rows.red.blue, w: 0),
@@ -169,29 +135,25 @@ enum NightModeStyle {
     private static func colorMatrixRows(
         background: ThemeRGBComponents,
         foreground: ThemeRGBComponents,
-        accentPreservation: CGFloat,
-        backgroundLuminance: CGFloat
+        accentPreservation: CGFloat
     ) -> (red: MatrixRow, green: MatrixRow, blue: MatrixRow) {
         (
             red: matrixRow(
                 foreground: foreground.red,
                 background: background.red,
                 preserving: accentPreservation,
-                backgroundLuminance: backgroundLuminance,
                 diagonal: .red
             ),
             green: matrixRow(
                 foreground: foreground.green,
                 background: background.green,
                 preserving: accentPreservation,
-                backgroundLuminance: backgroundLuminance,
                 diagonal: .green
             ),
             blue: matrixRow(
                 foreground: foreground.blue,
                 background: background.blue,
                 preserving: accentPreservation,
-                backgroundLuminance: backgroundLuminance,
                 diagonal: .blue
             )
         )
@@ -207,11 +169,9 @@ enum NightModeStyle {
         foreground: CGFloat,
         background: CGFloat,
         preserving: CGFloat,
-        backgroundLuminance: CGFloat,
         diagonal: DiagonalChannel
     ) -> MatrixRow {
-        let luminance = max(backgroundLuminance, 0.001)
-        let delta = ((foreground - background) / luminance) + preserving
+        let delta = (foreground - background) + preserving
         return MatrixRow(
             red: (diagonal == .red ? preserving : 0) - delta * luminanceWeights.red,
             green: (diagonal == .green ? preserving : 0) - delta * luminanceWeights.green,

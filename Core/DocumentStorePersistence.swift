@@ -202,11 +202,11 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        sessions = try container.decode([SessionReference].self, forKey: .sessions)
+        let sessions = try container.decode([SessionReference].self, forKey: .sessions)
 
         if let windows = try container.decodeIfPresent([WindowRecord].self, forKey: .windows),
            windows.isEmpty == false {
-            self.windows = windows
+            self.init(sessions: sessions, windows: windows)
             return
         }
 
@@ -216,27 +216,13 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
         let isLeftSidebarVisible = try container.decodeIfPresent(Bool.self, forKey: .isLeftSidebarVisible) ?? true
         let isRightSidebarVisible = try container.decodeIfPresent(Bool.self, forKey: .isRightSidebarVisible) ?? true
 
-        windows = [
-            WindowRecord(
-                id: UUID(),
-                sessionURLs: activeSessionURL.map { [$0] } ?? [],
-                tabPresentationMode: tabPresentationMode,
-                isLeftSidebarVisible: isLeftSidebarVisible,
-                isRightSidebarVisible: isRightSidebarVisible,
-                rightSidebarMode: .outline,
-                searchQuery: "",
-                searchScope: .currentDocument,
-                splitState: SplitStateRecord(
-                    isEnabled: false,
-                    primarySessionID: nil,
-                    secondarySessionID: nil,
-                    primarySessionURL: activeSessionURL,
-                    secondarySessionURL: nil,
-                    focusedPane: .primary
-                ),
-                recentlyClosedURLs: []
-            )
-        ]
+        self.init(
+            sessions: sessions,
+            activeSessionURL: activeSessionURL,
+            tabPresentationMode: tabPresentationMode,
+            isLeftSidebarVisible: isLeftSidebarVisible,
+            isRightSidebarVisible: isRightSidebarVisible
+        )
     }
 
     func encode(to encoder: Encoder) throws {

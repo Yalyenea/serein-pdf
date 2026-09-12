@@ -4,7 +4,6 @@ import Foundation
 struct AppUpdateService: Sendable {
     static let defaultOwner = "Yalyenea"
     static let defaultRepo = "serein-pdf"
-    static let appBundleName = "Serein.app"
     static let dmgNamePrefix = "Serein-"
     static let dmgNameSuffix = ".dmg"
 
@@ -29,11 +28,7 @@ struct AppUpdateService: Sendable {
         case noReleaseAsset
         case invalidVersion(String)
         case downloadFailed(String)
-        case mountFailed(String)
-        case appNotFoundInDMG
-        case installFailed(String)
         case missingGitHubToken
-        case cancelled
 
         var errorDescription: String? {
             switch self {
@@ -51,16 +46,8 @@ struct AppUpdateService: Sendable {
                 "Invalid version string: \(value)"
             case let .downloadFailed(detail):
                 "Download failed: \(detail)"
-            case let .mountFailed(detail):
-                "Could not mount the update disk image: \(detail)"
-            case .appNotFoundInDMG:
-                "Serein.app was not found inside the downloaded DMG."
-            case let .installFailed(detail):
-                "Install failed: \(detail)"
             case .missingGitHubToken:
                 "This repository is private. Add a GitHub token under [updates] github_token."
-            case .cancelled:
-                "Update cancelled."
             }
         }
     }
@@ -207,66 +194,6 @@ struct AppUpdateService: Sendable {
 
     // MARK: - Install
 
-    /// Mount DMG, copy app to destination. Does not relaunch.
-    func installApp(
-        fromDMG dmgURL: URL,
-        to destinationAppURL: URL
-    ) throws {
-        let fileManager = FileManager.default
-        let mountPoint = fileManager.temporaryDirectory
-            .appendingPathComponent("SereinUpdateMount-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: mountPoint, withIntermediateDirectories: true)
-        defer {
-            _ = try? runProcess("/usr/bin/hdiutil", arguments: ["detach", mountPoint.path, "-force"])
-            try? fileManager.removeItem(at: mountPoint)
-        }
-
-        let attach = try runProcess(
-            "/usr/bin/hdiutil",
-            arguments: [
-                "attach", dmgURL.path,
-                "-nobrowse",
-                "-readonly",
-                "-mountpoint", mountPoint.path,
-            ]
-        )
-        guard attach.terminationStatus == 0 else {
-            throw ServiceError.mountFailed(attach.stderr.isEmpty ? attach.stdout : attach.stderr)
-        }
-
-        let sourceApp = try findAppBundle(in: mountPoint, fileManager: fileManager)
-        let parent = destinationAppURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-
-        let staging = parent.appendingPathComponent(".SereinUpdateStaging-\(UUID().uuidString).app", isDirectory: true)
-        defer { try? fileManager.removeItem(at: staging) }
-
-        if fileManager.fileExists(atPath: staging.path) {
-            try fileManager.removeItem(at: staging)
-        }
-        try fileManager.copyItem(at: sourceApp, to: staging)
-
-        // Prefer replacing via rename for atomic-ish swap.
-        let backup = parent.appendingPathComponent(".SereinUpdateBackup-\(UUID().uuidString).app", isDirectory: true)
-        defer { try? fileManager.removeItem(at: backup) }
-
-        if fileManager.fileExists(atPath: destinationAppURL.path) {
-            if fileManager.fileExists(atPath: backup.path) {
-                try fileManager.removeItem(at: backup)
-            }
-            try fileManager.moveItem(at: destinationAppURL, to: backup)
-        }
-
-        do {
-            try fileManager.moveItem(at: staging, to: destinationAppURL)
-        } catch {
-            if fileManager.fileExists(atPath: backup.path) {
-                try? fileManager.moveItem(at: backup, to: destinationAppURL)
-            }
-            throw ServiceError.installFailed(error.localizedDescription)
-        }
-    }
-
     /// Writes a helper script that waits for this process to exit, then installs and relaunches.
     func scheduleInstallAndRelaunch(
         dmgURL: URL,
@@ -407,53 +334,6 @@ struct AppUpdateService: Sendable {
             }
             throw ServiceError.httpStatus(http.statusCode)
         }
-    }
-
-    private func findAppBundle(in root: URL, fileManager: FileManager) throws -> URL {
-        let preferred = root.appendingPathComponent(Self.appBundleName, isDirectory: true)
-        if fileManager.fileExists(atPath: preferred.path) {
-            return preferred
-        }
-        guard
-            let enumerator = fileManager.enumerator(
-                at: root,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )
-        else {
-            throw ServiceError.appNotFoundInDMG
-        }
-        for case let url as URL in enumerator {
-            if url.lastPathComponent == Self.appBundleName {
-                return url
-            }
-        }
-        throw ServiceError.appNotFoundInDMG
-    }
-
-    private struct ProcessResult {
-        var terminationStatus: Int32
-        var stdout: String
-        var stderr: String
-    }
-
-    private func runProcess(_ launchPath: String, arguments: [String]) throws -> ProcessResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: launchPath)
-        process.arguments = arguments
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        try process.run()
-        process.waitUntilExit()
-        let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-        return ProcessResult(
-            terminationStatus: process.terminationStatus,
-            stdout: String(data: outData, encoding: .utf8) ?? "",
-            stderr: String(data: errData, encoding: .utf8) ?? ""
-        )
     }
 
     private func shellEscape(_ value: String) -> String {

@@ -9,31 +9,13 @@ final class AppUpdateCoordinator {
 
     private let tokenProvider: () -> String?
     private let autoCheckEnabledProvider: () -> Bool
-    private let destinationAppURLProvider: () -> URL
 
     init(
-        tokenProvider: @escaping () -> String? = {
-            // Prefer config token; allow env override for CI/dev verification.
-            if let env = ProcessInfo.processInfo.environment["SEREIN_GITHUB_TOKEN"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               env.isEmpty == false {
-                return env
-            }
-            if let env = ProcessInfo.processInfo.environment["GITHUB_TOKEN"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               env.isEmpty == false {
-                return env
-            }
-            return nil
-        },
-        autoCheckEnabledProvider: @escaping () -> Bool = { true },
-        destinationAppURLProvider: @escaping () -> URL = {
-            Bundle.main.bundleURL
-        }
+        tokenProvider: @escaping () -> String?,
+        autoCheckEnabledProvider: @escaping () -> Bool
     ) {
         self.tokenProvider = tokenProvider
         self.autoCheckEnabledProvider = autoCheckEnabledProvider
-        self.destinationAppURLProvider = destinationAppURLProvider
     }
 
     func scheduleLaunchCheck(delay: TimeInterval = 2.5) {
@@ -97,22 +79,16 @@ final class AppUpdateCoordinator {
 
         let workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("SereinUpdateDownload-\(UUID().uuidString)", isDirectory: true)
-        let dmgURL: URL
-        do {
-            dmgURL = try await service.downloadRelease(release, to: workDir) { [weak self] fraction in
-                Task { @MainActor in
-                    self?.updateProgress(fraction)
-                }
+        let dmgURL = try await service.downloadRelease(release, to: workDir) { [weak self] fraction in
+            Task { @MainActor in
+                self?.updateProgress(fraction)
             }
-        } catch {
-            throw error
         }
 
         updateProgressTitle("Installing Serein \(release.version)…")
-        let destination = destinationAppURLProvider()
         _ = try service.scheduleInstallAndRelaunch(
             dmgURL: dmgURL,
-            destinationAppURL: destination
+            destinationAppURL: Bundle.main.bundleURL
         )
 
         presentInfo(

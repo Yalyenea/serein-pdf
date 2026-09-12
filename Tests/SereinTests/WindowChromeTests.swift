@@ -18,19 +18,6 @@ struct WindowChromeTests {
     }
 
     @Test
-    func mainWindowTitleTracksActivePDF() throws {
-        _ = NSApplication.shared
-        let store = makeIsolatedDocumentStore()
-        let controller = MainWindowController(documentStore: store)
-        defer { controller.close() }
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "window-title-active"))
-
-        #expect(controller.window?.title == session.title)
-        #expect(controller.window?.representedURL == session.url)
-        #expect(controller.window?.representedFilename == session.url.path)
-    }
-
-    @Test
     func mainWindowTitleResetsForBlankTab() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
@@ -52,6 +39,9 @@ struct WindowChromeTests {
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let first = try store.open(documentAt: makeTemporaryPDF(named: "window-title-first"))
+        #expect(controller.window?.title == first.title)
+        #expect(controller.window?.representedURL == first.url)
+        #expect(controller.window?.representedFilename == first.url.path)
         let second = try store.open(documentAt: makeTemporaryPDF(named: "window-title-second"))
 
         #expect(controller.window?.title == second.title)
@@ -149,7 +139,7 @@ struct WindowChromeTests {
         #expect(controller.view.layer?.cornerRadius == 3)
         #expect(controller.view.layer?.backgroundColor != NSColor.clear.cgColor)
 
-        let selectedTab = try #require(titlebarTabItems(in: controller.view).first)
+        let selectedTab = try #require(findDescendant(of: TitlebarTabItemView.self, in: controller.view))
         #expect(selectedTab.layer?.cornerRadius == controller.view.layer?.cornerRadius)
         #expect(selectedTab.intrinsicContentSize.height == controller.view.frame.height)
 
@@ -445,7 +435,7 @@ struct WindowChromeTests {
         #expect(controller.triggerAnnotationShortcut(.highlight) == false)
         controller.view.layoutSubtreeIfNeeded()
 
-        let highlightLabels = textFields(in: controller.view)
+        let highlightLabels = findAllDescendants(of: NSTextField.self, in: controller.view)
             .filter { $0.stringValue.contains("Highlight") }
             .map(\.stringValue)
 
@@ -1783,16 +1773,9 @@ struct WindowChromeTests {
     }
 
     @Test
-    func settingsWindowUsesFixedContentWidth() {
-        let controller = SettingsWindowController(configuration: .default) { _ in }
-        controller.showWindow(nil)
-
-        #expect(controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size == NSSize(width: 680, height: 704))
-    }
-
-    @Test
     func settingsWindowPageTabsUseEqualWidths() throws {
         let controller = SettingsWindowController(configuration: .default) { _ in }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
@@ -1808,9 +1791,11 @@ struct WindowChromeTests {
     @Test
     func settingsWindowSwitchesPageHeightsWithoutChangingWidth() throws {
         let controller = SettingsWindowController(configuration: .default) { _ in }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let window = try #require(controller.window)
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 704))
         controller.selectPageForTesting(1)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
@@ -1834,6 +1819,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { configuration in
             publishedConfigurations.append(configuration)
         }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
@@ -1857,6 +1843,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { configuration in
             publishedConfigurations.append(configuration)
         }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
@@ -1910,7 +1897,7 @@ struct WindowChromeTests {
 
         #expect(findView(identifier: "shortcutSearchField", in: contentView) is NSSearchField)
         #expect(findView(identifier: "shortcutBuiltIn.\(command.rawValue)", in: row) is ShortcutSequenceView)
-        let labels = textFields(in: row).map(\.stringValue)
+        let labels = findAllDescendants(of: NSTextField.self, in: row).map(\.stringValue)
         #expect(labels.contains("Direct shortcut optional"))
         #expect(labels.contains("Default: None") == false)
     }
@@ -1934,7 +1921,10 @@ struct WindowChromeTests {
                 in: contentView
             ) as? NSButton
         )
-        captureButton.performClick(nil)
+        // Avoid AppKit's click animation pumping the async test runner's run loop.
+        let action = try #require(captureButton.action)
+        let target = try #require(captureButton.target)
+        #expect(captureButton.sendAction(action, to: target))
         #expect(
             controller.window?.performKeyEquivalent(
                 with: makeKeyEvent(
@@ -1972,7 +1962,9 @@ struct WindowChromeTests {
         let clearButton = try #require(
             findView(identifier: command.rawValue, in: row) as? NSButton
         )
-        clearButton.performClick(nil)
+        let action = try #require(clearButton.action)
+        let target = try #require(clearButton.target)
+        #expect(clearButton.sendAction(action, to: target))
 
         #expect(findView(identifier: rowIdentifier, in: contentView) == nil)
     }
@@ -1984,6 +1976,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { configuration in
             publishedConfigurations.append(configuration)
         }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
@@ -2005,6 +1998,7 @@ struct WindowChromeTests {
     func settingsWindowDoesNotExposeLegacySidebarOpacity() throws {
         _ = NSApplication.shared
         let controller = SettingsWindowController(configuration: .default) { _ in }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
@@ -2019,6 +2013,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { configuration in
             publishedConfigurations.append(configuration)
         }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
@@ -2047,6 +2042,7 @@ struct WindowChromeTests {
         let controller = SettingsWindowController(configuration: .default) { configuration in
             publishedConfigurations.append(configuration)
         }
+        defer { controller.close() }
         controller.showWindow(nil)
 
         let contentView = try #require(controller.window?.contentView)
@@ -2120,7 +2116,7 @@ struct WindowChromeTests {
         store.setRightSidebarMode(.search, in: controller.windowID)
         store.setRightSidebarMode(.annotations, in: controller.windowID)
         flushLayout(controller.window)
-        let tableAlphas = tableViews(in: splitController.rightSidebarViewController.view)
+        let tableAlphas = findAllDescendants(of: NSTableView.self, in: splitController.rightSidebarViewController.view)
             .map(\.backgroundColor.alphaComponent)
         #expect(tableAlphas.isEmpty == false)
         #expect(tableAlphas.allSatisfy { abs($0) < 0.01 })
@@ -2131,7 +2127,7 @@ struct WindowChromeTests {
 
         #expect(abs(leftMaterial.tintAlpha - 1) < 0.01)
         #expect(abs(rightMaterial.tintAlpha - 1) < 0.01)
-        let refreshedTableAlphas = tableViews(in: splitController.rightSidebarViewController.view)
+        let refreshedTableAlphas = findAllDescendants(of: NSTableView.self, in: splitController.rightSidebarViewController.view)
             .map(\.backgroundColor.alphaComponent)
         #expect(refreshedTableAlphas.allSatisfy { abs($0) < 0.01 })
     }
@@ -2146,8 +2142,8 @@ struct WindowChromeTests {
         var configuration = AppConfiguration.default
         configuration.library.folderURLs = [folderURL]
         let controller = SettingsWindowController(configuration: configuration) { _ in }
+        defer { controller.close() }
         controller.showWindow(nil)
-        defer { controller.window?.close() }
 
         let window = try #require(controller.window)
         controller.selectPageForTesting(1) // Library
@@ -2155,7 +2151,7 @@ struct WindowChromeTests {
         window.layoutIfNeeded()
 
         #expect(window.title == "Settings")
-        let labels = textFields(in: window.contentView ?? NSView())
+        let labels = findAllDescendants(of: NSTextField.self, in: window.contentView ?? NSView())
             .map(\.stringValue)
         #expect(labels.contains(where: { $0.contains(folderURL.lastPathComponent) || $0 == folderURL.path }))
     }
@@ -2447,6 +2443,11 @@ struct WindowChromeTests {
         reader.fitToWidth()
         flushLayout(controller.window)
 
+        // Leave the top edge so zooming out can preserve the center without clamping.
+        controller.scrollHalfPageDown()
+        reader.flushPendingReadingPosition()
+        flushLayout(controller.window)
+
         guard let beforeAnchor = visibleDocumentCenter(in: reader.pdfView) else {
             Issue.record("Failed to capture pre-zoom anchor")
             return
@@ -2464,6 +2465,11 @@ struct WindowChromeTests {
 
         #expect(abs(afterAnchor.x - beforeAnchor.x) < 2.0)
         #expect(abs(afterAnchor.y - beforeAnchor.y) < 8.0)
+        let storedPosition = try #require(store.session(for: session.id)?.lastReadPosition)
+        let livePosition = try #require(reader.testingCurrentReadingPosition)
+        #expect(storedPosition.pageIndex == livePosition.pageIndex)
+        #expect(abs(storedPosition.point.x - livePosition.point.x) < 2)
+        #expect(abs(storedPosition.point.y - livePosition.point.y) < 2)
     }
 
     @Test
@@ -2496,6 +2502,7 @@ struct WindowChromeTests {
         let beforeOrigin = clipView.bounds.origin.y
 
         controller.scrollHalfPageDown()
+        reader.flushPendingReadingPosition()
         flushLayout(controller.window)
         let afterDownOrigin = clipView.bounds.origin.y
         let downDelta = afterDownOrigin - beforeOrigin
@@ -3099,6 +3106,7 @@ struct WindowChromeTests {
         reader.fitToWidth()
         flushLayout(controller.window)
 
+        reader.flushPendingReadingPosition()
         NotificationCenter.default.removeObserver(
             reader,
             name: Notification.Name.PDFViewScaleChanged,
@@ -3110,6 +3118,7 @@ struct WindowChromeTests {
         reader.testingBeginUserMagnification()
         reader.pdfView.scaleFactor = manualScale
         flushLayout(controller.window)
+        #expect(abs(reader.pdfView.scaleFactor - manualScale) < 0.001)
 
         guard let selection = reader.pdfView.document?.findString("DeepSeek", withOptions: .caseInsensitive).first else {
             Issue.record("Failed to locate selectable text for highlighting")
@@ -3487,78 +3496,13 @@ private func pdfScrollBackgroundViews(in scrollView: NSScrollView) -> [NSView] {
 }
 
 @MainActor
-private func textFields(in root: NSView) -> [NSTextField] {
-    var matches: [NSTextField] = []
-    var pending = [root]
-    while let view = pending.popLast() {
-        if let textField = view as? NSTextField {
-            matches.append(textField)
-        }
-        pending.append(contentsOf: view.subviews)
-    }
-    return matches
-}
-
-@MainActor
 private func textField(identifier: String, in root: NSView) -> NSTextField? {
-    textFields(in: root).first { $0.identifier?.rawValue == identifier }
-}
-
-@MainActor
-private func findView(identifier: String, in root: NSView) -> NSView? {
-    if root.identifier?.rawValue == identifier {
-        return root
-    }
-    for subview in root.subviews {
-        if let match = findView(identifier: identifier, in: subview) {
-            return match
-        }
-    }
-    return nil
-}
-
-@MainActor
-private func sliders(in root: NSView) -> [NSSlider] {
-    var matches: [NSSlider] = []
-    var pending = [root]
-    while let view = pending.popLast() {
-        if let slider = view as? NSSlider {
-            matches.append(slider)
-        }
-        pending.append(contentsOf: view.subviews)
-    }
-    return matches
+    findView(identifier: identifier, in: root) as? NSTextField
 }
 
 @MainActor
 private func slider(identifier: String, in root: NSView) -> NSSlider? {
-    sliders(in: root).first { $0.identifier?.rawValue == identifier }
-}
-
-@MainActor
-private func tableViews(in root: NSView) -> [NSTableView] {
-    var matches: [NSTableView] = []
-    var pending = [root]
-    while let view = pending.popLast() {
-        if let tableView = view as? NSTableView {
-            matches.append(tableView)
-        }
-        pending.append(contentsOf: view.subviews)
-    }
-    return matches
-}
-
-@MainActor
-private func titlebarTabItems(in root: NSView) -> [TitlebarTabItemView] {
-    var matches: [TitlebarTabItemView] = []
-    var pending = [root]
-    while let view = pending.popLast() {
-        if let tabItem = view as? TitlebarTabItemView {
-            matches.append(tabItem)
-        }
-        pending.append(contentsOf: view.subviews)
-    }
-    return matches
+    findView(identifier: identifier, in: root) as? NSSlider
 }
 
 @MainActor
@@ -3769,7 +3713,9 @@ private func assertInternalLinkNavigationStaysCentered(in mode: ReaderDisplayMod
     let jumpButton = try #require(preview.view.subviews.compactMap { $0 as? NSButton }.first {
         $0.identifier?.rawValue == "referencePreviewJump"
     })
-    jumpButton.performClick(nil)
+    let action = try #require(jumpButton.action)
+    let actionTarget = try #require(jumpButton.target)
+    #expect(jumpButton.sendAction(action, to: actionTarget))
     flushLayout(window)
     #expect(reader.testingReferencePreviewContent == nil)
 

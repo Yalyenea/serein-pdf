@@ -34,7 +34,6 @@ enum ThemeColorRecipe: Equatable, Sendable {
     case srgb(ThemeRGBComponents, alpha: CGFloat = 1)
 
     func resolve(for appearance: NSAppearance) -> NSColor {
-        let color: NSColor
         var resolvedColor: NSColor?
         appearance.performAsCurrentDrawingAppearance {
             resolvedColor = switch self {
@@ -59,25 +58,17 @@ enum ThemeColorRecipe: Equatable, Sendable {
                 )
             }
         }
-        color = resolvedColor!
-        return color
+        return resolvedColor!
     }
 }
 
 enum ThemePDFStyle: Equatable, Sendable {
     case none
-    case classicInvert
     case paper(background: ThemeRGBComponents)
     case darkPaper(
         background: ThemeRGBComponents,
         foreground: ThemeRGBComponents,
         accentPreservation: CGFloat
-    )
-    case remap(
-        background: ThemeRGBComponents,
-        foreground: ThemeRGBComponents,
-        accentPreservation: CGFloat,
-        backgroundLuminance: CGFloat
     )
 }
 
@@ -107,7 +98,6 @@ struct ThemeDescriptor: Equatable, Sendable {
     let chromeDivider: ThemeColorRecipe
     let selectedChromeBackground: ThemeColorRecipe
     let chromeStroke: ThemeColorRecipe
-    let usesOpaqueSidebar: Bool
     let prefersFlatPDFChrome: Bool
     let highlightPalette: HighlightPalette
     let pdfStyle: ThemePDFStyle
@@ -193,7 +183,6 @@ enum ThemeRegistry {
             chromeDivider: .calibratedWhite(0.88),
             selectedChromeBackground: .calibratedWhite(0.915),
             chromeStroke: .calibratedWhite(0.82),
-            usesOpaqueSidebar: true,
             prefersFlatPDFChrome: false,
             highlightPalette: .normal,
             pdfStyle: .none
@@ -210,7 +199,6 @@ enum ThemeRegistry {
             chromeDivider: .srgb(dawnUI),
             selectedChromeBackground: .srgb(dawnHighlight, alpha: 0.5),
             chromeStroke: .srgb(dawnStrongUI),
-            usesOpaqueSidebar: true,
             prefersFlatPDFChrome: true,
             highlightPalette: .rosePineDawn,
             pdfStyle: .paper(background: dawnSurface)
@@ -230,7 +218,6 @@ enum ThemeRegistry {
             chromeDivider: .srgb(normalDarkDivider),
             selectedChromeBackground: .srgb(normalDarkSelected),
             chromeStroke: .srgb(normalDarkStroke),
-            usesOpaqueSidebar: true,
             prefersFlatPDFChrome: true,
             highlightPalette: .normal,
             pdfStyle: .darkPaper(
@@ -251,7 +238,6 @@ enum ThemeRegistry {
             chromeDivider: .srgb(moonOverlay),
             selectedChromeBackground: .srgb(moonOverlay),
             chromeStroke: .srgb(moonMuted),
-            usesOpaqueSidebar: true,
             prefersFlatPDFChrome: true,
             highlightPalette: .rosePineMoon,
             pdfStyle: .darkPaper(

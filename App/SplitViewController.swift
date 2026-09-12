@@ -603,11 +603,6 @@ final class SplitViewController: NSSplitViewController {
             reader.onFindActionRequested = { [weak self] action in
                 self?.handleFindAction(action)
             }
-            reader.onRevealAnnotationRequested = { [weak self] group in
-                guard let self else { return }
-                self.documentStore.setRightSidebarVisible(true, in: self.windowID)
-                self.rightSidebarViewController.revealAnnotation(group.groupID, focusEditor: false)
-            }
             reader.shouldSuppressAnnotationPreview = { [weak self] groupID in
                 self?.shouldSuppressAnnotationPreview(for: groupID) ?? false
             }

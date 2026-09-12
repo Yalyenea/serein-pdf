@@ -431,7 +431,6 @@ final class CommandPaletteController: NSWindowController, NSWindowDelegate, NSTa
 #if DEBUG
 extension CommandPaletteController {
     var testingFilteredCommands: [ShortcutCommand] { state.filteredItems.map(\.command) }
-    var testingHighlightedCommand: ShortcutCommand? { state.highlightedItem?.command }
     var testingQueryField: NSSearchField { queryField }
 
     func testingSetQuery(_ query: String) {

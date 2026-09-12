@@ -5,16 +5,6 @@ import XCTest
 
 @MainActor
 final class HighlightUndoTests: XCTestCase {
-    func testApplyHighlightReturnsRecordForEveryLine() throws {
-        let document = try makeTextPDF(text: "alpha beta")
-        let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
-
-        let records = HighlightService.applyHighlight(to: selection, color: HighlightColor.pink.nsColor)
-        XCTAssertEqual(records.count, 1)
-        XCTAssertEqual(records.first?.pageIndex, 0)
-        XCTAssertEqual(records.first?.annotation.type, "Highlight")
-    }
-
     func testUndoAddRemovesAnnotation() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTextFile(text: "alpha"))
@@ -22,6 +12,9 @@ final class HighlightUndoTests: XCTestCase {
         let selection = try XCTUnwrap(document.findString("alpha", withOptions: []).first)
 
         let records = HighlightService.applyHighlight(to: selection)
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.pageIndex, 0)
+        XCTAssertEqual(records.first?.annotation.type, "Highlight")
         store.recordHighlightUndo(.added(records), for: session.id)
         store.setDirty(true, for: session.id)
 
@@ -163,43 +156,6 @@ final class HighlightUndoTests: XCTestCase {
     }
 
     private func makeTextFile(text: String) throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-            .appendingPathComponent("undo-text.pdf")
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        writeTextPDF(text: text, to: url)
-        return url
-    }
-
-    private func makeTextPDF(text: String) throws -> PDFDocument {
-        let url = try makeTextFile(text: text)
-        return try XCTUnwrap(PDFDocument(url: url))
-    }
-
-    private func writeTextPDF(text: String, to url: URL) {
-        var mediaBox = CGRect(x: 0, y: 0, width: 420, height: 220)
-        let data = NSMutableData()
-        guard let consumer = CGDataConsumer(data: data),
-              let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
-            XCTFail("Failed to create PDF context")
-            return
-        }
-
-        context.beginPDFPage(nil)
-        let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = graphicsContext
-        NSColor.white.setFill()
-        NSBezierPath(rect: mediaBox).fill()
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 22, weight: .medium),
-            .foregroundColor: NSColor.black,
-        ]
-        NSString(string: text).draw(at: NSPoint(x: 48, y: 112), withAttributes: attributes)
-        NSGraphicsContext.restoreGraphicsState()
-        context.endPDFPage()
-        context.closePDF()
-        data.write(to: url, atomically: true)
+        try TestPDFFixtures.makeSearchablePDF(named: "undo-text", pages: [text])
     }
 }

@@ -406,7 +406,6 @@ final class ReaderViewController: NSViewController {
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
     var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
     var onBookPageBoundaryRequested: (Int) -> Bool = { _ in false }
-    var onRevealAnnotationRequested: ((DocumentHighlightGroup) -> Void)?
     var onSendSelectionToCodexRequested: ((String) -> Void)?
     var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
     /// When true for a groupID, hover preview is suppressed (e.g. same row selected in Annotations sidebar).
@@ -428,7 +427,6 @@ final class ReaderViewController: NSViewController {
     private let overviewGridView = OverviewGridView()
     private let referencePreview = ReaderReferencePreviewController()
     private let findBarView = FindBarView()
-    private var findBarTopConstraint: NSLayoutConstraint?
     private var pdfContainerTopConstraint: NSLayoutConstraint?
     private var readerState = ReaderState()
     private(set) var displayedSessionID: UUID?
@@ -554,9 +552,6 @@ final class ReaderViewController: NSViewController {
         }
         annotationInteraction.onFocusRequested = { [weak self] in
             self?.onFocusRequested?()
-        }
-        annotationInteraction.onRevealRequested = { [weak self] group in
-            self?.onRevealAnnotationRequested?(group)
         }
         annotationInteraction.onCreateMarkupRequested = { [weak self] type in
             self?.createHighlightFromCurrentSelection(type: type)
@@ -878,9 +873,7 @@ final class ReaderViewController: NSViewController {
         container.addSubview(overviewGridView)
         container.addSubview(findBarView)
 
-        let findBarTop = findBarView.topAnchor.constraint(equalTo: container.topAnchor)
         let pdfTop = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
-        findBarTopConstraint = findBarTop
         pdfContainerTopConstraint = pdfTop
 
         NSLayoutConstraint.activate([
@@ -915,7 +908,7 @@ final class ReaderViewController: NSViewController {
             overviewGridView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             findBarView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             findBarView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            findBarTop,
+            findBarView.topAnchor.constraint(equalTo: container.topAnchor),
             findBarView.heightAnchor.constraint(equalToConstant: 36),
         ])
 
@@ -992,6 +985,7 @@ final class ReaderViewController: NSViewController {
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         // Pin before store writeback so the notification does not re-apply scale.
         displayedScaleMode = .manual
+        flushPendingReadingPositionWriteback()
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }
 
@@ -1007,6 +1001,7 @@ final class ReaderViewController: NSViewController {
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         // Pin before store writeback so the notification does not re-apply scale.
         displayedScaleMode = .manual
+        flushPendingReadingPositionWriteback()
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }
 
@@ -2349,12 +2344,6 @@ final class ReaderViewController: NSViewController {
         documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
     }
 
-    @objc
-    private func handlePDFViewSelectionChanged(_ notification: Notification) {
-        // Auto-highlight has moved to the local mouseUp monitor; selection changes
-        // during an active drag are ignored to avoid stacking highlights.
-    }
-
     private func applyHighlightOnMouseUpIfNeeded(event: NSEvent) {
         guard presentationOverlay.isPresentationEnabled == false,
               readerState.isAnnotationModeEnabled,
@@ -3539,6 +3528,7 @@ final class ReaderViewController: NSViewController {
         )
         guard appliedRecords.isEmpty == false else { return nil }
 
+        flushPendingReadingPositionWriteback()
         documentStore.noteHighlightsAdded(appliedRecords, for: session.id)
         pdfView.currentSelection = nil
         return HighlightService.buildHighlightGroups(from: appliedRecords).first

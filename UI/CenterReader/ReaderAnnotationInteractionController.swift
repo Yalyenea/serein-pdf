@@ -6,7 +6,6 @@ import PDFKit
 final class ReaderAnnotationInteractionController: NSObject {
     var activeSessionID: UUID?
     var onFocusRequested: (() -> Void)?
-    var onRevealRequested: ((DocumentHighlightGroup) -> Void)?
     var onCreateMarkupRequested: ((AnnotationMarkupType) -> DocumentHighlightGroup?)?
     var onNavigateRequested: ((DocumentHighlightGroup) -> Void)?
     var onSendSelectionToCodexRequested: ((String) -> Void)?

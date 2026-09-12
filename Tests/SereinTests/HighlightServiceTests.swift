@@ -283,7 +283,7 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertTrue(page.annotations.filter { $0.type == "Highlight" }.isEmpty)
     }
 
-    func testBuildHighlightGroupContainingUUIDCollectsRecordsAcrossPages() throws {
+    func testCachedHighlightGroupContainingUUIDCollectsRecordsAcrossPages() throws {
         let document = TestPDFFixtures.makeBlankDocument(pageCount: 2)
         let firstPage = try XCTUnwrap(document.page(at: 0))
         let secondPage = try XCTUnwrap(document.page(at: 1))
@@ -294,9 +294,8 @@ final class HighlightServiceTests: XCTestCase {
         second.userName = groupID
         makeHighlight(on: secondPage, bounds: NSRect(x: 24, y: 40, width: 80, height: 18)).userName = UUID().uuidString
 
-        let group = try XCTUnwrap(
-            HighlightService.buildHighlightGroup(containing: first, in: document)
-        )
+        let cache = DocumentHighlightCache(groups: HighlightService.buildHighlightGroups(in: document))
+        let group = try XCTUnwrap(cache.group(containing: first))
 
         XCTAssertEqual(group.groupID, groupID)
         XCTAssertEqual(group.records.map(\.pageIndex), [0, 1])
@@ -348,7 +347,7 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(page.annotations.count, 4)
     }
 
-    func testBuildHighlightGroupContainingExternalAnnotationOnlyUsesHitAnnotation() throws {
+    func testCachedHighlightGroupContainingExternalAnnotationOnlyUsesHitAnnotation() throws {
         let document = TestPDFFixtures.makeBlankDocument(pageCount: 1)
         let page = try XCTUnwrap(document.page(at: 0))
         let first = makeHighlight(on: page, bounds: NSRect(x: 24, y: 100, width: 80, height: 18))
@@ -356,9 +355,8 @@ final class HighlightServiceTests: XCTestCase {
         first.userName = "Shared Author"
         second.userName = "Shared Author"
 
-        let group = try XCTUnwrap(
-            HighlightService.buildHighlightGroup(containing: first, in: document)
-        )
+        let cache = DocumentHighlightCache(groups: HighlightService.buildHighlightGroups(in: document))
+        let group = try XCTUnwrap(cache.group(containing: first))
 
         XCTAssertEqual(group.records.count, 1)
         XCTAssertEqual(group.snippet, "Untitled Highlight")

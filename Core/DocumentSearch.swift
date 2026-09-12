@@ -244,10 +244,6 @@ final class DocumentSearchOperation: NSObject {
 
     @objc
     private func finishCurrentTargetNotification(_ notification: Notification) {
-        finishCurrentTarget()
-    }
-
-    private func finishCurrentTarget() {
         guard isCancelled == false,
               source.targets.indices.contains(targetIndex) else { return }
         let target = source.targets[targetIndex]
@@ -277,37 +273,12 @@ private struct DocumentSearchTextContext {
     var normalizedQuery: String?
 }
 
-enum DocumentSearchService {
+private enum DocumentSearchService {
     private static let wordCharacters = CharacterSet.alphanumerics
         .union(.nonBaseCharacters)
         .union(CharacterSet(charactersIn: "_"))
 
-    static func buildMatches(
-        for query: String,
-        options: SearchOptions = .default,
-        in document: PDFDocument
-    ) -> [DocumentSearchMatch] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return [] }
-
-        let compareOptions: NSString.CompareOptions = options.isCaseSensitive ? [] : .caseInsensitive
-        var textContext = DocumentSearchTextContext()
-        var matches: [DocumentSearchMatch] = []
-        for selection in document.findString(trimmed, withOptions: compareOptions) {
-            guard let match = makeMatch(
-                from: selection,
-                query: trimmed,
-                options: options,
-                matchIndex: matches.count,
-                in: document,
-                textContext: &textContext
-            ) else { continue }
-            matches.append(match)
-        }
-        return matches
-    }
-
-    fileprivate static func makeMatch(
+    static func makeMatch(
         from selection: PDFSelection,
         query: String,
         options: SearchOptions,

@@ -1,8 +1,5 @@
 import AppKit
 
-private final class RecentFilesPaletteQueryField: NSTextField {
-}
-
 private final class RecentFilesPaletteResultsTableView: NSTableView {
     var onKeyEvent: ((NSEvent) -> Bool)?
 
@@ -100,7 +97,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
     private var interactionMode: RecentFilesPaletteInteractionMode = .editingQuery
 
     private let titleLabel = NSTextField(labelWithString: "")
-    private let queryField = RecentFilesPaletteQueryField(frame: .zero)
+    private let queryField = NSTextField(frame: .zero)
     private let secondaryLabel = NSTextField(labelWithString: "")
     private let footerLabel = NSTextField(
         labelWithString: "↑ / ↓ 选中    Space 多选    Enter 打开    Esc 关闭"

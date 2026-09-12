@@ -12,8 +12,6 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
     let title: String
     let subtitle: String
     let pageText: String
-    let pageIndex: Int
-    let pageCount: Int
     let paneBadge: String?
     let isFocusedPane: Bool
     let isActive: Bool
@@ -26,41 +24,23 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
         secondarySessionID: UUID? = nil,
         focusedPane: ReaderPane = .primary
     ) {
-        if session.isBlank {
-            self.sessionID = session.id
-            self.title = session.title
-            self.subtitle = "Blank tab"
-            self.pageText = "Blank"
-            self.pageIndex = 0
-            self.pageCount = 0
-            if session.id == primarySessionID {
-                self.paneBadge = "P"
-                self.isFocusedPane = focusedPane == .primary
-            } else if session.id == secondarySessionID {
-                self.paneBadge = "S"
-                self.isFocusedPane = focusedPane == .secondary
-            } else {
-                self.paneBadge = nil
-                self.isFocusedPane = false
-            }
-            self.isActive = isActive
-            self.isDirty = false
-            return
-        }
-
-        let pageCount = session.pageCount
-        let pageIndex = pageCount.map { $0 > 0 ? min(max(session.currentPageIndex, 0), $0 - 1) : 0 }
-            ?? max(session.currentPageIndex, 0)
         self.sessionID = session.id
         self.title = session.title
-        self.subtitle = session.url.path
-        if let pageCount, pageCount > 0 {
-            self.pageText = "Page \(pageIndex + 1) / \(pageCount)"
+        self.subtitle = session.isBlank ? "Blank tab" : session.url.path
+        self.isActive = isActive
+        self.isDirty = session.isBlank == false && session.isDirty
+        if session.isBlank {
+            self.pageText = "Blank"
         } else {
-            self.pageText = "Page \(pageIndex + 1)"
+            let pageCount = session.pageCount
+            let pageIndex = pageCount.map { $0 > 0 ? min(max(session.currentPageIndex, 0), $0 - 1) : 0 }
+                ?? max(session.currentPageIndex, 0)
+            if let pageCount, pageCount > 0 {
+                self.pageText = "Page \(pageIndex + 1) / \(pageCount)"
+            } else {
+                self.pageText = "Page \(pageIndex + 1)"
+            }
         }
-        self.pageIndex = pageIndex
-        self.pageCount = pageCount ?? 0
         if session.id == primarySessionID {
             self.paneBadge = "P"
             self.isFocusedPane = focusedPane == .primary
@@ -71,13 +51,11 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
             self.paneBadge = nil
             self.isFocusedPane = false
         }
-        self.isActive = isActive
-        self.isDirty = session.isDirty
     }
 }
 
 struct OpenTabsPaletteState {
-    private(set) var items: [OpenTabsPaletteItem]
+    private(set) var items: [OpenTabsPaletteItem] = []
     private(set) var highlightedIndex: Int?
 
     init(
@@ -87,17 +65,13 @@ struct OpenTabsPaletteState {
         secondarySessionID: UUID? = nil,
         focusedPane: ReaderPane = .primary
     ) {
-        let items = sessions.map {
-            OpenTabsPaletteItem(
-                session: $0,
-                isActive: $0.id == activeSessionID,
-                primarySessionID: primarySessionID,
-                secondarySessionID: secondarySessionID,
-                focusedPane: focusedPane
-            )
-        }
-        self.items = items
-        self.highlightedIndex = Self.initialHighlightIndex(in: items)
+        replaceSessions(
+            sessions,
+            activeSessionID: activeSessionID,
+            primarySessionID: primarySessionID,
+            secondarySessionID: secondarySessionID,
+            focusedPane: focusedPane
+        )
     }
 
     var highlightedItem: OpenTabsPaletteItem? {

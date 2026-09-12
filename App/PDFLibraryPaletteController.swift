@@ -1,8 +1,5 @@
 import AppKit
 
-private final class PDFLibraryPaletteQueryField: NSTextField {
-}
-
 private final class PDFLibraryPaletteTableView: NSTableView {
     var onKeyEvent: ((NSEvent) -> Bool)?
 
@@ -149,7 +146,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private let titleLabel = NSTextField(labelWithString: "PDF Library")
     private let secondaryLabel = NSTextField(labelWithString: "")
     private let segmentControl = NSSegmentedControl(labels: ["All"], trackingMode: .selectOne, target: nil, action: nil)
-    private let queryField = PDFLibraryPaletteQueryField(frame: .zero)
+    private let queryField = NSTextField(frame: .zero)
     private let foldersScrollView = NSScrollView()
     private let pdfsScrollView = NSScrollView()
     private let foldersTableView = PDFLibraryPaletteTableView()

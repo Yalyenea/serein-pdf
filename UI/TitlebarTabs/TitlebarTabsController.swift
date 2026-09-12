@@ -53,7 +53,6 @@ final class TitlebarTabsController: NSViewController {
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let documentContainerView = NSView()
-    private let bottomBorderView = NSView()
     private var isTabsStripVisible = true
     private var stripWidthConstraint: NSLayoutConstraint?
     private var displayedTabsFingerprint: TabsFingerprint?
@@ -121,12 +120,7 @@ final class TitlebarTabsController: NSViewController {
         scrollView.documentView = documentContainerView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        bottomBorderView.wantsLayer = true
-        bottomBorderView.translatesAutoresizingMaskIntoConstraints = false
-        bottomBorderView.isHidden = !isTabsStripVisible
-
         container.addSubview(scrollView)
-        container.addSubview(bottomBorderView)
 
         let stripWidthConstraint = container.widthAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.width)
         self.stripWidthConstraint = stripWidthConstraint
@@ -136,10 +130,6 @@ final class TitlebarTabsController: NSViewController {
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            bottomBorderView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            bottomBorderView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            bottomBorderView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            bottomBorderView.heightAnchor.constraint(equalToConstant: 1),
             stripWidthConstraint,
             container.heightAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.height),
             stackView.leadingAnchor.constraint(equalTo: documentContainerView.leadingAnchor, constant: 6),
@@ -167,7 +157,6 @@ final class TitlebarTabsController: NSViewController {
             view.layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
                 .withAlphaComponent(0.18)
                 .cgColor
-            bottomBorderView.layer?.backgroundColor = NSColor.clear.cgColor
         }
     }
 
@@ -313,7 +302,6 @@ final class TitlebarTabsController: NSViewController {
     private func applyVisibilityState() {
         view.isHidden = !isTabsStripVisible
         scrollView.isHidden = !isTabsStripVisible
-        bottomBorderView.isHidden = true
         view.frame.size = preferredContentSize
     }
 

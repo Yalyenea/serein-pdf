@@ -40,7 +40,7 @@ final class ReaderCommentInteractionTests: XCTestCase {
                 pdfView.layoutDocumentView()
                 pdfView.annotationsChanged(on: page)
                 pdfView.layoutSubtreeIfNeeded()
-                let icon = try XCTUnwrap(imageViews(in: try XCTUnwrap(pdfView.documentView)).first { $0.image != nil })
+                let icon = try XCTUnwrap(findAllDescendants(of: NSImageView.self, in: try XCTUnwrap(pdfView.documentView)).first { $0.image != nil })
                 let center = NSPoint(x: icon.bounds.midX, y: icon.bounds.midY)
                 let point = icon.convert(center, to: pdfView)
                 XCTAssertTrue(pdfView.hitTest(pdfView.convert(point, to: pdfView.superview)) === pdfView)
@@ -112,11 +112,7 @@ final class ReaderCommentInteractionTests: XCTestCase {
     }
 
     private func commentIcons(in pdfView: PDFView) -> [NSImageView] {
-        imageViews(in: pdfView).filter { $0.image != nil }
+        findAllDescendants(of: NSImageView.self, in: pdfView).filter { $0.image != nil }
     }
 
-    private func imageViews(in view: NSView) -> [NSImageView] {
-        ((view as? NSImageView).map { [$0] } ?? [])
-            + view.subviews.flatMap { imageViews(in: $0) }
-    }
 }

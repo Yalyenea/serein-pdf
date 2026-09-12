@@ -1,48 +1,19 @@
 import AppKit
 import Foundation
 import PDFKit
-import XCTest
 
-/// Shared PDF fixtures for SereinTests. Files live under unique temp directories
-/// that are registered for best-effort cleanup (XCTest teardown + process exit).
+/// Shared PDF fixtures stored in unique directories under the project’s .tmp/.
 enum TestPDFFixtures {
-    private final class RootRegistry: @unchecked Sendable {
-        private let lock = NSLock()
-        private var roots: [URL] = []
-
-        func register(_ url: URL) {
-            lock.lock()
-            roots.append(url)
-            lock.unlock()
-        }
-
-        func takeAll() -> [URL] {
-            lock.lock()
-            defer { lock.unlock() }
-            let snapshot = roots
-            roots.removeAll()
-            return snapshot
-        }
-    }
-
-    private static let registry = RootRegistry()
-
-    static func registerRoot(_ url: URL) {
-        registry.register(url)
-    }
-
     static func makeRootDirectory(prefix: String = "serein-test") throws -> URL {
-        let root = FileManager.default.temporaryDirectory
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(".tmp/test-fixtures", isDirectory: true)
             .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        registerRoot(root)
         return root
-    }
-
-    static func purgeRegisteredRoots() {
-        for root in registry.takeAll() {
-            try? FileManager.default.removeItem(at: root)
-        }
     }
 
     /// Blank multi-page PDF (image pages, no selectable text).
@@ -214,14 +185,5 @@ enum TestPDFFixtures {
             throw CocoaError(.fileWriteUnknown)
         }
         return data
-    }
-}
-
-extension XCTestCase {
-    /// Ensure temp roots created by `TestPDFFixtures` during this test are removed.
-    func trackPDFFixturesForTeardown() {
-        addTeardownBlock {
-            TestPDFFixtures.purgeRegisteredRoots()
-        }
     }
 }

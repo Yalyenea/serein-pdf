@@ -117,39 +117,6 @@ enum HighlightService {
         }
     }
 
-    static func buildHighlightGroup(
-        containing annotation: PDFAnnotation,
-        in document: PDFDocument
-    ) -> DocumentHighlightGroup? {
-        guard isMarkupAnnotation(annotation),
-              let annotationPage = annotation.page,
-              annotationPage.document === document else { return nil }
-
-        let groupID = resolvedGroupID(for: annotation)
-        var records: [HighlightAnnotationRecord] = []
-        if let sereinGroupID = sereinGroupID(for: annotation) {
-            for pageIndex in 0..<document.pageCount {
-                guard let page = document.page(at: pageIndex) else { continue }
-                for candidate in page.annotations {
-                    guard isMarkupAnnotation(candidate),
-                          self.sereinGroupID(for: candidate) == sereinGroupID else { continue }
-                    records.append(
-                        HighlightAnnotationRecord(pageIndex: pageIndex, annotation: candidate)
-                    )
-                }
-            }
-        } else {
-            records = [
-                HighlightAnnotationRecord(
-                    pageIndex: document.index(for: annotationPage),
-                    annotation: annotation
-                ),
-            ]
-        }
-
-        return highlightGroup(groupID: groupID, records: records)
-    }
-
     static func highlightAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
         // PDFKit draws later annotations on top; prefer the topmost hit.
         page.annotations.last { annotation in

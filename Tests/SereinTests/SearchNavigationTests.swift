@@ -317,18 +317,15 @@ final class SearchNavigationTests: XCTestCase {
         controller.view.frame = NSRect(x: 0, y: 0, width: 320, height: 540)
         controller.view.layoutSubtreeIfNeeded()
 
-        let emptyLabel = try XCTUnwrap(
-            controller.view.subviews.first { $0.identifier?.rawValue == "searchEmptyStateLabel" } as? NSTextField
-        )
-
-        XCTAssertTrue(emptyLabel.isHidden)
-        XCTAssertTrue(emptyLabel.stringValue.isEmpty)
+        let visibleLabels = findAllDescendants(of: NSTextField.self, in: controller.view)
+            .filter { $0.isHiddenOrHasHiddenAncestor == false }
+        XCTAssertTrue(visibleLabels.allSatisfy { $0.stringValue.isEmpty })
+        XCTAssertEqual(controller.selectionSummary().totalMatches, 0)
 
         store.updateSearch(query: "needle", scope: .currentDocument, in: store.defaultWindowID)
         waitForSearch(in: store)
         controller.view.layoutSubtreeIfNeeded()
 
-        XCTAssertTrue(emptyLabel.isHidden)
         XCTAssertGreaterThan(controller.selectionSummary().totalMatches, 0)
     }
 

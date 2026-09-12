@@ -20,7 +20,6 @@ struct PDFBoundaryScrollTests {
                 .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
                 .appendingPathComponent(".tmp/pdf-boundary-tests/\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            TestPDFFixtures.registerRoot(root)
             url = root.appendingPathComponent("boundary.pdf")
             let document = TestPDFFixtures.makeBlankDocument(
                 pageCount: 3, pageSize: NSSize(width: 720, height: 1800)
