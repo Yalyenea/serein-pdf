@@ -14,6 +14,7 @@ final class ReadingFocusOverlayView: NSView {
 
     private let shadeLayer = CAShapeLayer()
     private let focusEdgeLayer = CAShapeLayer()
+    private var renderedFocusBandRect: NSRect?
     private var focusTrackingArea: NSTrackingArea?
     private var isPointerInside = false
     private var isFocusPinned = false
@@ -41,7 +42,10 @@ final class ReadingFocusOverlayView: NSView {
     override func updateTrackingAreas() {
         if let focusTrackingArea {
             removeTrackingArea(focusTrackingArea)
+            self.focusTrackingArea = nil
         }
+        defer { super.updateTrackingAreas() }
+        guard isFocusEnabled else { return }
 
         let trackingArea = NSTrackingArea(
             rect: .zero,
@@ -57,7 +61,6 @@ final class ReadingFocusOverlayView: NSView {
         )
         addTrackingArea(trackingArea)
         focusTrackingArea = trackingArea
-        super.updateTrackingAreas()
     }
 
     override func viewDidMoveToWindow() {
@@ -78,15 +81,8 @@ final class ReadingFocusOverlayView: NSView {
                 name: NSWindow.didResignKeyNotification,
                 object: window
             )
-            pointerMotionMonitor = NSEvent.addLocalMonitorForEvents(
-                matching: [.leftMouseDragged, .scrollWheel]
-            ) { [weak self] event in
-                MainActor.assumeIsolated {
-                    self?.handlePointerMotion(event)
-                }
-                return event
-            }
         }
+        updatePointerMotionMonitor()
     }
 
     override func layout() {
@@ -113,6 +109,8 @@ final class ReadingFocusOverlayView: NSView {
     func setFocusEnabled(_ enabled: Bool) {
         guard enabled != isFocusEnabled else { return }
         isFocusEnabled = enabled
+        updateTrackingAreas()
+        updatePointerMotionMonitor()
         if enabled == false {
             isPointerInside = false
             clearFocus(animated: false)
@@ -219,7 +217,7 @@ final class ReadingFocusOverlayView: NSView {
     }
 
     private func handlePointerMotion(_ event: NSEvent) {
-        guard event.window === window else { return }
+        guard isFocusEnabled, event.window === window else { return }
         let point = convert(event.locationInWindow, from: nil)
         if event.type == .scrollWheel {
             DispatchQueue.main.async { [weak self] in
@@ -227,6 +225,25 @@ final class ReadingFocusOverlayView: NSView {
             }
         } else {
             handlePointerDrag(at: point)
+        }
+    }
+
+    private func updatePointerMotionMonitor() {
+        guard isFocusEnabled, window != nil else {
+            if let pointerMotionMonitor {
+                NSEvent.removeMonitor(pointerMotionMonitor)
+                self.pointerMotionMonitor = nil
+            }
+            return
+        }
+        guard pointerMotionMonitor == nil else { return }
+        pointerMotionMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDragged, .scrollWheel]
+        ) { [weak self] event in
+            MainActor.assumeIsolated {
+                self?.handlePointerMotion(event)
+            }
+            return event
         }
     }
 
@@ -258,11 +275,16 @@ final class ReadingFocusOverlayView: NSView {
     }
 
     private func updateShadeLayers() {
+        let nextFocusBandRect = isFocusEnabled ? focusBandRect : nil
+        guard nextFocusBandRect != renderedFocusBandRect
+                || (nextFocusBandRect != nil && shadeLayer.frame != bounds) else { return }
+        renderedFocusBandRect = nextFocusBandRect
+
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
 
-        guard isFocusEnabled, let focusBandRect else {
+        guard let focusBandRect = nextFocusBandRect else {
             shadeLayer.isHidden = true
             shadeLayer.path = nil
             focusEdgeLayer.isHidden = true

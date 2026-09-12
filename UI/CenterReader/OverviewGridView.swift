@@ -69,6 +69,8 @@ final class OverviewGridView: NSView {
     }
 
     deinit {
+        pendingRenderTickets.values.forEach { $0.cancel() }
+        renderQueue.cancelAllOperations()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -344,8 +346,11 @@ final class OverviewGridView: NSView {
         renderQueue.addOperation { [weak self, ticket] in
             guard ticket.isCancelled == false else { return }
             let image: NSImage? = autoreleasepool {
-                guard let page = ticket.document.page(at: ticket.pageIndex) else { return nil }
-                return page.thumbnail(of: ticket.pixelSize, for: .mediaBox)
+                guard let document = ticket.takeDocument(),
+                      let page = document.page(at: ticket.pageIndex) else { return nil }
+                return withExtendedLifetime(document) {
+                    page.thumbnail(of: ticket.pixelSize, for: .mediaBox)
+                }
             }
             guard let image else { return }
             guard ticket.isCancelled == false else { return }
@@ -372,6 +377,7 @@ final class OverviewGridView: NSView {
         thumbnailGeneration += 1
         pendingRenderTickets.values.forEach { $0.cancel() }
         pendingRenderTickets.removeAll()
+        renderQueue.cancelAllOperations()
     }
 
     private func invalidateThumbnails(clearDisplayedImages: Bool) {
@@ -415,6 +421,11 @@ extension OverviewGridView {
     var testingLiveItemViewCount: Int { visibleItemViews.count }
 
     var testingHasDocument: Bool { document != nil }
+
+    var testingRendersSuspended: Bool {
+        get { renderQueue.isSuspended }
+        set { renderQueue.isSuspended = newValue }
+    }
 
     /// Moves the viewport without going through the scroll machinery, then
     /// runs the same refresh a real scroll would trigger.
@@ -532,15 +543,19 @@ private final class FlippedClipContainer: NSView {
 /// One off-main rasterization request plus its result slot.
 /// `@unchecked Sendable` crosses only the render queue boundary.
 private final class OverviewRenderTicket: @unchecked Sendable {
-    let document: PDFDocument
     let pageIndex: Int
     let pixelSize: NSSize
     let pointSize: CGSize
     let generation: Int
     let costBytes: Int
 
-    private let cancelled = OSAllocatedUnfairLock(initialState: false)
-    private let result = OSAllocatedUnfairLock<NSImage?>(initialState: nil)
+    private struct State {
+        var document: PDFDocument?
+        var isCancelled = false
+        var result: NSImage?
+    }
+
+    private let state: OSAllocatedUnfairLock<State>
 
     init(
         document: PDFDocument,
@@ -549,7 +564,7 @@ private final class OverviewRenderTicket: @unchecked Sendable {
         pointSize: CGSize,
         generation: Int
     ) {
-        self.document = document
+        self.state = OSAllocatedUnfairLock(uncheckedState: State(document: document))
         self.pageIndex = pageIndex
         self.pixelSize = pixelSize
         self.pointSize = pointSize
@@ -558,18 +573,37 @@ private final class OverviewRenderTicket: @unchecked Sendable {
     }
 
     func cancel() {
-        cancelled.withLock { $0 = true }
+        state.withLock {
+            $0.isCancelled = true
+            $0.document = nil
+            $0.result = nil
+        }
     }
 
     var isCancelled: Bool {
-        cancelled.withLock { $0 }
+        state.withLock { $0.isCancelled }
+    }
+
+    /// Only an executing rasterization retains the document after cancellation.
+    /// Queued tickets release it immediately, even while their queue is busy.
+    func takeDocument() -> PDFDocument? {
+        state.withLockUnchecked { state in
+            defer { state.document = nil }
+            return state.document
+        }
     }
 
     func storeResult(_ image: NSImage) {
-        result.withLock { $0 = image }
+        state.withLock {
+            guard $0.isCancelled == false else { return }
+            $0.result = image
+        }
     }
 
     func takeResult() -> NSImage? {
-        result.withLock { $0 }
+        state.withLock { state in
+            defer { state.result = nil }
+            return state.result
+        }
     }
 }

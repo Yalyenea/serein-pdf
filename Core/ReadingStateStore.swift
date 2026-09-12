@@ -106,8 +106,12 @@ final class UserDefaultsReadingStateStore: ReadingStateStore, @unchecked Sendabl
             lock.unlock()
             return
         }
-        cache[key] = state
-        touchLRULocked(key)
+        if cacheChanged {
+            cache[key] = state
+        }
+        if lruChanged {
+            touchLRULocked(key)
+        }
         pruneIfNeededLocked()
         markDirtyLocked()
         let flushImmediately = debounceInterval <= 0

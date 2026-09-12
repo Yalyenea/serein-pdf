@@ -45,6 +45,7 @@ final class RightSidebarViewController: NSViewController {
     var onWillNavigateFromPages: (() -> Void)?
     var onDidNavigateFromPages: (() -> Void)?
     private let thumbnailView = NavigationTrackingPDFThumbnailView()
+    private weak var configuredPDFView: PDFView?
     private let modeSegmented = NSSegmentedControl()
     private let emptyStateView = EmptyStateView(
         title: "No Document Open",
@@ -80,7 +81,8 @@ final class RightSidebarViewController: NSViewController {
     }
 
     func configure(pdfView: PDFView) {
-        thumbnailView.pdfView = pdfView
+        configuredPDFView = pdfView
+        updateThumbnailBinding()
     }
 
     override func viewDidLoad() {
@@ -114,6 +116,7 @@ final class RightSidebarViewController: NSViewController {
         }
         applyMode()
         applyDocumentPresence()
+        updateThumbnailBinding()
     }
 
     deinit {
@@ -243,11 +246,10 @@ final class RightSidebarViewController: NSViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.affects(windowID: windowID) else { return }
-        guard notification.isOnlySidebarVisibilityChange == false else { return }
         // Outline/search/annotations controllers observe the store themselves for content.
         guard notification.isOnlyReadingPositionChange == false else { return }
         let change = notification.documentStoreChange
-        if change.intersection([.content, .tabs, .rightSidebarMode]).isEmpty == false {
+        if change.intersection([.content, .tabs, .rightSidebarMode, .sidebarVisibility, .appearance]).isEmpty == false {
             applyStateFromStore()
         }
         if change.intersection([.content, .tabs, .search]).isEmpty == false {
@@ -333,7 +335,24 @@ final class RightSidebarViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        guard thumbnailView.pdfView != nil else { return }
         adjustThumbnailSizeForWidth()
+    }
+
+    private func updateThumbnailBinding() {
+        guard isViewLoaded else { return }
+        let sidebarVisible = documentStore.appConfiguration.layout.sidebarsSwapped
+            ? documentStore.isLeftSidebarVisible(in: windowID)
+            : documentStore.isRightSidebarVisible(in: windowID)
+        let showsPages = sidebarVisible && appliedMode == .pages && activeDocument() != nil
+        let pdfView = showsPages ? configuredPDFView : nil
+        guard thumbnailView.pdfView !== pdfView else { return }
+        if pdfView != nil {
+            adjustThumbnailSizeForWidth()
+        }
+        // PDFThumbnailView observes and rasterizes its PDFView even while hidden.
+        // Keep the reader weakly until the Pages pane is actually visible.
+        thumbnailView.pdfView = pdfView
     }
 
     private func adjustThumbnailSizeForWidth() {
@@ -390,6 +409,7 @@ final class RightSidebarViewController: NSViewController {
         modeSegmented.selectedSegment = mode.rawValue
         applyMode()
         applyDocumentPresence()
+        updateThumbnailBinding()
     }
 
     private func ensureAnnotationsViewLoaded() {

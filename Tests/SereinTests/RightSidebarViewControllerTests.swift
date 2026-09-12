@@ -1,9 +1,91 @@
 import AppKit
+import PDFKit
 import Testing
 @testable import Serein
 
 @MainActor
 struct RightSidebarViewControllerTests {
+    @Test
+    func thumbnailsBindOnlyWhilePagesHaveAnActiveDocument() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "pages-lazy-binding")
+        )
+        let controller = RightSidebarViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        let pdfView = PDFView()
+        pdfView.document = try store.pdfDocument(for: session.id)
+        controller.configure(pdfView: pdfView)
+        controller.loadViewIfNeeded()
+        let thumbnails = try #require(
+            findDescendant(of: NavigationTrackingPDFThumbnailView.self, in: controller.view)
+        )
+        #expect(thumbnails.pdfView == nil)
+
+        for mode in [RightSidebarMode.outline, .search, .annotations] {
+            store.setRightSidebarMode(.pages, in: store.defaultWindowID)
+            #expect(thumbnails.pdfView === pdfView)
+            store.setRightSidebarMode(mode, in: store.defaultWindowID)
+            #expect(thumbnails.pdfView == nil)
+        }
+
+        let replacementPDFView = PDFView()
+        replacementPDFView.document = pdfView.document
+        controller.configure(pdfView: replacementPDFView)
+        #expect(thumbnails.pdfView == nil)
+        store.setRightSidebarMode(.pages, in: store.defaultWindowID)
+        #expect(thumbnails.pdfView === replacementPDFView)
+
+        _ = store.newBlankTab(in: store.defaultWindowID)
+        #expect(thumbnails.pdfView == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func thumbnailsDetachWhenTheirSidebarIsCollapsed(sidebarsSwapped: Bool) throws {
+        var configuration = AppConfiguration.default
+        configuration.layout.sidebarsSwapped = sidebarsSwapped
+        let store = makeIsolatedDocumentStore(appConfiguration: configuration)
+        let session = try store.open(
+            documentAt: TestPDFFixtures.makeBlankPDF(named: "pages-collapse-\(sidebarsSwapped)")
+        )
+        store.setRightSidebarMode(.pages, in: store.defaultWindowID)
+        let controller = RightSidebarViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        let pdfView = PDFView()
+        pdfView.document = try store.pdfDocument(for: session.id)
+        controller.configure(pdfView: pdfView)
+        controller.loadViewIfNeeded()
+        let thumbnails = try #require(
+            findDescendant(of: NavigationTrackingPDFThumbnailView.self, in: controller.view)
+        )
+        #expect(thumbnails.pdfView === pdfView)
+
+        if sidebarsSwapped {
+            store.setRightSidebarVisible(false)
+            #expect(thumbnails.pdfView === pdfView)
+            store.setLeftSidebarVisible(false)
+        } else {
+            store.setLeftSidebarVisible(false)
+            #expect(thumbnails.pdfView === pdfView)
+            store.setRightSidebarVisible(false)
+        }
+        #expect(thumbnails.pdfView == nil)
+
+        if sidebarsSwapped {
+            store.setLeftSidebarVisible(true)
+        } else {
+            store.setRightSidebarVisible(true)
+        }
+        #expect(thumbnails.pdfView === pdfView)
+        controller.view.frame = NSRect(x: 0, y: 0, width: 320, height: 540)
+        controller.view.layoutSubtreeIfNeeded()
+        #expect(thumbnails.maximumNumberOfColumns == 3)
+    }
+
     @Test
     func pageThumbnailIntentForwardsThroughSidebar() throws {
         let store = makeIsolatedDocumentStore()

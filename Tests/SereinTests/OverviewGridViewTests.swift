@@ -178,6 +178,34 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertTrue(grid.testingThumbnailImageIndices.isEmpty)
     }
 
+    func testCancellingQueuedRendersReleasesDocumentBeforeQueueResumes() {
+        _ = NSApplication.shared
+        let grid = OverviewGridView(frame: NSRect(origin: .zero, size: viewportSize))
+        grid.testingRendersSuspended = true
+        defer { grid.testingRendersSuspended = false }
+        weak var previousDocument: PDFDocument?
+        autoreleasepool {
+            let document = TestPDFFixtures.makeBlankDocument(pageCount: 60)
+            previousDocument = document
+            grid.configure(document: document)
+            grid.applyLayout(columns: 3, cellSize: CGSize(width: 120, height: 170))
+            grid.layoutSubtreeIfNeeded()
+        }
+        XCTAssertNotNil(previousDocument)
+        XCTAssertFalse(grid.testingPendingRenderIndices.isEmpty)
+
+        grid.releaseDocument()
+
+        XCTAssertNil(previousDocument)
+        XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
+
+        // A new generation remains renderable after the old queue was cancelled.
+        grid.configure(document: TestPDFFixtures.makeBlankDocument(pageCount: 4))
+        grid.testingRendersSuspended = false
+        grid.testingFlushRenders()
+        XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0..<4))
+    }
+
     private func makeLaidOutGrid(pageCount: Int) -> OverviewGridView {
         let grid = OverviewGridView(frame: NSRect(origin: .zero, size: viewportSize))
         grid.configure(document: TestPDFFixtures.makeBlankDocument(pageCount: pageCount))

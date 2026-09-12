@@ -23,6 +23,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Performance
 - All-pages overview (`Cmd+Shift+O`) rasterizes lazily instead of up front: only pages within one screen of the viewport render, off the main thread two at a time, and thumbnails are capped at 1200px on the long side. Offscreen pages release their bitmaps, a cost-bounded `NSCache` restores recently visited pages without re-rasterizing, zooming / resizing re-renders only visible cells, and leaving the overview frees every thumbnail immediately.
+- Replace per-second PDF metadata polling with file and directory change events. Rebind monitoring after atomic replacements and directory recreation, and scan only the changed file for in-place writes.
+- Detach Pages thumbnails while their sidebar is hidden or showing another mode. Cancelling queued overview renders releases their PDFs and completed bitmaps immediately.
+- Remove pointer tracking while reading focus is disabled and reuse its drawing paths when geometry is unchanged.
+- Skip rebuilding reading-history LRU order when saving progress for the current most-recent document.
 
 ## [0.6.2] - 2026-08-30
 

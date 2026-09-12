@@ -123,6 +123,51 @@ final class ReadingFocusOverlayViewTests: XCTestCase {
         XCTAssertNotNil(focusEdgeLayer.path)
     }
 
+    func testDisabledFocusRemovesPointerTracking() {
+        let overlay = ReadingFocusOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 500, height: 300)
+        )
+        overlay.updateTrackingAreas()
+        XCTAssertTrue(overlay.trackingAreas.isEmpty)
+
+        overlay.setFocusEnabled(true)
+        XCTAssertEqual(overlay.trackingAreas.count, 1)
+        overlay.setFocusEnabled(false)
+        XCTAssertTrue(overlay.trackingAreas.isEmpty)
+        overlay.setFocusEnabled(true)
+        XCTAssertEqual(overlay.trackingAreas.count, 1)
+    }
+
+    func testUnchangedFocusGeometryReusesPathsAndResizeRefreshesThem() throws {
+        let overlay = ReadingFocusOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 500, height: 300)
+        )
+        overlay.pageBoundsProvider = { _ in NSRect(x: 50, y: 0, width: 400, height: 300) }
+        overlay.setFocusEnabled(true)
+        overlay.updateFocus(at: NSPoint(x: 120, y: 150))
+        let layers = try XCTUnwrap(overlay.layer?.sublayers?.compactMap { $0 as? CAShapeLayer })
+        let shadePath = try XCTUnwrap(layers[0].path)
+        let edgePath = try XCTUnwrap(layers[1].path)
+
+        // Page-width focus only moves vertically, even if the pointer moves sideways.
+        for x in 121...220 {
+            overlay.updateFocus(at: NSPoint(x: x, y: 150))
+            overlay.refreshFocusGeometry()
+            XCTAssertTrue(layers[0].path === shadePath)
+            XCTAssertTrue(layers[1].path === edgePath)
+        }
+        XCTAssertEqual(overlay.focusLocation, NSPoint(x: 220, y: 150))
+
+        overlay.setFrameSize(NSSize(width: 600, height: 300))
+        overlay.refreshFocusGeometry()
+        XCTAssertEqual(layers[0].frame, overlay.bounds)
+        XCTAssertEqual(layers[0].path?.boundingBoxOfPath.width, 600)
+
+        overlay.setFocusEnabled(false)
+        XCTAssertNil(layers[0].path)
+        XCTAssertNil(layers[1].path)
+    }
+
     func testOverlayNeverCapturesPDFInteraction() {
         let overlay = ReadingFocusOverlayView(
             frame: NSRect(x: 0, y: 0, width: 500, height: 300)
