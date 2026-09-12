@@ -4,21 +4,26 @@ import XCTest
 
 @MainActor
 final class AnnotationCommentEditorTests: XCTestCase {
-    func testEditorStartsAtTopWithoutAnEmptySnippetRow() throws {
+    func testEditorPreservesPreviewContextAboveTheComment() throws {
         let (editor, window, hostWindow) = makeEditor(comment: "还要大于，以保证 P 正定")
         defer { window.close(); hostWindow.close() }
         let scroll = try XCTUnwrap(descendants(NSScrollView.self, in: editor.view).first)
         let text = try XCTUnwrap(scroll.documentView as? NSTextView)
 
-        XCTAssertEqual(editor.view.bounds.width, 300, accuracy: 0.5)
-        XCTAssertEqual(editor.view.bounds.maxY - scroll.frame.maxY, 10, accuracy: 0.5)
-        XCTAssertLessThan(editor.view.bounds.height, 120)
+        XCTAssertEqual(editor.view.bounds.width, 360, accuracy: 0.5)
+        let commentFrame = scroll.convert(scroll.bounds, to: editor.view)
+        XCTAssertEqual(commentFrame.minX, 14, accuracy: 0.5)
+        XCTAssertGreaterThan(editor.view.bounds.maxY - commentFrame.maxY, 40)
+        XCTAssertLessThan(editor.view.bounds.height, 160)
         XCTAssertEqual(text.string, "还要大于，以保证 P 正定")
         XCTAssertFalse(descendants(NSTextField.self, in: editor.view).contains { $0.stringValue.isEmpty })
-        XCTAssertFalse(descendants(NSTextField.self, in: editor.view).contains { $0.stringValue == "Original highlighted passage" })
-        let footer = try XCTUnwrap(descendants(NSTextField.self, in: editor.view).first { $0.stringValue.contains("Esc") })
-        XCTAssertEqual(footer.frame.minY - editor.view.bounds.minY, 4, accuracy: 0.5)
-        XCTAssertEqual(scroll.frame.height, 54, accuracy: 0.5)
+        XCTAssertTrue(descendants(NSTextField.self, in: editor.view).contains { $0.stringValue == "Original highlighted passage" })
+        let footer = try XCTUnwrap(descendants(NSTextField.self, in: editor.view).first { $0.stringValue == "⌘↩" })
+        let save = try XCTUnwrap(descendants(NSButton.self, in: editor.view).first { $0.title == "Save" })
+        XCTAssertEqual(footer.frame.minY - editor.view.bounds.minY, 2, accuracy: 0.5)
+        XCTAssertGreaterThan(footer.frame.minX, save.frame.maxX)
+        XCTAssertLessThan(footer.frame.minX - save.frame.maxX, 10)
+        XCTAssertEqual(scroll.frame.height, 20, accuracy: 0.5)
         XCTAssertEqual(window.frame.size, editor.view.bounds.size)
         XCTAssertEqual(try XCTUnwrap(editor.view.layer).cornerRadius, 6, accuracy: 0.01)
         XCTAssertTrue(try XCTUnwrap(editor.view.layer).masksToBounds)
@@ -181,6 +186,30 @@ final class AnnotationCommentEditorTests: XCTestCase {
         XCTAssertEqual(saved, [text.string, text.string])
     }
 
+    func testPreviewClickKeepsThePanelAndImmediatelyFocusesTheEditor() throws {
+        let (editor, panel, hostWindow) = makeEditor(comment: "第一行评论\n第二行评论\n第三行评论", editing: false)
+        defer { panel.close(); hostWindow.close() }
+        XCTAssertFalse(editor.isEditing)
+        XCTAssertFalse(panel.canBecomeKey)
+        XCTAssertFalse(panel.isKeyWindow)
+        let previewFrame = panel.frame
+        let card = editor.cardView
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown,
+            location: NSPoint(x: 30, y: 30), modifierFlags: [], timestamp: 0,
+            windowNumber: panel.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+
+        card.mouseDown(with: event)
+
+        XCTAssertTrue(editor.isEditing)
+        XCTAssertTrue(card === panel.contentView)
+        XCTAssertTrue(card.window === panel)
+        XCTAssertEqual(previewFrame.minX, panel.frame.minX, accuracy: 0.5)
+        XCTAssertEqual(previewFrame.width, panel.frame.width, accuracy: 0.5)
+        XCTAssertTrue(abs(previewFrame.maxY - panel.frame.maxY) < 0.5 || abs(previewFrame.minY - panel.frame.minY) < 0.5)
+        XCTAssertTrue(panel.firstResponder === descendants(NSTextView.self, in: editor.view).first)
+        XCTAssertTrue(panel.canBecomeKey)
+    }
+
     func testRenderThemePreviewsWhenRequested() throws {
         guard let path = ProcessInfo.processInfo.environment["SEREIN_COMMENT_SNAPSHOTS"] else { return }
         let directory = URL(fileURLWithPath: path, isDirectory: true)
@@ -195,22 +224,31 @@ final class AnnotationCommentEditorTests: XCTestCase {
         ]
         for (name, light, dark, appearance) in themes {
             ThemeManager.shared.apply(light: light, dark: dark)
-            let (editor, window, hostWindow) = makeEditor(comment: "还要大于，以保证 P 正定", appearance: appearance)
+            let (editor, window, hostWindow) = makeEditor(comment: "还要大于，以保证 P 正定。\n第二行评论保持原位，点击后可以直接编辑。", appearance: appearance, editing: false)
             defer { window.close(); hostWindow.close() }
             window.refreshThemeAppearance()
-            layout(editor, in: window)
-            let content = try XCTUnwrap(window.contentView)
-            let bitmap = try XCTUnwrap(content.bitmapImageRepForCachingDisplay(in: content.bounds))
-            content.cacheDisplay(in: content.bounds, to: bitmap)
-            XCTAssertLessThan(try XCTUnwrap(bitmap.colorAt(x: 0, y: 0)).alphaComponent, 0.1)
-            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-            try png.write(to: directory.appendingPathComponent("comment-\(name).png"))
+            for state in ["preview", "editing", "empty"] {
+                if state == "editing" { window.beginEditing() }
+                if state == "empty" {
+                    let text = try XCTUnwrap(descendants(NSTextView.self, in: editor.view).first)
+                    text.string = ""
+                    text.didChangeText()
+                }
+                layout(editor, in: window)
+                let content = try XCTUnwrap(window.contentView)
+                let bitmap = try XCTUnwrap(content.bitmapImageRepForCachingDisplay(in: content.bounds))
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                XCTAssertLessThan(try XCTUnwrap(bitmap.colorAt(x: 0, y: 0)).alphaComponent, 0.1)
+                let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                try png.write(to: directory.appendingPathComponent("comment-\(name)-\(state).png"))
+            }
         }
     }
 
     private func makeEditor(
         comment: String,
-        appearance: NSAppearance.Name = .aqua
+        appearance: NSAppearance.Name = .aqua,
+        editing: Bool = true
     ) -> (AnnotationCommentEditorViewController, AnnotationCommentPanel, NSWindow) {
         _ = NSApplication.shared
         let group = DocumentHighlightGroup(
@@ -238,7 +276,7 @@ final class AnnotationCommentEditorTests: XCTestCase {
         hostWindow.center()
         hostWindow.makeKeyAndOrderFront(nil)
         hostWindow.makeFirstResponder(reader)
-        window.show(relativeTo: NSRect(x: 250, y: 200, width: 1, height: 1), of: reader)
+        window.show(relativeTo: NSRect(x: 250, y: 200, width: 1, height: 1), of: reader, editing: editing)
         RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         layout(editor, in: window)
         return (editor, window, hostWindow)

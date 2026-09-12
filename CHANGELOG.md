@@ -11,7 +11,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Refresh comment icons immediately after adding, editing, or removing comments on highlights, underlines, and strikethroughs. Preserve annotation identity, stacking order, and one comment owner per multiline group.
 - Keep one comment icon per multiline highlight by storing the shared comment on its first annotation. Consolidate identical comments in older Serein groups on open while preserving distinct notes and external annotations.
 - Clicking a comment icon or double-clicking a highlight opens Serein's comment panel. Handle annotation clicks and context menus without opening PDFKit's yellow note editor.
-- Comment editing uses a compact panel with 6pt corners and tighter bottom spacing. Remove the empty snippet row and nested input background; let the editor grow with its contents and scroll once it reaches its height limit.
+- Comment previews and editing share one 6pt-corner card. Click the icon or preview to edit in place, with a 150ms pointer transition between the annotation and card. Keep the icon visible and the card attached to the same corner as it grows.
+- Measure wrapped comments with the native text control so multiline Chinese text is not clipped. Keep empty and short editors compact, with a right-aligned `Save ⌘↩` footer and no visible Esc hint.
 - Refresh open comment panels and hover previews when the theme changes, including the highlight color strip and editor controls.
 
 ### Reading

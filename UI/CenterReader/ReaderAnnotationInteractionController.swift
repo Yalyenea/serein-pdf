@@ -16,7 +16,6 @@ final class ReaderAnnotationInteractionController: NSObject {
     private let documentStore: DocumentStore
     private let pdfView: ReaderPDFView
     private weak var hostView: NSView?
-    private let previewView = AnnotationPreviewView()
     private let focusPulseView = AnnotationFocusPulseView()
 
     private var pendingFocusToken = 0
@@ -25,44 +24,47 @@ final class ReaderAnnotationInteractionController: NSObject {
     private var lastHoveredGroup: DocumentHighlightGroup?
     private var lastHoveredAt: Date?
     private var contextGroup: DocumentHighlightGroup?
-    private var previewAnchor: NSRect?
     private var previewShowWorkItem: DispatchWorkItem?
+    private var previewHideWorkItem: DispatchWorkItem?
+    private var isPointerOverCard = false
     private var focusHideWorkItem: DispatchWorkItem?
     private var commentEditorPanel: AnnotationCommentPanel?
+    private var presentedGroup: DocumentHighlightGroup?
 
     init(documentStore: DocumentStore, pdfView: ReaderPDFView) {
         self.documentStore = documentStore
         self.pdfView = pdfView
         super.init()
-        previewView.isHidden = true
         focusPulseView.isHidden = true
     }
 
     func install(in hostView: NSView) {
         self.hostView = hostView
-        hostView.addSubview(previewView)
         hostView.addSubview(focusPulseView)
     }
 
     func layoutOverlay() {
-        positionPreviewIfNeeded()
+        if let presentedGroup {
+            commentEditorPanel?.updateAnchor(commentAnchorRect(for: presentedGroup))
+        }
     }
 
     func refreshThemeAppearance() {
-        previewView.refreshColors()
         commentEditorPanel?.refreshThemeAppearance()
     }
 
     func handlePointerMoved(_ event: NSEvent?) {
+        guard commentEditorPanel?.editor.isEditing != true else { return }
         guard let event, let hit = annotationHit(at: event.locationInWindow) else {
             if let hoveredGroup {
                 lastHoveredGroup = hoveredGroup
                 lastHoveredAt = Date()
             }
-            cancelPendingPreview()
-            hidePreviewKeepingHoverMemory()
+            schedulePreviewHide()
             return
         }
+
+        cancelPendingHide()
 
         lastHoveredGroup = hit.group
         lastHoveredAt = Date()
@@ -70,41 +72,33 @@ final class ReaderAnnotationInteractionController: NSObject {
         let annotationChanged = hoveredAnnotation !== hit.annotation
         let contentChanged = hoveredGroup?.comment != hit.group.comment
             || hoveredGroup?.snippet != hit.group.snippet
-        guard annotationChanged || contentChanged else { return }
+        guard annotationChanged || contentChanged || (commentEditorPanel == nil && previewShowWorkItem == nil) else { return }
 
         hoveredAnnotation = hit.annotation
         hoveredGroup = hit.group
 
         guard hit.group.normalizedComment.isEmpty == false else {
             cancelPendingPreview()
-            previewView.isHidden = true
-            previewAnchor = nil
+            dismissCommentEditor()
             return
         }
 
         if shouldSuppressPreview?(hit.group.groupID) == true {
             cancelPendingPreview()
-            previewView.isHidden = true
-            previewAnchor = nil
+            dismissCommentEditor()
             return
         }
 
-        guard let hostView else { return }
-        let boundsInPDF = pdfView.convert(hit.annotation.bounds, from: hit.page)
-        previewAnchor = hostView.convert(boundsInPDF, from: pdfView)
-
         cancelPendingPreview()
+        if presentedGroup?.groupID == hit.group.groupID && contentChanged == false { return }
+        dismissCommentEditor()
         let workItem = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self,
                       self.hoveredAnnotation === hit.annotation,
                       self.hoveredGroup?.groupID == hit.group.groupID else { return }
-                guard self.previewView.configure(with: hit.group) else {
-                    self.previewView.isHidden = true
-                    return
-                }
-                self.previewView.isHidden = false
-                self.positionPreviewIfNeeded()
+                self.previewShowWorkItem = nil
+                self.showCommentCard(for: hit.group, editing: false)
             }
         }
         previewShowWorkItem = workItem
@@ -191,41 +185,53 @@ final class ReaderAnnotationInteractionController: NSObject {
         guard let hit = annotationHit(at: event.locationInWindow),
               event.clickCount == 2 || hit.isCommentIcon else { return false }
         onFocusRequested?()
-        presentCommentEditor(for: hit.group)
+        presentCommentEditor(for: hit.group, navigate: false)
         return true
     }
 
     @discardableResult
     func addOrEditComment() -> Bool {
         if let createdGroup = onCreateMarkupRequested?(.highlight) {
-            presentCommentEditor(for: createdGroup)
+            presentCommentEditor(for: createdGroup, navigate: false)
             return true
         }
         if let pointInWindow = hostView?.window?.mouseLocationOutsideOfEventStream,
            let group = annotationHit(at: pointInWindow)?.group {
-            presentCommentEditor(for: group)
+            presentCommentEditor(for: group, navigate: false)
             return true
         }
         if let hoveredGroup {
-            presentCommentEditor(for: hoveredGroup)
+            presentCommentEditor(for: hoveredGroup, navigate: false)
             return true
         }
         if let lastHoveredGroup,
            let lastHoveredAt,
            Date().timeIntervalSince(lastHoveredAt) < 0.45 {
-            presentCommentEditor(for: lastHoveredGroup)
+            presentCommentEditor(for: lastHoveredGroup, navigate: false)
             return true
         }
         return false
     }
 
-    func presentCommentEditor(for group: DocumentHighlightGroup) {
+    func presentCommentEditor(for group: DocumentHighlightGroup, navigate: Bool = true) {
+        if let panel = commentEditorPanel, presentedGroup?.groupID == group.groupID {
+            cancelPendingPreview()
+            cancelPendingHide()
+            panel.beginEditing()
+            return
+        }
         clearPreview()
         dismissCommentEditor()
 
-        guard let session = activeSession() else { return }
-        onNavigateRequested?(group)
-        showFocusPulse(for: group)
+        if navigate {
+            onNavigateRequested?(group)
+            showFocusPulse(for: group)
+        }
+        showCommentCard(for: group, editing: true)
+    }
+
+    private func showCommentCard(for group: DocumentHighlightGroup, editing: Bool) {
+        guard let session = activeSession(), let hostView else { return }
 
         let editor = AnnotationCommentEditorViewController(group: group)
         editor.onSave = { [weak self] comment in
@@ -241,15 +247,36 @@ final class ReaderAnnotationInteractionController: NSObject {
             self?.dismissCommentEditor()
         }
 
-        guard let hostView else { return }
         let panel = AnnotationCommentPanel(editor: editor)
+        panel.onHoverChanged = { [weak self] hovered in
+            guard let self else { return }
+            self.isPointerOverCard = hovered
+            if hovered {
+                self.cancelPendingHide()
+            } else {
+                self.schedulePreviewHide()
+            }
+        }
+        panel.onBeginEditing = { [weak self] in
+            self?.cancelPendingPreview()
+            self?.cancelPendingHide()
+            self?.onFocusRequested?()
+        }
+        panel.onClose = { [weak self] in
+            self?.commentEditorPanel = nil
+            self?.presentedGroup = nil
+            self?.isPointerOverCard = false
+        }
         commentEditorPanel = panel
-        panel.show(relativeTo: anchorRect(for: group), of: hostView)
+        presentedGroup = group
+        panel.show(relativeTo: commentAnchorRect(for: group), of: hostView, editing: editing)
     }
 
     func dismissCommentEditor() {
         let panel = commentEditorPanel
         commentEditorPanel = nil
+        presentedGroup = nil
+        isPointerOverCard = false
         panel?.close()
     }
 
@@ -301,12 +328,16 @@ final class ReaderAnnotationInteractionController: NSObject {
 
     func clearPreview() {
         cancelPendingPreview()
+        cancelPendingHide()
         hidePreviewKeepingHoverMemory()
     }
 
     func sessionDidChange() {
         clearPreview()
+        dismissCommentEditor()
         contextGroup = nil
+        lastHoveredGroup = nil
+        lastHoveredAt = nil
     }
 
     private func activeSession() -> DocumentSession? {
@@ -334,43 +365,14 @@ final class ReaderAnnotationInteractionController: NSObject {
         return HighlightAnnotationHit(annotation: annotation, page: page, group: group, isCommentIcon: commentAnnotation != nil)
     }
 
-    private func positionPreviewIfNeeded() {
-        guard previewView.isHidden == false,
-              let anchor = previewAnchor,
-              let hostView,
-              hostView.bounds.width > 40,
-              hostView.bounds.height > 40 else { return }
-
-        let size = previewView.preferredSize(maxWidth: hostView.bounds.width - 24)
-        guard size.width + 16 <= hostView.bounds.width,
-              size.height + 16 <= hostView.bounds.height else {
-            previewView.isHidden = true
-            return
+    private func commentAnchorRect(for group: DocumentHighlightGroup) -> NSRect {
+        let owner = group.records.first { ($0.annotation.contents ?? "").isEmpty == false }
+            ?? group.records.first
+        guard let hostView, let annotation = owner?.annotation, let page = annotation.page else {
+            return anchorRect(for: group)
         }
-
-        let spaceRight = hostView.bounds.maxX - anchor.maxX
-        let spaceLeft = anchor.minX - hostView.bounds.minX
-        var x: CGFloat
-        if spaceRight >= size.width + 16 || spaceRight >= spaceLeft {
-            x = anchor.maxX + 8
-            if x + size.width > hostView.bounds.maxX - 8 {
-                x = anchor.minX - size.width - 8
-            }
-        } else {
-            x = anchor.minX - size.width - 8
-            if x < hostView.bounds.minX + 8 {
-                x = anchor.maxX + 8
-            }
-        }
-        x = min(max(x, hostView.bounds.minX + 8), hostView.bounds.maxX - size.width - 8)
-
-        var y = anchor.maxY + 8
-        if y + size.height > hostView.bounds.maxY - 8 {
-            y = anchor.minY - size.height - 8
-        }
-        y = min(max(y, hostView.bounds.minY + 8), hostView.bounds.maxY - size.height - 8)
-        previewView.frame = NSRect(origin: NSPoint(x: x, y: y), size: size)
-        previewView.needsLayout = true
+        let bounds = pdfView.convert(HighlightService.commentIconBounds(for: annotation), from: page)
+        return hostView.convert(bounds, from: pdfView)
     }
 
     private func anchorRect(for group: DocumentHighlightGroup) -> NSRect {
@@ -424,11 +426,11 @@ final class ReaderAnnotationInteractionController: NSObject {
     @objc
     private func editContextComment(_ sender: Any?) {
         if let contextGroup {
-            presentCommentEditor(for: contextGroup)
+            presentCommentEditor(for: contextGroup, navigate: false)
             return
         }
         if let createdGroup = onCreateMarkupRequested?(.highlight) {
-            presentCommentEditor(for: createdGroup)
+            presentCommentEditor(for: createdGroup, navigate: false)
         }
     }
 
@@ -466,12 +468,34 @@ final class ReaderAnnotationInteractionController: NSObject {
         previewShowWorkItem = nil
     }
 
+    private func cancelPendingHide() {
+        previewHideWorkItem?.cancel()
+        previewHideWorkItem = nil
+    }
+
+    private func schedulePreviewHide() {
+        guard commentEditorPanel?.editor.isEditing != true, isPointerOverCard == false else { return }
+        cancelPendingPreview()
+        guard previewHideWorkItem == nil else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.previewHideWorkItem = nil
+                guard self.isPointerOverCard == false, self.commentEditorPanel?.editor.isEditing != true else { return }
+                self.hidePreviewKeepingHoverMemory()
+            }
+        }
+        previewHideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
+    }
+
     private func hidePreviewKeepingHoverMemory() {
         hoveredAnnotation = nil
         hoveredGroup = nil
-        previewAnchor = nil
-        previewView.isHidden = true
+        if commentEditorPanel?.editor.isEditing == false { dismissCommentEditor() }
     }
+
+    var testingCommentPanel: AnnotationCommentPanel? { commentEditorPanel }
 }
 
 private struct HighlightAnnotationHit {

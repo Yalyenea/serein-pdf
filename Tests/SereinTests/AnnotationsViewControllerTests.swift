@@ -668,6 +668,43 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertEqual(preview.preferredSize(maxWidth: 120).width, 120)
     }
 
+    func testPreviewLaysOutWrappedAndExplicitCommentLines() throws {
+        _ = NSApplication.shared
+        let preview = AnnotationPreviewView(frame: .zero)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = preview
+        defer { window.close() }
+
+        for (index, comment) in [
+            "第一行评论\n第二行评论\n第三行评论",
+            "这是一段较长的评论，用于检查预览中的文字能否自动换行。缩窄卡片后，评论应该显示为多行，并且每一行都有足够的高度。",
+        ].enumerated() {
+            XCTAssertTrue(preview.configure(with: DocumentHighlightGroup(
+                groupID: "multiline-preview", pageIndex: 0, snippet: "Original passage",
+                color: .pink, createdAt: nil, comment: comment, primarySelection: nil, records: []
+            )))
+            window.setContentSize(preview.preferredSize(maxWidth: 240))
+            preview.needsLayout = true
+            preview.layoutSubtreeIfNeeded()
+            let label = try XCTUnwrap(preview.subviews.compactMap { $0 as? NSTextField }
+                .first { $0.stringValue == comment })
+            let requiredHeight = try XCTUnwrap(label.cell).cellSize(forBounds:
+                NSRect(x: 0, y: 0, width: label.frame.width, height: 1_000)).height
+            XCTAssertGreaterThan(label.frame.height, 28)
+            XCTAssertGreaterThanOrEqual(label.frame.height, requiredHeight)
+            XCTAssertGreaterThanOrEqual(label.frame.minY, 10)
+
+            if let path = ProcessInfo.processInfo.environment["SEREIN_PREVIEW_SNAPSHOTS"] {
+                let bitmap = try XCTUnwrap(preview.bitmapImageRepForCachingDisplay(in: preview.bounds))
+                preview.cacheDisplay(in: preview.bounds, to: bitmap)
+                let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                try data.write(to: URL(fileURLWithPath: path).appendingPathComponent("preview-\(index).png"))
+            }
+        }
+    }
+
     func testReaderContextMenuFocusesItsSourceSplitPane() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "reader-context-pane"))

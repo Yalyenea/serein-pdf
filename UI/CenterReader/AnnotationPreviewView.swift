@@ -1,17 +1,26 @@
 import AppKit
 
 final class AnnotationPreviewView: NSView {
+    static let contentWidth: CGFloat = 360
+    static let textInset: CGFloat = 14
+    static let textWidth: CGFloat = contentWidth - 27
+
+    var onPress: (() -> Void)?
+    var onHoverChanged: ((Bool) -> Void)?
     private let colorBar = NSView()
     private let metadataLabel = NSTextField(labelWithString: "")
     private let snippetLabel = NSTextField(wrappingLabelWithString: "")
     private let commentLabel = NSTextField(wrappingLabelWithString: "")
     private var highlightColor: HighlightColor = .default
+    private var editorView: NSView?
+    private var editorHeight: CGFloat = 0
+    private var hoverTrackingArea: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
 
         wantsLayer = true
-        layer?.cornerRadius = 8
+        layer?.cornerRadius = 6
         layer?.masksToBounds = true
 
         colorBar.wantsLayer = true
@@ -45,7 +54,38 @@ final class AnnotationPreviewView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
+        guard let hit = super.hitTest(point) else { return nil }
+        return editorView == nil ? self : hit
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        if editorView == nil { onPress?() }
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        super.updateTrackingAreas()
+        let area = NSTrackingArea(rect: .zero,
+                                 options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                 owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHoverChanged?(true) }
+    override func mouseExited(with event: NSEvent) { onHoverChanged?(false) }
+
+    func setEditorView(_ editorView: NSView?, height: CGFloat) {
+        if self.editorView !== editorView {
+            self.editorView?.removeFromSuperview()
+            self.editorView = editorView
+            if let editorView { addSubview(editorView) }
+        }
+        editorHeight = height
+        commentLabel.isHidden = editorView != nil
+        needsLayout = true
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -57,8 +97,6 @@ final class AnnotationPreviewView: NSView {
     @discardableResult
     func configure(with group: DocumentHighlightGroup) -> Bool {
         let comment = group.normalizedComment
-        guard comment.isEmpty == false else { return false }
-
         let page = "Page \(group.pageIndex + 1)"
         if let createdAt = group.createdAt {
             metadataLabel.stringValue = "\(page) · \(createdAt.formatted(date: .abbreviated, time: .shortened))"
@@ -69,77 +107,53 @@ final class AnnotationPreviewView: NSView {
         commentLabel.stringValue = comment
         highlightColor = group.color
         refreshColors()
-        return true
+        return comment.isEmpty == false
     }
 
     func preferredSize(maxWidth: CGFloat) -> NSSize {
-        let width = min(max(maxWidth, 1), 360)
+        let width = min(max(maxWidth, 1), Self.contentWidth)
         let textWidth = max(width - 27, 1)
         let metadataHeight: CGFloat = 14
-        let snippetHeight = measuredHeight(
-            snippetLabel.stringValue,
-            font: snippetLabel.font,
-            width: textWidth,
-            maximumLines: 3
-        )
-        let commentHeight = measuredHeight(
-            commentLabel.stringValue,
-            font: commentLabel.font,
-            width: textWidth,
-            maximumLines: 5
-        )
-        return NSSize(width: width, height: 10 + metadataHeight + 5 + snippetHeight + 7 + commentHeight + 11)
+        let snippetHeight = measuredHeight(of: snippetLabel, width: textWidth)
+        let commentHeight = editorView == nil ? measuredHeight(of: commentLabel, width: textWidth) : editorHeight
+        let bottomInset: CGFloat = editorView == nil ? 11 : 6
+        return NSSize(width: width, height: 10 + metadataHeight + 5 + snippetHeight + 7 + commentHeight + bottomInset)
+    }
+
+    func preferredSize(editorHeight: CGFloat) -> NSSize {
+        let snippetHeight = measuredHeight(of: snippetLabel, width: Self.textWidth)
+        return NSSize(width: Self.contentWidth, height: 10 + 14 + 5 + snippetHeight + 7 + editorHeight + 6)
     }
 
     override func layout() {
         super.layout()
         colorBar.frame = NSRect(x: 0, y: 0, width: 3, height: bounds.height)
 
-        let x: CGFloat = 14
+        let x = Self.textInset
         let width = max(bounds.width - x - 13, 1)
         var top = bounds.height - 10
 
         metadataLabel.frame = NSRect(x: x, y: top - 14, width: width, height: 14)
         top -= 19
 
-        let snippetHeight = measuredHeight(
-            snippetLabel.stringValue,
-            font: snippetLabel.font,
-            width: width,
-            maximumLines: 3
-        )
+        let snippetHeight = measuredHeight(of: snippetLabel, width: width)
         snippetLabel.frame = NSRect(x: x, y: top - snippetHeight, width: width, height: snippetHeight)
         top -= snippetHeight + 7
 
-        let commentHeight = measuredHeight(
-            commentLabel.stringValue,
-            font: commentLabel.font,
-            width: width,
-            maximumLines: 5
-        )
+        let commentHeight = measuredHeight(of: commentLabel, width: width)
         commentLabel.frame = NSRect(x: x, y: top - commentHeight, width: width, height: commentHeight)
+        editorView?.frame = NSRect(x: x, y: top - editorHeight, width: width, height: editorHeight)
     }
 
-    private func measuredHeight(
-        _ text: String,
-        font: NSFont?,
-        width: CGFloat,
-        maximumLines: Int
-    ) -> CGFloat {
-        guard text.isEmpty == false, let font else { return 14 }
-        let bounds = (text as NSString).boundingRect(
-            with: NSSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: font]
-        )
-        let lineHeight = ceil(font.ascender - font.descender + font.leading)
-        return min(ceil(bounds.height), lineHeight * CGFloat(maximumLines))
+    private func measuredHeight(of label: NSTextField, width: CGFloat) -> CGFloat {
+        let bounds = NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)
+        return ceil(label.cell!.cellSize(forBounds: bounds).height)
     }
 
     func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             colorBar.layer?.backgroundColor = NightModeStyle.highlightColor(for: highlightColor, appearance: effectiveAppearance).cgColor
-            layer?.backgroundColor = NightModeStyle.paneBackgroundColor.withAlphaComponent(0.98).cgColor
+            layer?.backgroundColor = NightModeStyle.paneBackgroundColor.cgColor
             layer?.borderWidth = 1
             layer?.borderColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.16).cgColor
             metadataLabel.textColor = NightModeStyle.secondaryTextColor
