@@ -418,6 +418,8 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
         if isFloatingPresentation {
             filterField.cell = ThemedSearchFieldCell(textCell: "")
+            filterField.isEditable = true
+            filterField.isSelectable = true
         }
 
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)

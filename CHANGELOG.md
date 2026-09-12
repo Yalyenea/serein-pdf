@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Outline
+- Restore text input in the floating outline filter; clicking the search field keeps the outline open while editing.
+
 ### Annotations
 - Keep one comment icon per multiline highlight by storing the shared comment on its first annotation. Consolidate identical comments in older Serein groups on open while preserving distinct notes and external annotations.
 - Clicking a comment icon or double-clicking a highlight opens Serein's comment panel. Handle annotation clicks and context menus without opening PDFKit's yellow note editor.

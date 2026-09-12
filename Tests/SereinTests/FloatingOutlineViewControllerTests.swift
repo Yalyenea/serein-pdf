@@ -197,17 +197,32 @@ struct FloatingOutlineViewControllerTests {
         controller.loadViewIfNeeded()
         controller.testingSetHovered(true)
         let outlineController = controller.testingOutlineViewController
-
-        outlineController.controlTextDidBeginEditing(
-            Notification(name: NSControl.textDidBeginEditingNotification)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: controller.preferredSize),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
         )
+        window.isReleasedWhenClosed = false
+        window.contentView = controller.view
+        defer { window.close() }
+        window.layoutIfNeeded()
+        let filterField = try #require(
+            floatingOutlineView(identifier: "outlineFilterField", in: controller.view) as? NSSearchField
+        )
+
+        #expect(filterField.isEditable)
+        #expect(filterField.isSelectable)
+        #expect(window.makeFirstResponder(filterField))
+        let editor = try #require(filterField.currentEditor() as? NSTextView)
+        editor.insertText("Conclusion", replacementRange: NSRange(location: NSNotFound, length: 0))
         controller.testingSetHovered(false)
 
         #expect(controller.testingIsExpanded)
+        #expect(filterField.stringValue == "Conclusion")
+        #expect(floatingOutlineRows(in: outlineController.view).map(\.node.title) == ["Conclusion"])
 
-        outlineController.controlTextDidEndEditing(
-            Notification(name: NSControl.textDidEndEditingNotification)
-        )
+        #expect(window.makeFirstResponder(nil))
 
         #expect(controller.testingIsExpanded == false)
     }
