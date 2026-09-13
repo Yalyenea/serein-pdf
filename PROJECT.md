@@ -164,7 +164,7 @@ flowchart LR
 - `Cmd+Z`:撤销最近一次批注新增或删除(上限 50,无 redo)
 
 **阅读**
-- `Cmd+K`:打开 Spotlight 风格 Command Palette;输入文字筛选当前可执行命令,`↑` / `↓` 选择,`Enter` 执行,`Esc` 或再次 `Cmd+K` 关闭;面板打开时可直接按原有第二段组合
+- `Cmd+K`:打开紧凑网格 Command Palette;按分区两列排布当前可执行命令,`↑` / `↓` / `←` / `→` 选择,`Enter` 或点击执行,`Esc` 或再次 `Cmd+K` 关闭;面板打开时可直接按原有第二段组合
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4` 保持 `Single Page` / `Single Page Continuous` / `Two-Up` / `Two-Up Continuous`;`Book` / `Book · Continuous Turn` 默认无快捷键,可从 View 菜单或 Settings 选择
@@ -202,7 +202,7 @@ flowchart LR
 - `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
 - `Cmd+K` → `Cmd+N`:把当前 PDF 移到新窗口
 - `Window > Move Current PDF to Window`:移到指定已有窗口;垂直 / 标题栏 tab 也可直接跨窗拖拽
-- `Cmd+Shift+Space`:最近文件启动器
+- `Cmd+Shift+Space`:最近文件启动器;阅读器抢回焦点后 `Esc` 仍先关闭面板
 - `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 普通切换,`Option+Click` / `Option+Enter` 进入 split-edit;重复 `Ctrl+Tab` 或 `Esc` 关闭
 - 多 PDF 连续阅读:批量打开会预选本批 PDF,也可 `Cmd` / `Shift` 点击多选后通过 tab 右键菜单开启 / 退出
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
@@ -319,10 +319,10 @@ App/                                      # AppKit 入口、窗口与设置/启�
   ReaderShortcutWindow.swift              # 自定义 NSWindow,拦截 keyDown 分发 reader 快捷键
   SplitViewController.swift               # 三栏 NSSplitViewController:左 tabs / 中 reader / 右 sidebar
   SettingsWindowController.swift          # 设置窗口:外观 / 阅读 / 批注 / 可搜索快捷键配置 UI
-  CommandPaletteController.swift          # Spotlight 风格命令面板与键盘交互
-  CommandPaletteState.swift               # 命令搜索 / 高亮选择状态(纯模型)
-  ShortcutSequenceView.swift              # 单段 / 二段快捷键的紧凑键帽视图
-  RecentFilesPaletteController.swift      # Spotlight 风格最近文件启动器的窗口与交互控制器
+  CommandPaletteController.swift          # 紧凑网格命令面板与键盘交互
+  CommandPaletteState.swift               # 命令网格导航与高亮选择状态(纯模型)
+  ShortcutSequenceView.swift              # 单段 / 二段快捷键的符号芯片视图
+  RecentFilesPaletteController.swift      # 最近文件启动器的窗口与交互控制器
   RecentFilesPaletteState.swift           # 最近文件启动器的查询匹配与多选状态(纯模型)
   PDFLibraryPaletteController.swift       # PDF Library 二级浏览面板:库 tab / 文件夹 / PDF 列表 / 搜索
   OpenTabsPaletteController.swift         # 当前窗口所有 tabs 轻量文本总览
@@ -424,8 +424,8 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   HighlightUndoTests.swift                # 撤销栈上限与 added/removed 还原
   NightModeStyleTests.swift               # 夜间反色映射
   ReaderShortcutsControllerTests.swift    # reader 快捷键分发与文本上下文让路
-  CommandPaletteStateTests.swift          # 命令过滤、快捷键序列与高亮状态
-  CommandPaletteControllerTests.swift     # 命令面板搜索、执行与二段式键处理
+  CommandPaletteStateTests.swift          # 命令网格导航、快捷键序列与高亮状态
+  CommandPaletteControllerTests.swift     # 命令面板网格、执行与二段式键处理
   RecentFilesPaletteStateTests.swift      # 启动器模型的过滤 / 多选
   RecentFilesPaletteControllerTests.swift # 启动器控制器交互
   OpenTabsPaletteStateTests.swift         # show all tabs 预览目标与网格选中

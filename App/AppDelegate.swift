@@ -114,12 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 self?.refreshThemeChromeIfFollowingSystem()
             }
         }
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleDocumentStoreDidChange),
-            name: .documentStoreDidChange,
-            object: documentStore
-        )
+        observeMenuStateChanges()
         readerShortcutsController = ReaderShortcutsController(
             shortcutsProvider: { [weak self] in
                 self?.appConfiguration.shortcuts.bindings ?? [:]
@@ -377,6 +372,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if change.contains(.recentFiles) {
             updateRecentFilesMenu()
         }
+        refreshManagedMenuState()
+    }
+
+    private func observeMenuStateChanges() {
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleDocumentStoreDidChange),
+            name: .documentStoreDidChange, object: documentStore
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleReaderWindowDidBecomeKey),
+            name: NSWindow.didBecomeKeyNotification, object: nil
+        )
+    }
+
+    @objc
+    private func handleReaderWindowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              controller(for: window) != nil else { return }
+        refreshManagedMenuState()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -3014,3 +3028,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
     }
 }
+
+#if DEBUG
+extension AppDelegate {
+    func installMenuForTesting(documentStore: DocumentStore, controllers: [MainWindowController]) {
+        self.documentStore = documentStore
+        mainWindowControllers = Dictionary(uniqueKeysWithValues: controllers.map { ($0.windowID, $0) })
+        installMainMenu()
+        observeMenuStateChanges()
+    }
+}
+#endif

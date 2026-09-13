@@ -4,7 +4,7 @@ import AppKit
 final class AnnotationCommentEditorViewController: NSViewController, NSTextViewDelegate {
     private static let minimumEditorHeight: CGFloat = 20
     private static let maximumEditorHeight: CGFloat = 180
-    private static let footerHeight: CGFloat = 18
+    private static let footerHeight: CGFloat = 28
 
     var onSave: ((String) -> Void)?
     var onCancel: (() -> Void)?
@@ -15,7 +15,7 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
     private let editorBody = NSView()
     private let editorScrollView = NSScrollView()
     private let textView = AnnotationCommentEditorTextView()
-    private let shortcutLabel = NSTextField(labelWithString: "⌘↩")
+    private let saveShortcutView = ShortcutSequenceView()
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     private var editorHeightConstraint: NSLayoutConstraint!
 
@@ -73,9 +73,10 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
         editorScrollView.wantsLayer = true
         editorScrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        shortcutLabel.font = .systemFont(ofSize: 9.5)
-        shortcutLabel.toolTip = "Save comment (⌘↩)"
-        shortcutLabel.translatesAutoresizingMaskIntoConstraints = false
+        saveShortcutView.configure(sequences: [
+            KeyboardShortcutSequence([KeyboardShortcut(key: "return", modifiers: [.command])])
+        ])
+        saveShortcutView.toolTip = "Save comment (⌘↩)"
 
         saveButton.bezelStyle = .recessed
         saveButton.isBordered = false
@@ -87,7 +88,7 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
         saveButton.translatesAutoresizingMaskIntoConstraints = false
 
         container.addSubview(editorScrollView)
-        container.addSubview(shortcutLabel)
+        container.addSubview(saveShortcutView)
         container.addSubview(saveButton)
 
         editorHeightConstraint = editorScrollView.heightAnchor.constraint(equalToConstant: Self.minimumEditorHeight)
@@ -97,13 +98,13 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
             editorScrollView.topAnchor.constraint(equalTo: container.topAnchor),
             editorHeightConstraint,
 
-            shortcutLabel.trailingAnchor.constraint(equalTo: editorScrollView.trailingAnchor),
-            shortcutLabel.topAnchor.constraint(equalTo: editorScrollView.bottomAnchor, constant: 4),
-            shortcutLabel.heightAnchor.constraint(equalToConstant: 12),
-            shortcutLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -2),
+            saveShortcutView.trailingAnchor.constraint(equalTo: editorScrollView.trailingAnchor),
+            saveShortcutView.topAnchor.constraint(equalTo: editorScrollView.bottomAnchor, constant: 4),
+            saveShortcutView.heightAnchor.constraint(equalToConstant: 22),
+            saveShortcutView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -2),
 
-            saveButton.trailingAnchor.constraint(equalTo: shortcutLabel.leadingAnchor, constant: -6),
-            saveButton.firstBaselineAnchor.constraint(equalTo: shortcutLabel.firstBaselineAnchor),
+            saveButton.trailingAnchor.constraint(equalTo: saveShortcutView.leadingAnchor, constant: -6),
+            saveButton.centerYAnchor.constraint(equalTo: saveShortcutView.centerYAnchor),
         ])
 
         view = cardView
@@ -163,7 +164,7 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
             cardView.refreshColors()
             textView.textColor = NightModeStyle.primaryTextColor
             textView.insertionPointColor = NightModeStyle.primaryTextColor
-            shortcutLabel.textColor = NightModeStyle.tertiaryTextColor
+            saveShortcutView.refreshChromeColors()
             saveButton.contentTintColor = NightModeStyle.primaryTextColor
         }
     }

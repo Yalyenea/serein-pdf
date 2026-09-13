@@ -4,7 +4,12 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Palettes
+- Command Palette is a compact two-column grid without search. Arrow keys move across commands, Enter or a click runs the highlight, and Esc or Cmd+K closes. Two-stage Cmd+K chords still work while the panel is open.
+- Esc closes the recent-files launcher even when the reader is key. Duplicate titles show the parent folder.
+
 ### Appearance
+- Shortcut hints use compact SF Symbol chips in palettes, Settings, comment editors, and the presentation toolbar.
 - Apply the selected theme to the filename toast, recent-files launcher, PDF library, open-tabs overview, command palette, shortcut keycaps, annotation editor, and presentation toolbar.
 - Refresh open panels in place when switching themes, preserving search queries, selections, and unfinished annotation comments.
 
@@ -12,6 +17,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Restore text input in the floating outline filter; clicking the search field keeps the outline open while editing.
 
 ### Annotations
+- Enable File > Save when a reader window becomes key after new annotation edits, so Cmd+S writes without opening the File menu.
 - Refresh comment icons immediately after adding, editing, or removing comments on highlights, underlines, and strikethroughs. Preserve annotation identity, stacking order, and one comment owner per multiline group.
 - Keep one comment icon per multiline highlight by storing the shared comment on its first annotation. Consolidate identical comments in older Serein groups on open while preserving distinct notes and external annotations.
 - Clicking a comment icon or double-clicking a highlight opens Serein's comment panel. Handle annotation clicks and context menus without opening PDFKit's yellow note editor.

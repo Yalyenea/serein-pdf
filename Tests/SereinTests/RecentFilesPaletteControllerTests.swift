@@ -4,6 +4,60 @@ import XCTest
 
 @MainActor
 final class RecentFilesPaletteControllerTests: XCTestCase {
+    func testEscapeFromReaderClosesUnfocusedRecentPanelAndThenReturnsToReader() throws {
+        _ = NSApplication.shared
+        let reader = ReaderShortcutWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+                                          styleMask: [.titled], backing: .buffered, defer: false)
+        var readerKeys: [UInt16] = []
+        reader.plainShortcutHandler = { event, _ in readerKeys.append(event.keyCode); return true }
+        let controller = RecentFilesPaletteController { _ in XCTFail("Escape must not open a PDF") }
+        defer { controller.close(); reader.orderOut(nil) }
+        for _ in 0..<2 {
+            controller.show(with: [], relativeTo: reader)
+            controller.window?.resignKey()
+            reader.makeKeyAndOrderFront(nil)
+            XCTAssertFalse(try XCTUnwrap(controller.window).isKeyWindow)
+            XCTAssertTrue(controller.window?.isVisible == true)
+
+            NSApp.sendEvent(makeKeyEvent(characters: "x", keyCode: 7, window: reader))
+            XCTAssertEqual(readerKeys.last, 7)
+            XCTAssertTrue(controller.window?.isVisible == true)
+
+            let before = readerKeys.count
+            NSApp.sendEvent(makeKeyEvent(characters: "\u{1b}", keyCode: 53, window: reader))
+            XCTAssertFalse(controller.window?.isVisible == true)
+            XCTAssertEqual(readerKeys.count, before)
+
+            NSApp.sendEvent(makeKeyEvent(characters: "\u{1b}", keyCode: 53, window: reader))
+            XCTAssertEqual(readerKeys.count, before + 1)
+            XCTAssertEqual(readerKeys.last, 53)
+        }
+    }
+
+    func testEscapeClosesPanelThroughKeyEquivalentWithEitherFocus() throws {
+        _ = NSApplication.shared
+        var openedURLs: [URL] = []
+        let controller = RecentFilesPaletteController { openedURLs = $0 }
+        defer { controller.close() }
+        for focusList in [false, true] {
+            controller.show(with: [URL(fileURLWithPath: "/tmp/recent-escape.pdf")], relativeTo: nil)
+            if focusList {
+                XCTAssertTrue(controller.testingHandleQueryCommand(#selector(NSResponder.moveDown(_:))))
+                XCTAssertTrue(controller.testingResultsTableIsFirstResponder)
+                _ = controller.testingHandleResultsKeyEvent(makeKeyEvent(characters: " ", keyCode: 49, window: controller.window))
+            }
+            let window = try XCTUnwrap(controller.window)
+            XCTAssertTrue(window.performKeyEquivalent(with: makeKeyEvent(characters: "\u{1b}", keyCode: 53, window: window)))
+            XCTAssertFalse(window.isVisible)
+            XCTAssertTrue(openedURLs.isEmpty)
+        }
+        controller.show(with: [], relativeTo: nil)
+        let window = try XCTUnwrap(controller.window)
+        window.makeFirstResponder(window.contentView)
+        window.cancelOperation(nil)
+        XCTAssertFalse(window.isVisible)
+    }
+
     func testThemeRefreshPreservesQueryAndMarkedFilesAcrossPanelReuse() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
@@ -163,7 +217,8 @@ final class RecentFilesPaletteControllerTests: XCTestCase {
         let first = URL(fileURLWithPath: "/tmp/first.pdf")
         let second = URL(fileURLWithPath: "/tmp/second.pdf")
         let third = URL(fileURLWithPath: "/tmp/third.pdf")
-        let controller = RecentFilesPaletteController { _ in }
+        var openedURLs: [URL] = []
+        let controller = RecentFilesPaletteController { openedURLs = $0 }
         controller.show(with: [first, second, third], relativeTo: nil)
         defer { controller.close() }
 
@@ -173,6 +228,8 @@ final class RecentFilesPaletteControllerTests: XCTestCase {
         XCTAssertTrue(controller.testingHandleResultsKeyEvent(downEvent))
         XCTAssertEqual(controller.testingInteractionMode, .navigatingResults)
         XCTAssertEqual(controller.testingHighlightedIndex, 1)
+        XCTAssertTrue(openedURLs.isEmpty)
+        XCTAssertTrue(controller.window?.isVisible == true)
     }
 
     func testSpaceKeepsCurrentHighlightAndDoesNotReturnToQuery() {

@@ -36,8 +36,8 @@ site for showcase, download notes, and compact docs.
 - Clean PDFs hot-reload when LaTeX, Typst, or another external compiler rewrites the open file in place or replaces it atomically, preserving the live page; PDFs with unsaved Serein annotations are left untouched
 - On first launch, Serein asks for persistent access to `/Users` so PDFs under user folders stay readable after reinstalling
 - PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
-- Spotlight-style Command Palette (`cmd+k`) searches actions available in the current context, runs the highlighted command with `enter`, and keeps the existing `cmd+k` two-stage shortcuts available inside the visible panel
-- Spotlight-style recent-files launcher (`cmd+shift+space`) stays compact, hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and an always-visible footer hint
+- Compact Command Palette (`cmd+k`) lists current-context actions in a two-column grid, runs the highlighted command with `enter` or a click, and keeps the existing `cmd+k` two-stage shortcuts available inside the visible panel
+- Compact recent-files launcher (`cmd+shift+space`) hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and `esc` close even after the reader takes key focus
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Opened PDFs are also noted to macOS native recent documents, and the active PDF URL is exposed to the window for system window/document integration
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen

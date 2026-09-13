@@ -21,6 +21,17 @@ private final class RecentFilesPalettePanel: NSPanel {
         }
         super.sendEvent(event)
     }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown, onKeyEvent?(event) == true {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        close()
+    }
 }
 
 enum RecentFilesPaletteInteractionMode {
@@ -29,7 +40,7 @@ enum RecentFilesPaletteInteractionMode {
 }
 
 private final class RecentFilesPaletteRowView: NSTableCellView {
-    private let selectionIndicator = NSTextField(labelWithString: "")
+    private let iconView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
 
@@ -37,37 +48,35 @@ private final class RecentFilesPaletteRowView: NSTableCellView {
         super.init(frame: frameRect)
         wantsLayer = true
 
-        selectionIndicator.translatesAutoresizingMaskIntoConstraints = false
-        selectionIndicator.font = .systemFont(ofSize: 12, weight: .semibold)
-        selectionIndicator.alignment = .center
-        selectionIndicator.textColor = HighlightColor.pink.nsColor
+        iconView.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingTail
 
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.font = .systemFont(ofSize: 10)
+        subtitleLabel.font = .systemFont(ofSize: 12)
         subtitleLabel.textColor = .secondaryLabelColor
         subtitleLabel.lineBreakMode = .byTruncatingMiddle
 
-        addSubview(selectionIndicator)
+        titleLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(iconView)
         addSubview(titleLabel)
         addSubview(subtitleLabel)
 
         NSLayoutConstraint.activate([
-            selectionIndicator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            selectionIndicator.centerYAnchor.constraint(equalTo: centerYAnchor),
-            selectionIndicator.widthAnchor.constraint(equalToConstant: 14),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16),
 
-            titleLabel.leadingAnchor.constraint(equalTo: selectionIndicator.trailingAnchor, constant: 8),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 5),
+            titleLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 7),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            subtitleLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1),
-            subtitleLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
+            subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 8),
+            subtitleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            subtitleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -76,21 +85,25 @@ private final class RecentFilesPaletteRowView: NSTableCellView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(item: RecentFilesPaletteItem, isMarked: Bool) {
-        selectionIndicator.textColor = NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance)
+    func configure(item: RecentFilesPaletteItem, isMarked: Bool, showsFolder: Bool) {
+        iconView.image = NSImage(systemSymbolName: isMarked ? "checkmark.circle.fill" : "doc", accessibilityDescription: isMarked ? "Selected PDF" : "PDF")
+        iconView.contentTintColor = isMarked
+            ? NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance)
+            : NightModeStyle.tertiaryTextColor
         titleLabel.textColor = NightModeStyle.primaryTextColor
         subtitleLabel.textColor = NightModeStyle.secondaryTextColor
-        selectionIndicator.stringValue = isMarked ? "●" : ""
         titleLabel.stringValue = item.title
-        subtitleLabel.stringValue = item.subtitle
+        subtitleLabel.stringValue = showsFolder ? item.url.deletingLastPathComponent().lastPathComponent : ""
+        toolTip = item.url.path
     }
 }
 
 @MainActor
-final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
-    private static let panelSize = NSSize(width: 520, height: 640)
+final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
+    private static let panelWidth: CGFloat = 680
+    private static let rowHeight: CGFloat = 36
+    private static let maximumVisibleRows = 14
 
-    private let panelTitle: String
     private let queryPlaceholder: String
     private let emptyItemsMessage: String
     private let emptyQueryMessage: String
@@ -98,13 +111,11 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
     private var state = RecentFilesPaletteState(recentURLs: [])
     private var isApplyingSelection = false
     private var interactionMode: RecentFilesPaletteInteractionMode = .editingQuery
+    private var duplicateTitles: Set<String> = []
+    private weak var parentWindow: NSWindow?
+    private var escapeEventMonitor: Any?
 
-    private let titleLabel = NSTextField(labelWithString: "")
     private let queryField = NSTextField(frame: .zero)
-    private let secondaryLabel = NSTextField(labelWithString: "")
-    private let footerLabel = NSTextField(
-        labelWithString: "↑ / ↓ 选中    Space 多选    Enter 打开    Esc 关闭"
-    )
     private let emptyLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()
     private let tableView = RecentFilesPaletteResultsTableView()
@@ -116,14 +127,13 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         emptyQueryMessage: String = "No recent files match the current query.",
         onOpenURLs: @escaping ([URL]) -> Void
     ) {
-        self.panelTitle = title
         self.queryPlaceholder = queryPlaceholder
         self.emptyItemsMessage = emptyItemsMessage
         self.emptyQueryMessage = emptyQueryMessage
         self.onOpenURLs = onOpenURLs
 
         let panel = RecentFilesPalettePanel(
-            contentRect: NSRect(origin: .zero, size: Self.panelSize),
+            contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 120),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -143,6 +153,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         panel.standardWindowButton(.zoomButton)?.isHidden = true
 
         super.init(window: panel)
+        panel.delegate = self
         panel.onKeyEvent = { [weak self] event in
             self?.handlePanelKeyEvent(event) ?? false
         }
@@ -157,7 +168,10 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
     }
 
     func show(with recentURLs: [URL], relativeTo parentWindow: NSWindow?) {
+        self.parentWindow = parentWindow
         state.replaceRecentURLs(recentURLs)
+        duplicateTitles = Set(Dictionary(grouping: state.allItems, by: \.title)
+            .filter { $0.value.count > 1 }.keys)
         interactionMode = .editingQuery
         queryField.stringValue = ""
         reloadUI()
@@ -166,7 +180,35 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         focusQueryField()
+        startEscapeEventMonitor()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    override func close() {
+        stopEscapeEventMonitor()
+        super.close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        stopEscapeEventMonitor()
+    }
+
+    private func startEscapeEventMonitor() {
+        stopEscapeEventMonitor()
+        escapeEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.window?.isVisible == true,
+                  event.keyCode == 53,
+                  event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return event }
+            self.close()
+            return nil
+        }
+    }
+
+    private func stopEscapeEventMonitor() {
+        if let escapeEventMonitor {
+            NSEvent.removeMonitor(escapeEventMonitor)
+            self.escapeEventMonitor = nil
+        }
     }
 
     func refreshChromeColors() {
@@ -174,14 +216,11 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         window.effectiveAppearance.performAsCurrentDrawingAppearance {
             window.backgroundColor = NightModeStyle.splitBackgroundColor
             window.contentView?.layer?.backgroundColor = NightModeStyle.splitBackgroundColor.cgColor
-            titleLabel.textColor = NightModeStyle.secondaryTextColor
             queryField.textColor = NightModeStyle.primaryTextColor
             queryField.placeholderAttributedString = NSAttributedString(
                 string: queryPlaceholder,
                 attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
             )
-            secondaryLabel.textColor = NightModeStyle.secondaryTextColor
-            footerLabel.textColor = NightModeStyle.tertiaryTextColor
             emptyLabel.textColor = NightModeStyle.secondaryTextColor
             if let editor = queryField.currentEditor() as? NSTextView {
                 editor.textColor = NightModeStyle.primaryTextColor
@@ -190,7 +229,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
             for row in 0..<tableView.numberOfRows {
                 if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? RecentFilesPaletteRowView {
                     let item = state.filteredItems[row]
-                    cell.configure(item: item, isMarked: state.isSelected(item.url))
+                    cell.configure(item: item, isMarked: state.isSelected(item.url), showsFolder: duplicateTitles.contains(item.title))
                 }
                 tableView.rowView(atRow: row, makeIfNecessary: false)?.needsDisplay = true
             }
@@ -203,32 +242,19 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         contentView.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
         panel.contentView = contentView
 
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.stringValue = panelTitle
-        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        titleLabel.textColor = .secondaryLabelColor
-
         queryField.translatesAutoresizingMaskIntoConstraints = false
         queryField.delegate = self
         queryField.isBordered = false
         queryField.drawsBackground = false
         queryField.focusRingType = .none
-        queryField.font = .systemFont(ofSize: 22, weight: .semibold)
+        queryField.font = .systemFont(ofSize: 17)
         queryField.placeholderString = queryPlaceholder
         queryField.textColor = .labelColor
         queryField.lineBreakMode = .byTruncatingTail
         queryField.maximumNumberOfLines = 1
-        secondaryLabel.translatesAutoresizingMaskIntoConstraints = false
-        secondaryLabel.font = .systemFont(ofSize: 11)
-        secondaryLabel.textColor = .secondaryLabelColor
-
-        footerLabel.translatesAutoresizingMaskIntoConstraints = false
-        footerLabel.font = .systemFont(ofSize: 11)
-        footerLabel.textColor = .secondaryLabelColor
-        footerLabel.alignment = .center
 
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
-        emptyLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        emptyLabel.font = .systemFont(ofSize: 12)
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.alignment = .center
         emptyLabel.isHidden = true
@@ -237,7 +263,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
         tableView.headerView = nil
-        tableView.rowHeight = 44
+        tableView.rowHeight = Self.rowHeight
         tableView.intercellSpacing = .zero
         tableView.backgroundColor = .clear
         tableView.selectionHighlightStyle = .regular
@@ -246,7 +272,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         tableView.delegate = self
         tableView.dataSource = self
         tableView.target = self
-        tableView.doubleAction = #selector(openHighlightedItem(_:))
+        tableView.action = #selector(openClickedItem(_:))
         tableView.onKeyEvent = { [weak self] event in
             self?.handleResultsKeyEvent(event) ?? false
         }
@@ -255,41 +281,29 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
         scrollView.documentView = tableView
 
-        contentView.addSubview(titleLabel)
         contentView.addSubview(queryField)
-        contentView.addSubview(secondaryLabel)
         contentView.addSubview(scrollView)
         contentView.addSubview(emptyLabel)
-        contentView.addSubview(footerLabel)
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
-
-            queryField.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            queryField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
             queryField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            queryField.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
-            queryField.heightAnchor.constraint(equalToConstant: 30),
+            queryField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
+            queryField.heightAnchor.constraint(equalToConstant: 28),
 
-            secondaryLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            secondaryLabel.trailingAnchor.constraint(equalTo: queryField.trailingAnchor),
-            secondaryLabel.topAnchor.constraint(equalTo: queryField.bottomAnchor, constant: 4),
-
-            scrollView.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: queryField.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: secondaryLabel.bottomAnchor, constant: 10),
-            scrollView.bottomAnchor.constraint(equalTo: footerLabel.topAnchor, constant: -10),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
+            scrollView.topAnchor.constraint(equalTo: queryField.bottomAnchor, constant: 10),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
 
             emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             emptyLabel.leadingAnchor.constraint(greaterThanOrEqualTo: scrollView.leadingAnchor, constant: 20),
             emptyLabel.trailingAnchor.constraint(lessThanOrEqualTo: scrollView.trailingAnchor, constant: -20),
-
-            footerLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            footerLabel.trailingAnchor.constraint(equalTo: queryField.trailingAnchor),
-            footerLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
         ])
     }
 
@@ -304,7 +318,8 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
     }
 
     private func reloadUI() {
-        secondaryLabel.stringValue = secondaryText()
+        isApplyingSelection = true
+        tableView.reloadData()
 
         if state.filteredItems.isEmpty {
             emptyLabel.stringValue = state.allItems.isEmpty ? emptyItemsMessage : emptyQueryMessage
@@ -315,20 +330,21 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
             scrollView.isHidden = false
         }
 
-        isApplyingSelection = true
-        tableView.reloadData()
+        resizePanelToFitResults()
         applyHighlightedSelection()
         isApplyingSelection = false
     }
 
-    private func secondaryText() -> String {
-        let selectedCount = state.selectedURLs.count
-        let filteredCount = state.filteredItems.count
-        let base = filteredCount == 0 ? "0 results" : "\(filteredCount) results"
-        if selectedCount == 0 {
-            return base
-        }
-        return "\(base)  ·  \(selectedCount) selected"
+    private func resizePanelToFitResults() {
+        guard let window else { return }
+        let visibleRows = min(state.filteredItems.count, Self.maximumVisibleRows)
+        let listHeight = visibleRows == 0 ? 44 : CGFloat(visibleRows) * Self.rowHeight
+        let availableHeight = (parentWindow?.screen ?? NSScreen.main)?.visibleFrame.height ?? 600
+        let height = min(64 + listHeight, availableHeight - 40)
+        guard window.contentView?.frame.height != height else { return }
+        let top = window.frame.maxY
+        window.setContentSize(NSSize(width: Self.panelWidth, height: height))
+        window.setFrameOrigin(NSPoint(x: window.frame.minX, y: top - window.frame.height))
     }
 
     private func focusQueryField() {
@@ -365,8 +381,12 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
     }
 
     @objc
-    private func openHighlightedItem(_ sender: Any?) {
-        openTargetsAndClose()
+    private func openClickedItem(_ sender: Any?) {
+        guard tableView.clickedRow >= 0,
+              state.filteredItems.indices.contains(tableView.clickedRow) else { return }
+        let url = state.filteredItems[tableView.clickedRow].url
+        close()
+        onOpenURLs([url])
     }
 
     private func handleResultsKeyEvent(_ event: NSEvent) -> Bool {
@@ -470,7 +490,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        44
+        Self.rowHeight
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -482,19 +502,21 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
                 view.identifier = identifier
                 return view
             }()
-        rowView.configure(item: item, isMarked: state.isSelected(item.url))
+        rowView.configure(item: item, isMarked: state.isSelected(item.url), showsFolder: duplicateTitles.contains(item.title))
         return rowView
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        ThemedTableRowView()
+        let view = ThemedTableRowView()
+        view.selectionCornerRadius = 5
+        view.selectionInsets = NSSize(width: 4, height: 2)
+        return view
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard isApplyingSelection == false else { return }
         interactionMode = .navigatingResults
         state.setHighlightedIndex(tableView.selectedRow >= 0 ? tableView.selectedRow : nil)
-        reloadUI()
     }
 }
 

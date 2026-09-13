@@ -5,6 +5,45 @@ import XCTest
 
 @MainActor
 final class AnnotationSaveTests: XCTestCase {
+    func testCommandSSavesNewEditsWithoutOpeningFileMenu() throws {
+        let app = NSApplication.shared
+        let previousMenu = app.mainMenu
+        let previousWindowsMenu = app.windowsMenu
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "command-s-live-menu"))
+        let controller = MainWindowController(documentStore: store)
+        let delegate = AppDelegate()
+        delegate.installMenuForTesting(documentStore: store, controllers: [controller])
+        let window = try XCTUnwrap(controller.window)
+        window.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        defer {
+            NotificationCenter.default.removeObserver(delegate)
+            window.orderOut(nil)
+            app.mainMenu = previousMenu
+            app.windowsMenu = previousWindowsMenu
+        }
+        let menu = try XCTUnwrap(app.mainMenu)
+        func findSave(in menu: NSMenu) -> NSMenuItem? {
+            for item in menu.items {
+                if item.representedObject as? ShortcutCommand == .saveAnnotations { return item }
+                if let submenu = item.submenu, let match = findSave(in: submenu) { return match }
+            }
+            return nil
+        }
+        let save = try XCTUnwrap(findSave(in: menu))
+        XCTAssertFalse(save.isEnabled)
+        for count in 1...2 {
+            try addHighlightAnnotation(to: session, in: store)
+            store.setDirty(true, for: session.id)
+            XCTAssertTrue(save.isEnabled)
+            XCTAssertTrue(menu.performKeyEquivalent(with: makeKeyEvent(characters: "s", modifierFlags: [.command], window: window)))
+            XCTAssertFalse(session.isDirty)
+            XCTAssertFalse(save.isEnabled)
+            XCTAssertEqual(PDFDocument(url: session.url)?.page(at: 0)?.annotations.count, count)
+        }
+    }
+
     func testAnnotationSavePolicyDefaultIsAfter10Minutes() {
         XCTAssertEqual(AnnotationSavePolicy.default, .after10Minutes)
         XCTAssertEqual(AnnotationSavePolicy.after10Minutes.autoSaveInterval, 600)

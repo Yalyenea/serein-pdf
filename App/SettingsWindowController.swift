@@ -115,6 +115,7 @@ enum SettingsPage: Int {
 }
 
 private final class ShortcutCaptureButton: NSButton {
+    private let shortcutView = ShortcutSequenceView()
     var shortcut: KeyboardShortcut? {
         didSet { updateTitle() }
     }
@@ -128,10 +129,18 @@ private final class ShortcutCaptureButton: NSButton {
         super.init(frame: frameRect)
         bezelStyle = .rounded
         controlSize = .small
-        font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        font = .systemFont(ofSize: 12, weight: .medium)
+        isBordered = false
         setButtonType(.momentaryPushIn)
         target = self
         action = #selector(beginCapture(_:))
+        addSubview(shortcutView)
+        NSLayoutConstraint.activate([
+            shortcutView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            shortcutView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            shortcutView.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 4),
+            shortcutView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -4),
+        ])
         updateTitle()
     }
 
@@ -141,6 +150,10 @@ private final class ShortcutCaptureButton: NSButton {
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) == nil ? nil : self
+    }
 
     @objc
     private func beginCapture(_ sender: Any?) {
@@ -199,11 +212,16 @@ private final class ShortcutCaptureButton: NSButton {
     }
 
     private func updateTitle() {
+        shortcutView.configure(sequences: shortcut.map { [KeyboardShortcutSequence([$0])] } ?? [])
+        shortcutView.isHidden = isCapturing || shortcut == nil
         if isCapturing {
             title = "Type Shortcut"
+            setAccessibilityLabel(title)
             return
         }
-        title = shortcut?.displayString ?? "None"
+        title = shortcut == nil ? "None" : ""
+        setAccessibilityLabel(shortcut?.displayString ?? "None")
+        toolTip = "Click to change shortcut"
     }
 }
 
@@ -300,6 +318,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
     private var shortcutButtons: [ShortcutCommand: ShortcutCaptureButton] = [:]
     private var shortcutDefaultLabels: [ShortcutCommand: NSTextField] = [:]
+    private var shortcutDefaultViews: [ShortcutCommand: ShortcutSequenceView] = [:]
     private var shortcutClearButtons: [ShortcutCommand: NSButton] = [:]
     private var shortcutRestoreButtons: [ShortcutCommand: NSButton] = [:]
 
@@ -442,7 +461,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         for command in ShortcutCommand.allCases {
             shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
             if let defaultShortcut = AppConfiguration.default.shortcuts.bindings[command] {
-                shortcutDefaultLabels[command]?.stringValue = "Default \(defaultShortcut.displayString)"
+                shortcutDefaultLabels[command]?.stringValue = "Default"
+                shortcutDefaultViews[command]?.configure(sequences: [KeyboardShortcutSequence([defaultShortcut])])
             } else if command.builtInShortcutSequence != nil {
                 shortcutDefaultLabels[command]?.stringValue = "Direct shortcut optional"
             } else {
@@ -1115,6 +1135,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         }
         shortcutButtons.removeAll(keepingCapacity: true)
         shortcutDefaultLabels.removeAll(keepingCapacity: true)
+        shortcutDefaultViews.removeAll(keepingCapacity: true)
         shortcutClearButtons.removeAll(keepingCapacity: true)
         shortcutRestoreButtons.removeAll(keepingCapacity: true)
 
@@ -1262,6 +1283,10 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         defaultLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         defaultLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        let defaultView = ShortcutSequenceView()
+        defaultView.identifier = NSUserInterfaceItemIdentifier("shortcutDefault.\(command.rawValue)")
+        defaultView.configure(sequences: [])
+
         let metadataViews: [NSView]
         if let builtInSequence = command.builtInShortcutSequence {
             let builtInLabel = NSTextField(labelWithString: "Built-in")
@@ -1270,9 +1295,9 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             let builtInView = ShortcutSequenceView()
             builtInView.identifier = NSUserInterfaceItemIdentifier("shortcutBuiltIn.\(command.rawValue)")
             builtInView.configure(sequences: [builtInSequence])
-            metadataViews = [defaultLabel, builtInLabel, builtInView]
+            metadataViews = [defaultLabel, defaultView, builtInLabel, builtInView]
         } else {
-            metadataViews = [defaultLabel]
+            metadataViews = [defaultLabel, defaultView]
         }
         let metadataStack = NSStackView(views: metadataViews)
         metadataStack.orientation = .horizontal
@@ -1325,7 +1350,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
             captureButton.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor, constant: -8),
             captureButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            captureButton.widthAnchor.constraint(equalToConstant: 106),
+            captureButton.widthAnchor.constraint(equalToConstant: 160),
+            captureButton.heightAnchor.constraint(equalToConstant: 28),
 
             restoreButton.trailingAnchor.constraint(equalTo: row.trailingAnchor),
             restoreButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
@@ -1344,6 +1370,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
         shortcutButtons[command] = captureButton
         shortcutDefaultLabels[command] = defaultLabel
+        shortcutDefaultViews[command] = defaultView
         shortcutClearButtons[command] = clearButton
         shortcutRestoreButtons[command] = restoreButton
         return row

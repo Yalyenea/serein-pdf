@@ -113,7 +113,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
     private static let verticalPadding: CGFloat = 6
     private static let stackSpacing: CGFloat = 3
     private static let editorHeight: CGFloat = 64
-    private static let editorFooterHeight: CGFloat = 20
+    private static let editorFooterHeight: CGFloat = 22
 
     private let colorBarView = AnnotationColorBarView()
     private let snippetLabel = NSTextField(wrappingLabelWithString: "")
@@ -121,7 +121,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
     private let editorScrollView = NSScrollView()
     private let commentTextView = AnnotationCommentTextView()
     private let editorFooter = NSView()
-    private let shortcutLabel = NSTextField(labelWithString: "⌘↩ Save  ·  Esc Cancel")
+    private let saveShortcutView = ShortcutSequenceView()
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     private var representedGroupID: String?
     private var highlightColor: HighlightColor = .default
@@ -165,16 +165,21 @@ final class AnnotationHighlightCellView: NSTableCellView {
         editorScrollView.wantsLayer = true
         editorScrollView.layer?.cornerRadius = 5
 
-        shortcutLabel.font = .systemFont(ofSize: 9.5)
-        shortcutLabel.textColor = NightModeStyle.tertiaryTextColor
+        saveShortcutView.configure(sequences: [
+            KeyboardShortcutSequence([KeyboardShortcut(key: "return", modifiers: [.command])])
+        ])
+        saveShortcutView.translatesAutoresizingMaskIntoConstraints = true
+        saveShortcutView.toolTip = "Save comment (⌘↩); Esc cancels"
 
         saveButton.bezelStyle = .recessed
+        saveButton.isBordered = false
         saveButton.controlSize = .small
         saveButton.font = .systemFont(ofSize: 10.5, weight: .medium)
         saveButton.target = self
         saveButton.action = #selector(handleSave(_:))
+        saveButton.toolTip = "Save comment (⌘↩); Esc cancels"
 
-        editorFooter.addSubview(shortcutLabel)
+        editorFooter.addSubview(saveShortcutView)
         editorFooter.addSubview(saveButton)
 
         addSubview(colorBarView)
@@ -223,7 +228,8 @@ final class AnnotationHighlightCellView: NSTableCellView {
             commentTextView.textColor = NightModeStyle.primaryTextColor
             commentTextView.insertionPointColor = NightModeStyle.primaryTextColor
             editorScrollView.backgroundColor = NightModeStyle.primaryTextColor.withAlphaComponent(0.035)
-            shortcutLabel.textColor = NightModeStyle.tertiaryTextColor
+            saveShortcutView.refreshChromeColors()
+            saveButton.contentTintColor = NightModeStyle.primaryTextColor
         }
     }
 
@@ -275,18 +281,18 @@ final class AnnotationHighlightCellView: NSTableCellView {
             editorFooter.frame = NSRect(x: textX, y: cursorY, width: textW, height: Self.editorFooterHeight)
             saveButton.sizeToFit()
             let saveSize = saveButton.frame.size
+            let shortcutSize = saveShortcutView.fittingSize
+            saveShortcutView.frame = NSRect(
+                x: textW - shortcutSize.width,
+                y: (Self.editorFooterHeight - shortcutSize.height) / 2,
+                width: shortcutSize.width,
+                height: shortcutSize.height
+            )
             saveButton.frame = NSRect(
-                x: textW - saveSize.width,
+                x: saveShortcutView.frame.minX - 6 - saveSize.width,
                 y: (Self.editorFooterHeight - saveSize.height) / 2,
                 width: saveSize.width,
                 height: saveSize.height
-            )
-            shortcutLabel.sizeToFit()
-            shortcutLabel.frame = NSRect(
-                x: 0,
-                y: (Self.editorFooterHeight - shortcutLabel.frame.height) / 2,
-                width: max(textW - saveSize.width - 6, 1),
-                height: shortcutLabel.frame.height
             )
         } else if commentLabel.isHidden == false {
             let commentH = Self.measuredHeight(

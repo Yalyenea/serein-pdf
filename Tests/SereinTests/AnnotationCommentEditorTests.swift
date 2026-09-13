@@ -18,7 +18,7 @@ final class AnnotationCommentEditorTests: XCTestCase {
         XCTAssertEqual(text.string, "还要大于，以保证 P 正定")
         XCTAssertFalse(descendants(NSTextField.self, in: editor.view).contains { $0.stringValue.isEmpty })
         XCTAssertTrue(descendants(NSTextField.self, in: editor.view).contains { $0.stringValue == "Original highlighted passage" })
-        let footer = try XCTUnwrap(descendants(NSTextField.self, in: editor.view).first { $0.stringValue == "⌘↩" })
+        let footer = try XCTUnwrap(descendants(ShortcutSequenceView.self, in: editor.view).first)
         let save = try XCTUnwrap(descendants(NSButton.self, in: editor.view).first { $0.title == "Save" })
         XCTAssertEqual(footer.frame.minY - editor.view.bounds.minY, 2, accuracy: 0.5)
         XCTAssertGreaterThan(footer.frame.minX, save.frame.maxX)

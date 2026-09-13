@@ -156,7 +156,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private let foldersTableView = PDFLibraryPaletteTableView()
     private let pdfsTableView = PDFLibraryPaletteTableView()
     private let emptyLabel = NSTextField(labelWithString: "")
-    private let footerLabel = NSTextField(labelWithString: "↑ / ↓ 选中    Enter 打开    Esc 关闭")
+    private let footerView = NSStackView()
 
     init(onOpenURL: @escaping (URL) -> Void) {
         self.onOpenURL = onOpenURL
@@ -336,10 +336,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         emptyLabel.textColor = NightModeStyle.secondaryTextColor
         emptyLabel.alignment = .center
 
-        footerLabel.translatesAutoresizingMaskIntoConstraints = false
-        footerLabel.font = .systemFont(ofSize: 11)
-        footerLabel.textColor = NightModeStyle.tertiaryTextColor
-        footerLabel.alignment = .center
+        configureFooter()
 
         let contentSplit = NSStackView(views: [foldersScrollView, pdfsScrollView])
         contentSplit.translatesAutoresizingMaskIntoConstraints = false
@@ -354,7 +351,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         contentView.addSubview(queryField)
         contentView.addSubview(contentSplit)
         contentView.addSubview(emptyLabel)
-        contentView.addSubview(footerLabel)
+        contentView.addSubview(footerView)
 
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
@@ -376,17 +373,46 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             contentSplit.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             contentSplit.trailingAnchor.constraint(equalTo: queryField.trailingAnchor),
             contentSplit.topAnchor.constraint(equalTo: queryField.bottomAnchor, constant: 12),
-            contentSplit.bottomAnchor.constraint(equalTo: footerLabel.topAnchor, constant: -10),
+            contentSplit.bottomAnchor.constraint(equalTo: footerView.topAnchor, constant: -10),
 
             emptyLabel.centerXAnchor.constraint(equalTo: pdfsScrollView.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: pdfsScrollView.centerYAnchor),
             emptyLabel.leadingAnchor.constraint(greaterThanOrEqualTo: pdfsScrollView.leadingAnchor, constant: 20),
             emptyLabel.trailingAnchor.constraint(lessThanOrEqualTo: pdfsScrollView.trailingAnchor, constant: -20),
 
-            footerLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            footerLabel.trailingAnchor.constraint(equalTo: queryField.trailingAnchor),
-            footerLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
+            footerView.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.leadingAnchor),
+            footerView.trailingAnchor.constraint(lessThanOrEqualTo: queryField.trailingAnchor),
+            footerView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            footerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
         ])
+    }
+
+    private func configureFooter() {
+        footerView.translatesAutoresizingMaskIntoConstraints = false
+        footerView.orientation = .horizontal
+        footerView.alignment = .centerY
+        footerView.spacing = 14
+        let hints: [([KeyboardShortcut], String)] = [
+            (["up", "down"].map { KeyboardShortcut(key: $0, modifiers: []) }, "选中"),
+            ([KeyboardShortcut(key: "return", modifiers: [])], "打开"),
+            ([KeyboardShortcut(key: "escape", modifiers: [])], "关闭"),
+        ]
+        for (shortcuts, title) in hints {
+            let group = NSStackView()
+            group.orientation = .horizontal
+            group.alignment = .centerY
+            group.spacing = 4
+            for shortcut in shortcuts {
+                let key = ShortcutSequenceView()
+                key.configure(sequences: [KeyboardShortcutSequence([shortcut])])
+                group.addArrangedSubview(key)
+            }
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: 11)
+            label.textColor = NightModeStyle.tertiaryTextColor
+            group.addArrangedSubview(label)
+            footerView.addArrangedSubview(group)
+        }
     }
 
     func refreshChromeColors() {
@@ -407,7 +433,12 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
                 editor.insertionPointColor = NightModeStyle.primaryTextColor
             }
             emptyLabel.textColor = NightModeStyle.secondaryTextColor
-            footerLabel.textColor = NightModeStyle.tertiaryTextColor
+            for group in footerView.arrangedSubviews.compactMap({ $0 as? NSStackView }) {
+                for view in group.arrangedSubviews {
+                    (view as? ShortcutSequenceView)?.refreshChromeColors()
+                    (view as? NSTextField)?.textColor = NightModeStyle.tertiaryTextColor
+                }
+            }
             foldersTableView.enumerateAvailableRowViews { rowView, row in
                 (self.foldersTableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? PDFLibraryFolderCellView)?
                     .configure(row: self.folderRows[row])

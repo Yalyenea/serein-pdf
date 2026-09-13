@@ -18,21 +18,26 @@ final class CommandPaletteStateTests: XCTestCase {
         XCTAssertEqual(ShortcutCommand.shareDocument.builtInChordDisplay, "⌘K → ⌘E")
     }
 
-    func testFilteringSearchesTitlesSectionsAndShortcutText() {
+    func testGridNavigationCrossesSectionsAndClampsAtEdges() {
         var state = CommandPaletteState()
-        state.replaceCommands(
-            [.highlightSelection, .openLibraryPDF, .toggleReaderSplit],
-            bindings: [.toggleReaderSplit: KeyboardShortcut(key: "\\", modifiers: [.command, .control])]
-        )
-
-        state.query = "library"
-        XCTAssertEqual(state.filteredItems.map(\.command), [.openLibraryPDF])
-
-        state.query = "tabs windows"
-        XCTAssertEqual(state.filteredItems.map(\.command), [.toggleReaderSplit])
-
-        state.query = "highlight"
-        XCTAssertEqual(state.highlightedItem?.command, .highlightSelection)
+        state.replaceCommands([.highlightSelection, .underlineSelection, .addComment, .openLibraryPDF], bindings: [:])
+        XCTAssertEqual(state.rows.map(\.count), [2, 1, 1])
+        state.moveHighlight(horizontal: 1)
+        XCTAssertEqual(state.highlightedIndex, 1)
+        state.moveHighlight(vertical: 1)
+        XCTAssertEqual(state.highlightedIndex, 2)
+        state.moveHighlight(vertical: 1)
+        XCTAssertEqual(state.highlightedItem?.command, .openLibraryPDF)
+        state.moveHighlight(vertical: 1)
+        XCTAssertEqual(state.highlightedItem?.command, .openLibraryPDF)
+        state.moveHighlight(vertical: -1)
+        state.moveHighlight(vertical: -1)
+        XCTAssertEqual(state.highlightedIndex, 0)
+        state.moveHighlight(horizontal: -1)
+        XCTAssertEqual(state.highlightedIndex, 0)
+        state.replaceCommands([], bindings: [:])
+        state.moveHighlight(vertical: 1)
+        XCTAssertNil(state.highlightedItem)
     }
 
     func testCommandItemShowsDirectAndBuiltInSequencesTogether() throws {
@@ -48,16 +53,9 @@ final class CommandPaletteStateTests: XCTestCase {
         )
     }
 
-    func testFilteringIncludesContextualTitle() {
+    func testContextualTitleIsPreserved() {
         var state = CommandPaletteState()
-        state.replaceCommands(
-            [.closeCurrentTab],
-            bindings: [:],
-            titles: [.closeCurrentTab: "Close Selected Tabs"]
-        )
-
-        state.query = "selected tabs"
-
-        XCTAssertEqual(state.filteredItems.map(\.command), [.closeCurrentTab])
+        state.replaceCommands([.closeCurrentTab], bindings: [:], titles: [.closeCurrentTab: "Close Selected Tabs"])
+        XCTAssertEqual(state.highlightedItem?.title, "Close Selected Tabs")
     }
 }

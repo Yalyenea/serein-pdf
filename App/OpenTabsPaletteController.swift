@@ -153,9 +153,7 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
 
     private let titleLabel = NSTextField(labelWithString: "Show All Tabs")
     private let secondaryLabel = NSTextField(labelWithString: "")
-    private let footerLabel = NSTextField(
-        labelWithString: "H/J/K/L 或 ↑/↓/←/→ 选中    Enter 打开    Option+Enter 编辑分屏    Esc 关闭"
-    )
+    private let footerView = NSStackView()
     private let emptyLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()
     private let collectionView = OpenTabsPaletteCollectionView()
@@ -233,10 +231,7 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
         secondaryLabel.textColor = NightModeStyle.secondaryTextColor
         secondaryLabel.alignment = .right
 
-        footerLabel.translatesAutoresizingMaskIntoConstraints = false
-        footerLabel.font = .systemFont(ofSize: 11)
-        footerLabel.textColor = NightModeStyle.tertiaryTextColor
-        footerLabel.alignment = .center
+        configureFooter()
 
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
         emptyLabel.font = .systemFont(ofSize: 14, weight: .medium)
@@ -272,7 +267,7 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
         contentView.addSubview(secondaryLabel)
         contentView.addSubview(scrollView)
         contentView.addSubview(emptyLabel)
-        contentView.addSubview(footerLabel)
+        contentView.addSubview(footerView)
 
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 22),
@@ -285,17 +280,47 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
             scrollView.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: secondaryLabel.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 16),
-            scrollView.bottomAnchor.constraint(equalTo: footerLabel.topAnchor, constant: -12),
+            scrollView.bottomAnchor.constraint(equalTo: footerView.topAnchor, constant: -12),
 
             emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             emptyLabel.leadingAnchor.constraint(greaterThanOrEqualTo: scrollView.leadingAnchor, constant: 20),
             emptyLabel.trailingAnchor.constraint(lessThanOrEqualTo: scrollView.trailingAnchor, constant: -20),
 
-            footerLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            footerLabel.trailingAnchor.constraint(equalTo: secondaryLabel.trailingAnchor),
-            footerLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
+            footerView.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.leadingAnchor),
+            footerView.trailingAnchor.constraint(lessThanOrEqualTo: secondaryLabel.trailingAnchor),
+            footerView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            footerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
         ])
+    }
+
+    private func configureFooter() {
+        footerView.translatesAutoresizingMaskIntoConstraints = false
+        footerView.orientation = .horizontal
+        footerView.alignment = .centerY
+        footerView.spacing = 14
+        let hints: [([KeyboardShortcut], String)] = [
+            (["h", "j", "k", "l", "left", "down", "up", "right"].map { KeyboardShortcut(key: $0, modifiers: []) }, "选中"),
+            ([KeyboardShortcut(key: "return", modifiers: [])], "打开"),
+            ([KeyboardShortcut(key: "return", modifiers: [.option])], "编辑分屏"),
+            ([KeyboardShortcut(key: "escape", modifiers: [])], "关闭"),
+        ]
+        for (shortcuts, title) in hints {
+            let group = NSStackView()
+            group.orientation = .horizontal
+            group.alignment = .centerY
+            group.spacing = 4
+            for shortcut in shortcuts {
+                let key = ShortcutSequenceView()
+                key.configure(sequences: [KeyboardShortcutSequence([shortcut])])
+                group.addArrangedSubview(key)
+            }
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: 11)
+            label.textColor = NightModeStyle.tertiaryTextColor
+            group.addArrangedSubview(label)
+            footerView.addArrangedSubview(group)
+        }
     }
 
     func refreshChromeColors() {
@@ -305,7 +330,12 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
             window.contentView?.layer?.backgroundColor = NightModeStyle.splitBackgroundColor.cgColor
             titleLabel.textColor = NightModeStyle.primaryTextColor
             secondaryLabel.textColor = NightModeStyle.secondaryTextColor
-            footerLabel.textColor = NightModeStyle.tertiaryTextColor
+            for group in footerView.arrangedSubviews.compactMap({ $0 as? NSStackView }) {
+                for view in group.arrangedSubviews {
+                    (view as? ShortcutSequenceView)?.refreshChromeColors()
+                    (view as? NSTextField)?.textColor = NightModeStyle.tertiaryTextColor
+                }
+            }
             emptyLabel.textColor = NightModeStyle.secondaryTextColor
             for indexPath in collectionView.indexPathsForVisibleItems() {
                 (collectionView.item(at: indexPath) as? OpenTabsPaletteTileItem)?

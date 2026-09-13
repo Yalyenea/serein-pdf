@@ -319,8 +319,10 @@ final class PresentationAnnotationOverlayViewTests: XCTestCase {
         let shortcutButtons = toolbar.subviews.compactMap { $0 as? NSButton }.filter {
             $0.identifier?.rawValue != "presentation-toolbar-pin"
         }
-        XCTAssertEqual(shortcutButtons.map(\.title), ["V", "P", "R", "⌘Z", "E"])
-        XCTAssertTrue(shortcutButtons.allSatisfy { $0.imagePosition == .imageAbove })
+        XCTAssertTrue(shortcutButtons.allSatisfy { $0.title.isEmpty })
+        XCTAssertTrue(shortcutButtons.allSatisfy { button in
+            button.subviews.contains { $0 is ShortcutSequenceView }
+        })
 
         pin.performClick(nil)
         XCTAssertFalse(overlay.isToolbarPinned)

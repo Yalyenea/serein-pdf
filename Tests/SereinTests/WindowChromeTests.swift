@@ -1863,7 +1863,11 @@ struct WindowChromeTests {
 
     @Test
     func settingsShortcutRowsFitCompactWindowWithoutHorizontalScrolling() throws {
-        let controller = SettingsWindowController(configuration: .default) { _ in }
+        var configuration = AppConfiguration.default
+        configuration.shortcuts.bindings[.sendCurrentPDFToCodex] = KeyboardShortcut(
+            key: "space", modifiers: [.command, .control, .option, .shift]
+        )
+        let controller = SettingsWindowController(configuration: configuration) { _ in }
         defer { controller.close() }
         controller.showWindow(nil)
         controller.selectPageForTesting(SettingsPage.shortcuts.rawValue)
@@ -1873,12 +1877,30 @@ struct WindowChromeTests {
         let scrollView = try #require(
             findView(identifier: "shortcutsScrollView", in: contentView) as? NSScrollView
         )
-        let command = ShortcutCommand.highlightSelection
-        let row = try #require(
-            findView(identifier: "shortcutRow.\(command.rawValue)", in: contentView)
-        )
         #expect(scrollView.hasHorizontalScroller == false)
-        #expect(row.frame.width <= scrollView.contentView.bounds.width + 1)
+        for command in ShortcutCommand.allCases {
+            let row = try #require(
+                findView(identifier: "shortcutRow.\(command.rawValue)", in: contentView)
+            )
+            let capture = try #require(
+                findView(identifier: "shortcutCapture.\(command.rawValue)", in: row) as? NSButton
+            )
+            #expect(row.frame.width <= scrollView.contentView.bounds.width + 1)
+            for shortcutView in findAllDescendants(of: ShortcutSequenceView.self, in: row)
+                where shortcutView.isHidden == false {
+                let frame = shortcutView.convert(shortcutView.bounds, to: row)
+                #expect(frame.minX >= -1)
+                #expect(frame.maxX <= row.bounds.width + 1)
+                #expect(shortcutView.frame.width + 1 >= shortcutView.fittingSize.width)
+                if shortcutView.superview !== capture {
+                    #expect(frame.maxX <= capture.frame.minX - 8)
+                }
+            }
+            if configuration.shortcuts.bindings[command] != nil {
+                #expect(capture.title.isEmpty)
+                #expect(findAllDescendants(of: ShortcutSequenceView.self, in: capture).count == 1)
+            }
+        }
     }
 
     @Test

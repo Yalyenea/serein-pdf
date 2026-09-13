@@ -32,6 +32,7 @@ final class PresentationAnnotationOverlayView: NSView {
     private let toolbarRevealButton = NSButton()
     private var isToolbarRevealed = false
     private var buttons: [NSButton] = []
+    private var shortcutViews: [ShortcutSequenceView] = []
     private var tracking: NSTrackingArea?
     private var activeStrokeIndex: Int?
     private var needsNewSegment = false
@@ -59,7 +60,7 @@ final class PresentationAnnotationOverlayView: NSView {
 
     override func layout() {
         super.layout()
-        toolbar.frame = NSRect(x: (bounds.width - 244) / 2, y: 12, width: 244, height: 44)
+        toolbar.frame = NSRect(x: (bounds.width - 284) / 2, y: 12, width: 284, height: 54)
         toolbarRevealButton.frame = NSRect(x: bounds.midX - 18, y: 8, width: 36, height: 16)
         refreshGeometry()
     }
@@ -452,12 +453,26 @@ final class PresentationAnnotationOverlayView: NSView {
                      ("scope", "Laser Pointer (R)", "R"), ("arrow.uturn.backward", "Undo Stroke (⌘Z)", "⌘Z"),
                      ("trash", "Clear Page (E)", "E")]
         for (index, item) in items.enumerated() {
-            let button = NSButton(frame: NSRect(x: 6 + index * 40, y: 4, width: 38, height: 36))
-            button.image = NSImage(systemSymbolName: item.0, accessibilityDescription: item.1)?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular))
-            button.title = item.2
-            button.font = .systemFont(ofSize: 9, weight: .medium)
-            button.imagePosition = .imageAbove
+            let button = PresentationToolButton(frame: NSRect(x: 6 + index * 48, y: 4, width: 46, height: 46))
+            button.title = ""
+            let icon = NSImageView()
+            icon.translatesAutoresizingMaskIntoConstraints = false
+            icon.image = NSImage(systemSymbolName: item.0, accessibilityDescription: item.1)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .regular))
+            button.addSubview(icon)
+            let shortcut = ShortcutSequenceView()
+            shortcut.configure(sequences: [KeyboardShortcutSequence([
+                KeyboardShortcut(key: index == 3 ? "z" : item.2, modifiers: index == 3 ? [.command] : [])
+            ])])
+            button.addSubview(shortcut)
+            shortcutViews.append(shortcut)
+            NSLayoutConstraint.activate([
+                icon.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+                icon.topAnchor.constraint(equalTo: button.topAnchor, constant: 2),
+                icon.heightAnchor.constraint(equalToConstant: 16),
+                shortcut.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+                shortcut.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -2),
+            ])
             button.bezelStyle = .recessed
             button.setButtonType(index < 3 ? .toggle : .momentaryPushIn)
             button.isBordered = false
@@ -472,7 +487,7 @@ final class PresentationAnnotationOverlayView: NSView {
             toolbar.addSubview(button)
             buttons.append(button)
         }
-        toolbarPinButton.frame = NSRect(x: 210, y: 8, width: 28, height: 28)
+        toolbarPinButton.frame = NSRect(x: 250, y: 13, width: 28, height: 28)
         toolbarPinButton.imagePosition = .imageOnly
         toolbarPinButton.isBordered = false
         toolbarPinButton.identifier = NSUserInterfaceItemIdentifier("presentation-toolbar-pin")
@@ -502,9 +517,15 @@ final class PresentationAnnotationOverlayView: NSView {
         for (index, button) in buttons.enumerated() {
             button.state = index == tool.rawValue ? .on : .off
             button.isEnabled = isPresentationEnabled && page != nil && (index < 3 || hasMarks)
+            shortcutViews[index].refreshChromeColors()
+            shortcutViews[index].alphaValue = button.isEnabled ? 1 : 0.4
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 button.contentTintColor = index == tool.rawValue
                     ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor
+                for icon in button.subviews.compactMap({ $0 as? NSImageView }) {
+                    icon.contentTintColor = button.contentTintColor
+                    icon.alphaValue = button.isEnabled ? 1 : 0.4
+                }
                 button.layer?.backgroundColor = index == tool.rawValue
                     ? NightModeStyle.selectedChromeBackgroundColor.cgColor
                     : NSColor.clear.cgColor
@@ -539,5 +560,11 @@ final class PresentationAnnotationOverlayView: NSView {
         focusInteraction()
         isToolbarRevealed = true
         applyToolbarVisibility()
+    }
+}
+
+private final class PresentationToolButton: NSButton {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) == nil ? nil : self
     }
 }
