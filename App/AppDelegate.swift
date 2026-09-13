@@ -2577,7 +2577,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         NSApp.appearance = effectiveMode.appAppearance
         mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
         settingsWindowController?.window?.appearance = effectiveMode.appAppearance
+        settingsWindowController?.refreshChromeColors()
         commandPaletteController?.refreshChromeColors()
+        recentFilesPaletteController?.refreshChromeColors()
+        libraryPaletteController?.refreshChromeColors()
+        openTabsPaletteController?.refreshChromeColors()
     }
 
     private func refreshThemeChromeIfFollowingSystem() {
@@ -2585,7 +2589,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
               appConfiguration.appearance.mode == .system else { return }
         mainWindowControllers.values.forEach { $0.refreshThemeAppearance() }
         settingsWindowController?.window?.appearance = nil
+        settingsWindowController?.refreshChromeColors()
         commandPaletteController?.refreshChromeColors()
+        recentFilesPaletteController?.refreshChromeColors()
+        libraryPaletteController?.refreshChromeColors()
+        openTabsPaletteController?.refreshChromeColors()
     }
 
     private func refreshMenuShortcuts() {

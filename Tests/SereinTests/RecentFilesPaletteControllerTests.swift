@@ -4,6 +4,46 @@ import XCTest
 
 @MainActor
 final class RecentFilesPaletteControllerTests: XCTestCase {
+    func testThemeRefreshPreservesQueryAndMarkedFilesAcrossPanelReuse() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        let previousTheme = ThemeManager.shared.selection
+        defer {
+            app.appearance = previousAppearance
+            ThemeManager.shared.apply(light: previousTheme.light, dark: previousTheme.dark)
+        }
+        app.appearance = NSAppearance(named: .aqua)
+        ThemeManager.shared.apply(light: .normal, dark: .normal)
+        let first = URL(fileURLWithPath: "/tmp/alpha-first.pdf")
+        let second = URL(fileURLWithPath: "/tmp/alpha-second.pdf")
+        let controller = RecentFilesPaletteController { _ in }
+        defer { controller.close() }
+        controller.show(with: [first, second], relativeTo: nil)
+        controller.testingSetQuery("alpha")
+        XCTAssertTrue(controller.testingHandleQueryCommand(#selector(NSResponder.moveDown(_:))))
+        XCTAssertTrue(controller.testingHandleResultsKeyEvent(
+            makeKeyEvent(characters: " ", keyCode: 49, window: controller.window)
+        ))
+        let content = try XCTUnwrap(controller.window?.contentView)
+        let originalBackground = try XCTUnwrap(content.layer?.backgroundColor)
+
+        ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
+        controller.refreshChromeColors()
+
+        XCTAssertNotEqual(content.layer?.backgroundColor, originalBackground)
+        XCTAssertEqual(controller.testingQuery, "alpha")
+        XCTAssertEqual(controller.testingSelectedURLs, [first])
+        XCTAssertEqual(controller.testingHighlightedIndex, 0)
+        let table = try XCTUnwrap(findDescendant(of: NSTableView.self, in: content))
+        XCTAssertTrue(table.rowView(atRow: 0, makeIfNecessary: true) is ThemedTableRowView)
+
+        controller.close()
+        controller.show(with: [second], relativeTo: nil)
+        XCTAssertEqual(controller.testingQuery, "")
+        XCTAssertTrue(controller.testingSelectedURLs.isEmpty)
+        XCTAssertEqual(table.numberOfRows, 1)
+    }
+
     func testEnterFromPanelOpensHighlightedURL() {
         _ = NSApplication.shared
         let first = URL(fileURLWithPath: "/tmp/first.pdf")

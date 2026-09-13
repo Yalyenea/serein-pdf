@@ -243,15 +243,21 @@ final class CommandPaletteControllerTests: XCTestCase {
         defer { controller.dismiss() }
         let queryField = controller.testingQueryField
         let searchCell = try XCTUnwrap(queryField.cell as? ThemedSearchFieldCell)
-        let normalColor = try XCTUnwrap(searchCell.backgroundColor?.usingColorSpace(.sRGB))
+        var resolvedNormalColor: NSColor?
+        queryField.effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolvedNormalColor = searchCell.backgroundColor?.usingColorSpace(.sRGB)
+        }
+        let normalColor = try XCTUnwrap(resolvedNormalColor)
 
         ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
         controller.refreshChromeColors()
-        let dawnColor = try XCTUnwrap(searchCell.backgroundColor?.usingColorSpace(.sRGB))
+        var resolvedDawnColor: NSColor?
         var resolvedExpectedColor: NSColor?
         queryField.effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolvedDawnColor = searchCell.backgroundColor?.usingColorSpace(.sRGB)
             resolvedExpectedColor = NightModeStyle.selectedChromeBackgroundColor.usingColorSpace(.sRGB)
         }
+        let dawnColor = try XCTUnwrap(resolvedDawnColor)
         let expectedColor = try XCTUnwrap(resolvedExpectedColor)
 
         XCTAssertGreaterThan(abs(dawnColor.redComponent - normalColor.redComponent), 0.01)

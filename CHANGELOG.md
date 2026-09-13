@@ -4,6 +4,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Appearance
+- Apply the selected theme to the filename toast, recent-files launcher, PDF library, open-tabs overview, command palette, shortcut keycaps, annotation editor, and presentation toolbar.
+- Refresh open panels in place when switching themes, preserving search queries, selections, and unfinished annotation comments.
+
 ### Outline
 - Restore text input in the floating outline filter; clicking the search field keeps the outline open while editing.
 

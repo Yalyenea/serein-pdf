@@ -53,6 +53,17 @@ final class SettingsWindowController: NSWindowController {
         settingsViewController.apply(configuration: configuration)
     }
 
+    func refreshChromeColors() {
+        var pending = settingsViewController.view.subviews
+        while let view = pending.popLast() {
+            if let shortcuts = view as? ShortcutSequenceView {
+                shortcuts.refreshChromeColors()
+            } else {
+                pending.append(contentsOf: view.subviews)
+            }
+        }
+    }
+
     func selectPage(_ page: SettingsPage) {
         settingsViewController.selectPage(page)
         applyPreferredWindowSize(settingsViewController.preferredContentSizeForCurrentPage())
@@ -71,6 +82,7 @@ final class SettingsWindowController: NSWindowController {
 
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
+        refreshChromeColors()
         applyPreferredWindowSize(settingsViewController.preferredContentSizeForCurrentPage())
     }
 

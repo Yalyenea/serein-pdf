@@ -77,6 +77,9 @@ private final class RecentFilesPaletteRowView: NSTableCellView {
     }
 
     func configure(item: RecentFilesPaletteItem, isMarked: Bool) {
+        selectionIndicator.textColor = NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance)
+        titleLabel.textColor = NightModeStyle.primaryTextColor
+        subtitleLabel.textColor = NightModeStyle.secondaryTextColor
         selectionIndicator.stringValue = isMarked ? "●" : ""
         titleLabel.stringValue = item.title
         subtitleLabel.stringValue = item.subtitle
@@ -145,6 +148,7 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         }
         buildInterface(in: panel)
         reloadUI()
+        refreshChromeColors()
     }
 
     @available(*, unavailable)
@@ -157,11 +161,40 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
         interactionMode = .editingQuery
         queryField.stringValue = ""
         reloadUI()
+        refreshChromeColors()
         positionPanel(relativeTo: parentWindow)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         focusQueryField()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func refreshChromeColors() {
+        guard let window else { return }
+        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+            window.backgroundColor = NightModeStyle.splitBackgroundColor
+            window.contentView?.layer?.backgroundColor = NightModeStyle.splitBackgroundColor.cgColor
+            titleLabel.textColor = NightModeStyle.secondaryTextColor
+            queryField.textColor = NightModeStyle.primaryTextColor
+            queryField.placeholderAttributedString = NSAttributedString(
+                string: queryPlaceholder,
+                attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
+            )
+            secondaryLabel.textColor = NightModeStyle.secondaryTextColor
+            footerLabel.textColor = NightModeStyle.tertiaryTextColor
+            emptyLabel.textColor = NightModeStyle.secondaryTextColor
+            if let editor = queryField.currentEditor() as? NSTextView {
+                editor.textColor = NightModeStyle.primaryTextColor
+                editor.insertionPointColor = NightModeStyle.primaryTextColor
+            }
+            for row in 0..<tableView.numberOfRows {
+                if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? RecentFilesPaletteRowView {
+                    let item = state.filteredItems[row]
+                    cell.configure(item: item, isMarked: state.isSelected(item.url))
+                }
+                tableView.rowView(atRow: row, makeIfNecessary: false)?.needsDisplay = true
+            }
+        }
     }
 
     private func buildInterface(in panel: NSPanel) {
@@ -451,6 +484,10 @@ final class RecentFilesPaletteController: NSWindowController, NSTableViewDataSou
             }()
         rowView.configure(item: item, isMarked: state.isSelected(item.url))
         return rowView
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        ThemedTableRowView()
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {

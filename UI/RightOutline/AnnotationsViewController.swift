@@ -124,6 +124,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
     private let shortcutLabel = NSTextField(labelWithString: "⌘↩ Save  ·  Esc Cancel")
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     private var representedGroupID: String?
+    private var highlightColor: HighlightColor = .default
     private var isEditingComment = false
     private var onSave: ((String) -> Void)?
     private var onCancel: (() -> Void)?
@@ -198,7 +199,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
         self.onSave = onSave
         self.onCancel = onCancel
         isEditingComment = isEditing
-        colorBarView.color = group.color.nsColor
+        highlightColor = group.color
         snippetLabel.stringValue = group.snippet
         commentLabel.stringValue = group.normalizedComment
         commentLabel.isHidden = isEditing || group.normalizedComment.isEmpty
@@ -210,7 +211,25 @@ final class AnnotationHighlightCellView: NSTableCellView {
         }
         let tooltipParts = [group.snippet, group.normalizedComment].filter { $0.isEmpty == false }
         toolTip = tooltipParts.isEmpty ? nil : tooltipParts.joined(separator: "\n\n")
+        refreshChromeColors()
         needsLayout = true
+    }
+
+    func refreshChromeColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            colorBarView.color = NightModeStyle.highlightColor(for: highlightColor, appearance: effectiveAppearance)
+            snippetLabel.textColor = NightModeStyle.primaryTextColor
+            commentLabel.textColor = NightModeStyle.secondaryTextColor
+            commentTextView.textColor = NightModeStyle.primaryTextColor
+            commentTextView.insertionPointColor = NightModeStyle.primaryTextColor
+            editorScrollView.backgroundColor = NightModeStyle.primaryTextColor.withAlphaComponent(0.035)
+            shortcutLabel.textColor = NightModeStyle.tertiaryTextColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshChromeColors()
     }
 
     override func layout() {
@@ -508,7 +527,14 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             tableView.backgroundColor = .clear
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
         }
-        tableView.reloadData()
+        for row in 0..<tableView.numberOfRows {
+            if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? AnnotationHighlightCellView {
+                cell.refreshChromeColors()
+            } else if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? NSTableCellView {
+                cell.textField?.textColor = NightModeStyle.secondaryTextColor
+            }
+            tableView.rowView(atRow: row, makeIfNecessary: false)?.needsDisplay = true
+        }
     }
 
     func reveal(groupID: String, focusEditor: Bool) {
@@ -612,6 +638,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
                 ?? makeSectionCell(identifier: identifier)
             cell.textField?.stringValue = title
+            cell.textField?.textColor = NightModeStyle.secondaryTextColor
             return cell
         case let .highlight(group):
             let identifier = NSUserInterfaceItemIdentifier("AnnotationHighlightCell")

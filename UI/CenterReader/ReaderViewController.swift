@@ -3536,6 +3536,7 @@ final class ReaderViewController: NSViewController {
 
     private func applyReaderAppearance() {
         annotationInteraction.refreshThemeAppearance()
+        presentationOverlay.refreshThemeAppearance()
         let isNightModeEnabled = readerState.isNightModeEnabled
         let appearance = NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
@@ -3642,9 +3643,13 @@ final class ReaderViewController: NSViewController {
     }
 
     private func updateSwitchTitleToastAppearance() {
-        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        switchTitleToastView.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(isDark ? 0.86 : 0.92).cgColor
-        switchTitleToastLabel.textColor = NightModeStyle.primaryTextColor
+        let appearance = switchTitleToastView.effectiveAppearance
+        appearance.performAsCurrentDrawingAppearance {
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            switchTitleToastView.layer?.backgroundColor = NightModeStyle.paneBackgroundColor
+                .withAlphaComponent(isDark ? 0.86 : 0.92).cgColor
+            switchTitleToastLabel.textColor = NightModeStyle.primaryTextColor
+        }
     }
 
     private func updateHighlightModeIndicator() {

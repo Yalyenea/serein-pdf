@@ -29,7 +29,7 @@ private final class OpenTabsPaletteTileView: NSView {
         activeIndicator.translatesAutoresizingMaskIntoConstraints = false
         activeIndicator.font = .systemFont(ofSize: 14, weight: .semibold)
         activeIndicator.alignment = .center
-        activeIndicator.textColor = HighlightColor.pink.nsColor
+        activeIndicator.textColor = NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance)
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -38,22 +38,21 @@ private final class OpenTabsPaletteTileView: NSView {
 
         pathLabel.translatesAutoresizingMaskIntoConstraints = false
         pathLabel.font = .systemFont(ofSize: 10)
-        pathLabel.textColor = .secondaryLabelColor
+        pathLabel.textColor = NightModeStyle.secondaryTextColor
         pathLabel.lineBreakMode = .byTruncatingMiddle
         pathLabel.maximumNumberOfLines = 1
 
         pageLabel.translatesAutoresizingMaskIntoConstraints = false
         pageLabel.font = .systemFont(ofSize: 10, weight: .medium)
-        pageLabel.textColor = .secondaryLabelColor
+        pageLabel.textColor = NightModeStyle.secondaryTextColor
         pageLabel.alignment = .right
 
         paneBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
         paneBadgeLabel.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
         paneBadgeLabel.alignment = .center
-        paneBadgeLabel.textColor = .secondaryLabelColor
+        paneBadgeLabel.textColor = NightModeStyle.secondaryTextColor
         paneBadgeLabel.wantsLayer = true
         paneBadgeLabel.layer?.cornerRadius = 4
-        paneBadgeLabel.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
 
         addSubview(activeIndicator)
         addSubview(titleLabel)
@@ -95,22 +94,29 @@ private final class OpenTabsPaletteTileView: NSView {
 
     func configure(item: OpenTabsPaletteItem) {
         activeIndicator.stringValue = item.isActive ? "●" : ""
+        titleLabel.textColor = NightModeStyle.primaryTextColor
+        pathLabel.textColor = NightModeStyle.secondaryTextColor
+        pageLabel.textColor = NightModeStyle.secondaryTextColor
+        activeIndicator.textColor = NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance)
         titleLabel.stringValue = item.isDirty ? "\(item.title) •" : item.title
         pathLabel.stringValue = item.subtitle
         pageLabel.stringValue = item.pageText
         paneBadgeLabel.stringValue = item.paneBadge ?? ""
         paneBadgeLabel.isHidden = item.paneBadge == nil
-        paneBadgeLabel.textColor = item.isFocusedPane ? HighlightColor.pink.nsColor : .secondaryLabelColor
+        paneBadgeLabel.textColor = item.isFocusedPane ? NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance) : NightModeStyle.secondaryTextColor
     }
 
     func updateSelection(isSelected: Bool, isActive: Bool) {
-        let selectedColor = HighlightColor.pink.nsColor.withAlphaComponent(0.85)
-        let activeColor = HighlightColor.pink.nsColor.withAlphaComponent(0.35)
-        layer?.backgroundColor = isSelected
-            ? selectedColor.withAlphaComponent(0.10).cgColor
-            : NSColor.clear.cgColor
-        layer?.borderColor = (isSelected ? selectedColor : (isActive ? activeColor : NSColor.separatorColor.withAlphaComponent(0.45))).cgColor
-        layer?.borderWidth = isSelected ? 2 : 1
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            paneBadgeLabel.layer?.backgroundColor = NightModeStyle.chromeStrokeColor.withAlphaComponent(0.35).cgColor
+            let selectedColor = NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance).withAlphaComponent(0.85)
+            let activeColor = NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance).withAlphaComponent(0.35)
+            layer?.backgroundColor = isSelected
+                ? selectedColor.withAlphaComponent(0.10).cgColor
+                : NSColor.clear.cgColor
+            layer?.borderColor = (isSelected ? selectedColor : (isActive ? activeColor : NightModeStyle.chromeStrokeColor.withAlphaComponent(0.45))).cgColor
+            layer?.borderWidth = isSelected ? 2 : 1
+        }
     }
 }
 
@@ -179,6 +185,7 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
 
         super.init(window: panel)
         buildInterface(in: panel)
+        refreshChromeColors()
         reloadUI()
     }
 
@@ -195,6 +202,7 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
         focusedPane: ReaderPane,
         relativeTo parentWindow: NSWindow?
     ) {
+        refreshChromeColors()
         state.replaceSessions(
             sessions,
             activeSessionID: activeSessionID,
@@ -218,21 +226,21 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
-        titleLabel.textColor = .labelColor
+        titleLabel.textColor = NightModeStyle.primaryTextColor
 
         secondaryLabel.translatesAutoresizingMaskIntoConstraints = false
         secondaryLabel.font = .systemFont(ofSize: 11)
-        secondaryLabel.textColor = .secondaryLabelColor
+        secondaryLabel.textColor = NightModeStyle.secondaryTextColor
         secondaryLabel.alignment = .right
 
         footerLabel.translatesAutoresizingMaskIntoConstraints = false
         footerLabel.font = .systemFont(ofSize: 11)
-        footerLabel.textColor = .secondaryLabelColor
+        footerLabel.textColor = NightModeStyle.tertiaryTextColor
         footerLabel.alignment = .center
 
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
         emptyLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.textColor = NightModeStyle.secondaryTextColor
         emptyLabel.alignment = .center
         emptyLabel.isHidden = true
 
@@ -288,6 +296,22 @@ final class OpenTabsPaletteController: NSWindowController, NSCollectionViewDataS
             footerLabel.trailingAnchor.constraint(equalTo: secondaryLabel.trailingAnchor),
             footerLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
         ])
+    }
+
+    func refreshChromeColors() {
+        guard let window else { return }
+        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+            window.backgroundColor = NightModeStyle.splitBackgroundColor
+            window.contentView?.layer?.backgroundColor = NightModeStyle.splitBackgroundColor.cgColor
+            titleLabel.textColor = NightModeStyle.primaryTextColor
+            secondaryLabel.textColor = NightModeStyle.secondaryTextColor
+            footerLabel.textColor = NightModeStyle.tertiaryTextColor
+            emptyLabel.textColor = NightModeStyle.secondaryTextColor
+            for indexPath in collectionView.indexPathsForVisibleItems() {
+                (collectionView.item(at: indexPath) as? OpenTabsPaletteTileItem)?
+                    .configure(item: state.items[indexPath.item])
+            }
+        }
     }
 
     private func positionPanel(relativeTo parentWindow: NSWindow?) {

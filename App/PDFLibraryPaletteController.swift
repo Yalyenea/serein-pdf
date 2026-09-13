@@ -54,7 +54,7 @@ private final class PDFLibraryFolderCellView: NSTableCellView {
 
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.font = .systemFont(ofSize: 10)
-        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.textColor = NightModeStyle.secondaryTextColor
         subtitleLabel.lineBreakMode = .byTruncatingMiddle
 
         addSubview(titleLabel)
@@ -78,6 +78,8 @@ private final class PDFLibraryFolderCellView: NSTableCellView {
     }
 
     func configure(row: PDFLibraryFolderRow) {
+        titleLabel.textColor = NightModeStyle.primaryTextColor
+        subtitleLabel.textColor = NightModeStyle.secondaryTextColor
         titleLabel.stringValue = row.title
         subtitleLabel.stringValue = row.subtitle
     }
@@ -97,7 +99,7 @@ private final class PDFLibraryPDFCellView: NSTableCellView {
 
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.font = .systemFont(ofSize: 10)
-        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.textColor = NightModeStyle.secondaryTextColor
         subtitleLabel.lineBreakMode = .byTruncatingMiddle
 
         addSubview(titleLabel)
@@ -121,6 +123,8 @@ private final class PDFLibraryPDFCellView: NSTableCellView {
     }
 
     func configure(item: PDFLibraryItem) {
+        titleLabel.textColor = NightModeStyle.primaryTextColor
+        subtitleLabel.textColor = NightModeStyle.secondaryTextColor
         titleLabel.stringValue = item.title
         subtitleLabel.stringValue = item.relativePath
     }
@@ -182,6 +186,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             self?.handlePanelKeyEvent(event) ?? false
         }
         buildInterface(in: panel)
+        refreshChromeColors()
         reloadUI()
     }
 
@@ -191,6 +196,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     }
 
     func show(folderURLs: [URL], relativeTo parentWindow: NSWindow?) {
+        refreshChromeColors()
         catalogBuildTask?.cancel()
         catalogBuildGeneration &+= 1
         let generation = catalogBuildGeneration
@@ -290,7 +296,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
 
         secondaryLabel.translatesAutoresizingMaskIntoConstraints = false
         secondaryLabel.font = .systemFont(ofSize: 11)
-        secondaryLabel.textColor = .secondaryLabelColor
+        secondaryLabel.textColor = NightModeStyle.secondaryTextColor
 
         segmentControl.translatesAutoresizingMaskIntoConstraints = false
         segmentControl.target = self
@@ -327,12 +333,12 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
 
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
         emptyLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.textColor = NightModeStyle.secondaryTextColor
         emptyLabel.alignment = .center
 
         footerLabel.translatesAutoresizingMaskIntoConstraints = false
         footerLabel.font = .systemFont(ofSize: 11)
-        footerLabel.textColor = .secondaryLabelColor
+        footerLabel.textColor = NightModeStyle.tertiaryTextColor
         footerLabel.alignment = .center
 
         let contentSplit = NSStackView(views: [foldersScrollView, pdfsScrollView])
@@ -381,6 +387,38 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             footerLabel.trailingAnchor.constraint(equalTo: queryField.trailingAnchor),
             footerLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -14),
         ])
+    }
+
+    func refreshChromeColors() {
+        guard let window else { return }
+        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+            window.backgroundColor = NightModeStyle.splitBackgroundColor
+            window.contentView?.layer?.backgroundColor = NightModeStyle.splitBackgroundColor.cgColor
+            titleLabel.textColor = NightModeStyle.primaryTextColor
+            secondaryLabel.textColor = NightModeStyle.secondaryTextColor
+            segmentControl.selectedSegmentBezelColor = NightModeStyle.selectedChromeBackgroundColor
+            queryField.textColor = NightModeStyle.primaryTextColor
+            queryField.placeholderAttributedString = NSAttributedString(
+                string: "Search library PDFs",
+                attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
+            )
+            if let editor = queryField.currentEditor() as? NSTextView {
+                editor.textColor = NightModeStyle.primaryTextColor
+                editor.insertionPointColor = NightModeStyle.primaryTextColor
+            }
+            emptyLabel.textColor = NightModeStyle.secondaryTextColor
+            footerLabel.textColor = NightModeStyle.tertiaryTextColor
+            foldersTableView.enumerateAvailableRowViews { rowView, row in
+                (self.foldersTableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? PDFLibraryFolderCellView)?
+                    .configure(row: self.folderRows[row])
+                rowView.needsDisplay = true
+            }
+            pdfsTableView.enumerateAvailableRowViews { rowView, row in
+                (self.pdfsTableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? PDFLibraryPDFCellView)?
+                    .configure(item: self.filteredItems[row])
+                rowView.needsDisplay = true
+            }
+        }
     }
 
     private func configure(tableView: NSTableView, identifier: String) {
@@ -656,6 +694,10 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             return folderRows.count
         }
         return filteredItems.count
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        ThemedTableRowView()
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {

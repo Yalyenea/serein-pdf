@@ -72,6 +72,8 @@ private final class CommandPaletteRowView: NSTableCellView {
     }
 
     func configure(with item: CommandPaletteItem) {
+        titleLabel.textColor = NightModeStyle.primaryTextColor
+        sectionLabel.textColor = NightModeStyle.secondaryTextColor
         titleLabel.stringValue = item.title
         sectionLabel.stringValue = item.section.title
         shortcutsView.configure(sequences: item.shortcutSequences)
@@ -309,6 +311,15 @@ final class CommandPaletteController: NSWindowController, NSWindowDelegate, NSTa
             resultCountLabel.textColor = NightModeStyle.secondaryTextColor
             emptyLabel.textColor = NightModeStyle.secondaryTextColor
             footerLabel.textColor = NightModeStyle.tertiaryTextColor
+            if let editor = queryField.currentEditor() as? NSTextView {
+                editor.textColor = NightModeStyle.primaryTextColor
+                editor.insertionPointColor = NightModeStyle.primaryTextColor
+            }
+            for row in 0..<tableView.numberOfRows {
+                let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? CommandPaletteRowView
+                cell?.configure(with: state.filteredItems[row])
+                tableView.rowView(atRow: row, makeIfNecessary: false)?.needsDisplay = true
+            }
         }
     }
 
@@ -420,6 +431,10 @@ final class CommandPaletteController: NSWindowController, NSWindowDelegate, NSTa
             }()
         rowView.configure(with: state.filteredItems[row])
         return rowView
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        ThemedTableRowView()
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {

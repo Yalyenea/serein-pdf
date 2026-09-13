@@ -35,12 +35,23 @@ final class ShortcutSequenceView: NSStackView {
             }
         }
         isHidden = sequences.isEmpty
+        refreshChromeColors()
+    }
+
+    func refreshChromeColors() {
+        for view in arrangedSubviews {
+            if let keycap = view as? ShortcutKeycapLabel {
+                keycap.refreshChromeColors()
+            } else if let label = view as? NSTextField {
+                label.textColor = NightModeStyle.tertiaryTextColor
+            }
+        }
     }
 
     private func makeSeparatorLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 10)
-        label.textColor = .tertiaryLabelColor
+        label.textColor = NightModeStyle.tertiaryTextColor
         return label
     }
 }
@@ -55,7 +66,7 @@ private final class ShortcutKeycapLabel: NSTextField {
         drawsBackground = false
         alignment = .center
         font = .monospacedSystemFont(ofSize: 10.5, weight: .medium)
-        textColor = .secondaryLabelColor
+        textColor = NightModeStyle.secondaryTextColor
         lineBreakMode = .byClipping
         wantsLayer = true
         layer?.cornerRadius = 4
@@ -73,9 +84,16 @@ private final class ShortcutKeycapLabel: NSTextField {
 
     override func updateLayer() {
         super.updateLayer()
-        layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.12).cgColor
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
-        layer?.borderWidth = 0.5
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NightModeStyle.selectedChromeBackgroundColor.cgColor
+            layer?.borderColor = NightModeStyle.chromeStrokeColor.withAlphaComponent(0.45).cgColor
+            layer?.borderWidth = 0.5
+        }
+    }
+
+    func refreshChromeColors() {
+        textColor = NightModeStyle.secondaryTextColor
+        needsDisplay = true
     }
 
     override var intrinsicContentSize: NSSize {

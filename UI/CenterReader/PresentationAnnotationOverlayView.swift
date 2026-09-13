@@ -66,7 +66,7 @@ final class PresentationAnnotationOverlayView: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        refreshGeometry()
+        refreshThemeAppearance()
     }
 
     override func viewDidMoveToWindow() {
@@ -211,13 +211,20 @@ final class PresentationAnnotationOverlayView: NSView {
         geometryPage = page
         pageFrame = nextFrame
         applyToolbarVisibility()
-        toolbar.layer?.backgroundColor = NightModeStyle.paneBackgroundColor
-            .withAlphaComponent(0.58).cgColor
-        toolbar.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.18).cgColor
-        toolbarRevealButton.layer?.backgroundColor = NightModeStyle.paneBackgroundColor
-            .withAlphaComponent(0.36).cgColor
-        updateButtons()
+        refreshThemeAppearance()
         needsDisplay = true
+    }
+
+    func refreshThemeAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            toolbar.layer?.backgroundColor = NightModeStyle.paneBackgroundColor
+                .withAlphaComponent(0.58).cgColor
+            toolbar.layer?.borderColor = NightModeStyle.chromeStrokeColor.withAlphaComponent(0.18).cgColor
+            toolbarRevealButton.layer?.backgroundColor = NightModeStyle.paneBackgroundColor
+                .withAlphaComponent(0.36).cgColor
+            toolbarRevealButton.contentTintColor = NightModeStyle.tertiaryTextColor
+        }
+        updateButtons()
     }
 
     func setToolbarPinned(_ pinned: Bool) {
@@ -477,7 +484,7 @@ final class PresentationAnnotationOverlayView: NSView {
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .medium))
         toolbarRevealButton.imagePosition = .imageOnly
         toolbarRevealButton.isBordered = false
-        toolbarRevealButton.contentTintColor = .tertiaryLabelColor
+        toolbarRevealButton.contentTintColor = NightModeStyle.tertiaryTextColor
         toolbarRevealButton.wantsLayer = true
         toolbarRevealButton.layer?.cornerRadius = 4
         toolbarRevealButton.toolTip = "Show presentation tools"
@@ -495,15 +502,18 @@ final class PresentationAnnotationOverlayView: NSView {
         for (index, button) in buttons.enumerated() {
             button.state = index == tool.rawValue ? .on : .off
             button.isEnabled = isPresentationEnabled && page != nil && (index < 3 || hasMarks)
-            button.contentTintColor = index == tool.rawValue ? .systemPink : .secondaryLabelColor
-            button.layer?.backgroundColor = index == tool.rawValue
-                ? NSColor.systemPink.withAlphaComponent(0.09).cgColor
-                : NSColor.clear.cgColor
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                button.contentTintColor = index == tool.rawValue
+                    ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor
+                button.layer?.backgroundColor = index == tool.rawValue
+                    ? NightModeStyle.selectedChromeBackgroundColor.cgColor
+                    : NSColor.clear.cgColor
+            }
         }
         let pinLabel = isToolbarPinned ? "Auto-hide toolbar" : "Keep toolbar visible"
         toolbarPinButton.image = NSImage(systemSymbolName: isToolbarPinned ? "pin.fill" : "pin", accessibilityDescription: pinLabel)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .regular))
-        toolbarPinButton.contentTintColor = .secondaryLabelColor
+        toolbarPinButton.contentTintColor = NightModeStyle.secondaryTextColor
         toolbarPinButton.toolTip = pinLabel
         toolbarPinButton.setAccessibilityLabel(pinLabel)
     }
