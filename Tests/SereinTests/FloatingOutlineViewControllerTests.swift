@@ -98,18 +98,21 @@ struct FloatingOutlineViewControllerTests {
                 in: outlineController.view
             ) as? NSSearchField
         )
+        outlineController.view.appearance = NSAppearance(named: .aqua)
         filterField.frame = NSRect(x: 0, y: 0, width: 276, height: 22)
         let normalRenderedColor = try renderedColor(of: filterField, at: NSPoint(x: 250, y: 11))
 
         ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
         outlineController.refreshChromeColors()
-        let dawnColor = try #require(filterField.backgroundColor?.usingColorSpace(.sRGB))
         let dawnRenderedColor = try renderedColor(of: filterField, at: NSPoint(x: 250, y: 11))
+        var resolvedDawnColor: NSColor?
         var resolvedExpectedColor: NSColor?
         filterField.effectiveAppearance.performAsCurrentDrawingAppearance {
+            resolvedDawnColor = filterField.backgroundColor?.usingColorSpace(.sRGB)
             resolvedExpectedColor = NightModeStyle.selectedChromeBackgroundColor
                 .usingColorSpace(.sRGB)
         }
+        let dawnColor = try #require(resolvedDawnColor)
         let expectedColor = try #require(resolvedExpectedColor)
 
         #expect(filterField.isBezeled)
@@ -691,7 +694,9 @@ private func renderedColor(of searchField: NSSearchField, at point: NSPoint) thr
     let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = graphicsContext
-    searchField.cell?.draw(withFrame: searchField.bounds, in: searchField)
+    searchField.effectiveAppearance.performAsCurrentDrawingAppearance {
+        searchField.cell?.draw(withFrame: searchField.bounds, in: searchField)
+    }
     graphicsContext.flushGraphics()
     NSGraphicsContext.restoreGraphicsState()
 
