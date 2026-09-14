@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Tabs
+- Clicking a vertical sidebar tab or titlebar tab now switches the PDF even when the tab is not first in the strip. Close buttons on those tabs stay clickable.
+
 ### Palettes
 - Command Palette is a compact two-column grid without search. Arrow keys move across commands, Enter or a click runs the highlight, and Esc or Cmd+K closes. Two-stage Cmd+K chords still work while the panel is open.
 - Esc closes the recent-files launcher even when the reader is key. Duplicate titles show the parent folder.

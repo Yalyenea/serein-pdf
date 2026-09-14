@@ -528,7 +528,7 @@ extension VerticalTabsViewController {
         listStackView.arrangedSubviews
             .compactMap { $0 as? VerticalTabItemView }
             .map { itemView in
-                itemView.hitTest(NSPoint(x: itemView.bounds.midX, y: itemView.bounds.midY))
+                itemView.hitTest(NSPoint(x: itemView.frame.midX, y: itemView.frame.midY))
                     is TabDragSourceButton
             }
     }

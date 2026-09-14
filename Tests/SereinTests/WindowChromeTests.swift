@@ -195,6 +195,36 @@ struct WindowChromeTests {
     }
 
     @Test
+    func stackedTitlebarTabsStayClickableAwayFromOrigin() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        store.setTabPresentationMode(.horizontalTitlebar)
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-hit-first"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-hit-second"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-hit-third"))
+        let controller = TitlebarTabsController(documentStore: store)
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 640, height: 36)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let tabItems = findAllDescendants(of: TitlebarTabItemView.self, in: controller.view)
+        #expect(tabItems.count == 3)
+        #expect((tabItems.map(\.frame.minX).max() ?? 0) > (tabItems.map(\.frame.minX).min() ?? 0))
+        #expect(controller.testingTabDragSourceHitTargets == [true, true, true])
+
+        for tabItem in tabItems {
+            let pointInContainer = tabItem.convert(
+                NSPoint(x: tabItem.bounds.midX, y: tabItem.bounds.midY),
+                to: controller.view
+            )
+            #expect(
+                controller.view.hitTest(pointInContainer) is TabDragSourceButton,
+                "tab frame \(tabItem.frame) should hit the select button"
+            )
+        }
+    }
+
+    @Test
     func transparentTitlebarDragAreaIsReservedBeforePDFContent() throws {
         _ = NSApplication.shared
         let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())

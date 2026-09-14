@@ -186,12 +186,13 @@ final class TitlebarTabItemView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard bounds.contains(point) else { return nil }
+        guard frame.contains(point) else { return nil }
         if titleLabel.isEditable {
             return super.hitTest(point)
         }
 
-        let closePoint = closeButton.convert(point, from: self)
+        let localPoint = convert(point, from: superview)
+        let closePoint = closeButton.convert(localPoint, from: self)
         if closeButton.bounds.contains(closePoint) {
             return closeButton
         }

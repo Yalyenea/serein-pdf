@@ -349,6 +349,54 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertEqual(controller.testingTabDragSourceHitTargets, [true])
     }
 
+    func testStackedVerticalTabsStayClickableAwayFromOrigin() throws {
+        _ = NSApplication.shared
+        let store = makeStore()
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "vertical-hit-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "vertical-hit-second"))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "vertical-hit-third"))
+        let controller = VerticalTabsViewController(
+            documentStore: store,
+            windowID: store.defaultWindowID
+        )
+        controller.loadViewIfNeeded()
+        let window = makeWindow(for: controller.view)
+        defer { window.close() }
+        controller.view.frame = NSRect(x: 0, y: 0, width: 240, height: 480)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let tabItems = findAllDescendants(of: VerticalTabItemView.self, in: controller.view)
+        XCTAssertEqual(tabItems.count, 3)
+        XCTAssertGreaterThan(tabItems.map(\.frame.minY).max() ?? 0, tabItems.map(\.frame.minY).min() ?? 0)
+        XCTAssertEqual(controller.testingTabDragSourceHitTargets, [true, true, true])
+
+        for tabItem in tabItems {
+            let pointInContainer = tabItem.convert(
+                NSPoint(x: tabItem.bounds.midX, y: tabItem.bounds.midY),
+                to: controller.view
+            )
+            XCTAssertTrue(
+                controller.view.hitTest(pointInContainer) is TabDragSourceButton,
+                "tab frame \(tabItem.frame) should hit the select button"
+            )
+        }
+
+        let topTab = tabItems[0]
+        let closeButton = try XCTUnwrap(findButton(titled: "×", in: topTab))
+        let closePoint = closeButton.convert(
+            NSPoint(x: closeButton.bounds.midX, y: closeButton.bounds.midY),
+            to: controller.view
+        )
+        XCTAssertTrue(controller.view.hitTest(closePoint) === closeButton)
+
+        XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), third.id)
+        let firstTab = tabItems[0]
+        let firstHit = firstTab.hitTest(NSPoint(x: firstTab.frame.midX, y: firstTab.frame.midY)) as? NSButton
+        XCTAssertEqual(firstHit?.sendAction(firstHit?.action, to: firstHit?.target), true)
+        XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), first.id)
+        XCTAssertEqual(store.sessions(in: store.defaultWindowID).map(\.id), [first.id, second.id, third.id])
+    }
+
     func testVerticalTabContextMenuKeepsRevealSeparateFromOpenWith() throws {
         _ = NSApplication.shared
         let store = makeStore()
