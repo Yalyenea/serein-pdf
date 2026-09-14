@@ -1029,6 +1029,46 @@ struct WindowChromeTests {
     }
 
     @Test
+    func readerPaneFocusStrokeIsOnlyDrawnWhileSplit() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "pane-stroke-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "pane-stroke-second"))
+        let windowID = controller.windowID
+        guard let workspace = (controller.window?.contentViewController as? SplitViewController)?
+            .readerWorkspaceViewController else {
+            Issue.record("Failed to locate reader workspace")
+            return
+        }
+        flushLayout(controller.window)
+
+        #expect(store.isSplitEnabled(in: windowID) == false)
+        #expect(workspace.testingPrimaryPaneBorderWidth == 0)
+        #expect(workspace.testingSecondaryPaneBorderWidth == 0)
+
+        store.activate(sessionID: first.id, in: windowID)
+        store.activate(sessionID: second.id, in: windowID, targetPane: .secondary)
+        store.setFocusedPane(.primary, in: windowID)
+        flushLayout(controller.window)
+
+        #expect(store.isSplitEnabled(in: windowID))
+        #expect(workspace.testingPrimaryPaneBorderWidth == 1)
+        #expect(workspace.testingSecondaryPaneBorderWidth == 0)
+
+        store.setFocusedPane(.secondary, in: windowID)
+        flushLayout(controller.window)
+        #expect(workspace.testingPrimaryPaneBorderWidth == 0)
+        #expect(workspace.testingSecondaryPaneBorderWidth == 1)
+
+        store.setSplitEnabled(false, in: windowID)
+        flushLayout(controller.window)
+        #expect(workspace.testingPrimaryPaneBorderWidth == 0)
+        #expect(workspace.testingSecondaryPaneBorderWidth == 0)
+    }
+
+    @Test
     func readerSplitToggleCanEnableAndDisableAgain() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()

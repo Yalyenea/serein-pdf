@@ -258,6 +258,14 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         (sideBySideMinimumConstraints + stackedMinimumConstraints).filter(\.isActive).count
     }
 
+    var testingPrimaryPaneBorderWidth: CGFloat {
+        primaryHostView.layer?.borderWidth ?? 0
+    }
+
+    var testingSecondaryPaneBorderWidth: CGFloat {
+        secondaryHostView.layer?.borderWidth ?? 0
+    }
+
     func toggleSplit() {
         documentStore.setSplitEnabled(!documentStore.isSplitEnabled(in: windowID), in: windowID)
     }
@@ -637,7 +645,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         let focusedPane = documentStore.focusedPane(in: windowID)
         let focusedPaneChanged = appliedFocusedPane != focusedPane
         appliedFocusedPane = focusedPane
-        primaryHostView.isFocused = focusedPane == .primary || splitEnabled == false
+        primaryHostView.isFocused = splitEnabled && focusedPane == .primary
         secondaryHostView.isFocused = splitEnabled && focusedPane == .secondary
         if splitStateChanged || primarySessionChanged || secondaryTargetChanged {
             syncSplitCandidateView()
