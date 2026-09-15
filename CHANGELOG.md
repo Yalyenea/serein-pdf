@@ -8,6 +8,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Clicking a vertical sidebar tab or titlebar tab now switches the PDF even when the tab is not first in the strip. Close buttons on those tabs stay clickable.
 
 ### Chrome
+- Hide the titlebar tab strip when the window has no tabs; restore it when a PDF or blank tab opens.
+- Show a large, faint Baskerville italic `Serein` wordmark in empty windows and blank tabs, sized to the reader area and colored by the current theme.
 - Draw the reader pane focus stroke only while split is on, so a single-pane window no longer has an inner frame.
 
 ### Palettes

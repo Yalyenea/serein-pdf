@@ -203,8 +203,9 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
   dark, without changing the mode model.
 - `sidebars_swapped = true` flips the left and right panes — window-level widths
   travel with the panes so your narrow tabs pane stays narrow after the swap.
-- Empty pages and blank tabs stay visually blank; PDF loading errors still show
-  in the center reader.
+- Empty windows and blank tabs show a large, faint serif italic `Serein` wordmark
+  that scales with the reader area and follows the theme. It disappears when a
+  PDF or loading error is displayed. Empty windows hide the titlebar tab strip.
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.

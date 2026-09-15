@@ -37,6 +37,42 @@ private enum BookScrollAxis {
     case vertical
 }
 
+private final class SereinWordmarkView: NSView {
+    var textColor: NSColor = .clear {
+        didSet { needsDisplay = true }
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func layout() {
+        super.layout()
+        needsDisplay = true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let familyFont = NSFontManager.shared.convert(NSFont.systemFont(ofSize: 100), toFamily: "Baskerville")
+        let font = NSFontManager.shared.convert(familyFont, toHaveTrait: .italicFontMask)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
+        let text = "Serein" as NSString
+        let size = text.size(withAttributes: attributes)
+        let scale = min(bounds.width * 0.82 / size.width, bounds.height * 0.65 / size.height)
+        guard scale > 0 else { return }
+
+        NSGraphicsContext.saveGraphicsState()
+        let transform = NSAffineTransform()
+        transform.translateX(
+            by: bounds.midX - size.width * scale / 2,
+            yBy: bounds.midY + bounds.height * 0.04 - size.height * scale / 2
+        )
+        transform.scale(by: scale)
+        transform.concat()
+        text.draw(at: .zero, withAttributes: attributes)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+}
+
 private final class ReaderSurfaceView: NSView {
     var onOpenURLs: (([URL]) -> Void)?
 
@@ -413,6 +449,7 @@ final class ReaderViewController: NSViewController {
     private let pdfContainerView = PDFContainerView()
     var presentationOverlay: PresentationAnnotationOverlayView { pdfContainerView.presentationOverlay }
     private let emptyStateContainer = NSStackView()
+    private let emptyStateWordmark = SereinWordmarkView()
     private let emptyStateErrorLabel = NSTextField(wrappingLabelWithString: "")
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
@@ -867,6 +904,9 @@ final class ReaderViewController: NSViewController {
         container.addSubview(pdfContainerView)
         annotationInteraction.install(in: container)
         container.addSubview(emptyStateContainer)
+        emptyStateWordmark.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateWordmark.setAccessibilityElement(false)
+        container.addSubview(emptyStateWordmark)
         container.addSubview(highlightModeIndicator)
         container.addSubview(panLockIndicator)
         container.addSubview(switchTitleToastView)
@@ -877,6 +917,10 @@ final class ReaderViewController: NSViewController {
         pdfContainerTopConstraint = pdfTop
 
         NSLayoutConstraint.activate([
+            emptyStateWordmark.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            emptyStateWordmark.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            emptyStateWordmark.topAnchor.constraint(equalTo: container.topAnchor),
+            emptyStateWordmark.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             pdfContainerView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             pdfContainerView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             pdfTop,
@@ -2422,6 +2466,7 @@ final class ReaderViewController: NSViewController {
     }
 
     private func showDefaultEmptyState() {
+        emptyStateWordmark.isHidden = false
         emptyStateErrorLabel.stringValue = ""
         emptyStateErrorLabel.isHidden = true
         emptyStateContainer.isHidden = true
@@ -2435,6 +2480,7 @@ final class ReaderViewController: NSViewController {
     }
 
     private func setEmptyStateVisible(_ visible: Bool) {
+        emptyStateWordmark.isHidden = true
         emptyStateContainer.isHidden = !visible
         if visible {
             pdfView.isHidden = true
@@ -3611,6 +3657,7 @@ final class ReaderViewController: NSViewController {
             pdfView.layer?.backgroundColor = NSColor.clear.cgColor
             highlightModeLabel.textColor = NightModeStyle.secondaryTextColor
             emptyStateErrorLabel.textColor = NightModeStyle.secondaryTextColor
+            emptyStateWordmark.textColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.14)
         }
         applyOverviewSurfaceAppearance()
         if emptyStateContainer.isHidden, pdfView.document != nil {

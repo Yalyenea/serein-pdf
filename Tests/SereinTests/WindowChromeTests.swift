@@ -103,6 +103,10 @@ struct WindowChromeTests {
 
         store.setTabPresentationMode(.horizontalTitlebar)
         controller.window?.layoutIfNeeded()
+        #expect(controller.window?.toolbar == nil)
+
+        _ = store.newBlankTab()
+        controller.window?.layoutIfNeeded()
         #expect(controller.window?.toolbar != nil)
 
         store.setTabPresentationMode(.verticalSidebar)
@@ -114,6 +118,7 @@ struct WindowChromeTests {
     func horizontalTabsHideWhenLeftSidebarReturns() {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
+        _ = store.newBlankTab()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
 
@@ -247,6 +252,7 @@ struct WindowChromeTests {
     func transparentTitlebarDragDoesNotStealWindowControlsOrTitlebarTabs() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
+        _ = store.newBlankTab()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         let window = try #require(controller.window as? ReaderShortcutWindow)
@@ -1476,12 +1482,16 @@ struct WindowChromeTests {
         store.setTabPresentationMode(.horizontalTitlebar)
         store.setLeftSidebarVisible(false)
         controller.window?.layoutIfNeeded()
-        #expect(controller.window?.toolbar != nil)
+        #expect(controller.window?.toolbar == nil)
 
         _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-open"))
         controller.window?.layoutIfNeeded()
 
         #expect(controller.window?.toolbar != nil)
+
+        store.closeActiveSession()
+        controller.window?.layoutIfNeeded()
+        #expect(controller.window?.toolbar == nil)
     }
 
     @Test

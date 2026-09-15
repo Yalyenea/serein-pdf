@@ -10,6 +10,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let tabsOnRight: Bool
         let isTabsPaneVisible: Bool
         let isImmersiveModeEnabled: Bool
+        let hasTabs: Bool
     }
 
     private struct WindowTitleState: Equatable {
@@ -144,12 +145,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             tabPresentationMode: documentStore.tabPresentationMode(in: windowID),
             tabsOnRight: tabsOnRight,
             isTabsPaneVisible: tabsPaneVisible,
-            isImmersiveModeEnabled: isImmersiveModeEnabled
+            isImmersiveModeEnabled: isImmersiveModeEnabled,
+            hasTabs: !documentStore.sessions(in: windowID).isEmpty
         )
         guard appliedWindowChromeState != state else { return }
         appliedWindowChromeState = state
         let shouldShowTitlebarTabs =
             state.tabPresentationMode == .horizontalTitlebar &&
+            state.hasTabs &&
             !tabsPaneVisible &&
             !isImmersiveModeEnabled
 
