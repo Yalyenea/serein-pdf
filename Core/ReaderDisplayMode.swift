@@ -129,6 +129,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case toggleContinuousReading = "toggle_continuous_reading"
     case fitHeight = "fit_height"
     case fitWidth = "fit_width"
+    case fitTextWidth = "fit_text_width"
     case zoomIn = "zoom_in"
     case zoomOut = "zoom_out"
     case singlePage = "single_page"
@@ -246,6 +247,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Fit Height"
         case .fitWidth:
             "Fit Width"
+        case .fitTextWidth:
+            "Fit Text Width"
         case .zoomIn:
             "Zoom In"
         case .zoomOut:
@@ -395,7 +398,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
              .undoLastHighlight, .redoLastHighlight, .copyHighlightsMarkdown:
             .annotations
         case .toggleNightMode, .toggleReadingFocus, .adjustReadingFocus,
-             .toggleHorizontalPanLock, .switchCurrentTheme, .fitHeight, .fitWidth,
+             .toggleHorizontalPanLock, .switchCurrentTheme, .fitHeight, .fitWidth, .fitTextWidth,
              .zoomIn, .zoomOut, .singlePage, .singlePageContinuous, .twoUp,
              .twoUpContinuous, .book, .bookContinuous, .toggleDisplayModeContinuity,
              .toggleContinuousReading, .toggleAllPagesOverview, .toggleDemoMode:

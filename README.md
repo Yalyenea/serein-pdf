@@ -21,6 +21,7 @@ site for showcase, download notes, and compact docs.
 - Reader navigation keeps the compact Vim-style layer: `c` toggles continuity within the current Single Page, Two-Up, or Book layout, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, and `g` / `shift+g` jump to the real document edges; Book modes also accept `h` / `←` and `l` / `→` for previous / next spread; `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document Outline, Pages, link, Search, and annotation jumps; clicking an internal link previews the destination in place, while Option-click jumps and stays centered
 - Cursor reading focus (`f`) dims the page outside a compact rounded band without blocking PDF interaction; `option+f` adjusts the current window between Page, Column (half-page), and Custom widths plus a configurable height
 - Horizontal pan lock (`l`) preserves the current X position and blocks left/right panning plus pinch / keyboard zoom; vertical scroll and page turns stay free
+- Fit Text Width (`cmd+option+0`) zooms the main reader to the current page or spread's text bounds with 12pt side margins, preserving vertical reading position. It applies once as manual zoom; pages without text stay unchanged. `cmd+0` fits the page width.
 - Compare split in the center reader (`cmd+ctrl+\`) opens a compact candidate chooser and can arrange the two independent readers left/right or top/bottom from the View menu
 - Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
 - New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
@@ -63,7 +64,7 @@ site for showcase, download notes, and compact docs.
 - While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets; `Export All Open Highlights…` groups the current window's annotated PDFs by document and page
 - Highlights, underlines, and strikethroughs with comments preview on hover (delayed, suppressed when the same item is selected in the Annotations pane). Each multiline comment has one icon that refreshes immediately after edits; identical comments in older Serein groups are consolidated on open. Clicking the icon or preview edits in the same 6pt-corner card, preserving its width and attachment corner. A 150ms pointer grace period lets you move into the card; editing stays open when the pointer leaves. Double-clicking the annotation, `cmd+option+m`, and the context menu also open the editor. The card keeps short comments compact, grows for longer text, and shows `Save ⌘↩` at the bottom right. Esc cancels without a visible footer hint. The card follows the current theme. The Annotations list supports inline edit, right-click recolor/delete/copy, and keyboard delete; Markdown export remains page-grouped as snippet + comment
-- Internal-link previews fill a 6pt-corner panel without a header. Text positions near the destination identify two-column content and zoom to the target column; single-column content, spanning headings, and uncertain layouts retain full-page width. Click links inside the preview to replace its page in place; Back/Forward arrows in the upper-left corner restore previous preview pages, scroll positions, and zoom. Following a new link after going back clears the forward branch. Preview history is separate from the main reader and clears when closed. The preview copies one page at a time and suppresses comment popups while preserving the source PDF and annotations. Option-click in the reader, or the upper-right Jump icon for the current preview target, navigates the main reader and records its history.
+- Internal-link previews fill a 6pt-corner panel without a header. Text positions near the destination identify two-column content and zoom to the target column, including equation numbers even when body lines are staggered or formulas contain short lines and superscripts; single-column content, spanning headings, and uncertain layouts retain full-page width. Click links inside the preview to replace its page in place; Back/Forward arrows in the upper-left corner restore previous preview pages, scroll positions, and zoom. Following a new link after going back clears the forward branch. Preview history is separate from the main reader and clears when closed. The preview copies one page at a time and suppresses comment popups while preserving the source PDF and annotations. Option-click in the reader, or the upper-right Jump icon for the current preview target, navigates the main reader and records its history.
 - Settings includes a searchable, grouped Shortcuts page with capture, clear, reset-all, conflict rejection, and separate keycaps for built-in two-stage shortcuts
 - Settings keeps one compact 680 pt width across General, Library, and Shortcuts; page height may adapt, while shortcut rows keep defaults and actions aligned without horizontal scrolling
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
@@ -164,6 +165,7 @@ root_bookmarks = [] # managed by Serein; do not edit manually
 codex_enabled = true
 
 [shortcuts]
+fit_text_width = "command+option+0"
 highlight_selection = "a"
 underline_selection = "u"
 strikethrough_selection = "s"
@@ -251,6 +253,7 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
 | New blank tab | `cmd+t` |
 | Fit width / height | `cmd+0` / `cmd+9` |
+| Fit text width | `cmd+option+0` |
 | Toggle cursor reading focus | `f` |
 | Adjust current-window focus width / height | `option+f` |
 | Toggle horizontal pan lock (preserve current X, block zoom) | `l` |

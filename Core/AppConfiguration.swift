@@ -249,6 +249,7 @@ struct AppConfiguration: Equatable, Sendable {
             .nextTab: KeyboardShortcut(key: "]", modifiers: [.command, .shift]),
             .fitHeight: KeyboardShortcut(key: "9", modifiers: [.command]),
             .fitWidth: KeyboardShortcut(key: "0", modifiers: [.command]),
+            .fitTextWidth: KeyboardShortcut(key: "0", modifiers: [.command, .option]),
             .zoomIn: KeyboardShortcut(key: "=", modifiers: [.command]),
             .zoomOut: KeyboardShortcut(key: "-", modifiers: [.command]),
             .singlePage: KeyboardShortcut(key: "1", modifiers: [.command]),
@@ -628,6 +629,7 @@ show_all_tabs = "control+tab"
 toggle_continuous_reading = "none"
 fit_height = "command+9"
 fit_width = "command+0"
+fit_text_width = "command+option+0"
 zoom_in = "command+="
 zoom_out = "command+-"
 single_page = "command+1"
@@ -753,6 +755,7 @@ show_all_tabs = "\(serializedShortcut(.showAllTabs, configuration: configuration
 toggle_continuous_reading = "\(serializedShortcut(.toggleContinuousReading, configuration: configuration))"
 fit_height = "\(serializedShortcut(.fitHeight, configuration: configuration))"
 fit_width = "\(serializedShortcut(.fitWidth, configuration: configuration))"
+fit_text_width = "\(serializedShortcut(.fitTextWidth, configuration: configuration))"
 zoom_in = "\(serializedShortcut(.zoomIn, configuration: configuration))"
 zoom_out = "\(serializedShortcut(.zoomOut, configuration: configuration))"
 single_page = "\(serializedShortcut(.singlePage, configuration: configuration))"
@@ -873,6 +876,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "toggle_continuous_reading",
         "fit_height",
         "fit_width",
+        "fit_text_width",
         "single_page",
         "single_page_continuous",
         "two_up",
@@ -1145,6 +1149,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .fitHeight, to: &configuration)
         case ("shortcuts", "fit_width"):
             try applyShortcut(rawValue, command: .fitWidth, to: &configuration)
+        case ("shortcuts", "fit_text_width"):
+            try applyShortcut(rawValue, command: .fitTextWidth, to: &configuration)
         case ("shortcuts", "single_page"):
             try applyShortcut(rawValue, command: .singlePage, to: &configuration)
         case ("shortcuts", "single_page_continuous"):

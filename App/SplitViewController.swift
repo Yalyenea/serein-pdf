@@ -448,6 +448,10 @@ final class SplitViewController: NSSplitViewController {
         readerWorkspaceViewController.fitToWidth()
     }
 
+    func fitToTextWidth() {
+        readerWorkspaceViewController.fitToTextWidth()
+    }
+
     func fitToHeight() {
         readerWorkspaceViewController.fitToHeight()
     }

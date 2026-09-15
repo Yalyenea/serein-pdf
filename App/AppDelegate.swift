@@ -444,6 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .toggleContinuousReading: { [weak self] in self?.toggleContinuousReading(nil) },
             .fitHeight: { [weak self] in self?.fitReaderToHeight(nil) },
             .fitWidth: { [weak self] in self?.fitReaderToWidth(nil) },
+            .fitTextWidth: { [weak self] in self?.fitReaderToTextWidth(nil) },
             .zoomIn: { [weak self] in self?.zoomInReader(nil) },
             .zoomOut: { [weak self] in self?.zoomOutReader(nil) },
             .singlePage: { [weak self] in self?.useSinglePage(nil) },
@@ -1072,6 +1073,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 title: "Fit Width",
                 command: .fitWidth,
                 action: #selector(fitReaderToWidth(_:))
+            ),
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.fitTextWidth.menuTitle,
+                command: .fitTextWidth,
+                action: #selector(fitReaderToTextWidth(_:))
             ),
             makeConfiguredMenuItem(
                 title: ShortcutCommand.fitHeight.menuTitle,
@@ -1795,6 +1801,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func fitReaderToWidth(_ sender: Any?) {
         mainWindowController?.fitReaderToWidth()
+    }
+
+    @objc
+    private func fitReaderToTextWidth(_ sender: Any?) {
+        mainWindowController?.fitReaderToTextWidth()
     }
 
     @objc
@@ -2962,7 +2973,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(toggleDisplayModeContinuity(_:)):
             return activePDFSession != nil
-        case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
+        case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)), #selector(fitReaderToTextWidth(_:)):
             return activePDFSession != nil
         case #selector(goToNextPageAction(_:)),
              #selector(goToPreviousPageAction(_:)),

@@ -227,6 +227,10 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.fitToWidth()
     }
 
+    func fitReaderToTextWidth() {
+        splitViewController.fitToTextWidth()
+    }
+
     func fitReaderToHeight() {
         splitViewController.fitToHeight()
     }

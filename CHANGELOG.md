@@ -32,6 +32,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Refresh open comment panels and hover previews when the theme changes, including the highlight color strip and editor controls.
 
 ### Reading
+- Add Fit Text Width (`cmd+option+0`) to the main reader: fit the current page or spread's text bounds with 12pt side margins and preserve vertical reading position. Apply once as manual zoom; leave textless pages unchanged. Configure `fit_text_width` in Settings → Shortcuts; `cmd+0` still fits page width.
+- Keep formula references in their target preview column when body lines are staggered or contain short equations and superscripts; include equation numbers in the column bounds.
 - Detect two-column text near an internal-link destination and zoom the preview to its target column. Keep full-page width for single-column text, spanning headings, or uncertain layouts; preserve the source PDF and independent preview history.
 - Preserve the viewport and manual zoom when zoom commands or new highlights arrive before pending reading-position updates have been written back.
 - Reference previews fill the available width in a 6pt-corner panel without a header. Follow internal links in the same preview, with Back/Forward arrows at the top left and Jump at the top right. Preview history restores scroll and zoom; following a new link after going back replaces the forward branch. Only Jump navigates the main reader, using the current preview target. Suppress comment popups in each copied page while preserving the source annotations.

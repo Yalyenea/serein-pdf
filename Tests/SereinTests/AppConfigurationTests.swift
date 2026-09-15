@@ -13,6 +13,10 @@ final class AppConfigurationTests: XCTestCase {
             // Full default surface: laundry-list key checks live in
             // testConfigKeyListsStayInSyncAndMissingKeysSelfHeal.
             XCTAssertEqual(configuration, .default)
+            XCTAssertEqual(
+                configuration.shortcuts.bindings[.fitTextWidth],
+                KeyboardShortcut(key: "0", modifiers: [.command, .option])
+            )
             XCTAssertEqual(configuration.layout.floatingOutlineHeight, 360, accuracy: 0.001)
             XCTAssertEqual(
                 configuration.shortcuts.bindings[.copyCurrentPageAsImage],
@@ -96,6 +100,7 @@ toggle_left_sidebar = "command+shift+l"
 close_current_tab = "command+e"
 close_current_window = "command+shift+e"
 fit_width = "command+shift+9"
+fit_text_width = "command+option+8"
 fit_height = "command+shift+8"
 previous_tab = "command+["
 two_up = "command+option+8"
@@ -160,6 +165,7 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentTab], KeyboardShortcut(key: "e", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.closeCurrentWindow], KeyboardShortcut(key: "e", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitWidth], KeyboardShortcut(key: "9", modifiers: [.command, .shift]))
+        XCTAssertEqual(configuration.shortcuts.bindings[.fitTextWidth], KeyboardShortcut(key: "8", modifiers: [.command, .option]))
         XCTAssertEqual(configuration.shortcuts.bindings[.fitHeight], KeyboardShortcut(key: "8", modifiers: [.command, .shift]))
         XCTAssertEqual(configuration.shortcuts.bindings[.previousTab], KeyboardShortcut(key: "[", modifiers: [.command]))
         XCTAssertEqual(configuration.shortcuts.bindings[.twoUp], KeyboardShortcut(key: "8", modifiers: [.command, .option]))
@@ -559,6 +565,7 @@ fit_width = "command+9"
             height: 128
         )
         configuration.annotations.autoSavePolicy = .never
+        configuration.shortcuts.bindings[.fitTextWidth] = KeyboardShortcut(key: "0", modifiers: [.command, .control])
         configuration.layout.floatingOutlineHeight = 540
         configuration.library.folderURLs = [
             URL(fileURLWithPath: "/tmp/Books"),
@@ -584,6 +591,10 @@ fit_width = "command+9"
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.customWidthRatio, 0.58, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.height, 128, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.annotations.autoSavePolicy, .never)
+        XCTAssertEqual(
+            reloadedConfiguration.shortcuts.bindings[.fitTextWidth],
+            KeyboardShortcut(key: "0", modifiers: [.command, .control])
+        )
         XCTAssertEqual(reloadedConfiguration.layout.floatingOutlineHeight, 540, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.library.folderURLs.map(\.path), ["/tmp/Books", "/tmp/Papers"])
         XCTAssertEqual(reloadedConfiguration.access.rootURLs.map(\.path), ["/Users"])
@@ -682,6 +693,7 @@ root_bookmarks = ["\(entry)"]
 
         var configuration = try store.load()
         configuration.shortcuts.bindings[.copyHighlightsMarkdown] = nil
+        configuration.shortcuts.bindings[.fitTextWidth] = nil
 
         try store.save(configuration)
         let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
@@ -689,5 +701,7 @@ root_bookmarks = ["\(entry)"]
 
         XCTAssertTrue(persistedContent.contains("copy_highlights_markdown = \"none\""))
         XCTAssertNil(reloaded.shortcuts.bindings[.copyHighlightsMarkdown])
+        XCTAssertTrue(persistedContent.contains("fit_text_width = \"none\""))
+        XCTAssertNil(reloaded.shortcuts.bindings[.fitTextWidth])
     }
 }

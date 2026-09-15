@@ -923,6 +923,62 @@ final class ReaderViewController: NSViewController {
         applyFitWidth(for: session)
     }
 
+    /// Fit the current page or spread's text once, keeping its vertical reading position.
+    func fitToTextWidth() {
+        guard !isAllPagesOverviewActive, !shouldLockHorizontalPan,
+              !presentationOverlay.isPresentationEnabled,
+              let session = targetSession(), session.id == displayedSessionID,
+              let document = pdfView.document, let clipView = pdfClipView() else { return }
+        let pages = spreadPages(for: session, in: document)
+        guard let anchorPage = pages.first else { return }
+        var textRect = NSRect.null
+        for page in pages {
+            let pageBounds = page.bounds(for: pdfView.displayBox)
+            guard let text = page.string else { return }
+            let characters = Array(text.utf16)
+            var bounds = NSRect.null
+            for index in 0..<min(characters.count, page.numberOfCharacters) {
+                if let scalar = UnicodeScalar(characters[index]), CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                    continue
+                }
+                let glyph = page.characterBounds(at: index).intersection(pageBounds)
+                if !glyph.isEmpty, !glyph.isNull, !glyph.isInfinite {
+                    bounds = bounds.union(glyph)
+                }
+            }
+            guard !bounds.isEmpty, !bounds.isNull, !bounds.isInfinite else { return }
+            textRect = textRect.union(pdfView.convert(bounds, from: page))
+        }
+        let viewport = pdfView.convert(clipView.bounds, from: clipView)
+        let availableWidth = viewport.width - 24
+        guard textRect.width > 0, availableWidth > 0 else { return }
+        let scale = min(max(pdfView.scaleFactor * availableWidth / textRect.width,
+                            pdfView.minScaleFactor), pdfView.maxScaleFactor)
+        let anchor = PDFViewportAnchor(
+            page: anchorPage,
+            pagePoint: pdfView.convert(NSPoint(x: textRect.midX, y: viewport.midY), to: anchorPage)
+        )
+
+        flushPendingReadingPositionWriteback()
+        let wasApplying = isApplyingStoreState
+        isApplyingStoreState = true
+        defer { isApplyingStoreState = wasApplying }
+        pendingFitWidthSessionID = nil
+        pendingFitHeightSessionID = nil
+        applyProgrammaticScale(scale)
+        restoreViewportAnchor(anchor)
+        pdfView.layoutDocumentView()
+        pdfView.layoutSubtreeIfNeeded()
+        recenterDocumentViewIfNeeded()
+        restoreViewportAnchor(anchor)
+        displayedScaleMode = .manual
+        documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
+        if let position = currentReadingPosition() {
+            displayedReadingPosition = position
+            documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        }
+    }
+
     /// Called after split chrome changes so fit modes track the new reader width
     /// instead of leaving the previous scale (which looks like a sidebar overlay).
     func reflowForContainerSizeChange() {

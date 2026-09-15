@@ -172,6 +172,23 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertTrue(shortcut.matches(event: event))
     }
 
+    func testFitTextWidthShortcutDistinguishesPageWidthAndOptionCharacter() throws {
+        let bindings = AppConfiguration.default.shortcuts.bindings
+        let textWidthShortcut = try XCTUnwrap(bindings[.fitTextWidth])
+        let pageWidthShortcut = try XCTUnwrap(bindings[.fitWidth])
+        let textWidthEvent = makeKeyEvent(
+            characters: "º",
+            charactersIgnoringModifiers: "0",
+            modifierFlags: [.command, .option]
+        )
+        let pageWidthEvent = makeKeyEvent(characters: "0", modifierFlags: [.command])
+
+        XCTAssertTrue(textWidthShortcut.matches(event: textWidthEvent))
+        XCTAssertFalse(pageWidthShortcut.matches(event: textWidthEvent))
+        XCTAssertTrue(pageWidthShortcut.matches(event: pageWidthEvent))
+        XCTAssertFalse(textWidthShortcut.matches(event: pageWidthEvent))
+    }
+
     func testHandlePlainShortcutSkipsEditableTextView() {
         var didTrigger = false
         let controller = ReaderShortcutsController(
