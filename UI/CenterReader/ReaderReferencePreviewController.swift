@@ -331,7 +331,8 @@ final class ReferencePreviewViewController: NSViewController {
         let width = preview.convert(pageBounds, from: page).width
         guard width > 0 else { return }
         hasPositioned = true
-        let viewport = scrollView.contentView.bounds.size
+        // PDFKit's clip bounds can use scaled document units after navigation.
+        let viewport = preview.convert(scrollView.contentView.bounds, from: scrollView.contentView).size
         preview.scaleFactor *= viewport.width / width
         preview.layoutDocumentView()
 
@@ -348,14 +349,36 @@ final class ReferencePreviewViewController: NSViewController {
             x: Self.coordinate(destination.point.x, lower: pageBounds.minX, upper: pageBounds.maxX, unspecified: pageBounds.minX),
             y: Self.coordinate(destination.point.y, lower: pageBounds.minY, upper: pageBounds.maxY, unspecified: pageBounds.maxY)
         )
+        var contentBounds = pageBounds
+        if destination.point.x.isFinite, destination.point.x != kPDFDestinationUnspecifiedValue,
+           destination.point.y.isFinite, destination.point.y != kPDFDestinationUnspecifiedValue,
+           let text = page.string {
+            let characters = Array(text.utf16)
+            let characterBounds = (0..<min(characters.count, page.numberOfCharacters)).compactMap { index -> NSRect? in
+                if let scalar = UnicodeScalar(characters[index]), CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                    return nil
+                }
+                return preview.convert(page.characterBounds(at: index), from: page)
+            }
+            if let column = ReferencePreviewColumnLayout.columnBounds(
+                characterBounds: characterBounds,
+                pageBounds: preview.convert(pageBounds, from: page),
+                target: preview.convert(point, from: page)
+            ) {
+                contentBounds = preview.convert(column, to: page)
+                preview.scaleFactor *= viewport.width / column.width
+                preview.layoutDocumentView()
+            }
+        }
         let target = preview.convert(point, from: page)
         let pageRect = preview.convert(pageBounds, from: page)
+        let contentRect = preview.convert(contentBounds, from: page)
         let height = min(viewport.height, pageRect.height)
         let desiredY = preview.isFlipped ? target.y - 24 : target.y - height + 24
         let rect = NSRect(
-            x: pageRect.minX,
+            x: contentRect.minX,
             y: min(max(desiredY, pageRect.minY), pageRect.maxY - height),
-            width: pageRect.width,
+            width: contentRect.width,
             height: height
         )
         preview.go(to: preview.convert(rect, to: page), on: page)
