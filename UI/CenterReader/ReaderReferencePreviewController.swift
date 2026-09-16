@@ -350,23 +350,38 @@ final class ReferencePreviewViewController: NSViewController {
             y: Self.coordinate(destination.point.y, lower: pageBounds.minY, upper: pageBounds.maxY, unspecified: pageBounds.maxY)
         )
         var contentBounds = pageBounds
-        if destination.point.x.isFinite, destination.point.x != kPDFDestinationUnspecifiedValue,
-           destination.point.y.isFinite, destination.point.y != kPDFDestinationUnspecifiedValue,
-           let text = page.string {
+        if let text = page.string {
             let characters = Array(text.utf16)
             let characterBounds = (0..<min(characters.count, page.numberOfCharacters)).compactMap { index -> NSRect? in
                 if let scalar = UnicodeScalar(characters[index]), CharacterSet.whitespacesAndNewlines.contains(scalar) {
                     return nil
                 }
-                return preview.convert(page.characterBounds(at: index), from: page)
+                let glyph = page.characterBounds(at: index).intersection(pageBounds)
+                guard !glyph.isEmpty, !glyph.isNull, !glyph.isInfinite else { return nil }
+                return preview.convert(glyph, from: page)
             }
-            if let column = ReferencePreviewColumnLayout.columnBounds(
+            let hasTarget = destination.point.x.isFinite && destination.point.x != kPDFDestinationUnspecifiedValue
+                && destination.point.y.isFinite && destination.point.y != kPDFDestinationUnspecifiedValue
+            let renderedPage = preview.convert(pageBounds, from: page)
+            // At a quarter turn, ordinary text lines run vertically; their line
+            // spacing must not be mistaken for gutters between upright columns.
+            let column = hasTarget && page.rotation % 180 == 0 ? ReferencePreviewColumnLayout.columnBounds(
                 characterBounds: characterBounds,
-                pageBounds: preview.convert(pageBounds, from: page),
+                pageBounds: renderedPage,
                 target: preview.convert(point, from: page)
-            ) {
+            ) : nil
+            let textBounds = characterBounds.reduce(NSRect.null) { $0.union($1) }
+            if let column {
                 contentBounds = preview.convert(column, to: page)
                 preview.scaleFactor *= viewport.width / column.width
+                preview.layoutDocumentView()
+            } else if !textBounds.isNull, textBounds.width > 0, viewport.width > 24 {
+                // Fit visible glyphs with 12pt side margins at the resulting scale.
+                let padding = textBounds.width * 12 / (viewport.width - 24)
+                let textWidth = NSRect(x: textBounds.minX - padding, y: renderedPage.minY,
+                                       width: textBounds.width + padding * 2, height: renderedPage.height)
+                contentBounds = preview.convert(textWidth, to: page)
+                preview.scaleFactor *= viewport.width / textWidth.width
                 preview.layoutDocumentView()
             }
         }
