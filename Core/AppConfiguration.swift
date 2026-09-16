@@ -223,7 +223,7 @@ struct AppConfiguration: Equatable, Sendable {
             .highlightSelection: KeyboardShortcut(key: "a", modifiers: []),
             .underlineSelection: KeyboardShortcut(key: "u", modifiers: []),
             .strikethroughSelection: KeyboardShortcut(key: "s", modifiers: []),
-            .addComment: KeyboardShortcut(key: "m", modifiers: [.command, .option]),
+            .addComment: KeyboardShortcut(key: "m", modifiers: []),
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: []),
@@ -588,7 +588,7 @@ codex_enabled = true
 highlight_selection = "a"
 underline_selection = "u"
 strikethrough_selection = "s"
-add_comment = "command+option+m"
+add_comment = "m"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 toggle_reading_focus = "f"
@@ -1404,7 +1404,12 @@ struct AppConfigurationStore {
         let legacyImmersiveMode = KeyboardShortcut(key: "l", modifiers: [.command, .option])
         let legacyShowAllTabs = KeyboardShortcut(key: "t", modifiers: [.command, .option])
         let legacyContinuousReading = KeyboardShortcut(key: "c", modifiers: [.command, .shift])
+        let legacyAddComment = KeyboardShortcut(key: "m", modifiers: [.command, .option])
         var didMigrate = false
+        if configuration.shortcuts.bindings[.addComment] == legacyAddComment {
+            configuration.shortcuts.bindings[.addComment] = KeyboardShortcut(key: "m", modifiers: [])
+            didMigrate = true
+        }
         if configuration.shortcuts.bindings[.removeHighlight] == legacyRemoveHighlight {
             configuration.shortcuts.bindings[.removeHighlight] = KeyboardShortcut(key: "d", modifiers: [])
             didMigrate = true

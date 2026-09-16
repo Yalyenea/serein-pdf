@@ -26,6 +26,10 @@ final class AppConfigurationTests: XCTestCase {
                 configuration.shortcuts.bindings[.toggleDisplayModeContinuity],
                 KeyboardShortcut(key: "c", modifiers: [])
             )
+            XCTAssertEqual(
+                configuration.shortcuts.bindings[.addComment],
+                KeyboardShortcut(key: "m", modifiers: [])
+            )
             XCTAssertTrue(configuration.integrations.codexEnabled)
             XCTAssertEqual(
                 configuration.shortcuts.bindings[.sendContextToCodex],
@@ -331,6 +335,25 @@ fit_width = "command+9"
         XCTAssertEqual(configuration.shortcuts.bindings[.findPreviousMatch], KeyboardShortcut(key: "g", modifiers: [.command, .shift]))
         XCTAssertTrue(persistedContent.contains("highlight_color_green = \"command+control+g\""))
         XCTAssertTrue(persistedContent.contains("find_previous_match = \"command+shift+g\""))
+    }
+
+    func testBootstrapMigratesLegacyAddCommentShortcut() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let fileURL = rootURL.appendingPathComponent("config.toml")
+
+        try AppConfigurationFile.defaultContents
+            .replacingOccurrences(of: "add_comment = \"m\"", with: "add_comment = \"command+option+m\"")
+            .write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+        let persistedContent = try String(contentsOf: fileURL, encoding: .utf8)
+
+        XCTAssertEqual(configuration.shortcuts.bindings[.addComment], KeyboardShortcut(key: "m", modifiers: []))
+        XCTAssertTrue(persistedContent.contains("add_comment = \"m\""))
+        XCTAssertFalse(persistedContent.contains("add_comment = \"command+option+m\""))
     }
 
     func testBootstrapMigratesLegacyRemoveHighlightShortcut() throws {

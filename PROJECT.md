@@ -88,7 +88,7 @@ flowchart LR
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
 | 批注存储 | Serein 多行 highlight / underline / strikeout 仅以 UUID `userName` 组成 group,共享评论仅写入首条批注的标准 `/Contents`,显示一个评论图标;打开旧文件时合并组内相同评论,保留不同内容及外部批注;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
 | 批注摘要 | 只使用 PDFKit 文本层生成 snippet；无文本层时显示 `Untitled Highlight`，不做 OCR / 页面栅格化 |
-| 评论交互 | 有评论的高亮 / 下划线 / 删除线 hover 延迟显示预览(无评论不弹;右栏同条已选中时抑制);预览与编辑共用批注旁的无边框 `NSPanel`,单击图标或预览原地编辑,保持宽度与靠近图标的一角,避开图标;鼠标跨入卡片有 150ms 宽限,编辑时移出不关闭;双击批注 / `Cmd+Option+M` / 右键也可编辑,不强制打开右栏;应用接管批注点击与右键,不打开 PDFKit 黄色编辑器;卡片采用 6pt 圆角与紧凑底边距,空评论最小输入高度 20pt,长评论随内容增高并在上限后滚动;底部右侧显示 `Save ⌘↩`,Esc 保留取消操作但不显示提示;卡片随主题刷新;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
+| 评论交互 | 有评论的高亮 / 下划线 / 删除线 hover 延迟显示预览(无评论不弹;右栏同条已选中时抑制);预览与编辑共用批注旁的无边框 `NSPanel`,单击图标或预览原地编辑,保持宽度与靠近图标的一角,避开图标;鼠标跨入卡片有 150ms 宽限,编辑时移出不关闭;双击批注 / `M` / 右键也可编辑,不强制打开右栏;应用接管批注点击与右键,不打开 PDFKit 黄色编辑器;卡片采用 6pt 圆角与紧凑底边距,空评论最小输入高度 20pt,长评论随内容增高并在上限后滚动;底部右侧显示 `Save ⌘↩`,Esc 保留取消操作但不显示提示;卡片随主题刷新;右栏为全高评论流,支持行内编辑、右键改色 / 删除 / 复制,跳转用短时 pulse 而非虚线选区 |
 | 高亮颜色 | `HighlightColor` 保持 pink / yellow / green 语义色;`NightModeStyle` 按 Normal / Rose Pine Dawn / Rose Pine Moon 解析实际 sRGB/alpha 调色板 |
 | 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF;`serein://open?file=<encoded file URL>` 仅接收单个本地可读 PDF 并复用同一打开管线 |
 | Codex 交接 | `Ctrl+Cmd+C` 按上下文发送:有选区时通过 `codex://new?prompt=…` 预填新任务,无选区时导出当前页临时 PNG;`Ctrl+Cmd+Shift+C` 使用原 PDF;文件通过 macOS 打开事件交给 `com.openai.codex`;Settings 可关闭整个集成;不传 workspace `path`,Codex 客户端可能自行把文件父目录作为 workspace |
@@ -153,7 +153,7 @@ flowchart LR
 - `A`:有选区 → 立即高亮;无选区 → 进入高亮模式
 - `U`:有选区 → 立即加下划线;无选区 → 进入下划线模式
 - `S`:有选区 → 立即加删除线;无选区 → 进入删除线模式
-- `Cmd+Option+M`:有选区 → 创建高亮并进入评论编辑;无选区且命中高亮 → 编辑已有评论
+- `M`:有选区 → 创建高亮并进入评论编辑;无选区且命中高亮 → 编辑已有评论
 - 高亮模式内 `1` / `2` / `3`:切换粉 / 黄 / 绿;文本输入框优先接收数字
 - `Esc`:退出批注模式 / 关闭 Find bar / 退出全览;演示时先将笔或激光切回指针,再按退出演示
 - `D`:删除鼠标所在批注(多行整组删除)

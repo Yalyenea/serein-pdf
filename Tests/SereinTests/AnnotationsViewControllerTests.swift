@@ -481,7 +481,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
         let menu = try XCTUnwrap(reader.pdfView.menu(for: event))
         let editItem = try XCTUnwrap(menu.item(withTitle: "Edit Comment"))
         XCTAssertEqual(editItem.keyEquivalent, "m")
-        XCTAssertEqual(editItem.keyEquivalentModifierMask, [.command, .option])
+        XCTAssertEqual(editItem.keyEquivalentModifierMask, [])
         XCTAssertTrue(menu.item(withTitle: "Remove Annotation")?.isEnabled == true)
 
         let previousMode = store.rightSidebarMode(in: store.defaultWindowID)
@@ -589,7 +589,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
         controller.loadViewIfNeeded()
         let emptyLabel = try XCTUnwrap(
             findAllDescendants(of: NSTextField.self, in: controller.view)
-                .first { $0.stringValue.contains("⌘⌥M") }
+                .first { $0.stringValue.contains("Comment · M") }
         )
         XCTAssertTrue(emptyLabel.stringValue.contains("No annotations"))
         XCTAssertFalse(emptyLabel.isHidden)

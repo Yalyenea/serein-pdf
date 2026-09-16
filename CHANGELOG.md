@@ -25,6 +25,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Restore text input in the floating outline filter; clicking the search field keeps the outline open while editing.
 
 ### Annotations
+- Change the add-or-edit comment shortcut from `cmd+option+m` to `m`. Configs still on the old default migrate on launch.
 - Enable File > Save when a reader window becomes key after new annotation edits, so Cmd+S writes without opening the File menu.
 - Refresh comment icons immediately after adding, editing, or removing comments on highlights, underlines, and strikethroughs. Preserve annotation identity, stacking order, and one comment owner per multiline group.
 - Keep one comment icon per multiline highlight by storing the shared comment on its first annotation. Consolidate identical comments in older Serein groups on open while preserving distinct notes and external annotations.
