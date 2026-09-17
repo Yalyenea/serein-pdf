@@ -16,6 +16,8 @@ final class ReaderAnnotationInteractionController: NSObject {
     private let pdfView: ReaderPDFView
     private weak var hostView: NSView?
     private let focusPulseView = AnnotationFocusPulseView()
+    private let commentIconOverlay = CommentIconOverlayView(frame: .zero)
+    private var isOverlayRefreshScheduled = false
 
     private var pendingFocusToken = 0
     private weak var hoveredAnnotation: PDFAnnotation?
@@ -42,14 +44,22 @@ final class ReaderAnnotationInteractionController: NSObject {
         hostView.addSubview(focusPulseView)
     }
 
-    func layoutOverlay() {
-        if let presentedGroup {
-            commentEditorPanel?.updateAnchor(commentAnchorRect(for: presentedGroup))
+    func scheduleOverlayRefresh() {
+        guard isOverlayRefreshScheduled == false else { return }
+        isOverlayRefreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isOverlayRefreshScheduled = false
+            if let group = self.presentedGroup {
+                self.commentEditorPanel?.updateAnchor(self.commentAnchorRect(for: group))
+            }
+            self.refreshCommentIcons()
         }
     }
 
     func refreshThemeAppearance() {
         commentEditorPanel?.refreshThemeAppearance()
+        scheduleOverlayRefresh()
     }
 
     func handlePointerMoved(_ event: NSEvent?) {
@@ -337,6 +347,8 @@ final class ReaderAnnotationInteractionController: NSObject {
         contextGroup = nil
         lastHoveredGroup = nil
         lastHoveredAt = nil
+        commentIconOverlay.icons = []
+        commentIconOverlay.removeFromSuperview()
     }
 
     private func activeSession() -> DocumentSession? {
@@ -356,7 +368,7 @@ final class ReaderAnnotationInteractionController: NSObject {
               page.document === document else { return nil }
 
         let pointOnPage = pdfView.convert(pointInPDF, to: page)
-        let commentAnnotation = HighlightService.commentAnnotation(at: pointOnPage, on: page)
+        let commentAnnotation = pdfView.commentIcons.annotation(at: pointOnPage, on: page)
         guard let annotation = commentAnnotation ?? HighlightService.highlightAnnotation(at: pointOnPage, on: page),
               let group = documentStore.annotationGroup(containing: annotation, for: session.id) else {
             return nil
@@ -364,13 +376,71 @@ final class ReaderAnnotationInteractionController: NSObject {
         return HighlightAnnotationHit(annotation: annotation, page: page, group: group, isCommentIcon: commentAnnotation != nil)
     }
 
+    private func refreshCommentIcons() {
+        guard let documentView = pdfView.documentView else {
+            commentIconOverlay.removeFromSuperview()
+            return
+        }
+        if commentIconOverlay.superview !== documentView {
+            commentIconOverlay.removeFromSuperview()
+            // autoresizingMask keeps the frame in sync with documentView afterwards.
+            commentIconOverlay.frame = documentView.bounds
+            documentView.addSubview(commentIconOverlay)
+        }
+        Self.hideNativeCommentIcons(in: documentView)
+
+        let appearance = pdfView.effectiveAppearance
+        let pages = commentIconPages()
+        pdfView.commentIcons.retainPages(pages)
+        commentIconOverlay.icons = pages.flatMap { page in
+            pdfView.commentIcons.frames(on: page).map { annotation, pageRect in
+                let inPDF = pdfView.convert(pageRect, from: page)
+                let inDocument = documentView.convert(inPDF, from: pdfView)
+                let color = NightModeStyle.highlightColor(
+                    for: HighlightColor.closest(to: annotation.color),
+                    appearance: appearance
+                )
+                return (inDocument, color)
+            }
+        }
+    }
+
+    private func commentIconPages() -> [PDFPage] {
+        guard let document = pdfView.document else { return [] }
+        guard pdfView.displayMode == .singlePageContinuous || pdfView.displayMode == .twoUpContinuous else {
+            return pdfView.visiblePages
+        }
+        // During a scroll, visiblePages can still describe the previous page views.
+        // Resolve the viewport edges against PDFKit's document geometry instead.
+        let bounds = pdfView.bounds
+        let indices = [
+            NSPoint(x: bounds.minX, y: bounds.minY),
+            NSPoint(x: bounds.maxX, y: bounds.minY),
+            NSPoint(x: bounds.minX, y: bounds.maxY),
+            NSPoint(x: bounds.maxX, y: bounds.maxY),
+        ].compactMap { pdfView.page(for: $0, nearest: true) }.map { document.index(for: $0) }
+        guard let first = indices.min(), let last = indices.max() else { return [] }
+        return (first...last).compactMap { document.page(at: $0) }
+    }
+
+    /// PDFKit's native comment badges are the only image-bearing image views under documentView.
+    private static func hideNativeCommentIcons(in root: NSView) {
+        var pending = [root]
+        while let view = pending.popLast() {
+            if let imageView = view as? NSImageView, imageView.image != nil, imageView.isHidden == false {
+                imageView.isHidden = true
+            }
+            pending.append(contentsOf: view.subviews)
+        }
+    }
+
     private func commentAnchorRect(for group: DocumentHighlightGroup) -> NSRect {
-        let owner = group.records.first { ($0.annotation.contents ?? "").isEmpty == false }
+        let owner = group.records.first { CommentIconPlacement.isCommentOwner($0.annotation) }
             ?? group.records.first
         guard let hostView, let annotation = owner?.annotation, let page = annotation.page else {
             return anchorRect(for: group)
         }
-        let bounds = pdfView.convert(HighlightService.commentIconBounds(for: annotation), from: page)
+        let bounds = pdfView.convert(pdfView.commentIcons.bounds(for: annotation), from: page)
         return hostView.convert(bounds, from: pdfView)
     }
 
@@ -495,6 +565,43 @@ final class ReaderAnnotationInteractionController: NSObject {
     }
 
     var testingCommentPanel: AnnotationCommentPanel? { commentEditorPanel }
+}
+
+final class CommentIconOverlayView: NSView {
+    var icons: [(frame: NSRect, color: NSColor)] = [] {
+        didSet { needsDisplay = true }
+    }
+
+    override var isOpaque: Bool { false }
+
+    // Icon frames use PDFKit documentView's top-left coordinate system.
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        autoresizingMask = [.width, .height]
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        for icon in icons where icon.frame.intersects(dirtyRect) {
+            let rect = icon.frame.insetBy(dx: 0.4, dy: 0.4)
+            icon.color.setFill()
+            NSColor.white.withAlphaComponent(0.92).setStroke()
+            let path = NSBezierPath(ovalIn: rect)
+            path.lineWidth = 1
+            path.fill()
+            path.stroke()
+        }
+    }
 }
 
 private struct HighlightAnnotationHit {

@@ -51,13 +51,9 @@ private final class AnnotationTableView: NSTableView {
 
 private final class AnnotationRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
-        let color = NightModeStyle.primaryTextColor.withAlphaComponent(isEmphasized ? 0.09 : 0.065)
+        let color = NightModeStyle.primaryTextColor.withAlphaComponent(isEmphasized ? 0.06 : 0.04)
         color.setFill()
-        NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 1, dy: 0.5),
-            xRadius: 5,
-            yRadius: 5
-        ).fill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 3, yRadius: 3).fill()
     }
 }
 
@@ -103,15 +99,14 @@ private final class AnnotationCommentTextView: NSTextView {
 final class AnnotationHighlightCellView: NSTableCellView {
     private static let snippetFont = NSFont.systemFont(ofSize: 11.5, weight: .medium)
     private static let commentFont = NSFont.systemFont(ofSize: 11.5)
-    static let snippetMaxLines = 0
-    static let commentMaxLines = 16
-    private static let heightSafetyMaxLines: CGFloat = 40
-    private static let colorBarLeading: CGFloat = 4
-    private static let colorBarWidth: CGFloat = 2.5
-    private static let contentLeadingInset: CGFloat = 12
-    private static let contentTrailingInset: CGFloat = 6
-    private static let verticalPadding: CGFloat = 6
-    private static let stackSpacing: CGFloat = 3
+    static let snippetMaxLines = 4
+    static let commentMaxLines = 8
+    private static let colorBarLeading: CGFloat = 6
+    private static let colorBarWidth: CGFloat = 3
+    private static let contentLeadingInset: CGFloat = 14
+    private static let contentTrailingInset: CGFloat = 8
+    private static let verticalPadding: CGFloat = 7
+    private static let stackSpacing: CGFloat = 4
     private static let editorHeight: CGFloat = 64
     private static let editorFooterHeight: CGFloat = 22
 
@@ -245,7 +240,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
         guard width > 1, height > 1 else { return }
 
         let textX = Self.contentLeadingInset
-        let textW = max(width - Self.contentLeadingInset - Self.contentTrailingInset, 1)
+        let textW = max(width - Self.contentLeadingInset - Self.contentTrailingInset, 80)
         let top = height - Self.verticalPadding
 
         colorBarView.frame = NSRect(
@@ -322,7 +317,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
         width: CGFloat,
         isEditing: Bool = false
     ) -> CGFloat {
-        let textW = max(width - contentLeadingInset - contentTrailingInset, 1)
+        let textW = max(width - contentLeadingInset - contentTrailingInset, 80)
         let snippetH = measuredHeight(
             for: group.snippet,
             font: snippetFont,
@@ -371,7 +366,6 @@ final class AnnotationHighlightCellView: NSTableCellView {
         label.refusesFirstResponder = true
     }
 
-    /// `maximumLines == 0` → natural height, soft-capped for safety.
     static func measuredHeight(
         for text: String,
         font: NSFont,
@@ -386,8 +380,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
             attributes: [.font: font]
         )
         let natural = max(ceil(rect.height), lineHeight(for: font))
-        let lineCap = maximumLines > 0 ? CGFloat(maximumLines) : heightSafetyMaxLines
-        return min(natural, lineHeight(for: font) * lineCap)
+        return min(natural, lineHeight(for: font) * CGFloat(maximumLines))
     }
 
     private static func lineHeight(for font: NSFont) -> CGFloat {
@@ -472,9 +465,9 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         tableView.headerView = nil
         tableView.rowSizeStyle = .custom
         tableView.rowHeight = 44
-        tableView.intercellSpacing = NSSize(width: 0, height: 1)
+        tableView.intercellSpacing = NSSize(width: 0, height: 4)
         tableView.backgroundColor = .clear
-        tableView.allowsEmptySelection = false
+        tableView.allowsEmptySelection = true
         tableView.allowsMultipleSelection = false
         tableView.focusRingType = .none
         tableView.selectionHighlightStyle = .regular
@@ -708,10 +701,8 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
            let row = rowIndex(for: previousGroupID) {
             tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
             tableView.scrollRowToVisible(row)
-        } else if let firstRow = firstHighlightRow() {
-            tableView.selectRowIndexes(IndexSet(integer: firstRow), byExtendingSelection: false)
-            tableView.scrollRowToVisible(firstRow)
         } else {
+            tableView.deselectAll(nil)
             currentGroupID = nil
             onSelectionDidChange?(nil)
         }
@@ -956,13 +947,6 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             return group
         }
         return nil
-    }
-
-    private func firstHighlightRow() -> Int? {
-        rows.firstIndex {
-            if case .highlight = $0 { return true }
-            return false
-        }
     }
 
     private func group(for groupID: String) -> DocumentHighlightGroup? {

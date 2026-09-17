@@ -259,6 +259,10 @@ private final class PDFReaderClipView: NSClipView {
 }
 
 final class ReaderPDFView: PDFView {
+    let commentIcons = CommentIconPlacement()
+    override var document: PDFDocument? {
+        didSet { commentIcons.retainPages([]) }
+    }
     var onLayoutCompleted: (() -> Void)?
     var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
     var onInternalLinkPreviewRequested: ((PDFDestination, NSRect) -> Bool)?
@@ -353,7 +357,7 @@ final class ReaderPDFView: PDFView {
     private func managedAnnotation(at point: NSPoint) -> PDFAnnotation? {
         guard let page = page(for: point, nearest: false) else { return nil }
         let pagePoint = convert(point, to: page)
-        return HighlightService.commentAnnotation(at: pagePoint, on: page)
+        return commentIcons.annotation(at: pagePoint, on: page)
             ?? HighlightService.highlightAnnotation(at: pagePoint, on: page)
     }
 
@@ -556,6 +560,7 @@ final class ReaderViewController: NSViewController {
 
         pdfView.onLayoutCompleted = { [weak self] in
             self?.syncPDFMarginBackgroundAfterPDFKitLayout()
+            self?.annotationInteraction.scheduleOverlayRefresh()
         }
         pdfView.onInternalLinkNavigationRequested = { [weak self] destination in
             self?.referencePreview.close()
@@ -743,7 +748,6 @@ final class ReaderViewController: NSViewController {
             reflowOverviewGrid()
         }
         syncPDFMarginBackgroundAfterPDFKitLayout()
-        annotationInteraction.layoutOverlay()
 
         guard let session = targetSession(),
               displayedSessionID == session.id,
@@ -2305,6 +2309,7 @@ final class ReaderViewController: NSViewController {
             for page in pdfView.visiblePages {
                 pdfView.annotationsChanged(on: page)
             }
+            annotationInteraction.scheduleOverlayRefresh()
         }
         // Page/zoom writeback does not change find results; skip search recompute.
         if notification.isOnlyReadingPositionChange == false {
@@ -2329,6 +2334,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
+        annotationInteraction.scheduleOverlayRefresh()
         presentationOverlay.refreshGeometry()
         referencePreview.close()
         annotationInteraction.clearPreview()
@@ -2366,6 +2372,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewScaleChanged(_ notification: Notification) {
+        annotationInteraction.scheduleOverlayRefresh()
         presentationOverlay.refreshGeometry()
         markPDFPrivateViewTreeDirty()
         guard isApplyingProgrammaticScale == false,
@@ -2492,6 +2499,7 @@ final class ReaderViewController: NSViewController {
         defer {
             annotationInteraction.activeSessionID = displayedSessionID
             presentationOverlay.refreshGeometry()
+            annotationInteraction.scheduleOverlayRefresh()
         }
 
         if displayedSessionID != targetSessionID {
@@ -3196,6 +3204,7 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFClipViewBoundsDidChange(_ notification: Notification) {
+        annotationInteraction.scheduleOverlayRefresh()
         presentationOverlay.refreshGeometry()
         guard let clipView = notification.object as? NSClipView else { return }
         referencePreview.close()

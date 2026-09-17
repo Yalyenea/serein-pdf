@@ -213,7 +213,7 @@ final class ReaderCommentCardTests: XCTestCase {
         let controller: ReaderAnnotationInteractionController
         let comment: String
 
-        var iconBounds: NSRect { HighlightService.commentIconBounds(for: annotation) }
+        var iconBounds: NSRect { pdfView.commentIcons.bounds(for: annotation) }
 
         var iconScreenRect: NSRect {
             window.convertToScreen(pdfView.convert(pdfView.convert(iconBounds, from: page), to: nil))

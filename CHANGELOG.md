@@ -29,7 +29,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Enable File > Save when a reader window becomes key after new annotation edits, so Cmd+S writes without opening the File menu.
 - Refresh comment icons immediately after adding, editing, or removing comments on highlights, underlines, and strikethroughs. Preserve annotation identity, stacking order, and one comment owner per multiline group.
 - Keep one comment icon per multiline highlight by storing the shared comment on its first annotation. Consolidate identical comments in older Serein groups on open while preserving distinct notes and external annotations.
+- Annotations list is a compact comment feed: snippet then comment, a quiet selection, a color bar, and no auto-selected first row. Snippets wrap to 4 lines and comments to 8; the full text stays in the tooltip.
 - Clicking a comment icon or double-clicking a highlight opens Serein's comment panel. Handle annotation clicks and context menus without opening PDFKit's yellow note editor.
+- Place comment markers in nearby whitespace (prefer the right of the line, then the page margin) so they do not cover following glyphs. Hide PDFKit's numbered badges and draw a small highlight-colored dot instead.
+- Keep comment dots aligned with their click targets across page changes, scrolling, and zoom. Drawing, hit testing, and comment cards reuse page-space placements; annotation and page geometry changes invalidate them, and leaving pages releases cached layouts.
 - Comment previews and editing share one 6pt-corner card. Click the icon or preview to edit in place, with a 150ms pointer transition between the annotation and card. Keep the icon visible and the card attached to the same corner as it grows.
 - Measure wrapped comments with the native text control so multiline Chinese text is not clipped. Keep empty and short editors compact, with a right-aligned `Save ⌘↩` footer and no visible Esc hint.
 - Refresh open comment panels and hover previews when the theme changes, including the highlight color strip and editor controls.

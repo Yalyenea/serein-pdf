@@ -86,22 +86,22 @@ final class AnnotationsViewControllerTests: XCTestCase {
         // Narrow wrap needs more vertical space than a single wide line.
         XCTAssertGreaterThan(narrowHeight, wideHeight)
 
-        let narrowTextW = narrowWidth - 12 - 6
-        let wideTextW = wideWidth - 12 - 6
+        let narrowTextW = narrowWidth - 14 - 8
+        let wideTextW = wideWidth - 14 - 8
         let narrowSnippetH = AnnotationHighlightCellView.measuredHeight(
             for: snippet,
             font: .systemFont(ofSize: 11.5, weight: .medium),
             width: narrowTextW,
-            maximumLines: 0
+            maximumLines: AnnotationHighlightCellView.snippetMaxLines
         )
         let wideSnippetH = AnnotationHighlightCellView.measuredHeight(
             for: snippet,
             font: .systemFont(ofSize: 11.5, weight: .medium),
             width: wideTextW,
-            maximumLines: 0
+            maximumLines: AnnotationHighlightCellView.snippetMaxLines
         )
-        XCTAssertEqual(narrowHeight, ceil(12 + narrowSnippetH), accuracy: 0.5)
-        XCTAssertEqual(wideHeight, ceil(12 + wideSnippetH), accuracy: 0.5)
+        XCTAssertEqual(narrowHeight, ceil(14 + narrowSnippetH), accuracy: 0.5)
+        XCTAssertEqual(wideHeight, ceil(14 + wideSnippetH), accuracy: 0.5)
         // Wide enough that the whole phrase is one line.
         XCTAssertEqual(
             wideSnippetH,

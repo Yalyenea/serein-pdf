@@ -40,13 +40,12 @@ final class ReaderCommentInteractionTests: XCTestCase {
                 pdfView.layoutDocumentView()
                 pdfView.annotationsChanged(on: page)
                 pdfView.layoutSubtreeIfNeeded()
-                let icon = try XCTUnwrap(findAllDescendants(of: NSImageView.self, in: try XCTUnwrap(pdfView.documentView)).first { $0.image != nil })
-                let center = NSPoint(x: icon.bounds.midX, y: icon.bounds.midY)
-                let point = icon.convert(center, to: pdfView)
-                XCTAssertTrue(pdfView.hitTest(pdfView.convert(point, to: pdfView.superview)) === pdfView)
-                let pagePoint = pdfView.convert(point, to: page)
-                XCTAssertTrue(HighlightService.commentAnnotation(at: pagePoint, on: page) === annotation,
+                let iconBounds = pdfView.commentIcons.bounds(for: annotation)
+                let pagePoint = NSPoint(x: iconBounds.midX, y: iconBounds.midY)
+                XCTAssertTrue(pdfView.commentIcons.annotation(at: pagePoint, on: page) === annotation,
                               "Icon at \(pagePoint), rotation \(rotation), scale \(scale)")
+                let point = pdfView.convert(pagePoint, from: page)
+                XCTAssertTrue(pdfView.hitTest(pdfView.convert(point, to: pdfView.superview)) === pdfView)
                 let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown,
                     location: pdfView.convert(point, to: nil), modifierFlags: [], timestamp: 0,
                     windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
@@ -94,9 +93,14 @@ final class ReaderCommentInteractionTests: XCTestCase {
                 XCTAssertEqual(page.annotations.map(ObjectIdentifier.init), originalAnnotations.map(ObjectIdentifier.init))
                 XCTAssertEqual(records.compactMap(\.annotation.contents), comment.isEmpty ? [] : [comment])
                 XCTAssertTrue(records.allSatisfy { $0.annotation.popup == nil })
-                if let icon = icons.first {
-                    let center = icon.convert(NSPoint(x: icon.bounds.midX, y: icon.bounds.midY), to: pdfView)
-                    XCTAssertTrue(HighlightService.commentAnnotation(at: pdfView.convert(center, to: page), on: page) === records[0].annotation)
+                if comment.isEmpty == false {
+                    let iconBounds = pdfView.commentIcons.bounds(for: records[0].annotation)
+                    XCTAssertTrue(
+                        pdfView.commentIcons.annotation(
+                            at: NSPoint(x: iconBounds.midX, y: iconBounds.midY),
+                            on: page
+                        ) === records[0].annotation
+                    )
                 }
             }
 

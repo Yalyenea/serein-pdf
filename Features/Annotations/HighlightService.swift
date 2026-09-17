@@ -124,20 +124,6 @@ enum HighlightService {
         }
     }
 
-    // PDFKit positions markup comment icons just beyond the upper-right corner
-    // in page space. Include the gap so clicks cannot reach its note editor.
-    static func commentIconBounds(for annotation: PDFAnnotation) -> NSRect {
-        NSRect(x: annotation.bounds.maxX, y: annotation.bounds.maxY, width: 20, height: 20)
-    }
-
-    static func commentAnnotation(at pointOnPage: NSPoint, on page: PDFPage) -> PDFAnnotation? {
-        page.annotations.last {
-            isMarkupAnnotation($0)
-                && $0.contents?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                && commentIconBounds(for: $0).contains(pointOnPage)
-        }
-    }
-
     /// Older Serein files repeated the same comment on every line. Keep one
     /// standard /Contents entry without discarding distinct externally edited notes.
     static func consolidateComments(in document: PDFDocument) {
@@ -285,7 +271,7 @@ enum HighlightService {
         return String(describing: ObjectIdentifier(annotation))
     }
 
-    private static func annotationSortOrder(_ lhs: PDFAnnotation, _ rhs: PDFAnnotation) -> Bool {
+    static func annotationSortOrder(_ lhs: PDFAnnotation, _ rhs: PDFAnnotation) -> Bool {
         let lhsBounds = lhs.bounds
         let rhsBounds = rhs.bounds
         if abs(lhsBounds.maxY - rhsBounds.maxY) > 0.5 {
