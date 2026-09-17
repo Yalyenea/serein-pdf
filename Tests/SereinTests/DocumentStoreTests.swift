@@ -52,6 +52,46 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSession?.title, "single")
     }
 
+    func testHorizontalPanLockIsIndependentAndRestoredPerDocument() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let readingStates = InMemoryReadingStateStore()
+        let store = makeStore(persistence: persistence, readingStateStore: readingStates)
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "lock-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "lock-second"))
+        store.setHorizontalPanLocked(true, for: first.id)
+        XCTAssertTrue(try XCTUnwrap(store.session(for: first.id)).isHorizontalPanLocked)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: second.id)).isHorizontalPanLocked)
+
+        let restored = makeStore(persistence: persistence, readingStateStore: readingStates)
+        try restored.restorePersistedState()
+        XCTAssertTrue(try XCTUnwrap(restored.sessions.first { $0.url == first.url }).isHorizontalPanLocked)
+        XCTAssertFalse(try XCTUnwrap(restored.sessions.first { $0.url == second.url }).isHorizontalPanLocked)
+
+        store.close(sessionID: first.id)
+        let reopened = try store.open(documentAt: first.url)
+        XCTAssertTrue(reopened.isHorizontalPanLocked)
+        store.setDisplayMode(.book, for: reopened.id)
+        store.setHorizontalPanLocked(true, for: reopened.id)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: reopened.id)).isHorizontalPanLocked)
+    }
+
+    func testReadingStateWithoutPanLockStillDecodes() throws {
+        let state = PersistedReadingState(
+            url: URL(fileURLWithPath: "/test.pdf"), displayMode: .singlePage,
+            scaleMode: .fitHeight, scaleFactor: 1, readingPosition: .zero,
+            isHorizontalPanLocked: true
+        )
+        let data = try JSONEncoder().encode(state)
+        XCTAssertEqual(try JSONDecoder().decode(PersistedReadingState.self, from: data), state)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "isHorizontalPanLocked")
+        let decoded = try JSONDecoder().decode(
+            PersistedReadingState.self, from: JSONSerialization.data(withJSONObject: legacy)
+        )
+        XCTAssertNil(decoded.isHorizontalPanLocked)
+        XCTAssertEqual(decoded.scaleMode, .fitHeight)
+    }
+
     func testLoadingNewDocumentResolvesInitialPositionToActualPageTop() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "initial-page-top"))

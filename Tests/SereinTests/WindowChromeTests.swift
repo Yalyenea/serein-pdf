@@ -2445,6 +2445,34 @@ struct WindowChromeTests {
     }
 
     @Test
+    func horizontalPanLockFollowsDocumentWhenSwitchingTabs() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "lock-tab-first"))
+        flushLayout(controller.window)
+        #expect(controller.toggleHorizontalPanLock())
+
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "lock-tab-second"))
+        flushLayout(controller.window)
+        #expect(!controller.isHorizontalPanLocked)
+        store.activate(sessionID: first.id)
+        flushLayout(controller.window)
+        #expect(controller.isHorizontalPanLocked)
+        store.activate(sessionID: second.id)
+        flushLayout(controller.window)
+        #expect(!controller.isHorizontalPanLocked)
+        #expect(controller.toggleHorizontalPanLock())
+        store.activate(sessionID: first.id)
+        flushLayout(controller.window)
+        #expect(!controller.toggleHorizontalPanLock())
+        store.activate(sessionID: second.id)
+        flushLayout(controller.window)
+        #expect(controller.isHorizontalPanLocked)
+    }
+
+    @Test
     func horizontalPanLockPreservesPositionAndBlocksHorizontalScroll() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()

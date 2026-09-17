@@ -445,7 +445,7 @@ final class ReaderViewController: NSViewController {
     var onOpenURLsRequested: (([URL]) -> Void)?
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
     var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
-    var onBookPageBoundaryRequested: (Int) -> Bool = { _ in false }
+    var onPageBoundaryRequested: (Int) -> Bool = { _ in false }
     var onSendSelectionToCodexRequested: ((String) -> Void)?
     var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
     /// When true for a groupID, hover preview is suppressed (e.g. same row selected in Annotations sidebar).
@@ -498,6 +498,9 @@ final class ReaderViewController: NSViewController {
     private var bookScrollGestureOwnedByReader = false
     private var consumeBookDirectScrollUntilEnd = false
     private var consumeBookMomentumUntilEnd = false
+    private var ownsVerticalPageGesture = false
+    private var verticalPageTurnAccumulator: CGFloat = 0
+    private var didTurnPageInVerticalGesture = false
     private var pendingFitWidthSessionID: UUID?
     private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
@@ -1847,34 +1850,24 @@ final class ReaderViewController: NSViewController {
     }
 
     func setHorizontalPanLockEnabled(_ enabled: Bool) {
-        if enabled, targetSession()?.displayMode.usesBookLayout == true { return }
-        guard enabled != isHorizontalPanLocked else {
-            guard isViewLoaded else { return }
-            updatePanLockIndicator()
-            configurePDFScrollBehaviorIfNeeded()
-            return
-        }
+        guard let session = targetSession(), !session.isBlank else { return }
+        documentStore.setHorizontalPanLocked(enabled, for: session.id)
+    }
 
-        guard isViewLoaded else {
-            isHorizontalPanLocked = enabled
-            return
-        }
-
-        if enabled {
-            configurePDFScrollBehaviorIfNeeded()
-            let currentOriginX = pdfClipView()?.bounds.origin.x
-            isHorizontalPanLocked = true
-            (pdfClipView() as? PDFReaderClipView)?.forcedOriginX = currentOriginX
-            recenterDocumentViewIfNeeded()
-        } else {
-            isHorizontalPanLocked = false
-            (pdfClipView() as? PDFReaderClipView)?.forcedOriginX = nil
-            configurePDFScrollBehaviorIfNeeded()
-        }
+    private func applyHorizontalPanLock(_ enabled: Bool) {
+        guard enabled != isHorizontalPanLocked else { return }
+        isHorizontalPanLocked = enabled
+        guard isViewLoaded else { return }
+        (pdfClipView() as? PDFReaderClipView)?.forcedOriginX = nil
+        configurePDFScrollBehaviorIfNeeded()
+        if enabled { recenterDocumentViewIfNeeded() }
         updatePanLockIndicator()
     }
 
     private func rewriteScrollEventIfNeeded(_ event: NSEvent) -> NSEvent? {
+        if handleVerticalPageScroll(event, pointerIsOverPDF: pointerEventIsOverPDFContent(event)) {
+            return nil
+        }
         let phase = event.phase
         let momentumPhase = event.momentumPhase
         let startsGesture = phase.contains(.mayBegin) || phase.contains(.began)
@@ -1944,6 +1937,62 @@ final class ReaderViewController: NSViewController {
         }
         guard ScrollWheelHorizontalStripper.hasHorizontalComponent(event) else { return event }
         return ScrollWheelHorizontalStripper.verticalOnly(from: event) ?? event
+    }
+
+    /// Keep PDFKit's wheel-driven page transition out of discrete layouts.
+    /// Page changes use the same destination route as J/K; remaining momentum
+    /// belongs to the old page and must not move the new one.
+    private func handleVerticalPageScroll(_ event: NSEvent, pointerIsOverPDF: Bool) -> Bool {
+        let phase = event.phase
+        let momentum = event.momentumPhase
+        let mode = targetSession()?.displayMode
+        if phase.contains(.mayBegin) || phase.contains(.began) {
+            resetVerticalPageGesture()
+            ownsVerticalPageGesture = pointerIsOverPDF && (mode == .singlePage || mode == .twoUp)
+                && event.modifierFlags.intersection([.command, .option, .control]).isEmpty
+        }
+        guard ownsVerticalPageGesture, !phase.isEmpty || !momentum.isEmpty else { return false }
+        defer {
+            if phase.contains(.cancelled) || momentum.contains(.ended) || momentum.contains(.cancelled) {
+                resetVerticalPageGesture()
+            }
+        }
+        if didTurnPageInVerticalGesture { return true }
+        guard mode == .singlePage || mode == .twoUp,
+              event.modifierFlags.intersection([.command, .option, .control]).isEmpty else {
+            resetVerticalPageGesture()
+            return false
+        }
+        guard abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) else { return false }
+        let delta = event.scrollingDeltaY
+        guard abs(delta) > 0.01 else { return true }
+        onFocusRequested?()
+        if scrollVertically(by: -delta) {
+            verticalPageTurnAccumulator = 0
+            return true
+        }
+
+        // Inertia may finish scrolling within a page, but never starts a turn.
+        guard momentum.isEmpty, !phase.contains(.ended), !phase.contains(.cancelled) else { return true }
+        if (verticalPageTurnAccumulator < 0) != (delta < 0) {
+            verticalPageTurnAccumulator = 0
+        }
+        verticalPageTurnAccumulator += delta
+        guard abs(verticalPageTurnAccumulator) >= 48 else { return true }
+        let direction = delta < 0 ? 1 : -1
+        let didTurn = turnPage(by: direction)
+        if !didTurn { _ = onPageBoundaryRequested(direction) }
+        // A boundary navigation can replace the session and reset input state.
+        ownsVerticalPageGesture = true
+        didTurnPageInVerticalGesture = true
+        verticalPageTurnAccumulator = 0
+        return true
+    }
+
+    private func resetVerticalPageGesture() {
+        ownsVerticalPageGesture = false
+        verticalPageTurnAccumulator = 0
+        didTurnPageInVerticalGesture = false
     }
 
     @discardableResult
@@ -2016,7 +2065,7 @@ final class ReaderViewController: NSViewController {
         }
         onFocusRequested?()
         let didTurnLocally = turnPage(by: direction)
-        let didCrossDocument = didTurnLocally == false && onBookPageBoundaryRequested(direction)
+        let didCrossDocument = didTurnLocally == false && onPageBoundaryRequested(direction)
         bookPageTurnScrollAccumulator = 0
         if didTurnLocally || didCrossDocument {
             lastBookPageTurnScrollTimestamp = timestamp
@@ -2503,6 +2552,8 @@ final class ReaderViewController: NSViewController {
         }
 
         if displayedSessionID != targetSessionID {
+            resetVerticalPageGesture()
+            applyHorizontalPanLock(false)
             presentationOverlay.resetDocument()
             referencePreview.close()
             annotationInteraction.sessionDidChange()
@@ -2570,6 +2621,7 @@ final class ReaderViewController: NSViewController {
         defer { isApplyingStoreState = false }
 
         if documentChanged {
+            applyHorizontalPanLock(false)
             presentationOverlay.resetDocument()
             referencePreview.close()
             resetBookPageTurnState()
@@ -2587,6 +2639,7 @@ final class ReaderViewController: NSViewController {
             targetReadingPosition,
             force: documentChanged || displayModeChanged
         )
+        applyHorizontalPanLock(refreshedSession.isHorizontalPanLocked)
         if let reloadedLivePosition,
            reloadedLivePosition != refreshedSession.lastReadPosition {
             documentStore.updateReadingPosition(
@@ -2620,6 +2673,11 @@ final class ReaderViewController: NSViewController {
               let document = documentStore.loadedPDFDocument(for: session.id),
               pdfView.document === document,
               displayedDisplayMode == session.displayMode else { return false }
+
+        if isHorizontalPanLocked != session.isHorizontalPanLocked {
+            applyHorizontalPanLock(session.isHorizontalPanLocked)
+            return true
+        }
 
         guard let livePosition = currentReadingPosition() else { return false }
 
@@ -2792,8 +2850,9 @@ final class ReaderViewController: NSViewController {
 
         resetBookPageTurnState()
         markPDFPrivateViewTreeDirty()
+        resetVerticalPageGesture()
         if session.displayMode.usesBookLayout, isHorizontalPanLocked {
-            setHorizontalPanLockEnabled(false)
+            applyHorizontalPanLock(false)
         }
         pdfView.displayDirection = session.displayMode.displayDirection
         pdfView.displaysAsBook = session.displayMode.displaysAsBook
@@ -3091,15 +3150,18 @@ final class ReaderViewController: NSViewController {
     @discardableResult
     private func scrollByViewportFraction(_ fraction: CGFloat) -> Bool {
         guard isAllPagesOverviewActive == false,
-              let scrollView = pdfScrollView(),
               let clipView = pdfClipView() else { return false }
 
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
         syncPDFMarginBackgroundAfterPDFKitLayout()
+        return scrollVertically(by: clipView.bounds.height * fraction)
+    }
 
+    private func scrollVertically(by delta: CGFloat) -> Bool {
+        guard let scrollView = pdfScrollView(), let clipView = pdfClipView() else { return false }
         var targetBounds = clipView.bounds
-        targetBounds.origin.y += clipView.bounds.height * fraction
+        targetBounds.origin.y += delta
         targetBounds = clipView.constrainBoundsRect(targetBounds)
         guard abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return false }
 
@@ -3876,6 +3938,10 @@ extension ReaderViewController {
 
     func testingResetBookScrollGesture() {
         resetBookPageTurnState()
+    }
+
+    func testingHandleVerticalPageScroll(_ event: NSEvent, pointerIsOverPDF: Bool = true) -> Bool {
+        handleVerticalPageScroll(event, pointerIsOverPDF: pointerIsOverPDF)
     }
 
     func testingPositionBelongsToCurrentSpread(

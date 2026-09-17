@@ -117,11 +117,11 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             guard let self else { return }
             self.documentStore.setFocusedPane(.secondary, in: self.windowID)
         }
-        primaryReaderViewController.onBookPageBoundaryRequested = { [weak self] direction in
-            self?.turnBookPageAcrossBoundary(direction: direction, in: .primary) ?? false
+        primaryReaderViewController.onPageBoundaryRequested = { [weak self] direction in
+            self?.turnPageAcrossBoundary(direction: direction, in: .primary) ?? false
         }
-        secondaryReaderViewController.onBookPageBoundaryRequested = { [weak self] direction in
-            self?.turnBookPageAcrossBoundary(direction: direction, in: .secondary) ?? false
+        secondaryReaderViewController.onPageBoundaryRequested = { [weak self] direction in
+            self?.turnPageAcrossBoundary(direction: direction, in: .secondary) ?? false
         }
         primaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
             guard let self else { return nil }
@@ -371,9 +371,9 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     }
 
     @discardableResult
-    private func turnBookPageAcrossBoundary(direction: Int, in pane: ReaderPane) -> Bool {
+    private func turnPageAcrossBoundary(direction: Int, in pane: ReaderPane) -> Bool {
         documentStore.setFocusedPane(pane, in: windowID)
-        return goToContinuousReadingBoundary(direction: direction, usesBookPageTurn: true)
+        return goToContinuousReadingBoundary(direction: direction, usesBookPageTurn: activeReaderViewController().usesBookLayout)
     }
 
     @discardableResult

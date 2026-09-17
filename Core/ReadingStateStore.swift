@@ -9,6 +9,8 @@ struct PersistedReadingState: Codable, Equatable, Sendable {
     var readingPosition: ReadingPosition
     var leftSidebarWidth: CGFloat?
     var rightSidebarWidth: CGFloat?
+    // Older reading records omit this field; DocumentStore treats nil as unlocked.
+    var isHorizontalPanLocked: Bool? = false
 }
 
 protocol ReadingStateStore {

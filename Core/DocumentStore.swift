@@ -1103,7 +1103,20 @@ final class DocumentStore {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[sessionIndex].displayMode != mode else { return }
         sessions[sessionIndex].displayMode = mode
+        if mode.usesBookLayout {
+            sessions[sessionIndex].isHorizontalPanLocked = false
+        }
         persistReadingState(for: sessions[sessionIndex])
+        notifyChange(.content, sessionIDs: [sessionID])
+    }
+
+    func setHorizontalPanLocked(_ enabled: Bool, for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
+              !sessions[index].isBlank,
+              !enabled || !sessions[index].displayMode.usesBookLayout,
+              sessions[index].isHorizontalPanLocked != enabled else { return }
+        sessions[index].isHorizontalPanLocked = enabled
+        persistReadingState(for: sessions[index])
         notifyChange(.content, sessionIDs: [sessionID])
     }
 
@@ -1679,6 +1692,7 @@ final class DocumentStore {
                     displayMode: restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
                     scaleMode: resolvedScaleMode(restoredState?.scaleMode),
                     zoomScale: restoredState?.scaleFactor ?? 1.0,
+                    isHorizontalPanLocked: restoredState?.isHorizontalPanLocked ?? false,
                     lastReadPosition: restoredState?.readingPosition,
                     annotationSavePolicy: appConfiguration.annotations.autoSavePolicy
                 )
@@ -2462,6 +2476,7 @@ final class DocumentStore {
             displayMode: seedState?.displayMode ?? restoredState?.displayMode ?? appConfiguration.reader.defaultDisplayMode,
             scaleMode: seedState?.scaleMode ?? resolvedScaleMode(restoredState?.scaleMode),
             zoomScale: seedState?.zoomScale ?? restoredState?.scaleFactor ?? 1.0,
+            isHorizontalPanLocked: seedState?.isHorizontalPanLocked ?? restoredState?.isHorizontalPanLocked ?? false,
             lastReadPosition: lastReadPosition,
             outlineTree: seedState?.outlineTree ?? [],
             isOutlineLoaded: seedState?.isOutlineLoaded ?? false,
@@ -2518,7 +2533,8 @@ final class DocumentStore {
                     scaleFactor: session.zoomScale,
                     readingPosition: session.lastReadPosition,
                     leftSidebarWidth: nil,
-                    rightSidebarWidth: nil
+                    rightSidebarWidth: nil,
+                    isHorizontalPanLocked: session.isHorizontalPanLocked
                 )
             )
         } catch {

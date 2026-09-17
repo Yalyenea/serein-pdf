@@ -4,6 +4,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reading
+- Save horizontal pan lock per PDF and restore it after closing or restarting, keeping other documents independent.
+- Use the same page navigation as J/K for vertical trackpad turns in non-continuous Single Page and Two-Up modes. Preserve scrolling within zoomed pages and consume remaining motion after a turn so it cannot move the new page.
+
 ### Tabs
 - Clicking a vertical sidebar tab or titlebar tab now switches the PDF even when the tab is not first in the strip. Close buttons on those tabs stay clickable.
 

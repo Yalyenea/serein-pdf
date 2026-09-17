@@ -6,6 +6,93 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct PDFResponsiveScrollingTests {
+    @Test(arguments: [ReaderDisplayMode.singlePage, .twoUp])
+    func discreteTrackpadTurnsMatchKeyboardAndConsumeRemainingGesture(mode: ReaderDisplayMode) throws {
+        let (controller, reader, store, sessionID) = try makePagedReader(mode: mode)
+        defer { controller.close() }
+        reader.fitToHeight()
+        settle(controller.window)
+
+        for direction: Int32 in [-1, 1] {
+            let start = direction < 0 ? 0 : 2
+            _ = reader.goToPage(start)
+            settle(controller.window)
+            if direction < 0 { _ = reader.goToNextPage() } else { _ = reader.goToPreviousPage() }
+            settle(controller.window)
+            let expected = try #require(reader.testingCurrentReadingPosition)
+            let expectedScale = reader.pdfView.scaleFactor
+            _ = reader.goToPage(start)
+            settle(controller.window)
+
+            for step in rapidFlick {
+                #expect(reader.testingHandleVerticalPageScroll(try makeEvent(step, direction: direction)))
+                settle(controller.window)
+            }
+            let actual = try #require(reader.testingCurrentReadingPosition)
+            #expect(actual.pageIndex == expected.pageIndex)
+            #expect(abs(actual.point.x - expected.point.x) < 1)
+            #expect(abs(actual.point.y - expected.point.y) < 1)
+            #expect(abs(reader.pdfView.scaleFactor - expectedScale) < 0.001)
+            #expect(store.session(for: sessionID)?.currentPageIndex == expected.pageIndex)
+        }
+    }
+
+    @Test(arguments: [ReaderDisplayMode.singlePage, .twoUp])
+    func discreteTrackpadScrollsWithinPageAndMomentumCannotTurn(mode: ReaderDisplayMode) throws {
+        let (controller, reader, _, _) = try makePagedReader(mode: mode)
+        defer { controller.close() }
+        let scroll = try #require(reader.pdfView.subviews.compactMap { $0 as? NSScrollView }.first)
+        let clip = scroll.contentView
+        let startY = clip.bounds.minY
+        let began = WheelStep(delta: 0, phase: 1, expectedPhase: .began)
+        let changed = WheelStep(delta: 120, phase: 2, expectedPhase: .changed)
+        #expect(reader.testingHandleVerticalPageScroll(try makeEvent(began, direction: -1)))
+        #expect(reader.testingHandleVerticalPageScroll(try makeEvent(changed, direction: -1)))
+        #expect(clip.bounds.minY > startY + 1)
+        #expect(reader.testingCurrentReadingPosition?.pageIndex == 0)
+
+        let ended = WheelStep(delta: 0, phase: 4, expectedPhase: .ended)
+        #expect(reader.testingHandleVerticalPageScroll(try makeEvent(ended, direction: -1)))
+        for step in [
+            WheelStep(delta: 9000, momentum: 1, expectedMomentum: .began),
+            WheelStep(delta: 9000, momentum: 2, expectedMomentum: .changed),
+            WheelStep(delta: 0, momentum: 3, expectedMomentum: .ended),
+        ] {
+            #expect(reader.testingHandleVerticalPageScroll(try makeEvent(step, direction: -1)))
+        }
+        settle(controller.window)
+        #expect(reader.testingCurrentReadingPosition?.pageIndex == 0)
+
+        #expect(reader.testingHandleVerticalPageScroll(try makeEvent(began, direction: -1)))
+        #expect(reader.testingHandleVerticalPageScroll(try makeEvent(changed, direction: -1)))
+        settle(controller.window)
+        #expect(reader.testingCurrentReadingPosition?.pageIndex == (mode == .twoUp ? 2 : 1))
+    }
+
+    @Test
+    func discreteTrackpadHandlerYieldsOutsideReaderAndInContinuousMode() throws {
+        let (controller, reader, store, sessionID) = try makePagedReader(mode: .singlePage)
+        defer { controller.close() }
+        let event = try makeEvent(WheelStep(delta: 120, phase: 1, expectedPhase: .began), direction: -1)
+        #expect(!reader.testingHandleVerticalPageScroll(event, pointerIsOverPDF: false))
+        store.setDisplayMode(.singlePageContinuous, for: sessionID)
+        #expect(!reader.testingHandleVerticalPageScroll(event))
+    }
+
+    private func makePagedReader(mode: ReaderDisplayMode) throws -> (MainWindowController, ReaderViewController, DocumentStore, UUID) {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        let session = try store.open(documentAt: TestPDFFixtures.makeBlankPDF(
+            named: "discrete-trackpad", pageCount: 6, pageSize: NSSize(width: 720, height: 1800)
+        ))
+        store.setDisplayMode(mode, for: session.id)
+        store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
+        settle(controller.window)
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        return (controller, split.readerViewController, store, session.id)
+    }
+
     @Test(arguments: [
         ReaderDisplayMode.singlePage, .singlePageContinuous, .twoUp, .twoUpContinuous,
     ], [CGFloat(1), 1.37, 2.333333333333])
