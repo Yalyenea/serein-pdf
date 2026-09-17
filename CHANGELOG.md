@@ -5,6 +5,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Reading
+- Fix a crash during PDFKit's background form recognition by preserving its native document getter and clearing comment-icon caches explicitly when replacing documents.
 - Save horizontal pan lock per PDF and restore it after closing or restarting, keeping other documents independent.
 - Use the same page navigation as J/K for vertical trackpad turns in non-continuous Single Page and Two-Up modes. Preserve scrolling within zoomed pages and consume remaining motion after a turn so it cannot move the new page.
 

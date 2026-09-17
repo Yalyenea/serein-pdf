@@ -1,10 +1,36 @@
 import AppKit
 import PDFKit
 import XCTest
+import ObjectiveC.runtime
 @testable import Serein
 
 @MainActor
 final class CommentIconReuseTests: XCTestCase {
+    func testDocumentGetterRemainsPDFKitImplementation() async throws {
+        let selector = #selector(getter: PDFView.document)
+        let readerMethod = try XCTUnwrap(class_getInstanceMethod(ReaderPDFView.self, selector))
+        let nativeMethod = try XCTUnwrap(class_getInstanceMethod(PDFView.self, selector))
+        XCTAssertEqual(
+            unsafeBitCast(method_getImplementation(readerMethod), to: UInt.self),
+            unsafeBitCast(method_getImplementation(nativeMethod), to: UInt.self),
+            "PDFKit reads document on its form-filling queue; keep its native getter."
+        )
+        _ = NSApplication.shared
+        let view = ReaderPDFView()
+        let document = PDFDocument()
+        view.setReaderDocument(document)
+        nonisolated(unsafe) let object: NSObject = view
+        let expectedID = ObjectIdentifier(document)
+        let completed = expectation(description: "PDFKit background document read")
+        DispatchQueue(label: "test.pdf-form-filling").async {
+            XCTAssertFalse(Thread.isMainThread)
+            let result = object.perform(NSSelectorFromString("document"))?.takeUnretainedValue()
+            XCTAssertEqual(result.map(ObjectIdentifier.init), expectedID)
+            completed.fulfill()
+        }
+        await fulfillment(of: [completed], timeout: 5)
+    }
+
     func testDrawingHitTestingAndAnchoringReuseTextScan() throws {
         _ = NSApplication.shared
         let view = ReaderPDFView(frame: NSRect(x: 0, y: 0, width: 600, height: 800))
@@ -13,7 +39,7 @@ final class CommentIconReuseTests: XCTestCase {
         page.setBounds(NSRect(x: 0, y: 0, width: 600, height: 800), for: .mediaBox)
         let annotation = comment(on: page)
         document.insert(page, at: 0)
-        view.document = document
+        view.setReaderDocument(document)
         let placement = view.commentIcons
         let frame = try XCTUnwrap(placement.frames(on: page).first?.frame)
         let scans = page.textScans
@@ -80,10 +106,10 @@ final class CommentIconReuseTests: XCTestCase {
         let page = CountingPage()
         _ = comment(on: page)
         document.insert(page, at: 0)
-        view.document = document
+        view.setReaderDocument(document)
         _ = view.commentIcons.frames(on: page)
         let scans = page.textScans
-        view.document = PDFDocument()
+        view.setReaderDocument(PDFDocument())
         _ = view.commentIcons.frames(on: page)
         XCTAssertGreaterThan(page.textScans, scans)
     }

@@ -252,6 +252,7 @@ struct PDFResponsiveScrollingTests {
             wheel1: step.delta * direction, wheel2: 0, wheel3: 0
         ))
         cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: step.phase)
+        cg.flags = []
         cg.setIntegerValueField(.scrollWheelEventMomentumPhase, value: step.momentum)
         let event = try #require(NSEvent(cgEvent: cg))
         try #require(event.phase == step.expectedPhase)

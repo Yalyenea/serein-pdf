@@ -260,8 +260,11 @@ private final class PDFReaderClipView: NSClipView {
 
 final class ReaderPDFView: PDFView {
     let commentIcons = CommentIconPlacement()
-    override var document: PDFDocument? {
-        didSet { commentIcons.retainPages([]) }
+    // PDFKit reads its native document getter from the form-filling queue.
+    // Clear our UI cache explicitly without overriding that getter in Swift.
+    func setReaderDocument(_ document: PDFDocument?) {
+        commentIcons.retainPages([])
+        self.document = document
     }
     var onLayoutCompleted: (() -> Void)?
     var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
@@ -2562,7 +2565,7 @@ final class ReaderViewController: NSViewController {
 
         guard let session = targetSession() else {
             referencePreview.close()
-            pdfView.document = nil
+            pdfView.setReaderDocument(nil)
             markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
             syncReadingFocusAvailability()
@@ -2579,7 +2582,7 @@ final class ReaderViewController: NSViewController {
 
         if session.isBlank {
             referencePreview.close()
-            pdfView.document = nil
+            pdfView.setReaderDocument(nil)
             markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
             syncReadingFocusAvailability()
@@ -2602,7 +2605,7 @@ final class ReaderViewController: NSViewController {
             document = try documentStore.pdfDocument(for: session.id)
         } catch {
             referencePreview.close()
-            pdfView.document = nil
+            pdfView.setReaderDocument(nil)
             markPDFPrivateViewTreeDirty(resetRoots: true)
             pdfView.isHidden = true
             syncReadingFocusAvailability()
@@ -2625,7 +2628,7 @@ final class ReaderViewController: NSViewController {
             presentationOverlay.resetDocument()
             referencePreview.close()
             resetBookPageTurnState()
-            pdfView.document = document
+            pdfView.setReaderDocument(document)
             markPDFPrivateViewTreeDirty(resetRoots: true)
             displayedSessionID = refreshedSession.id
             displayedReadingPosition = nil
