@@ -16,6 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -69,10 +75,12 @@ jobs:
 
           cat >> .tmp/release-notes.md <<'EOF'
 
-          Install:
-          1. Download the DMG artifact attached to this release
+          Install (Apple silicon, macOS 14 or later):
+          1. Download the DMG attached to this release
           2. Open it and drag `Serein.app` to `/Applications`
-          3. First launch: right-click -> Open, or run `xattr -dr com.apple.quarantine /Applications/Serein.app`
+          3. This build is not notarized. If macOS blocks the first launch, follow [Apple’s instructions](https://support.apple.com/en-us/102445) to open a trusted app through System Settings → Privacy & Security → Open Anyway.
+
+          Serein is licensed under GPL-3.0-only. The matching source is available in the source archives below.
           EOF
 
       - name: Upload DMG artifact

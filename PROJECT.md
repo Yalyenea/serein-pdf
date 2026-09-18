@@ -476,7 +476,8 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 
 ### 8.3 Milestone 13.1 网站后续
 
-- 实机截图替换占位、截图规范、release 下载说明;可选 Pages 部署与暗色主题截图
+- 纯静态网站包含 Features、Changelog、Docs 与 GitHub 入口，支持中英文和明暗主题；通过 GitHub Pages 部署到 `serein.yfff.me`。
+- 截图与 PDF 演示暂缓，后续按需要补充。
 
 ### 8.4 多主题预设
 

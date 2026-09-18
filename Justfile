@@ -29,22 +29,10 @@ run:
 website:
     uv run python -m http.server 4173 --bind 127.0.0.1 --directory Website
 
-# Check required website files and references.
+# Check website pages, translations, navigation, and local links.
 website-check:
-    test -f Website/index.html
-    test -f Website/README.md
-    test -f Website/assets/styles.css
-    test -f Website/assets/main.js
-    test -s Website/assets/app-icon.png
-    test -s Website/assets/serein-reader.png
-    rg -q 'assets/styles.css' Website/index.html
-    rg -q 'assets/main.js' Website/index.html
-    rg -q 'assets/app-icon.png' Website/index.html
-    rg -q 'assets/serein-reader.png' Website/index.html
-    rg -q 'data-theme-toggle' Website/index.html
-    rg -q 'data-lang-toggle' Website/index.html
-    rg -q 'https://github.com/Yalyenea/serein-pdf/releases/latest' Website/index.html
-    @echo "website check passed."
+    uv run --with beautifulsoup4 Scripts/check-website.py
+    node --check Website/assets/main.js
 
 # Ensure the stable local signing identity exists in the login keychain.
 signing-identity:

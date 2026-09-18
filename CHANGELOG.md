@@ -4,6 +4,12 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-19
+
+### Website and licensing
+- Publish the bilingual product website with features, release notes, documentation, and GitHub links.
+- License Serein under GPL-3.0-only and include the license in release bundles.
+
 ### Reliability
 - Share annotations, saving, and undo between panes comparing the same PDF while keeping reading positions independent; release comparison sessions and stale undo records with their documents.
 - Serialize persistence snapshots and writes to prevent older state from overwriting newer state. Preserve explicitly empty window lists.

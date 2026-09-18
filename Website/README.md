@@ -1,46 +1,16 @@
 # Serein Website
 
-Local static product site for Serein. Dependency-light: plain HTML, CSS, and
-JavaScript — no build step.
+Static HTML, CSS, and JavaScript, with English/Chinese copy and light/dark themes.
 
-Design direction follows an editorial / archive “knowledge tool” pattern:
-warm paper base, serif display type, hairline brand mark, grain texture,
-staggered rise/reveal, light/dark theme, and EN/中文 copy.
+- `index.html`: features and download.
+- `changelog.html`: release highlights.
+- `docs.html`: installation, reading, annotations, shortcuts, and settings.
+- `assets/`: shared styles, preference controls, and app icon.
 
-## Preview
+Run `just website` from the repository root and open http://127.0.0.1:4173/.
+Run `just website-check` to validate pages, translations, navigation, and local links.
 
-From the repository root:
-
-```sh
-just website
-```
-
-Then open:
-
-```text
-http://127.0.0.1:4173/
-```
-
-## Check
-
-```sh
-just website-check
-```
-
-The check verifies required website files, local asset references, and the
-current release link. It does not configure GitHub Pages or write deployment
-metadata.
-
-## Structure
-
-| Path | Role |
-|---|---|
-| `index.html` | Hero, feature bands, alternating rows, download, compact docs |
-| `assets/styles.css` | Design tokens + layout |
-| `assets/main.js` | Theme, language, scroll reveal, path copy |
-| `assets/serein-reader.png` | Product screenshot |
-| `assets/app-icon.png` | Favicon / footer mark |
-
-## Follow-up
-
-Planned under **M13.1** in [TASKS.md](../TASKS.md): replace editorial placeholder cards with real feature screenshots, optional GitHub Pages deploy, and EN/中文 copy pass. Skeleton is done; polish when assets are ready.
+The Website workflow checks pull requests and deploys changes on `main` to GitHub
+Pages. Only the public pages and assets are uploaded. Set the Pages custom domain
+to `serein.yfff.me`, with a DNS-only Cloudflare CNAME pointing to
+`yalyenea.github.io`.

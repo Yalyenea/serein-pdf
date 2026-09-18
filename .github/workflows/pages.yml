@@ -1,0 +1,49 @@
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ["Website/**", "Scripts/check-website.py", "Justfile", ".github/workflows/pages.yml"]
+  pull_request:
+    paths: ["Website/**", "Scripts/check-website.py", "Justfile", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - uses: extractions/setup-just@v3
+      - run: just website-check
+      - name: Stage public files
+        run: |
+          mkdir -p .tmp/site
+          cp Website/*.html Website/robots.txt Website/sitemap.xml .tmp/site/
+          cp -R Website/assets .tmp/site/assets
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          path: .tmp/site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/deploy-pages@v4
+        id: deployment

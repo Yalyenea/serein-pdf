@@ -6,8 +6,9 @@
 
 Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
-Local website preview lives in [Website](Website/). It is a static product
-site for showcase, download notes, and compact docs.
+[Website](https://serein.yfff.me) · [Download](https://github.com/Yalyenea/serein-pdf/releases/latest) · [Docs](https://serein.yfff.me/docs.html)
+
+The release DMG supports Apple silicon Macs running macOS 14 or later.
 
 ## Features
 
@@ -320,10 +321,11 @@ UI/          CenterReader, LeftTabs, RightOutline, TitlebarTabs
 Tests/       Swift Testing + XCTest suites
 Resources/   Info.plist, AppIcon.png/.icns
 Scripts/     make-app.sh, make-icon.sh
-Website/     Local static product website
+Website/     Static product website
 Justfile     Task runner entrypoints
 ```
 
 ## License
 
-Personal use. No redistribution.
+Copyright © 2026 Yalyenea. Licensed under the GNU General Public License,
+version 3 only (`GPL-3.0-only`). See [LICENSE](LICENSE).

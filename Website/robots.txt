@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://serein.yfff.me/sitemap.xml
