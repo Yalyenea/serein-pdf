@@ -264,6 +264,7 @@ final class ReaderPDFView: PDFView {
     // Clear our UI cache explicitly without overriding that getter in Swift.
     func setReaderDocument(_ document: PDFDocument?) {
         commentIcons.retainPages([])
+        textSelectionAnchor = nil
         self.document = document
     }
     var onLayoutCompleted: (() -> Void)?
@@ -276,6 +277,36 @@ final class ReaderPDFView: PDFView {
     var contextMenuProvider: ((NSEvent) -> NSMenu?)?
 
     private var pointerTrackingArea: NSTrackingArea?
+    private var textSelectionAnchor: (page: PDFPage, point: NSPoint)?
+    nonisolated(unsafe) private var textSelectionMouseMonitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let textSelectionMouseMonitor {
+            NSEvent.removeMonitor(textSelectionMouseMonitor)
+            self.textSelectionMouseMonitor = nil
+        }
+        textSelectionAnchor = nil
+        guard window != nil else { return }
+        textSelectionMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            let handled = MainActor.assumeIsolated {
+                guard let self, event.window === self.window,
+                      !self.isHiddenOrHasHiddenAncestor else { return false }
+                let point = self.convert(event.locationInWindow, from: nil)
+                guard self.visibleRect.contains(point),
+                      let hit = self.window?.contentView?.hitTest(event.locationInWindow),
+                      hit === self || hit.isDescendant(of: self) else { return false }
+                return self.handleTextSelectionMouseDown(event)
+            }
+            return handled ? nil : event
+        }
+    }
+
+    deinit {
+        if let textSelectionMouseMonitor {
+            NSEvent.removeMonitor(textSelectionMouseMonitor)
+        }
+    }
 
     override func isAccessibilityElement() -> Bool {
         false
@@ -378,6 +409,26 @@ final class ReaderPDFView: PDFView {
         return native
     }
 
+    private func handleTextSelectionMouseDown(_ event: NSEvent) -> Bool {
+        let point = convert(event.locationInWindow, from: nil)
+        let endpoint = textEndpoint(at: point)
+        if event.modifierFlags.intersection([.shift, .command, .option, .control]) == .shift,
+           let anchor = textSelectionAnchor, let endpoint,
+           let document, anchor.page.document === document {
+            let forward = document.index(for: anchor.page) <= document.index(for: endpoint.page)
+            let start = forward ? anchor : endpoint
+            let end = forward ? endpoint : anchor
+            if let selection = document.selection(from: start.page, at: start.point,
+                                                  to: end.page, at: end.point) {
+                window?.makeFirstResponder(self)
+                setCurrentSelection(selection, animate: false)
+                return true
+            }
+        }
+        textSelectionAnchor = internalLink(at: event) == nil && managedAnnotation(at: point) == nil ? endpoint : nil
+        return false
+    }
+
     override func mouseDown(with event: NSEvent) {
         if let link = internalLink(at: event) {
             if !event.modifierFlags.contains(.option),
@@ -392,6 +443,12 @@ final class ReaderPDFView: PDFView {
             return
         }
         super.mouseDown(with: event)
+    }
+
+    private func textEndpoint(at point: NSPoint) -> (page: PDFPage, point: NSPoint)? {
+        guard let page = page(for: point, nearest: false) else { return nil }
+        // PDFKit resolves insertion points in whitespace as well as inside glyphs.
+        return (page, convert(point, to: page))
     }
 
     override func magnify(with event: NSEvent) {

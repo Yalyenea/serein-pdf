@@ -101,6 +101,7 @@ flowchart LR
 | 同 PDF 对比 | 同一个 PDF 的第二 pane 使用绑定源 session 的内部 comparison session,共享 PDF、批注与撤销,独立页码 / 缩放;不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
+| 文本点选 | 单击设置起点，`Shift` + 单击选择到终点，支持反向、跨页和行首尾空白；连续 `Shift` + 单击调整终点。起点按阅读区独立保存，切换文档或移出窗口时清除；通过本地鼠标事件监听处理，保留 PDFKit 原生拖选与双击选词。 |
 | 演示工具 | 演示模式提供指针、临时笔与激光;墨迹按 PDF 页坐标保存在当前阅读区,翻页保留并随页面定位,各窗口独立,退出演示或切换文档时清空,不写入 PDF;底部工具栏可固定或自动隐藏 |
 | 全览性能 | `OverviewGridView` 缩略图只按可视区 ± 一屏懒栅格化(离主线程、2 并发、像素长边上限 1200);`NSCache` 按字节成本回收,远端页释放位图,退出全览立即清空并取消排队任务、释放其 PDF 和结果;缩放 / resize 只重渲可视区,滚回近访页走缓存不重渲;右栏 Pages 仅在面板可见时绑定 PDFView |
 | 书籍阅读 | 新增 `book` / `bookContinuous`,与既有 `twoUp` / `twoUpContinuous` 并存;两个书籍状态复用横向 `PDFView.twoUp + displaysAsBook` 布局,封面单页,后续按左右 spread 配对;封面与末尾孤页保留空槽以稳定页面尺寸;Fit Width 按实际页面框与固定安全边距同时约束宽高,手动缩小后只要完整可见也保持双轴居中;Continuous Turn 允许持续手势逐 spread 翻页 |

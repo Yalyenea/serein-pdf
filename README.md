@@ -12,6 +12,7 @@ site for showcase, download notes, and compact docs.
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or adaptive titlebar tabs
+- Click a starting point, then Shift-click an endpoint to select text, including across pages and from line-boundary whitespace. Further Shift-clicks adjust the endpoint; an ordinary click starts a new selection.
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
 - Right pane hosts **Outline + Pages + Search + Annotations**; Annotations is a full-height compact comment feed with inline editing and keyboard navigation, while Outline adds heading filtering, wrapped titles, no horizontal panning, and one-click tree expand/collapse
