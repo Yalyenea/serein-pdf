@@ -21,7 +21,7 @@ site for showcase, download notes, and compact docs.
 - Find bar supports `This Document` / `All Open`, match-case `Aa`, and whole-word `Word`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles continuity within the current Single Page, Two-Up, or Book layout, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, and `g` / `shift+g` jump to the real document edges; Book modes also accept `h` / `←` and `l` / `→` for previous / next spread; `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document Outline, Pages, link, Search, and annotation jumps; clicking an internal link previews the destination in place, while Option-click jumps and stays centered
 - Cursor reading focus (`f`) dims the page outside a compact rounded band without blocking PDF interaction; `option+f` adjusts the current window between Page, Column (half-page), and Custom widths plus a configurable height
-- Horizontal pan lock (`l`) preserves the current X position and blocks left/right panning plus pinch / keyboard zoom; vertical scroll and page turns stay free
+- Horizontal pan lock (`l`) preserves the current X position and blocks left/right panning and magnification gestures. Zoom commands and page/text fitting remain available and lock the resulting X position; vertical scroll and page turns stay free.
 - Fit Text Width (`cmd+option+0`) zooms the main reader to the current page or spread's text bounds with 12pt side margins, preserving vertical reading position. It applies once as manual zoom; pages without text stay unchanged. `cmd+0` fits the page width.
 - Compare split in the center reader (`cmd+ctrl+\`) opens a compact candidate chooser and can arrange the two independent readers left/right or top/bottom from the View menu
 - Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
@@ -259,7 +259,7 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Fit text width | `cmd+option+0` |
 | Toggle cursor reading focus | `f` |
 | Adjust current-window focus width / height | `option+f` |
-| Toggle horizontal pan lock (preserve current X, block zoom) | `l` |
+| Toggle horizontal pan lock (preserve current X, block magnification gestures) | `l` |
 | Toggle current layout continuity | `c` |
 | Select document tabs 1–3 | physical left `cmd+1` / `cmd+2` / `cmd+3` |
 | Single Page Continuous | physical right `cmd+2` |

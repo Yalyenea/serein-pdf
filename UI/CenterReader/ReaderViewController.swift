@@ -272,6 +272,8 @@ final class ReaderPDFView: PDFView {
     var onInternalLinkPreviewRequested: ((PDFDestination, NSRect) -> Bool)?
     var onAnnotationActivationRequested: ((NSEvent) -> Bool)?
     var onUserMagnificationRequested: (() -> Void)?
+    var onZoomInRequested: (() -> Void)?
+    var onZoomOutRequested: (() -> Void)?
     var shouldAllowUserMagnification: (() -> Bool)?
     var onPointerMoved: ((NSEvent?) -> Void)?
     var contextMenuProvider: ((NSEvent) -> NSMenu?)?
@@ -464,15 +466,11 @@ final class ReaderPDFView: PDFView {
     }
 
     override func zoomIn(_ sender: Any?) {
-        guard allowsUserMagnification else { return }
-        onUserMagnificationRequested?()
-        super.zoomIn(sender)
+        onZoomInRequested?()
     }
 
     override func zoomOut(_ sender: Any?) {
-        guard allowsUserMagnification else { return }
-        onUserMagnificationRequested?()
-        super.zoomOut(sender)
+        onZoomOutRequested?()
     }
 
     private var allowsUserMagnification: Bool {
@@ -642,6 +640,8 @@ final class ReaderViewController: NSViewController {
         pdfView.onUserMagnificationRequested = { [weak self] in
             self?.beginUserMagnification()
         }
+        pdfView.onZoomInRequested = { [weak self] in self?.zoomIn() }
+        pdfView.onZoomOutRequested = { [weak self] in self?.zoomOut() }
         pdfView.shouldAllowUserMagnification = { [weak self] in
             self?.shouldLockHorizontalPan == false
         }
@@ -1037,7 +1037,7 @@ final class ReaderViewController: NSViewController {
 
     /// Fit the current page or spread's text once, keeping its vertical reading position.
     func fitToTextWidth() {
-        guard !isAllPagesOverviewActive, !shouldLockHorizontalPan,
+        guard !isAllPagesOverviewActive,
               !presentationOverlay.isPresentationEnabled,
               let session = targetSession(), session.id == displayedSessionID,
               let document = pdfView.document, let clipView = pdfClipView() else { return }
@@ -1077,12 +1077,7 @@ final class ReaderViewController: NSViewController {
         defer { isApplyingStoreState = wasApplying }
         pendingFitWidthSessionID = nil
         pendingFitHeightSessionID = nil
-        applyProgrammaticScale(scale)
-        restoreViewportAnchor(anchor)
-        pdfView.layoutDocumentView()
-        pdfView.layoutSubtreeIfNeeded()
-        recenterDocumentViewIfNeeded()
-        restoreViewportAnchor(anchor)
+        applyProgrammaticScale(scale, viewportAnchor: anchor)
         displayedScaleMode = .manual
         documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
         if let position = currentReadingPosition() {
@@ -1146,8 +1141,7 @@ final class ReaderViewController: NSViewController {
             adjustOverviewZoom(scale: 1.1)
             return
         }
-        guard shouldLockHorizontalPan == false,
-              let session = targetSession(),
+        guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
@@ -1162,8 +1156,7 @@ final class ReaderViewController: NSViewController {
             adjustOverviewZoom(scale: 1 / 1.1)
             return
         }
-        guard shouldLockHorizontalPan == false,
-              let session = targetSession(),
+        guard let session = targetSession(),
               session.id == displayedSessionID else { return }
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
@@ -3059,10 +3052,19 @@ final class ReaderViewController: NSViewController {
         return abs(pdfView.scaleFactor - targetScaleFactor) > 0.001
     }
 
-    private func applyProgrammaticScale(_ scaleFactor: CGFloat, preserveViewportCenter: Bool = false) {
-        let viewportAnchor = preserveViewportCenter ? captureViewportAnchor() : nil
+    private func applyProgrammaticScale(
+        _ scaleFactor: CGFloat,
+        preserveViewportCenter: Bool = false,
+        viewportAnchor: PDFViewportAnchor? = nil
+    ) {
+        let viewportAnchor = viewportAnchor ?? (preserveViewportCenter ? captureViewportAnchor() : nil)
         isApplyingProgrammaticScale = true
-        defer { isApplyingProgrammaticScale = false }
+        // Explicit zoom may reposition the viewport; lock the resulting X afterward.
+        syncHorizontalPanLockConstraint()
+        defer {
+            isApplyingProgrammaticScale = false
+            syncHorizontalPanLockConstraint()
+        }
         pdfView.scaleFactor = scaleFactor
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
@@ -3314,7 +3316,8 @@ final class ReaderViewController: NSViewController {
 
     private func syncHorizontalPanLockConstraint() {
         guard let clipView = pdfClipView() as? PDFReaderClipView else { return }
-        guard shouldLockHorizontalPan, let documentView = pdfDocumentView() else {
+        guard shouldLockHorizontalPan, !isApplyingProgrammaticScale,
+              let documentView = pdfDocumentView() else {
             clipView.forcedOriginX = nil
             return
         }

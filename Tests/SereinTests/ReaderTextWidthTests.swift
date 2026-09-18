@@ -79,20 +79,89 @@ struct ReaderTextWidthTests {
     }
 
     @Test
-    func horizontalPanLockBlocksTextWidthFit() throws {
+    func horizontalPanLockAllowsTextWidthFitAndLocksResultingPosition() throws {
         try withReader { controller, reader, store, sessionID in
             #expect(controller.toggleHorizontalPanLock())
             settle(controller)
-            let before = try #require(store.session(for: sessionID))
             let scale = reader.pdfView.scaleFactor
-            let origin = try clipView(in: reader.pdfView).bounds.origin
+            let page = try #require(reader.pdfView.currentPage)
 
             reader.fitToTextWidth()
             settle(controller)
 
+            #expect(reader.pdfView.scaleFactor > scale * 1.2)
+            try expectTextFillsViewport([page], in: reader.pdfView)
+            #expect(store.session(for: sessionID)?.scaleMode == .manual)
+            #expect(store.session(for: sessionID)?.isHorizontalPanLocked == true)
+            let clip = try clipView(in: reader.pdfView)
+            let lockedX = clip.bounds.origin.x
+            #expect(lockedX > 0)
+            clip.setBoundsOrigin(NSPoint(x: lockedX + 55, y: clip.bounds.origin.y))
+            settle(controller)
+            #expect(abs(clip.bounds.origin.x - lockedX) < 0.1)
+            reader.fitToTextWidth()
+            settle(controller)
+            try expectTextFillsViewport([page], in: reader.pdfView)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func explicitZoomCommandsPreserveAnchorsWithHorizontalPanLock(_ continuous: Bool) throws {
+        var unlockedResults: [(scale: CGFloat, center: NSPoint)] = []
+        for locked in [false, true] {
+            try withReader(mode: continuous ? .singlePageContinuous : .singlePage) { controller, reader, store, sessionID in
+                let page = try #require(reader.pdfView.currentPage)
+                if locked { #expect(controller.toggleHorizontalPanLock()) }
+                let commands: [() -> Void] = [
+                    { reader.zoomIn() }, { reader.zoomOut() },
+                    { reader.pdfView.zoomIn(nil) }, { reader.pdfView.zoomOut(nil) },
+                    { reader.fitToWidth() }, { reader.fitToHeight() }, { reader.fitToPage() },
+                ]
+                for (index, command) in commands.enumerated() {
+                    reader.fitToTextWidth()
+                    controller.scrollHalfPageDown()
+                    settle(controller)
+                    command()
+                    settle(controller)
+                    let scale = reader.pdfView.scaleFactor
+                    let center = try viewportCenter(on: page, in: reader.pdfView)
+                    if !locked {
+                        unlockedResults.append((scale, center))
+                        continue
+                    }
+                    let expected = unlockedResults[index]
+                    #expect(abs(scale - expected.scale) < 0.001)
+                    #expect(abs(center.x - expected.center.x) < 1)
+                    #expect(abs(center.y - expected.center.y) < 1)
+                    #expect(store.session(for: sessionID)?.isHorizontalPanLocked == true)
+                    #expect(reader.testingPanLockIndicatorIsVisible)
+                    let clip = try clipView(in: reader.pdfView)
+                    let lockedX = clip.bounds.origin.x
+                    clip.setBoundsOrigin(NSPoint(x: lockedX + 55, y: clip.bounds.origin.y))
+                    settle(controller)
+                    #expect(abs(clip.bounds.origin.x - lockedX) < 0.1)
+                }
+            }
+        }
+    }
+
+    @Test
+    func horizontalPanLockStillBlocksMagnificationGestures() throws {
+        try withReader { controller, reader, _, _ in
+            #expect(controller.toggleHorizontalPanLock())
+            let scale = reader.pdfView.scaleFactor
+            var magnificationRequests = 0
+            reader.pdfView.onUserMagnificationRequested = { magnificationRequests += 1 }
+            let event = try #require(NSEvent.otherEvent(
+                with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0
+            ))
+            // A locked reader must reject the gesture before PDFKit handles its payload.
+            reader.pdfView.magnify(with: event)
+            reader.pdfView.smartMagnify(with: event)
+            settle(controller)
+            #expect(magnificationRequests == 0)
             #expect(reader.pdfView.scaleFactor == scale)
-            #expect(try clipView(in: reader.pdfView).bounds.origin == origin)
-            #expect(store.session(for: sessionID)?.scaleMode == before.scaleMode)
         }
     }
 

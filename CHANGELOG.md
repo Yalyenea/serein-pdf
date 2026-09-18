@@ -12,6 +12,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Release overview resources when leaving a PDF, reset library filters on refresh, and preserve input-method composition and Unicode caret positions in launchers.
 
 ### Reading
+- Allow explicit zoom and page/text fitting while horizontal pan lock is enabled. Preserve the viewport anchor during scaling and lock the resulting horizontal position; magnification gestures remain blocked.
 - Select text by clicking a starting point and Shift-clicking an endpoint, including across pages and from whitespace at line boundaries. Further Shift-clicks adjust the endpoint; switching documents clears the anchor. Preserve native dragging and double-click selection.
 - Fix a crash during PDFKit's background form recognition by preserving its native document getter and clearing comment-icon caches explicitly when replacing documents.
 - Save horizontal pan lock per PDF and restore it after closing or restarting, keeping other documents independent.

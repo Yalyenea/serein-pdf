@@ -2583,8 +2583,12 @@ struct WindowChromeTests {
         reader.zoomOut()
         reader.pdfView.zoomOut(nil)
         flushLayout(controller.window)
-        #expect(abs(reader.pdfView.scaleFactor - scaleBefore) < 0.0001)
-        #expect(abs(clipView.bounds.origin.x - lockedX) < 1.5)
+        #expect(reader.pdfView.scaleFactor < scaleBefore - 0.01)
+        #expect(store.session(for: session.id)?.isHorizontalPanLocked == true)
+        let zoomedX = clipView.bounds.origin.x
+        clipView.setBoundsOrigin(NSPoint(x: zoomedX + 55, y: clipView.bounds.origin.y))
+        flushLayout(controller.window)
+        #expect(abs(clipView.bounds.origin.x - zoomedX) < 0.1)
 
         #expect(controller.toggleHorizontalPanLock() == false)
         #expect(reader.testingHorizontalPanLockIsEnabled == false)
