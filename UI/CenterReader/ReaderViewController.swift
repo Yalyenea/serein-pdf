@@ -3713,8 +3713,11 @@ final class ReaderViewController: NSViewController {
     }
 
     private func captureViewportAnchor() -> PDFViewportAnchor? {
-        guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
-        let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
+        guard let clipView = pdfClipView(),
+              clipView.bounds.width > 0, clipView.bounds.height > 0 else { return nil }
+        let viewportCenter = pdfView.convert(
+            NSPoint(x: clipView.bounds.midX, y: clipView.bounds.midY), from: clipView
+        )
         guard let page = pdfView.page(for: viewportCenter, nearest: true) else { return nil }
         let pagePoint = pdfView.convert(viewportCenter, to: page)
         return PDFViewportAnchor(page: page, pagePoint: pagePoint)
@@ -3722,14 +3725,13 @@ final class ReaderViewController: NSViewController {
 
     private func restoreViewportAnchor(_ anchor: PDFViewportAnchor) {
         guard let scrollView = pdfScrollView(),
-              let clipView = pdfClipView(),
-              let documentView = pdfDocumentView() else { return }
+              let clipView = pdfClipView() else { return }
 
         let pointInView = pdfView.convert(anchor.pagePoint, from: anchor.page)
-        let pointInDoc = documentView.convert(pointInView, from: pdfView)
+        let pointInClip = clipView.convert(pointInView, from: pdfView)
         let desiredOrigin = NSPoint(
-            x: pointInDoc.x - clipView.bounds.width * 0.5,
-            y: pointInDoc.y - clipView.bounds.height * 0.5
+            x: pointInClip.x - clipView.bounds.width * 0.5,
+            y: pointInClip.y - clipView.bounds.height * 0.5
         )
         let targetBounds = clipView.constrainBoundsRect(
             NSRect(origin: desiredOrigin, size: clipView.bounds.size)

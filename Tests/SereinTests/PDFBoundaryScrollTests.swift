@@ -12,6 +12,7 @@ struct PDFBoundaryScrollTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
+        controller.showWindow(nil)
         let url: URL
         if let path = ProcessInfo.processInfo.environment["SEREIN_BOUNDARY_TEST_PDF"] {
             url = URL(fileURLWithPath: path)
@@ -58,7 +59,6 @@ struct PDFBoundaryScrollTests {
             // NSScrollView applies wheel deltas in its document coordinate system.
             // PDFKit's document orientation differs between macOS releases.
             let outwardWheelDirection: Int32 = (atEnd ? -1 : 1) * (clip.isFlipped ? 1 : -1)
-            print("Boundary start: mode=\(mode), end=\(atEnd), clipFlipped=\(clip.isFlipped), documentFlipped=\(document.isFlipped), edge=\(edge), clip=\(clip.bounds), document=\(document.frame), scale=\(reader.pdfView.scaleFactor), scaleMode=\(session.scaleMode), page=\(session.currentPageIndex), windowVisible=\(controller.window?.isVisible == true)")
             let samples = BoundarySamples()
             let observer = NotificationCenter.default.addObserver(
                 forName: NSView.boundsDidChangeNotification, object: clip, queue: nil
@@ -80,7 +80,7 @@ struct PDFBoundaryScrollTests {
                 scroll.scrollWheel(with: event)
                 settle(controller.window)
                 if abs(clip.bounds.origin.y - edge.y) >= 0.01 {
-                    print("Boundary changed: mode=\(mode), end=\(atEnd), deltaY=\(event.scrollingDeltaY), clipFlipped=\(clip.isFlipped), documentFlipped=\(document.isFlipped), origin=\(clip.bounds.origin), document=\(document.frame), scale=\(reader.pdfView.scaleFactor), scaleMode=\(session.scaleMode), page=\(session.currentPageIndex), windowVisible=\(controller.window?.isVisible == true), constrainedEdge=\(clip.constrainBoundsRect(proposed))")
+                    print("Boundary changed: mode=\(mode), end=\(atEnd), deltaY=\(event.scrollingDeltaY), clipFlipped=\(clip.isFlipped), documentFlipped=\(document.isFlipped), origin=\(clip.bounds.origin), document=\(document.frame), scale=\(reader.pdfView.scaleFactor), scaleMode=\(String(describing: store.session(for: session.id)?.scaleMode)), page=\(String(describing: store.session(for: session.id)?.currentPageIndex)), windowVisible=\(controller.window?.isVisible == true), constrainedEdge=\(clip.constrainBoundsRect(proposed))")
                 }
                 #expect(abs(clip.bounds.origin.y - edge.y) < 0.01)
             }
@@ -112,8 +112,10 @@ struct PDFBoundaryScrollTests {
 
     private func settle(_ window: NSWindow?) {
         window?.layoutIfNeeded()
+        window?.displayIfNeeded()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.03))
         window?.layoutIfNeeded()
+        window?.displayIfNeeded()
     }
 }
 

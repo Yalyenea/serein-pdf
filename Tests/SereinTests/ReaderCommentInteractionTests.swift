@@ -72,6 +72,9 @@ final class ReaderCommentInteractionTests: XCTestCase {
         let pdfView = ReaderPDFView(frame: window.contentView!.bounds)
         window.contentView = pdfView
         pdfView.displayMode = .singlePage
+        let interaction = ReaderAnnotationInteractionController(documentStore: makeIsolatedDocumentStore(), pdfView: pdfView)
+        interaction.install(in: pdfView)
+        pdfView.onLayoutCompleted = { [weak interaction] in interaction?.scheduleOverlayRefresh() }
 
         window.makeKeyAndOrderFront(nil)
         for type in AnnotationMarkupType.allCases {
@@ -87,19 +90,21 @@ final class ReaderCommentInteractionTests: XCTestCase {
             let overlapping = PDFAnnotation(bounds: records[0].annotation.bounds, forType: .highlight, withProperties: nil)
             page.addAnnotation(overlapping)
             let originalAnnotations = page.annotations
-            pdfView.document = document
+            pdfView.setReaderDocument(document)
             pdfView.scaleFactor = 1
             pdfView.layoutDocumentView()
-            XCTAssertEqual(commentIcons(in: pdfView).count, 0)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            XCTAssertEqual(try commentIconOverlay(in: pdfView).icons.count, 0)
 
             for comment in ["First line\nSecond line", "Edited comment", "", "Restored comment"] {
                 XCTAssertTrue(HighlightService.updateComment(comment, for: records), type.rawValue)
                 pdfView.annotationsChanged(on: page)
+                pdfView.layoutDocumentView()
                 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
                 pdfView.layoutSubtreeIfNeeded()
                 window.displayIfNeeded()
 
-                let icons = commentIcons(in: pdfView)
+                let icons = try commentIconOverlay(in: pdfView).icons
                 XCTAssertEqual(icons.count, comment.isEmpty ? 0 : 1,
                                "\(type.rawValue): \(comment); windowVisible=\(window.isVisible), visiblePages=\(pdfView.visiblePages.count), documentFrame=\(String(describing: pdfView.documentView?.frame))")
                 XCTAssertEqual(page.annotations.map(ObjectIdentifier.init), originalAnnotations.map(ObjectIdentifier.init))
@@ -118,18 +123,18 @@ final class ReaderCommentInteractionTests: XCTestCase {
 
             let saved = try XCTUnwrap(document.dataRepresentation())
             let reopened = try XCTUnwrap(PDFDocument(data: saved))
-            pdfView.document = reopened
+            pdfView.setReaderDocument(reopened)
             pdfView.layoutDocumentView()
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
             pdfView.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
-            XCTAssertEqual(commentIcons(in: pdfView).count, 1, type.rawValue)
+            XCTAssertEqual(try commentIconOverlay(in: pdfView).icons.count, 1, type.rawValue)
             XCTAssertEqual(reopened.page(at: 0)?.annotations.count, originalAnnotations.count)
         }
     }
 
-    private func commentIcons(in pdfView: PDFView) -> [NSImageView] {
-        findAllDescendants(of: NSImageView.self, in: pdfView).filter { $0.image != nil }
+    private func commentIconOverlay(in pdfView: PDFView) throws -> CommentIconOverlayView {
+        try XCTUnwrap(findAllDescendants(of: CommentIconOverlayView.self, in: pdfView).first)
     }
 
 }

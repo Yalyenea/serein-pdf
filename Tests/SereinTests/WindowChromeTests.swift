@@ -3697,8 +3697,9 @@ private func slider(identifier: String, in root: NSView) -> NSSlider? {
 
 @MainActor
 private func visibleDocumentCenter(in pdfView: PDFView) -> NSPoint? {
-    guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
-    let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
+    guard let clip = pdfClipView(in: pdfView),
+          clip.bounds.width > 0, clip.bounds.height > 0 else { return nil }
+    let viewportCenter = pdfView.convert(NSPoint(x: clip.bounds.midX, y: clip.bounds.midY), from: clip)
     guard let page = pdfView.page(for: viewportCenter, nearest: true) else { return nil }
     return pdfView.convert(viewportCenter, to: page)
 }
