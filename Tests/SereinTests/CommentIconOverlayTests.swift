@@ -22,10 +22,17 @@ final class CommentIconOverlayTests: XCTestCase {
         latePageView.wantsLayer = true
         latePageView.layer?.backgroundColor = NSColor.white.cgColor
         documentView.addSubview(latePageView)
-        reader.pdfView.needsLayout = true
-        settle(reader)
+        // Enter the same layout-completion path as PDFKit page changes. Marking
+        // a child dirty does not guarantee its parent lays it out on macOS 15.
+        reader.pdfView.layoutDocumentView()
         let overlay = try overlay(in: reader)
-        XCTAssertTrue(documentView.subviews.last === overlay)
+        let refreshDeadline = Date().addingTimeInterval(1)
+        while documentView.subviews.last !== overlay, Date() < refreshDeadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+        reader.view.window?.displayIfNeeded()
+        XCTAssertTrue(documentView.subviews.last === overlay,
+                      "overlayIndex=\(String(describing: documentView.subviews.firstIndex { $0 === overlay })), siblings=\(documentView.subviews.count)")
         let frame = try XCTUnwrap(overlay.icons.first?.frame)
         let drawnFrame = overlay.convert(frame, to: reader.pdfView)
         let expectedFrame = reader.pdfView.convert(reader.pdfView.commentIcons.bounds(for: annotation), from: page)
@@ -36,7 +43,8 @@ final class CommentIconOverlayTests: XCTestCase {
         let pixelX = Int(expectedFrame.midX / reader.pdfView.bounds.width * CGFloat(bitmap.pixelsWide))
         let pixelY = Int((reader.pdfView.bounds.maxY - expectedFrame.midY) / reader.pdfView.bounds.height * CGFloat(bitmap.pixelsHigh))
         let pixel = try XCTUnwrap(bitmap.colorAt(x: pixelX, y: pixelY)?.usingColorSpace(.sRGB))
-        XCTAssertGreaterThan(pixel.saturationComponent, 0.1, "The dot must be visible at its click target")
+        XCTAssertGreaterThan(pixel.saturationComponent, 0.1,
+                             "The dot must be visible at its click target; overlayIndex=\(String(describing: documentView.subviews.firstIndex { $0 === overlay })), siblings=\(documentView.subviews.count)")
     }
 
     func testCommentChangesRefreshDotsWithoutResizingReader() throws {
