@@ -387,6 +387,11 @@ final class ReaderAnnotationInteractionController: NSObject {
             commentIconOverlay.frame = documentView.bounds
             documentView.addSubview(commentIconOverlay)
         }
+        // PDFKit may append page views after installing the overlay. Keep dots
+        // above those pages when asynchronous layout finishes.
+        if documentView.subviews.last !== commentIconOverlay {
+            documentView.addSubview(commentIconOverlay, positioned: .above, relativeTo: nil)
+        }
         Self.hideNativeCommentIcons(in: documentView)
 
         let appearance = pdfView.effectiveAppearance

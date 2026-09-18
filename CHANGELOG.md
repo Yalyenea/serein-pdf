@@ -11,6 +11,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - License Serein under GPL-3.0-only and include the license in release bundles.
 
 ### Reliability
+- Keep comment dots above PDFKit page views after layout updates, align their click targets across macOS versions, and retain the final reading position after explicit zoom.
 - Share annotations, saving, and undo between panes comparing the same PDF while keeping reading positions independent; release comparison sessions and stale undo records with their documents.
 - Serialize persistence snapshots and writes to prevent older state from overwriting newer state. Preserve explicitly empty window lists.
 - Download updates directly to disk, validate release size and checksum when supplied, and schedule installation only after document saving permits quitting. Restore the previous app if replacement fails.

@@ -2632,8 +2632,19 @@ struct WindowChromeTests {
         reader.fitToWidth()
         flushLayout(controller.window)
 
-        // Leave the top edge so zooming out can preserve the center without clamping.
-        controller.scrollHalfPageDown()
+        // Start in the middle of the page. PDFKit's initial scroll position and
+        // coordinate orientation vary by macOS version; neither edge can keep
+        // its viewport center when zooming out because the scroll range shrinks.
+        let page = try #require(reader.pdfView.document?.page(at: 0))
+        let pageBounds = page.bounds(for: reader.pdfView.displayBox)
+        let pageCenter = NSPoint(x: pageBounds.midX, y: pageBounds.midY)
+        let clip = scroll.contentView
+        let centerInClip = clip.convert(reader.pdfView.convert(pageCenter, from: page), from: reader.pdfView)
+        clip.scroll(to: NSPoint(
+            x: centerInClip.x - clip.bounds.width / 2,
+            y: centerInClip.y - clip.bounds.height / 2
+        ))
+        scroll.reflectScrolledClipView(clip)
         reader.flushPendingReadingPosition()
         flushLayout(controller.window)
 
@@ -2641,6 +2652,7 @@ struct WindowChromeTests {
             Issue.record("Failed to capture pre-zoom anchor")
             return
         }
+        #expect(abs(beforeAnchor.y - pageCenter.y) < 2)
 
         reader.zoomOut()
         for _ in 0..<6 {
@@ -2653,7 +2665,8 @@ struct WindowChromeTests {
         }
 
         #expect(abs(afterAnchor.x - beforeAnchor.x) < 2.0)
-        #expect(abs(afterAnchor.y - beforeAnchor.y) < 8.0)
+        #expect(abs(afterAnchor.y - beforeAnchor.y) < 8.0,
+                "Before: \(beforeAnchor), after: \(afterAnchor), clip: \(clip.bounds)")
         let storedPosition = try #require(store.session(for: session.id)?.lastReadPosition)
         let livePosition = try #require(reader.testingCurrentReadingPosition)
         #expect(storedPosition.pageIndex == livePosition.pageIndex)

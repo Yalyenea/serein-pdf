@@ -15,7 +15,17 @@ final class CommentIconOverlayTests: XCTestCase {
         let group = try XCTUnwrap(fixture.store.annotationGroup(containing: annotation, for: fixture.sessionID))
         XCTAssertTrue(fixture.store.updateComment("Visible dot", forHighlightGroup: group.groupID, in: fixture.sessionID))
         settle(reader)
+        // PDFKit can append page views after the annotation overlay is installed.
+        // A late opaque page sibling must never cover the dot on the next layout.
+        let documentView = try XCTUnwrap(reader.pdfView.documentView)
+        let latePageView = NSView(frame: documentView.bounds)
+        latePageView.wantsLayer = true
+        latePageView.layer?.backgroundColor = NSColor.white.cgColor
+        documentView.addSubview(latePageView)
+        reader.pdfView.needsLayout = true
+        settle(reader)
         let overlay = try overlay(in: reader)
+        XCTAssertTrue(documentView.subviews.last === overlay)
         let frame = try XCTUnwrap(overlay.icons.first?.frame)
         let drawnFrame = overlay.convert(frame, to: reader.pdfView)
         let expectedFrame = reader.pdfView.convert(reader.pdfView.commentIcons.bounds(for: annotation), from: page)
