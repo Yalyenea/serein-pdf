@@ -2600,8 +2600,8 @@ struct WindowChromeTests {
         #expect(reader.pdfView.scaleFactor < scaleBefore - 0.01)
     }
 
-    @Test
-    func singlePageZoomKeepsViewportCenterStable() throws {
+    @Test(arguments: [NSScroller.Style.overlay, .legacy])
+    func singlePageZoomKeepsViewportCenterStable(scrollerStyle: NSScroller.Style) throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
         app.appearance = NSAppearance(named: .aqua)
@@ -2626,6 +2626,9 @@ struct WindowChromeTests {
         }
 
         let reader = splitController.readerViewController
+        let scroll = try #require(reader.pdfView.documentView?.enclosingScrollView)
+        scroll.scrollerStyle = scrollerStyle
+        flushLayout(controller.window)
         reader.fitToWidth()
         flushLayout(controller.window)
 

@@ -395,12 +395,12 @@ final class ReaderAnnotationInteractionController: NSObject {
         commentIconOverlay.icons = pages.flatMap { page in
             pdfView.commentIcons.frames(on: page).map { annotation, pageRect in
                 let inPDF = pdfView.convert(pageRect, from: page)
-                let inDocument = documentView.convert(inPDF, from: pdfView)
+                let inOverlay = commentIconOverlay.convert(inPDF, from: pdfView)
                 let color = NightModeStyle.highlightColor(
                     for: HighlightColor.closest(to: annotation.color),
                     appearance: appearance
                 )
-                return (inDocument, color)
+                return (inOverlay, color)
             }
         }
     }
@@ -572,7 +572,7 @@ final class CommentIconOverlayView: NSView {
 
     override var isOpaque: Bool { false }
 
-    // Icon frames use PDFKit documentView's top-left coordinate system.
+    // Frames are converted into this view, independently of PDFKit's orientation.
     override var isFlipped: Bool { true }
 
     override init(frame frameRect: NSRect) {

@@ -73,6 +73,7 @@ final class ReaderCommentInteractionTests: XCTestCase {
         window.contentView = pdfView
         pdfView.displayMode = .singlePage
 
+        window.makeKeyAndOrderFront(nil)
         for type in AnnotationMarkupType.allCases {
             let document = TestPDFFixtures.makeBlankDocument(pageCount: 1, pageSize: NSSize(width: 600, height: 800))
             let page = try XCTUnwrap(document.page(at: 0))
@@ -96,9 +97,11 @@ final class ReaderCommentInteractionTests: XCTestCase {
                 pdfView.annotationsChanged(on: page)
                 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
                 pdfView.layoutSubtreeIfNeeded()
+                window.displayIfNeeded()
 
                 let icons = commentIcons(in: pdfView)
-                XCTAssertEqual(icons.count, comment.isEmpty ? 0 : 1, "\(type.rawValue): \(comment)")
+                XCTAssertEqual(icons.count, comment.isEmpty ? 0 : 1,
+                               "\(type.rawValue): \(comment); windowVisible=\(window.isVisible), visiblePages=\(pdfView.visiblePages.count), documentFrame=\(String(describing: pdfView.documentView?.frame))")
                 XCTAssertEqual(page.annotations.map(ObjectIdentifier.init), originalAnnotations.map(ObjectIdentifier.init))
                 XCTAssertEqual(records.compactMap(\.annotation.contents), comment.isEmpty ? [] : [comment])
                 XCTAssertTrue(records.allSatisfy { $0.annotation.popup == nil })
@@ -119,6 +122,7 @@ final class ReaderCommentInteractionTests: XCTestCase {
             pdfView.layoutDocumentView()
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
             pdfView.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
             XCTAssertEqual(commentIcons(in: pdfView).count, 1, type.rawValue)
             XCTAssertEqual(reopened.page(at: 0)?.annotations.count, originalAnnotations.count)
         }

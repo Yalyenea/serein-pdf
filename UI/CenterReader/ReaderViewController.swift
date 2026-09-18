@@ -1151,10 +1151,17 @@ final class ReaderViewController: NSViewController {
         }
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
+        flushPendingReadingPositionWriteback()
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         // Pin before store writeback so the notification does not re-apply scale.
         displayedScaleMode = .manual
+        // PDFKit emits intermediate bounds while scaling. Persist the restored
+        // viewport, replacing any writeback queued before anchor restoration.
+        if let position = currentReadingPosition() {
+            displayedReadingPosition = position
+            scheduleReadingPositionWriteback(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        }
         flushPendingReadingPositionWriteback()
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }
@@ -1166,10 +1173,17 @@ final class ReaderViewController: NSViewController {
         }
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
+        flushPendingReadingPositionWriteback()
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         // Pin before store writeback so the notification does not re-apply scale.
         displayedScaleMode = .manual
+        // PDFKit emits intermediate bounds while scaling. Persist the restored
+        // viewport, replacing any writeback queued before anchor restoration.
+        if let position = currentReadingPosition() {
+            displayedReadingPosition = position
+            scheduleReadingPositionWriteback(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        }
         flushPendingReadingPositionWriteback()
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }

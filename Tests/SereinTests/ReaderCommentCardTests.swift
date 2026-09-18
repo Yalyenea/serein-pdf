@@ -10,7 +10,7 @@ final class ReaderCommentCardTests: XCTestCase {
         defer { fixture.close() }
         let keyWindow = NSApp.keyWindow
         fixture.controller.handlePointerMoved(try fixture.event(.mouseMoved, in: fixture.annotation.bounds))
-        settle(0.17)
+        settle(until: { fixture.controller.testingCommentPanel != nil })
 
         let panel = try XCTUnwrap(fixture.controller.testingCommentPanel)
         XCTAssertTrue(panel.isVisible)

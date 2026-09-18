@@ -80,7 +80,13 @@ final class CommentIconOverlayTests: XCTestCase {
             scrollView.contentView.scroll(to: NSPoint(x: scrollView.contentView.bounds.minX, y: y))
             scrollView.reflectScrolledClipView(scrollView.contentView)
             settle(reader)
-            XCTAssertFalse(reader.pdfView.visiblePages.isEmpty)
+            let deadline = Date().addingTimeInterval(1)
+            while reader.pdfView.visiblePages.isEmpty, Date() < deadline {
+                reader.view.window?.displayIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+            }
+            XCTAssertFalse(reader.pdfView.visiblePages.isEmpty,
+                           "clip=\(scrollView.contentView.bounds), document=\(String(describing: reader.pdfView.documentView?.frame))")
             try assertDotsMatchVisiblePages(reader)
         }
         XCTAssertEqual(document.pageCount, 3)
@@ -112,7 +118,8 @@ final class CommentIconOverlayTests: XCTestCase {
                 documentView.convert(reader.pdfView.convert(frame, from: page), from: reader.pdfView)
             }
         }.filter { $0.intersects(viewport) }
-        let allFrames = try overlay(in: reader).icons.map(\.frame)
+        let overlay = try overlay(in: reader)
+        let allFrames = overlay.icons.map { documentView.convert($0.frame, from: overlay) }
         let actual = allFrames.filter { $0.intersects(viewport) }
         return (actual, expected)
     }

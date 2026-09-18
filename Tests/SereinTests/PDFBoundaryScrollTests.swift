@@ -58,6 +58,7 @@ struct PDFBoundaryScrollTests {
             // NSScrollView applies wheel deltas in its document coordinate system.
             // PDFKit's document orientation differs between macOS releases.
             let outwardWheelDirection: Int32 = (atEnd ? -1 : 1) * (clip.isFlipped ? 1 : -1)
+            print("Boundary start: mode=\(mode), end=\(atEnd), clipFlipped=\(clip.isFlipped), documentFlipped=\(document.isFlipped), edge=\(edge), clip=\(clip.bounds), document=\(document.frame), scale=\(reader.pdfView.scaleFactor), scaleMode=\(session.scaleMode), page=\(session.currentPageIndex), windowVisible=\(controller.window?.isVisible == true)")
             let samples = BoundarySamples()
             let observer = NotificationCenter.default.addObserver(
                 forName: NSView.boundsDidChangeNotification, object: clip, queue: nil
@@ -75,8 +76,12 @@ struct PDFBoundaryScrollTests {
                     scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
                     wheel1: outwardWheelDirection * 2, wheel2: 0, wheel3: 0
                 ))
-                scroll.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
+                let event = try #require(NSEvent(cgEvent: cg))
+                scroll.scrollWheel(with: event)
                 settle(controller.window)
+                if abs(clip.bounds.origin.y - edge.y) >= 0.01 {
+                    print("Boundary changed: mode=\(mode), end=\(atEnd), deltaY=\(event.scrollingDeltaY), clipFlipped=\(clip.isFlipped), documentFlipped=\(document.isFlipped), origin=\(clip.bounds.origin), document=\(document.frame), scale=\(reader.pdfView.scaleFactor), scaleMode=\(session.scaleMode), page=\(session.currentPageIndex), windowVisible=\(controller.window?.isVisible == true), constrainedEdge=\(clip.constrainBoundsRect(proposed))")
+                }
                 #expect(abs(clip.bounds.origin.y - edge.y) < 0.01)
             }
             NotificationCenter.default.removeObserver(observer)
