@@ -837,6 +837,7 @@ final class ReaderViewController: NSViewController {
         pdfView.displayDirection = .vertical
         pdfView.backgroundColor = NSColor.white
         pdfView.isHidden = true
+        // Page spacing is geometry; keep it identical across appearance changes.
         pdfView.displaysPageBreaks = true
         pdfView.pageShadowsEnabled = false
 
@@ -3722,11 +3723,7 @@ final class ReaderViewController: NSViewController {
         appearance.performAsCurrentDrawingAppearance {
             let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
             let usesFlatPDFChrome = NightModeStyle.prefersFlatPDFChrome(for: appearance)
-            let displaysPageBreaks = !isNightModeEnabled
             let showsPageShadows = !isNightModeEnabled && !usesFlatPDFChrome
-            if pdfView.displaysPageBreaks != displaysPageBreaks {
-                pdfView.displaysPageBreaks = displaysPageBreaks
-            }
             if pdfView.pageShadowsEnabled != showsPageShadows {
                 pdfView.pageShadowsEnabled = showsPageShadows
             }

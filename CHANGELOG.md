@@ -29,6 +29,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Esc closes the recent-files launcher even when the reader is key. Duplicate titles show the parent folder.
 
 ### Appearance
+- Keep PDF page spacing unchanged when toggling light and dark with `i`, preserving page position and zoom across all reading modes.
 - Shortcut hints use compact SF Symbol chips in palettes, Settings, comment editors, and the presentation toolbar.
 - Apply the selected theme to the filename toast, recent-files launcher, PDF library, open-tabs overview, command palette, shortcut keycaps, annotation editor, and presentation toolbar.
 - Refresh open panels in place when switching themes, preserving search queries, selections, and unfinished annotation comments.

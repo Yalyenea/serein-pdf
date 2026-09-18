@@ -527,7 +527,8 @@ struct WindowChromeTests {
         reader.pdfView.layoutSubtreeIfNeeded()
         flushLayout(controller.window)
 
-        #expect(reader.pdfView.displaysPageBreaks == false)
+        #expect(reader.pdfView.displaysPageBreaks)
+        #expect(reader.pdfView.pageShadowsEnabled == false)
         let pageBackground = resolvedColor(NightModeStyle.pageBackgroundColor, in: app.effectiveAppearance)
         if let layerColor = reader.pdfView.layer?.backgroundColor,
            let layerBackground = NSColor(cgColor: layerColor) {
@@ -554,6 +555,55 @@ struct WindowChromeTests {
             assertColor(readerBackgroundColor, matches: pageBackground)
         } else {
             Issue.record("Failed to read reader background")
+        }
+    }
+
+    @Test
+    func appearanceTogglePreservesPageGeometryAndZoom() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        defer { app.appearance = previousAppearance }
+
+        for mode in ReaderDisplayMode.allCases {
+            for fitsWidth in [false, true] {
+                app.appearance = NSAppearance(named: .aqua)
+                let store = makeIsolatedDocumentStore()
+                let controller = MainWindowController(documentStore: store)
+                defer { controller.close() }
+                let session = try store.open(documentAt: makeTemporaryPDF(
+                    named: "theme-position",
+                    pageSizes: Array(repeating: NSSize(width: 595, height: 842), count: 6)
+                ))
+                store.setDisplayMode(mode, for: session.id)
+                let split = try #require(controller.window?.contentViewController as? SplitViewController)
+                let reader = split.readerViewController
+                flushLayout(controller.window)
+                if fitsWidth {
+                    reader.fitToWidth()
+                } else {
+                    store.setScaleMode(.manual, scaleFactor: 1.37, for: session.id)
+                }
+                #expect(reader.goToPage(2))
+                flushLayout(controller.window)
+                let page = try #require(reader.pdfView.currentPage)
+                let bounds = page.bounds(for: reader.pdfView.displayBox)
+                let point = NSPoint(x: bounds.midX, y: bounds.midY)
+                let originalPoint = reader.pdfView.convert(point, from: page)
+                let originalScale = reader.pdfView.scaleFactor
+
+                for appearance in [NSAppearance.Name.darkAqua, .aqua, .darkAqua, .aqua] {
+                    app.appearance = NSAppearance(named: appearance)
+                    controller.refreshThemeAppearance()
+                    reader.pdfView.layoutDocumentView()
+                    flushLayout(controller.window)
+                    let currentPoint = reader.pdfView.convert(point, from: page)
+                    #expect(abs(currentPoint.x - originalPoint.x) < 0.1,
+                            "Horizontal drift in \(mode), fit width: \(fitsWidth)")
+                    #expect(abs(currentPoint.y - originalPoint.y) < 0.1,
+                            "Vertical drift in \(mode), fit width: \(fitsWidth)")
+                    #expect(abs(reader.pdfView.scaleFactor - originalScale) < 0.0001)
+                }
+            }
         }
     }
 
