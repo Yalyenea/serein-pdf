@@ -12,7 +12,6 @@ struct PDFBoundaryScrollTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        controller.showWindow(nil)
         let url: URL
         if let path = ProcessInfo.processInfo.environment["SEREIN_BOUNDARY_TEST_PDF"] {
             url = URL(fileURLWithPath: path)
@@ -56,9 +55,6 @@ struct PDFBoundaryScrollTests {
             settle(controller.window)
             let edge = clip.bounds.origin
             let outward: CGFloat = atEnd ? 1 : -1
-            // NSScrollView applies wheel deltas in its document coordinate system.
-            // PDFKit's document orientation differs between macOS releases.
-            let outwardWheelDirection: Int32 = (atEnd ? -1 : 1) * (clip.isFlipped ? 1 : -1)
             let samples = BoundarySamples()
             let observer = NotificationCenter.default.addObserver(
                 forName: NSView.boundsDidChangeNotification, object: clip, queue: nil
@@ -74,14 +70,10 @@ struct PDFBoundaryScrollTests {
             for _ in 0..<4 {
                 let cg = try #require(CGEvent(
                     scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
-                    wheel1: outwardWheelDirection * 2, wheel2: 0, wheel3: 0
+                    wheel1: atEnd ? -2 : 2, wheel2: 0, wheel3: 0
                 ))
-                let event = try #require(NSEvent(cgEvent: cg))
-                scroll.scrollWheel(with: event)
+                scroll.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
                 settle(controller.window)
-                if abs(clip.bounds.origin.y - edge.y) >= 0.01 {
-                    print("Boundary changed: mode=\(mode), end=\(atEnd), deltaY=\(event.scrollingDeltaY), clipFlipped=\(clip.isFlipped), documentFlipped=\(document.isFlipped), origin=\(clip.bounds.origin), document=\(document.frame), scale=\(reader.pdfView.scaleFactor), scaleMode=\(String(describing: store.session(for: session.id)?.scaleMode)), page=\(String(describing: store.session(for: session.id)?.currentPageIndex)), windowVisible=\(controller.window?.isVisible == true), constrainedEdge=\(clip.constrainBoundsRect(proposed))")
-                }
                 #expect(abs(clip.bounds.origin.y - edge.y) < 0.01)
             }
             NotificationCenter.default.removeObserver(observer)
@@ -99,7 +91,7 @@ struct PDFBoundaryScrollTests {
             for _ in 0..<3 {
                 let cg = try #require(CGEvent(
                     scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
-                    wheel1: -outwardWheelDirection * 12, wheel2: 0, wheel3: 0
+                    wheel1: atEnd ? 12 : -12, wheel2: 0, wheel3: 0
                 ))
                 scroll.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
                 settle(controller.window)
@@ -112,10 +104,8 @@ struct PDFBoundaryScrollTests {
 
     private func settle(_ window: NSWindow?) {
         window?.layoutIfNeeded()
-        window?.displayIfNeeded()
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.03))
         window?.layoutIfNeeded()
-        window?.displayIfNeeded()
     }
 }
 

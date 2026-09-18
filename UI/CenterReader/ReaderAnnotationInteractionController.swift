@@ -412,8 +412,10 @@ final class ReaderAnnotationInteractionController: NSObject {
 
     private func commentIconPages() -> [PDFPage] {
         guard let document = pdfView.document else { return [] }
-        // During layout or scrolling, visiblePages can still be empty or describe
-        // the previous page views, including in non-continuous modes.
+        guard pdfView.displayMode == .singlePageContinuous || pdfView.displayMode == .twoUpContinuous else {
+            return pdfView.visiblePages
+        }
+        // During a scroll, visiblePages can still describe the previous page views.
         // Resolve the viewport edges against PDFKit's document geometry instead.
         let bounds = pdfView.bounds
         let indices = [

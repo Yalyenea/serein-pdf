@@ -1078,14 +1078,6 @@ final class ReaderViewController: NSViewController {
         pendingFitWidthSessionID = nil
         pendingFitHeightSessionID = nil
         applyProgrammaticScale(scale, viewportAnchor: anchor)
-        // A legacy vertical scroller can disappear when the fitted page becomes
-        // shorter than the viewport. Fit against the resulting content width.
-        let fittedWidth = pdfView.convert(clipView.bounds, from: clipView).width - 24
-        if fittedWidth > 0, abs(fittedWidth - availableWidth) > 0.5 {
-            let adjustedScale = min(max(pdfView.scaleFactor * fittedWidth / availableWidth,
-                                        pdfView.minScaleFactor), pdfView.maxScaleFactor)
-            applyProgrammaticScale(adjustedScale, viewportAnchor: anchor)
-        }
         displayedScaleMode = .manual
         documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
         if let position = currentReadingPosition() {
@@ -1151,17 +1143,10 @@ final class ReaderViewController: NSViewController {
         }
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
-        flushPendingReadingPositionWriteback()
         let nextScale = min(pdfView.scaleFactor * 1.1, pdfView.maxScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         // Pin before store writeback so the notification does not re-apply scale.
         displayedScaleMode = .manual
-        // PDFKit emits intermediate bounds while scaling. Persist the restored
-        // viewport, replacing any writeback queued before anchor restoration.
-        if let position = currentReadingPosition() {
-            displayedReadingPosition = position
-            scheduleReadingPositionWriteback(position, scaleFactor: pdfView.scaleFactor, for: session.id)
-        }
         flushPendingReadingPositionWriteback()
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }
@@ -1173,17 +1158,10 @@ final class ReaderViewController: NSViewController {
         }
         guard let session = targetSession(),
               session.id == displayedSessionID else { return }
-        flushPendingReadingPositionWriteback()
         let nextScale = max(pdfView.scaleFactor / 1.1, pdfView.minScaleFactor)
         applyProgrammaticScale(nextScale, preserveViewportCenter: true)
         // Pin before store writeback so the notification does not re-apply scale.
         displayedScaleMode = .manual
-        // PDFKit emits intermediate bounds while scaling. Persist the restored
-        // viewport, replacing any writeback queued before anchor restoration.
-        if let position = currentReadingPosition() {
-            displayedReadingPosition = position
-            scheduleReadingPositionWriteback(position, scaleFactor: pdfView.scaleFactor, for: session.id)
-        }
         flushPendingReadingPositionWriteback()
         documentStore.setScaleMode(.manual, scaleFactor: nextScale, for: session.id)
     }
@@ -3713,11 +3691,8 @@ final class ReaderViewController: NSViewController {
     }
 
     private func captureViewportAnchor() -> PDFViewportAnchor? {
-        guard let clipView = pdfClipView(),
-              clipView.bounds.width > 0, clipView.bounds.height > 0 else { return nil }
-        let viewportCenter = pdfView.convert(
-            NSPoint(x: clipView.bounds.midX, y: clipView.bounds.midY), from: clipView
-        )
+        guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
+        let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
         guard let page = pdfView.page(for: viewportCenter, nearest: true) else { return nil }
         let pagePoint = pdfView.convert(viewportCenter, to: page)
         return PDFViewportAnchor(page: page, pagePoint: pagePoint)
@@ -3725,13 +3700,14 @@ final class ReaderViewController: NSViewController {
 
     private func restoreViewportAnchor(_ anchor: PDFViewportAnchor) {
         guard let scrollView = pdfScrollView(),
-              let clipView = pdfClipView() else { return }
+              let clipView = pdfClipView(),
+              let documentView = pdfDocumentView() else { return }
 
         let pointInView = pdfView.convert(anchor.pagePoint, from: anchor.page)
-        let pointInClip = clipView.convert(pointInView, from: pdfView)
+        let pointInDoc = documentView.convert(pointInView, from: pdfView)
         let desiredOrigin = NSPoint(
-            x: pointInClip.x - clipView.bounds.width * 0.5,
-            y: pointInClip.y - clipView.bounds.height * 0.5
+            x: pointInDoc.x - clipView.bounds.width * 0.5,
+            y: pointInDoc.y - clipView.bounds.height * 0.5
         )
         let targetBounds = clipView.constrainBoundsRect(
             NSRect(origin: desiredOrigin, size: clipView.bounds.size)

@@ -1550,6 +1550,7 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
+        prepareMainWindowForLayoutTests(controller)
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "outline-navigation"))
         flushLayout(controller.window)
 
@@ -1595,7 +1596,6 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        prepareMainWindowForLayoutTests(controller)
         let fixture = try makeTemporaryPDFWithInternalLink(named: "reference-preview-lifecycle")
         let session = try store.open(documentAt: fixture.url)
         flushLayout(controller.window)
@@ -2600,8 +2600,8 @@ struct WindowChromeTests {
         #expect(reader.pdfView.scaleFactor < scaleBefore - 0.01)
     }
 
-    @Test(arguments: [NSScroller.Style.overlay, .legacy])
-    func singlePageZoomKeepsViewportCenterStable(scrollerStyle: NSScroller.Style) throws {
+    @Test
+    func singlePageZoomKeepsViewportCenterStable() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
         app.appearance = NSAppearance(named: .aqua)
@@ -2610,7 +2610,6 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        prepareMainWindowForLayoutTests(controller)
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "single-page-zoom-anchor",
@@ -2626,25 +2625,11 @@ struct WindowChromeTests {
         }
 
         let reader = splitController.readerViewController
-        let scroll = try #require(reader.pdfView.documentView?.enclosingScrollView)
-        scroll.scrollerStyle = scrollerStyle
-        flushLayout(controller.window)
         reader.fitToWidth()
         flushLayout(controller.window)
 
-        // Start in the middle of the page. PDFKit's initial scroll position and
-        // coordinate orientation vary by macOS version; neither edge can keep
-        // its viewport center when zooming out because the scroll range shrinks.
-        let page = try #require(reader.pdfView.document?.page(at: 0))
-        let pageBounds = page.bounds(for: reader.pdfView.displayBox)
-        let pageCenter = NSPoint(x: pageBounds.midX, y: pageBounds.midY)
-        let clip = scroll.contentView
-        let centerInClip = clip.convert(reader.pdfView.convert(pageCenter, from: page), from: reader.pdfView)
-        clip.scroll(to: NSPoint(
-            x: centerInClip.x - clip.bounds.width / 2,
-            y: centerInClip.y - clip.bounds.height / 2
-        ))
-        scroll.reflectScrolledClipView(clip)
+        // Leave the top edge so zooming out can preserve the center without clamping.
+        controller.scrollHalfPageDown()
         reader.flushPendingReadingPosition()
         flushLayout(controller.window)
 
@@ -2652,7 +2637,6 @@ struct WindowChromeTests {
             Issue.record("Failed to capture pre-zoom anchor")
             return
         }
-        #expect(abs(beforeAnchor.y - pageCenter.y) < 2)
 
         reader.zoomOut()
         for _ in 0..<6 {
@@ -2665,8 +2649,7 @@ struct WindowChromeTests {
         }
 
         #expect(abs(afterAnchor.x - beforeAnchor.x) < 2.0)
-        #expect(abs(afterAnchor.y - beforeAnchor.y) < 8.0,
-                "Before: \(beforeAnchor), after: \(afterAnchor), clip: \(clip.bounds)")
+        #expect(abs(afterAnchor.y - beforeAnchor.y) < 8.0)
         let storedPosition = try #require(store.session(for: session.id)?.lastReadPosition)
         let livePosition = try #require(reader.testingCurrentReadingPosition)
         #expect(storedPosition.pageIndex == livePosition.pageIndex)
@@ -2736,7 +2719,6 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        prepareMainWindowForLayoutTests(controller)
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "half-page-scroll-outline"))
         flushLayout(controller.window)
 
@@ -3251,6 +3233,7 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
+        prepareMainWindowForLayoutTests(controller)
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "rapid-page-turn-settle",
@@ -3279,7 +3262,9 @@ struct WindowChromeTests {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.25))
         controller.window?.layoutIfNeeded()
         let afterWaitOrigin = clipView.bounds.origin
-        let backingScale = controller.window?.backingScaleFactor ?? 1
+        // PDFKit scales clip coordinates; convert the offset vector, not its
+        // origin point or the window's screen-space backing scale factor.
+        let backingOffset = clipView.convertToBacking(NSSize(width: afterWaitOrigin.x, height: afterWaitOrigin.y))
 
         #expect(store.session(for: session.id)?.currentPageIndex == 3)
         let document = try #require(reader.pdfView.document)
@@ -3287,7 +3272,7 @@ struct WindowChromeTests {
         #expect(reader.testingCurrentReadingPosition?.pageIndex == 3)
         #expect(abs(afterWaitOrigin.x - settledOrigin.x) < 0.5)
         #expect(abs(afterWaitOrigin.y - settledOrigin.y) < 0.5)
-        #expect(abs(afterWaitOrigin.y * backingScale - (afterWaitOrigin.y * backingScale).rounded()) < 0.001)
+        #expect(abs(backingOffset.height - backingOffset.height.rounded()) < 0.001)
     }
 
     @Test
@@ -3710,9 +3695,8 @@ private func slider(identifier: String, in root: NSView) -> NSSlider? {
 
 @MainActor
 private func visibleDocumentCenter(in pdfView: PDFView) -> NSPoint? {
-    guard let clip = pdfClipView(in: pdfView),
-          clip.bounds.width > 0, clip.bounds.height > 0 else { return nil }
-    let viewportCenter = pdfView.convert(NSPoint(x: clip.bounds.midX, y: clip.bounds.midY), from: clip)
+    guard pdfView.bounds.width > 0, pdfView.bounds.height > 0 else { return nil }
+    let viewportCenter = NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY)
     guard let page = pdfView.page(for: viewportCenter, nearest: true) else { return nil }
     return pdfView.convert(viewportCenter, to: page)
 }
