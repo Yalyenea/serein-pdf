@@ -27,6 +27,9 @@ Native macOS PDF reader.
 
 ## Engineering Rules
 
+- Use `just run` for routine development and UI testing. Use `just build` only when validating a release bundle or preparing a release.
+- Before launching, check for an existing development instance and avoid duplicate launches. Leave the installed `/Applications/Serein.app` instance alone unless asked.
+- Do not use `open -n` for routine testing. When opening a PDF in a specific app bundle, use `open -a <app> <pdf>`; passing the app and PDF as separate targets can launch multiple instances.
 - Put temporary files in `.tmp/`.
 - Use git, but never commit automatically unless asked.
 - Add tests for core state and persistence logic.
