@@ -200,8 +200,8 @@ struct ReaderTextWidthTests {
         }
     }
 
-    @Test(arguments: [0, 90, 270])
-    func respectsCropBoxAndRotation(_ rotation: Int) throws {
+    @Test(arguments: [0, 90, 270], [NSScroller.Style.overlay, .legacy])
+    func respectsCropBoxAndRotation(_ rotation: Int, scrollerStyle: NSScroller.Style) throws {
         let url = try makeTextPDF()
         let document = try #require(PDFDocument(url: url))
         let page = try #require(document.page(at: 0))
@@ -210,6 +210,9 @@ struct ReaderTextWidthTests {
         #expect(document.write(to: url))
 
         try withReader(url: url) { controller, reader, _, _ in
+            let scroll = try #require(reader.pdfView.documentView?.enclosingScrollView)
+            scroll.scrollerStyle = scrollerStyle
+            settle(controller)
             let livePage = try #require(reader.pdfView.document?.page(at: 0))
             reader.fitToTextWidth()
             settle(controller)

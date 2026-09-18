@@ -1595,6 +1595,7 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
+        prepareMainWindowForLayoutTests(controller)
         let fixture = try makeTemporaryPDFWithInternalLink(named: "reference-preview-lifecycle")
         let session = try store.open(documentAt: fixture.url)
         flushLayout(controller.window)
@@ -2609,6 +2610,7 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
+        prepareMainWindowForLayoutTests(controller)
         let session = try store.open(
             documentAt: makeTemporaryPDF(
                 named: "single-page-zoom-anchor",
@@ -2718,6 +2720,7 @@ struct WindowChromeTests {
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
+        prepareMainWindowForLayoutTests(controller)
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "half-page-scroll-outline"))
         flushLayout(controller.window)
 

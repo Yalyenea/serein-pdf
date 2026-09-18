@@ -1078,6 +1078,14 @@ final class ReaderViewController: NSViewController {
         pendingFitWidthSessionID = nil
         pendingFitHeightSessionID = nil
         applyProgrammaticScale(scale, viewportAnchor: anchor)
+        // A legacy vertical scroller can disappear when the fitted page becomes
+        // shorter than the viewport. Fit against the resulting content width.
+        let fittedWidth = pdfView.convert(clipView.bounds, from: clipView).width - 24
+        if fittedWidth > 0, abs(fittedWidth - availableWidth) > 0.5 {
+            let adjustedScale = min(max(pdfView.scaleFactor * fittedWidth / availableWidth,
+                                        pdfView.minScaleFactor), pdfView.maxScaleFactor)
+            applyProgrammaticScale(adjustedScale, viewportAnchor: anchor)
+        }
         displayedScaleMode = .manual
         documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
         if let position = currentReadingPosition() {

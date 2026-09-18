@@ -101,15 +101,18 @@ final class ReaderCommentCardTests: XCTestCase {
         XCTAssertEqual(fixture.store.session(for: fixture.sessionID)?.isDirty, false)
 
         fixture.controller.handlePointerMoved(try fixture.event(.mouseMoved, in: fixture.iconBounds))
-        settle(0.17)
+        settle(until: { fixture.controller.testingCommentPanel != nil })
         let dismissedPreview = try XCTUnwrap(fixture.controller.testingCommentPanel)
+        // Pair the synthetic reader exit with a card exit: the real CI cursor
+        // may happen to rest over the panel without receiving our synthetic move.
+        dismissedPreview.onHoverChanged?(false)
         fixture.controller.handlePointerMoved(nil)
-        settle(0.17)
+        settle(until: { fixture.controller.testingCommentPanel == nil })
         XCTAssertFalse(dismissedPreview.isVisible)
         XCTAssertNil(fixture.controller.testingCommentPanel)
 
         fixture.controller.handlePointerMoved(try fixture.event(.mouseMoved, in: fixture.iconBounds))
-        settle(0.17)
+        settle(until: { fixture.controller.testingCommentPanel != nil })
         let preview = try XCTUnwrap(fixture.controller.testingCommentPanel)
         XCTAssertFalse(preview.editor.isEditing)
         fixture.controller.sessionDidChange()
@@ -199,6 +202,13 @@ final class ReaderCommentCardTests: XCTestCase {
 
     private func settle(_ interval: TimeInterval) {
         RunLoop.current.run(until: Date().addingTimeInterval(interval))
+    }
+
+    private func settle(until condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(1)
+        while !condition(), Date() < deadline {
+            settle(0.01)
+        }
     }
 
     @MainActor

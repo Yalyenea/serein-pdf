@@ -135,6 +135,7 @@ struct PDFResponsiveScrollingTests {
             scroll.reflectScrolledClipView(clip)
             settle(controller.window)
             let edge = clip.bounds.origin
+            let outwardWheelDirection: Int32 = (atEnd ? -1 : 1) * (clip.isFlipped ? 1 : -1)
             let samples = ResponsiveBoundarySamples()
             let observer = NotificationCenter.default.addObserver(
                 forName: NSView.boundsDidChangeNotification, object: clip, queue: nil
@@ -146,7 +147,7 @@ struct PDFResponsiveScrollingTests {
             // CG scroll phases and momentum phases have different numeric
             // encodings. Verify the resulting NSEvent lifecycle before dispatch.
             for step in rapidFlick {
-                let event = try makeEvent(step, direction: atEnd ? -1 : 1)
+                let event = try makeEvent(step, direction: outwardWheelDirection)
                 scroll.scrollWheel(with: event)
                 samples.origins.append(clip.bounds.origin)
                 RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
@@ -161,7 +162,7 @@ struct PDFResponsiveScrollingTests {
 
             // A new gesture must immediately scroll back into the document.
             for step in inwardFlick {
-                scroll.scrollWheel(with: try makeEvent(step, direction: atEnd ? 1 : -1))
+                scroll.scrollWheel(with: try makeEvent(step, direction: -outwardWheelDirection))
                 RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
             }
             settle(controller.window)
@@ -190,7 +191,7 @@ struct PDFResponsiveScrollingTests {
             }
             defer { NotificationCenter.default.removeObserver(collisionObserver) }
             for step in rapidFlick {
-                scroll.scrollWheel(with: try makeEvent(step, direction: atEnd ? -1 : 1))
+                scroll.scrollWheel(with: try makeEvent(step, direction: outwardWheelDirection))
                 collisionSamples.origins.append(clip.bounds.origin)
                 RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
                 collisionSamples.origins.append(clip.bounds.origin)
@@ -203,7 +204,7 @@ struct PDFResponsiveScrollingTests {
             // wait or a programmatic position change between the two gestures.
             let reversedAt = collisionSamples.origins.count
             for step in inwardFlick {
-                scroll.scrollWheel(with: try makeEvent(step, direction: atEnd ? 1 : -1))
+                scroll.scrollWheel(with: try makeEvent(step, direction: -outwardWheelDirection))
                 collisionSamples.origins.append(clip.bounds.origin)
                 RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
                 collisionSamples.origins.append(clip.bounds.origin)

@@ -55,6 +55,9 @@ struct PDFBoundaryScrollTests {
             settle(controller.window)
             let edge = clip.bounds.origin
             let outward: CGFloat = atEnd ? 1 : -1
+            // NSScrollView applies wheel deltas in its document coordinate system.
+            // PDFKit's document orientation differs between macOS releases.
+            let outwardWheelDirection: Int32 = (atEnd ? -1 : 1) * (clip.isFlipped ? 1 : -1)
             let samples = BoundarySamples()
             let observer = NotificationCenter.default.addObserver(
                 forName: NSView.boundsDidChangeNotification, object: clip, queue: nil
@@ -70,7 +73,7 @@ struct PDFBoundaryScrollTests {
             for _ in 0..<4 {
                 let cg = try #require(CGEvent(
                     scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
-                    wheel1: atEnd ? -2 : 2, wheel2: 0, wheel3: 0
+                    wheel1: outwardWheelDirection * 2, wheel2: 0, wheel3: 0
                 ))
                 scroll.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
                 settle(controller.window)
@@ -91,7 +94,7 @@ struct PDFBoundaryScrollTests {
             for _ in 0..<3 {
                 let cg = try #require(CGEvent(
                     scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
-                    wheel1: atEnd ? 12 : -12, wheel2: 0, wheel3: 0
+                    wheel1: -outwardWheelDirection * 12, wheel2: 0, wheel3: 0
                 ))
                 scroll.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
                 settle(controller.window)
