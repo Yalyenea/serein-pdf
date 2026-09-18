@@ -1845,7 +1845,8 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions(in: windowID).map(\.id), [session.id])
         XCTAssertEqual(store.session(for: primaryID)?.url, session.url)
         XCTAssertEqual(store.session(for: secondaryID)?.url, session.url)
-        XCTAssertFalse(store.session(for: secondaryID)?.isAnnotationCacheLoaded == true)
+        XCTAssertTrue(store.session(for: secondaryID)?.isAnnotationCacheLoaded == true)
+        XCTAssertTrue(try store.pdfDocument(for: primaryID) === store.pdfDocument(for: secondaryID))
 
         store.setScaleMode(.manual, scaleFactor: 2.0, for: primaryID)
         XCTAssertEqual(store.session(for: primaryID)?.zoomScale, 2.0)

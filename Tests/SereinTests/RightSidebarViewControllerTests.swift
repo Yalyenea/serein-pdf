@@ -63,6 +63,8 @@ struct RightSidebarViewControllerTests {
             findDescendant(of: NavigationTrackingPDFThumbnailView.self, in: controller.view)
         )
         #expect(thumbnails.pdfView === pdfView)
+        let modes = try #require(findDescendant(of: NSSegmentedControl.self, in: controller.view))
+        #expect(modes.selectedSegment == RightSidebarMode.pages.rawValue)
 
         if sidebarsSwapped {
             store.setRightSidebarVisible(false)

@@ -352,10 +352,11 @@ final class OverviewGridView: NSView {
                     page.thumbnail(of: ticket.pixelSize, for: .mediaBox)
                 }
             }
-            guard let image else { return }
             guard ticket.isCancelled == false else { return }
-            image.size = ticket.pointSize
-            ticket.storeResult(image)
+            if let image {
+                image.size = ticket.pointSize
+                ticket.storeResult(image)
+            }
 
             DispatchQueue.main.async { [weak self, ticket] in
                 guard let self else { return }
@@ -392,6 +393,7 @@ final class OverviewGridView: NSView {
     /// grid cannot keep the session's PDFDocument pinned.
     func releaseDocument() {
         configure(document: nil)
+        reusableItemViews.removeAll()
     }
 
     override func layout() {
@@ -419,6 +421,8 @@ extension OverviewGridView {
     }
 
     var testingLiveItemViewCount: Int { visibleItemViews.count }
+
+    var testingReusableItemViewCount: Int { reusableItemViews.count }
 
     var testingHasDocument: Bool { document != nil }
 

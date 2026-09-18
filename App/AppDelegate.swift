@@ -268,9 +268,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        (currentWindowController() ?? mainWindowControllers.values.first)?.prepareForApplicationTermination() == false
-            ? .terminateCancel
-            : .terminateNow
+        guard (currentWindowController() ?? mainWindowControllers.values.first)?.prepareForApplicationTermination() != false else {
+            return .terminateCancel
+        }
+        do {
+            try appUpdateCoordinator?.installPendingUpdate()
+            return .terminateNow
+        } catch {
+            sender.presentError(error)
+            return .terminateCancel
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

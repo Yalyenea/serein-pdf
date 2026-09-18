@@ -9,6 +9,40 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(HighlightColor.default, .pink)
     }
 
+    func testAnnotationSortOrderIsTransitiveForNearbyLines() {
+        let page = PDFPage()
+        let annotations = (0..<3).map { index in
+            makeHighlight(
+                on: page,
+                bounds: NSRect(x: CGFloat(index) * 10, y: 100 + CGFloat(index) * 0.4, width: 20, height: 10)
+            )
+        }
+
+        for first in annotations {
+            for second in annotations where HighlightService.annotationSortOrder(first, second) {
+                for third in annotations where HighlightService.annotationSortOrder(second, third) {
+                    XCTAssertTrue(HighlightService.annotationSortOrder(first, third))
+                }
+            }
+        }
+    }
+
+    func testCacheUpsertReplacesDuplicateGroupInSameBatch() throws {
+        let document = TestPDFFixtures.makeBlankDocument(pageCount: 1)
+        let page = try XCTUnwrap(document.page(at: 0))
+        let annotation = makeHighlight(on: page, bounds: NSRect(x: 20, y: 40, width: 80, height: 18))
+        annotation.userName = UUID().uuidString
+        let original = try XCTUnwrap(HighlightService.buildHighlightGroups(in: document).first)
+        annotation.contents = "Updated"
+        let updated = try XCTUnwrap(HighlightService.buildHighlightGroups(in: document).first)
+        var cache = DocumentHighlightCache()
+
+        cache.upsert([original, updated])
+
+        XCTAssertEqual(cache.groups.count, 1)
+        XCTAssertEqual(cache.group(containing: annotation)?.comment, "Updated")
+    }
+
     func testAllPaletteColorsAreAvailable() {
         XCTAssertEqual(Set(HighlightColor.allCases), [.pink, .yellow, .green])
     }
@@ -345,6 +379,40 @@ final class HighlightServiceTests: XCTestCase {
         XCTAssertEqual(page.annotations.compactMap(\.contents), ["Same", "Distinct", "Same"])
         XCTAssertEqual(HighlightService.buildHighlightGroups(in: document).count, 2)
         XCTAssertEqual(page.annotations.count, 4)
+    }
+
+    func testDistinctGroupCommentsSurviveDisplayExportAndEditing() throws {
+        let document = TestPDFFixtures.makeBlankDocument(pageCount: 1)
+        let page = try XCTUnwrap(document.page(at: 0))
+        let groupID = UUID().uuidString
+        for (index, comment) in ["First note", "First note", " \n ", "Second note"].enumerated() {
+            let annotation = makeHighlight(
+                on: page,
+                bounds: NSRect(x: 24, y: 200 - index * 30, width: 80, height: 18)
+            )
+            annotation.userName = groupID
+            annotation.contents = comment
+        }
+        let group = try XCTUnwrap(HighlightService.buildHighlightGroups(in: document).first)
+        let combinedComment = "First note\n\nSecond note"
+        XCTAssertEqual(group.comment, combinedComment)
+
+        for format in [HighlightExportFormat.markdown, .plainText] {
+            let exported = try XCTUnwrap(String(
+                data: HighlightExporter.export([group], format: format),
+                encoding: .utf8
+            ))
+            XCTAssertTrue(exported.contains(combinedComment))
+            XCTAssertEqual(exported.components(separatedBy: "First note").count - 1, 1)
+        }
+        let json = try HighlightExporter.export([group], format: .json)
+        let exported = try JSONDecoder().decode([ExportedHighlight].self, from: json)
+        XCTAssertEqual(exported.first?.comment, combinedComment)
+
+        XCTAssertTrue(HighlightService.updateComment(group.comment, for: group.records))
+        XCTAssertEqual(group.records.compactMap(\.annotation.contents), [combinedComment])
+        let saved = try XCTUnwrap(PDFDocument(data: try XCTUnwrap(document.dataRepresentation())))
+        XCTAssertEqual(HighlightService.buildHighlightGroups(in: saved).first?.comment, combinedComment)
     }
 
     func testCachedHighlightGroupContainingExternalAnnotationOnlyUsesHitAnnotation() throws {

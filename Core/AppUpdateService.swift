@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// GitHub Releases based updater for direct-distributed Serein builds.
 struct AppUpdateService: Sendable {
@@ -53,6 +54,9 @@ struct AppUpdateService: Sendable {
     }
 
     struct HTTPClient: Sendable {
+        var download: @Sendable (URLRequest) async throws -> (URL, URLResponse) = { request in
+            try await URLSession.shared.download(for: request)
+        }
         var data: @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
         static let urlSession = HTTPClient { request in
@@ -163,11 +167,13 @@ struct AppUpdateService: Sendable {
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
         let fileManager = FileManager.default
+        guard release.assetName.hasPrefix(Self.dmgNamePrefix),
+              release.assetName.hasSuffix(Self.dmgNameSuffix),
+              release.assetName.contains("/") == false else {
+            throw ServiceError.downloadFailed("invalid asset name")
+        }
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let destination = directory.appendingPathComponent(release.assetName, isDirectory: false)
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
 
         var request: URLRequest
         if githubToken != nil {
@@ -182,14 +188,44 @@ struct AppUpdateService: Sendable {
             request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
         }
 
-        let (bytes, response) = try await httpClient.data(request)
+        let (temporaryURL, response) = try await httpClient.download(request)
+        defer { try? fileManager.removeItem(at: temporaryURL) }
         try throwIfHTTPError(response)
-        guard bytes.isEmpty == false else {
-            throw ServiceError.downloadFailed("empty body")
+        try Task.checkCancellation()
+        try Self.validateDownload(at: temporaryURL, release: release)
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
         }
-        try bytes.write(to: destination, options: .atomic)
+        try fileManager.moveItem(at: temporaryURL, to: destination)
         progress?(1)
         return destination
+    }
+
+    private static func validateDownload(at url: URL, release: ReleaseInfo) throws {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let byteCount = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        guard byteCount > 0 else {
+            throw ServiceError.downloadFailed("empty body")
+        }
+        if let expectedSize = release.size, byteCount != expectedSize {
+            throw ServiceError.downloadFailed("asset size does not match the release")
+        }
+        guard let digest = release.digest else { return }
+        guard digest.hasPrefix("sha256:"), digest.count == 71 else {
+            throw ServiceError.downloadFailed("unsupported asset digest")
+        }
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1_048_576), chunk.isEmpty == false {
+            try Task.checkCancellation()
+            hasher.update(data: chunk)
+        }
+        let actualDigest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        guard actualDigest == digest.dropFirst(7).lowercased() else {
+            throw ServiceError.downloadFailed("asset checksum does not match the release")
+        }
     }
 
     // MARK: - Install
@@ -204,6 +240,12 @@ struct AppUpdateService: Sendable {
         let workDir = fileManager.temporaryDirectory
             .appendingPathComponent("SereinUpdate-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: workDir, withIntermediateDirectories: true)
+        var launched = false
+        defer {
+            if launched == false {
+                try? fileManager.removeItem(at: workDir)
+            }
+        }
 
         let scriptURL = workDir.appendingPathComponent("install-and-relaunch.sh", isDirectory: false)
         let logURL = workDir.appendingPathComponent("install.log", isDirectory: false)
@@ -222,10 +264,15 @@ struct AppUpdateService: Sendable {
 
         DMG=\(shellEscape(dmgURL.path))
         DEST=\(shellEscape(destinationAppURL.path))
+        PARENT="$(dirname "$DEST")"
+        STAGING="$PARENT/.SereinUpdateStaging-$$.app"
+        BACKUP="$PARENT/.SereinUpdateBackup-$$.app"
         MOUNT="$(mktemp -d -t SereinUpdateMount)"
         cleanup() {
           hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true
-          rm -rf "$MOUNT"
+          rm -rf "$MOUNT" "$STAGING"
+          rm -f "$DMG"
+          rmdir \(shellEscape(dmgURL.deletingLastPathComponent().path)) 2>/dev/null || true
         }
         trap cleanup EXIT
 
@@ -236,20 +283,11 @@ struct AppUpdateService: Sendable {
           exit 1
         fi
 
-        PARENT="$(dirname "$DEST")"
-        STAGING="$PARENT/.SereinUpdateStaging-$$.app"
-        BACKUP="$PARENT/.SereinUpdateBackup-$$.app"
-        rm -rf "$STAGING" "$BACKUP"
-        /bin/cp -R "$SOURCE" "$STAGING"
-        if [[ -d "$DEST" ]]; then
-          /bin/mv "$DEST" "$BACKUP"
-        fi
-        /bin/mv "$STAGING" "$DEST"
-        rm -rf "$BACKUP"
+        \(Self.installationReplacementScript)
         /usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
         /usr/bin/open "$DEST"
-        rm -f "$DMG"
         echo "Serein updater finished $(date)"
+        rm -rf \(shellEscape(workDir.path))
         """
 
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
@@ -261,8 +299,23 @@ struct AppUpdateService: Sendable {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+        launched = true
         return scriptURL
     }
+
+    static let installationReplacementScript = """
+    /bin/cp -R "$SOURCE" "$STAGING"
+    if [[ -d "$DEST" ]]; then
+      /bin/mv "$DEST" "$BACKUP"
+    fi
+    if ! /bin/mv "$STAGING" "$DEST"; then
+      if [[ -d "$BACKUP" ]]; then
+        /bin/mv "$BACKUP" "$DEST"
+      fi
+      exit 1
+    fi
+    rm -rf "$BACKUP"
+    """
 
     // MARK: - Version helpers
 

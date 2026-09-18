@@ -28,22 +28,10 @@ enum OutlineExtractor {
         for outline: PDFOutline,
         in document: PDFDocument
     ) -> ReadingPosition? {
-        if let destination = outline.destination,
-           let page = destination.page {
-            return ReadingPosition(
-                pageIndex: document.index(for: page),
-                point: destination.point
-            )
-        }
-
-        if let action = outline.action as? PDFActionGoTo,
-           let page = action.destination.page {
-            return ReadingPosition(
-                pageIndex: document.index(for: page),
-                point: action.destination.point
-            )
-        }
-
-        return nil
+        guard let destination = outline.destination ?? (outline.action as? PDFActionGoTo)?.destination,
+              let page = destination.page else { return nil }
+        let pageIndex = document.index(for: page)
+        guard pageIndex != NSNotFound else { return nil }
+        return ReadingPosition(pageIndex: pageIndex, point: destination.point)
     }
 }

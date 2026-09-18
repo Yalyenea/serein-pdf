@@ -33,7 +33,6 @@ final class UserDefaultsReadingStateStore: ReadingStateStore, @unchecked Sendabl
     private static let logger = Logger(subsystem: "local.yfff.Serein", category: "ReadingStateStore")
 
     private let userDefaults: UserDefaults
-    private let sendableUserDefaults: SendableUserDefaults
     private let maxEntries: Int
     private let debounceInterval: TimeInterval
     private let lock = NSLock()
@@ -57,7 +56,6 @@ final class UserDefaultsReadingStateStore: ReadingStateStore, @unchecked Sendabl
         debounceInterval: TimeInterval = UserDefaultsReadingStateStore.debounceInterval
     ) {
         self.userDefaults = userDefaults
-        self.sendableUserDefaults = SendableUserDefaults(userDefaults)
         self.maxEntries = max(1, maxEntries)
         self.debounceInterval = max(0, debounceInterval)
         persistenceQueue.setSpecific(key: persistenceQueueKey, value: 1)
@@ -125,6 +123,16 @@ final class UserDefaultsReadingStateStore: ReadingStateStore, @unchecked Sendabl
     }
 
     func flush() throws {
+        if DispatchQueue.getSpecific(key: persistenceQueueKey) != nil {
+            try persistPendingState()
+        } else {
+            try persistenceQueue.sync { try persistPendingState() }
+        }
+    }
+
+    private func persistPendingState() throws {
+        // Take the snapshot on the writer queue so concurrent flushes cannot
+        // enqueue an older snapshot after a newer write.
         lock.lock()
         flushWorkItem?.cancel()
         flushWorkItem = nil
@@ -135,24 +143,7 @@ final class UserDefaultsReadingStateStore: ReadingStateStore, @unchecked Sendabl
         }
         lock.unlock()
 
-        if DispatchQueue.getSpecific(key: persistenceQueueKey) != nil {
-            try Self.write(snapshot, to: userDefaults)
-        } else {
-            let completion = DispatchSemaphore(value: 0)
-            let result = PersistenceResult()
-            persistenceQueue.async { [sendableUserDefaults] in
-                do {
-                    try Self.write(snapshot, to: sendableUserDefaults.value)
-                } catch {
-                    result.error = error
-                }
-                completion.signal()
-            }
-            completion.wait()
-            if let error = result.error {
-                throw error
-            }
-        }
+        try Self.write(snapshot, to: userDefaults)
         markPersisted(generation: snapshot.generation)
     }
 
@@ -266,17 +257,5 @@ final class UserDefaultsReadingStateStore: ReadingStateStore, @unchecked Sendabl
         let cache: [String: PersistedReadingState]
         let lruOrder: [String]
         let generation: UInt64
-    }
-
-    private final class PersistenceResult: @unchecked Sendable {
-        var error: Error?
-    }
-
-    private final class SendableUserDefaults: @unchecked Sendable {
-        let value: UserDefaults
-
-        init(_ value: UserDefaults) {
-            self.value = value
-        }
     }
 }

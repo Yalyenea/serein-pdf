@@ -289,6 +289,7 @@ final class RightSidebarViewController: NSViewController {
 
     private func applyMode() {
         let mode = documentStore.rightSidebarMode(in: windowID)
+        modeSegmented.selectedSegment = mode.rawValue
         guard appliedMode != mode else { return }
 
         switch mode {
@@ -398,8 +399,6 @@ final class RightSidebarViewController: NSViewController {
     }
 
     func applyStateFromStore() {
-        let mode = documentStore.rightSidebarMode(in: windowID)
-        modeSegmented.selectedSegment = mode.rawValue
         applyMode()
         applyDocumentPresence()
         updateThumbnailBinding()

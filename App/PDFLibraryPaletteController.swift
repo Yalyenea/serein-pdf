@@ -212,8 +212,6 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             catalog = PDFLibraryCatalog(roots: [], items: [])
             isLoadingCatalog = true
         }
-        selectedSegmentIndex = 0
-        selectedFolderScope = .all
         queryField.stringValue = ""
         rebuildSegments()
         reloadUI()
@@ -475,6 +473,8 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     }
 
     private func rebuildSegments() {
+        selectedSegmentIndex = 0
+        selectedFolderScope = .all
         segmentControl.segmentCount = max(1, catalog.roots.count + 1)
         segmentControl.setLabel("All", forSegment: 0)
         segmentControl.setWidth(64, forSegment: 0)
@@ -621,7 +621,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private func focusQueryField() {
         window?.makeFirstResponder(queryField)
         if let editor = window?.fieldEditor(true, for: queryField) as? NSTextView {
-            editor.selectedRange = NSRange(location: editor.string.count, length: 0)
+            editor.selectedRange = NSRange(location: editor.string.utf16.count, length: 0)
         }
     }
 
@@ -774,6 +774,11 @@ extension PDFLibraryPaletteController {
     var testingFolderRowTitles: [String] { folderRows.map(\.title) }
     var testingPDFTitles: [String] { filteredItems.map(\.title) }
     var testingIsLoadingCatalog: Bool { isLoadingCatalog }
+
+    func testingSelectSegment(_ index: Int) {
+        segmentControl.selectedSegment = index
+        segmentDidChange(segmentControl)
+    }
 
     func testingShow(folderURLs: [URL]) {
         show(folderURLs: folderURLs, relativeTo: nil)

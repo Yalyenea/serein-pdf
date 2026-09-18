@@ -197,6 +197,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         stopEscapeEventMonitor()
         escapeEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window?.isVisible == true,
+                  (event.window?.firstResponder as? NSTextView)?.hasMarkedText() != true,
                   event.keyCode == 53,
                   event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return event }
             self.close()
@@ -351,7 +352,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         interactionMode = .editingQuery
         window?.makeFirstResponder(queryField)
         if let editor = window?.fieldEditor(true, for: queryField) as? NSTextView {
-            editor.selectedRange = NSRange(location: editor.string.count, length: 0)
+            editor.selectedRange = NSRange(location: editor.string.utf16.count, length: 0)
         }
     }
 
@@ -422,6 +423,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
     }
 
     private func handlePanelKeyEvent(_ event: NSEvent) -> Bool {
+        guard (window?.firstResponder as? NSTextView)?.hasMarkedText() != true else { return false }
         let modifiers = event.modifierFlags.intersection([.command, .option, .control])
         guard modifiers.isEmpty else { return false }
 
@@ -465,7 +467,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        guard control === queryField else { return false }
+        guard control === queryField, textView.hasMarkedText() == false else { return false }
 
         switch commandSelector {
         case #selector(NSResponder.moveDown(_:)),

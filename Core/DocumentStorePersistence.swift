@@ -204,8 +204,7 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let sessions = try container.decode([SessionReference].self, forKey: .sessions)
 
-        if let windows = try container.decodeIfPresent([WindowRecord].self, forKey: .windows),
-           windows.isEmpty == false {
+        if let windows = try container.decodeIfPresent([WindowRecord].self, forKey: .windows) {
             self.init(sessions: sessions, windows: windows)
             return
         }
@@ -245,7 +244,6 @@ final class UserDefaultsDocumentStorePersistence: DocumentStorePersistence, @unc
     private static let logger = Logger(subsystem: "local.yfff.Serein", category: "DocumentStorePersistence")
 
     private let userDefaults: UserDefaults
-    private let sendableUserDefaults: SendableUserDefaults
     private let debounceInterval: TimeInterval
     private let lock = NSLock()
     private let persistenceQueue = DispatchQueue(
@@ -264,7 +262,6 @@ final class UserDefaultsDocumentStorePersistence: DocumentStorePersistence, @unc
         debounceInterval: TimeInterval = UserDefaultsDocumentStorePersistence.debounceInterval
     ) {
         self.userDefaults = userDefaults
-        self.sendableUserDefaults = SendableUserDefaults(userDefaults)
         self.debounceInterval = max(0, debounceInterval)
         persistenceQueue.setSpecific(key: persistenceQueueKey, value: 1)
     }
@@ -277,6 +274,13 @@ final class UserDefaultsDocumentStorePersistence: DocumentStorePersistence, @unc
     }
 
     func loadState() throws -> PersistedDocumentStoreState? {
+        if DispatchQueue.getSpecific(key: persistenceQueueKey) != nil {
+            return try loadPersistedState()
+        }
+        return try persistenceQueue.sync { try loadPersistedState() }
+    }
+
+    private func loadPersistedState() throws -> PersistedDocumentStoreState? {
         try flush()
         guard let data = userDefaults.data(forKey: Self.stateKey) else { return nil }
         let state = try JSONDecoder().decode(PersistedDocumentStoreState.self, from: data)
@@ -304,6 +308,15 @@ final class UserDefaultsDocumentStorePersistence: DocumentStorePersistence, @unc
     }
 
     func flush() throws {
+        if DispatchQueue.getSpecific(key: persistenceQueueKey) != nil {
+            try persistPendingState()
+        } else {
+            try persistenceQueue.sync { try persistPendingState() }
+        }
+    }
+
+    private func persistPendingState() throws {
+        // Snapshot and write share one queue; concurrent flushes preserve order.
         lock.lock()
         flushWorkItem?.cancel()
         flushWorkItem = nil
@@ -314,24 +327,7 @@ final class UserDefaultsDocumentStorePersistence: DocumentStorePersistence, @unc
         }
         lock.unlock()
 
-        if DispatchQueue.getSpecific(key: persistenceQueueKey) != nil {
-            try Self.write(snapshot.state, to: userDefaults)
-        } else {
-            let completion = DispatchSemaphore(value: 0)
-            let result = PersistenceResult()
-            persistenceQueue.async { [sendableUserDefaults] in
-                do {
-                    try Self.write(snapshot.state, to: sendableUserDefaults.value)
-                } catch {
-                    result.error = error
-                }
-                completion.signal()
-            }
-            completion.wait()
-            if let error = result.error {
-                throw error
-            }
-        }
+        try Self.write(snapshot.state, to: userDefaults)
         markPersisted(snapshot)
     }
 
@@ -389,17 +385,5 @@ final class UserDefaultsDocumentStorePersistence: DocumentStorePersistence, @unc
     private struct PersistenceSnapshot: Sendable {
         let state: PersistedDocumentStoreState
         let generation: UInt64
-    }
-
-    private final class PersistenceResult: @unchecked Sendable {
-        var error: Error?
-    }
-
-    private final class SendableUserDefaults: @unchecked Sendable {
-        let value: UserDefaults
-
-        init(_ value: UserDefaults) {
-            self.value = value
-        }
     }
 }

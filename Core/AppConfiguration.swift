@@ -406,7 +406,11 @@ struct KeyboardShortcut: Equatable, Sendable {
         let orderedModifiers = KeyboardShortcutModifier.allCases
             .filter { modifiers.contains($0) }
             .map(\.rawValue)
-        let serializedKey = key == " " ? "space" : key
+        let serializedKey = switch key {
+        case " ": "space"
+        case "+": "plus"
+        default: key
+        }
         return (orderedModifiers + [serializedKey]).joined(separator: "+")
     }
 
@@ -457,12 +461,12 @@ struct KeyboardShortcut: Equatable, Sendable {
             return modifier
         })
 
-        let normalizedKey = key == "space" ? "space" : key
+        let normalizedKey = key == "plus" ? "+" : key
         return KeyboardShortcut(key: normalizedKey, modifiers: modifiers)
     }
 
     static func isSupportedKeyToken(_ token: String) -> Bool {
-        if token == "escape" || token == "space" || token == "tab" {
+        if token == "escape" || token == "space" || token == "tab" || token == "plus" {
             return true
         }
         return token.count == 1 && token.unicodeScalars.allSatisfy {

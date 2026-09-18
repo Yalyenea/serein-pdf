@@ -80,4 +80,21 @@ final class OutlineExtractorTests: XCTestCase {
 
         return document
     }
+
+    func testExtractIgnoresDestinationOutsideDocument() throws {
+        let document = makeDocument(pageCount: 1)
+        let otherDocument = makeDocument(pageCount: 1)
+        let root = PDFOutline()
+        let item = PDFOutline()
+        item.label = "Invalid destination"
+        item.destination = PDFDestination(page: try XCTUnwrap(otherDocument.page(at: 0)), at: .zero)
+        root.insertChild(item, at: 0)
+        document.outlineRoot = root
+
+        let extracted = try XCTUnwrap(OutlineExtractor.extract(from: document).first)
+
+        XCTAssertEqual(extracted.title, "Invalid destination")
+        XCTAssertNil(extracted.pageIndex)
+        XCTAssertNil(extracted.destinationPoint)
+    }
 }

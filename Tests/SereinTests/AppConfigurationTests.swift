@@ -3,6 +3,15 @@ import XCTest
 @testable import Serein
 
 final class AppConfigurationTests: XCTestCase {
+    func testPlusShortcutsRoundTripWithoutConfusingModifierSeparator() throws {
+        let modifiers: [Set<KeyboardShortcutModifier>] = [[], [.command], [.shift], [.command, .shift]]
+        for flags in modifiers {
+            let shortcut = KeyboardShortcut(key: "+", modifiers: flags)
+            XCTAssertTrue(shortcut.serializedValue.hasSuffix("plus"))
+            XCTAssertEqual(try KeyboardShortcut.parse(shortcut.serializedValue), shortcut)
+        }
+    }
+
     func testBootstrapCreatesDefaultTomlConfig() throws {
         try withTemporaryConfigRoot(self) { rootURL in
             let fileURL = rootURL.appendingPathComponent("config.toml")

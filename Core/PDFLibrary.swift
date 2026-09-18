@@ -102,10 +102,10 @@ struct PDFLibraryCatalog: Equatable, Sendable {
     private static func relativePath(from rootURL: URL, to url: URL) -> String {
         let rootPath = rootURL.standardizedFileURL.path
         let path = url.standardizedFileURL.path
-        guard path == rootPath || path.hasPrefix(rootPath + "/") else { return path }
-        let startIndex = path.index(path.startIndex, offsetBy: rootPath.count)
-        let relative = String(path[startIndex...]).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return relative.isEmpty ? title(for: url) : relative
+        if path == rootPath { return "" }
+        let prefix = rootPath == "/" ? rootPath : rootPath + "/"
+        guard path.hasPrefix(prefix) else { return path }
+        return String(path.dropFirst(prefix.count))
     }
 
     private static func searchableText(for pdfURL: URL, rootURL: URL) -> String {

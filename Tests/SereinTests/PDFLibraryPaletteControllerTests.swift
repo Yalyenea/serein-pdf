@@ -4,6 +4,32 @@ import XCTest
 
 @MainActor
 final class PDFLibraryPaletteControllerTests: XCTestCase {
+    func testRefreshResetsSegmentFilterAlongWithSegmentControl() async throws {
+        _ = NSApplication.shared
+        let root = try TestPDFFixtures.makeRootDirectory(prefix: "library-refresh")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("First", isDirectory: true)
+        let second = root.appendingPathComponent("Second", isDirectory: true)
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+        try Data("a".utf8).write(to: first.appendingPathComponent("Alpha.pdf"))
+        try Data("b".utf8).write(to: second.appendingPathComponent("Beta.pdf"))
+        let controller = PDFLibraryPaletteController { _ in }
+        defer { controller.close() }
+        controller.testingShow(folderURLs: [first, second])
+        await controller.testingWaitForCatalog()
+        controller.testingSelectSegment(2)
+        XCTAssertEqual(controller.testingPDFTitles, ["Beta"])
+
+        controller.testingInvalidateCatalogCache()
+        await controller.testingWaitForCatalog()
+
+        XCTAssertEqual(controller.testingPDFTitles, ["Alpha", "Beta"])
+        XCTAssertEqual(controller.testingFolderRowTitles.first, "All libraries")
+        XCTAssertFalse(controller.testingFolderRowTitles.contains("First/First"))
+        XCTAssertFalse(controller.testingFolderRowTitles.contains("Second/Second"))
+    }
+
     func testShowBuildsFolderRowsAndFiltersPDFs() async throws {
         _ = NSApplication.shared
         let rootURL = FileManager.default.temporaryDirectory

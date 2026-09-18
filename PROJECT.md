@@ -98,7 +98,7 @@ flowchart LR
 | 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
 | 分屏方向 | `ReaderSplitLayout` 为窗口运行期状态,支持左右 `sideBySide` / 上下 `stacked`;切换方向不改 pair、pane session 与焦点 |
 | 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
-| 同 PDF 对比 | 同一个 PDF 的第二 pane 使用内部 comparison session,独立页码 / 缩放,但不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
+| 同 PDF 对比 | 同一个 PDF 的第二 pane 使用绑定源 session 的内部 comparison session,共享 PDF、批注与撤销,独立页码 / 缩放;不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
 | 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
 | 演示工具 | 演示模式提供指针、临时笔与激光;墨迹按 PDF 页坐标保存在当前阅读区,翻页保留并随页面定位,各窗口独立,退出演示或切换文档时清空,不写入 PDF;底部工具栏可固定或自动隐藏 |

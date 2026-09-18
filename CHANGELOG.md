@@ -4,6 +4,13 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reliability
+- Share annotations, saving, and undo between panes comparing the same PDF while keeping reading positions independent; release comparison sessions and stale undo records with their documents.
+- Serialize persistence snapshots and writes to prevent older state from overwriting newer state. Preserve explicitly empty window lists.
+- Download updates directly to disk, validate release size and checksum when supplied, and schedule installation only after document saving permits quitting. Restore the previous app if replacement fails.
+- Preserve distinct multiline comments, use the accepted whole-word search match for previews, and leave document titles unchanged when file renaming fails.
+- Release overview resources when leaving a PDF, reset library filters on refresh, and preserve input-method composition and Unicode caret positions in launchers.
+
 ### Reading
 - Fix a crash during PDFKit's background form recognition by preserving its native document getter and clearing comment-icon caches explicitly when replacing documents.
 - Save horizontal pan lock per PDF and restore it after closing or restarting, keeping other documents independent.

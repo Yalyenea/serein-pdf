@@ -47,6 +47,7 @@ struct DocumentHighlightCache {
             if let index = groupIndexByID[group.groupID] {
                 groups[index] = group
             } else {
+                groupIndexByID[group.groupID] = groups.count
                 groups.append(group)
             }
         }

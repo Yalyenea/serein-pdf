@@ -179,6 +179,8 @@ final class DocumentSearchOperation: NSObject {
         removeObservers()
         currentDocument?.cancelFindString()
         currentDocument = nil
+        currentTextContext = DocumentSearchTextContext()
+        currentMatches = []
         onUpdate = nil
     }
 
@@ -251,6 +253,7 @@ final class DocumentSearchOperation: NSObject {
         matchesBySessionID[target.sessionID] = currentMatches
         currentMatches = []
         currentDocument = nil
+        currentTextContext = DocumentSearchTextContext()
         targetIndex += 1
         let hasMoreTargets = targetIndex < source.targets.count
         onUpdate?(matchesBySessionID, hasMoreTargets)
@@ -268,9 +271,8 @@ final class DocumentSearchOperation: NSObject {
 }
 
 private struct DocumentSearchTextContext {
-    var pageTextByIndex: [Int: String] = [:]
-    var nextSearchStartByPage: [Int: String.Index] = [:]
-    var normalizedQuery: String?
+    var pageIndex: Int?
+    var pageText = ""
 }
 
 private enum DocumentSearchService {
@@ -291,37 +293,17 @@ private enum DocumentSearchService {
         guard pageIndex != NSNotFound else { return nil }
         let textRange = selection.range(at: 0, on: page)
         guard textRange.location != NSNotFound, textRange.length > 0 else { return nil }
+        if textContext.pageIndex != pageIndex {
+            textContext.pageIndex = pageIndex
+            textContext.pageText = page.string ?? ""
+        }
+        let pageText = textContext.pageText
         if options.matchesWholeWords,
-           selectionMatchesWholeWord(selection, on: page) == false {
+           selectionMatchesWholeWord(textRange, in: pageText) == false {
             return nil
         }
-
+        let matchRange = Range(textRange, in: pageText)
         let matchedText = normalize(selection.string ?? query)
-        let pageText: String
-        if let cachedPageText = textContext.pageTextByIndex[pageIndex] {
-            pageText = cachedPageText
-        } else {
-            pageText = normalize(page.string ?? matchedText)
-            textContext.pageTextByIndex[pageIndex] = pageText
-        }
-
-        let compareOptions: NSString.CompareOptions = options.isCaseSensitive ? [] : .caseInsensitive
-        let searchRange = (textContext.nextSearchStartByPage[pageIndex] ?? pageText.startIndex)..<pageText.endIndex
-        let normalizedQuery: String
-        if let cachedQuery = textContext.normalizedQuery {
-            normalizedQuery = cachedQuery
-        } else {
-            normalizedQuery = normalize(query)
-            textContext.normalizedQuery = normalizedQuery
-        }
-        let matchRange =
-            pageText.range(of: matchedText, options: compareOptions, range: searchRange)
-            ?? pageText.range(of: normalizedQuery, options: compareOptions, range: searchRange)
-            ?? pageText.range(of: matchedText, options: compareOptions)
-            ?? pageText.range(of: normalizedQuery, options: compareOptions)
-        if let matchRange {
-            textContext.nextSearchStartByPage[pageIndex] = matchRange.upperBound
-        }
 
         return DocumentSearchMatch(
             matchIndex: matchIndex,
@@ -332,10 +314,8 @@ private enum DocumentSearchService {
         )
     }
 
-    private static func selectionMatchesWholeWord(_ selection: PDFSelection, on page: PDFPage) -> Bool {
-        guard let pageText = page.string else { return false }
+    private static func selectionMatchesWholeWord(_ range: NSRange, in pageText: String) -> Bool {
         let text = pageText as NSString
-        let range = selection.range(at: 0, on: page)
         guard range.location != NSNotFound,
               range.length > 0,
               range.location >= 0,
@@ -369,7 +349,7 @@ private enum DocumentSearchService {
             ?? pageText.startIndex
         let suffixEnd = pageText.index(range.upperBound, offsetBy: 44, limitedBy: pageText.endIndex)
             ?? pageText.endIndex
-        let snippet = pageText[prefixStart..<suffixEnd]
+        let snippet = normalize(String(pageText[prefixStart..<suffixEnd]))
         let trimmedPrefix = prefixStart == pageText.startIndex ? "" : "…"
         let trimmedSuffix = suffixEnd == pageText.endIndex ? "" : "…"
         return "\(trimmedPrefix)\(snippet)\(trimmedSuffix)"

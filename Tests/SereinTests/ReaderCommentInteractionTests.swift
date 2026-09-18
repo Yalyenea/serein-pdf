@@ -25,6 +25,7 @@ final class ReaderCommentInteractionTests: XCTestCase {
         window.contentView = pdfView
         pdfView.displayMode = .singlePage
         pdfView.document = document
+        window.makeKeyAndOrderFront(nil)
         var activations = 0
         pdfView.onAnnotationActivationRequested = { _ in
             activations += 1
@@ -45,11 +46,19 @@ final class ReaderCommentInteractionTests: XCTestCase {
                 XCTAssertTrue(pdfView.commentIcons.annotation(at: pagePoint, on: page) === annotation,
                               "Icon at \(pagePoint), rotation \(rotation), scale \(scale)")
                 let point = pdfView.convert(pagePoint, from: page)
-                XCTAssertTrue(pdfView.hitTest(pdfView.convert(point, to: pdfView.superview)) === pdfView)
                 let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown,
                     location: pdfView.convert(point, to: nil), modifierFlags: [], timestamp: 0,
                     windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
-                pdfView.mouseDown(with: event)
+                let previousActivations = activations
+                // Dispatch through AppKit so hitTest sees this click as currentEvent
+                // and the assertion covers delivery through PDFKit's native subviews.
+                NSApp.sendEvent(event)
+                XCTAssertEqual(activations, previousActivations + 1,
+                               "Icon click, rotation \(rotation), scale \(scale)")
+                let mouseUp = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseUp,
+                    location: event.locationInWindow, modifierFlags: [], timestamp: 0.01,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 1, pressure: 0))
+                NSApp.sendEvent(mouseUp)
             }
         }
         XCTAssertEqual(activations, 8)

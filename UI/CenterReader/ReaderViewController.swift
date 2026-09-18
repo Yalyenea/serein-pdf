@@ -1641,6 +1641,7 @@ final class ReaderViewController: NSViewController {
 
     func setAllPagesOverviewActive(_ active: Bool) {
         guard active != isAllPagesOverviewActive else { return }
+        guard !active || pdfView.document != nil else { return }
 
         if active {
             referencePreview.close()
@@ -2564,6 +2565,7 @@ final class ReaderViewController: NSViewController {
         }
 
         guard let session = targetSession() else {
+            setAllPagesOverviewActive(false)
             referencePreview.close()
             pdfView.setReaderDocument(nil)
             markPDFPrivateViewTreeDirty(resetRoots: true)
@@ -2581,6 +2583,7 @@ final class ReaderViewController: NSViewController {
         }
 
         if session.isBlank {
+            setAllPagesOverviewActive(false)
             referencePreview.close()
             pdfView.setReaderDocument(nil)
             markPDFPrivateViewTreeDirty(resetRoots: true)
@@ -2604,6 +2607,7 @@ final class ReaderViewController: NSViewController {
         do {
             document = try documentStore.pdfDocument(for: session.id)
         } catch {
+            setAllPagesOverviewActive(false)
             referencePreview.close()
             pdfView.setReaderDocument(nil)
             markPDFPrivateViewTreeDirty(resetRoots: true)

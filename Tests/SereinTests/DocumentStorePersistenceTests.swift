@@ -3,6 +3,28 @@ import XCTest
 @testable import Serein
 
 final class DocumentStorePersistenceTests: XCTestCase {
+    func testExplicitEmptyWindowsRoundTripsWithoutCreatingLegacyWindow() throws {
+        let state = PersistedDocumentStoreState(sessions: [], windows: [])
+        let decoded = try JSONDecoder().decode(
+            PersistedDocumentStoreState.self,
+            from: JSONEncoder().encode(state)
+        )
+        XCTAssertEqual(decoded, state)
+    }
+
+    func testPendingStateFlushesOnDeinitialization() throws {
+        let suiteName = "SereinTests.DocumentStorePersistence.Deinit.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let state = PersistedDocumentStoreState(sessions: [], windows: [])
+        do {
+            let persistence = UserDefaultsDocumentStorePersistence(userDefaults: defaults, debounceInterval: 60)
+            try persistence.saveState(state)
+        }
+        let data = try XCTUnwrap(defaults.data(forKey: UserDefaultsDocumentStorePersistence.stateKey))
+        XCTAssertEqual(try JSONDecoder().decode(PersistedDocumentStoreState.self, from: data), state)
+    }
+
     func testLegacyJSONWithoutWindowsPreservesReaderStateAndSuppliesDefaults() throws {
         let legacyJSON = """
         {

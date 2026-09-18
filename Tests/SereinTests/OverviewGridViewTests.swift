@@ -171,6 +171,7 @@ final class OverviewGridViewTests: XCTestCase {
 
         XCTAssertFalse(grid.testingHasDocument)
         XCTAssertEqual(grid.testingLiveItemViewCount, 0)
+        XCTAssertEqual(grid.testingReusableItemViewCount, 0)
         XCTAssertTrue(grid.testingThumbnailImageIndices.isEmpty)
         XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
         grid.testingScroll(to: CGRect(origin: CGPoint(x: 0, y: 1_800), size: viewportSize))
@@ -206,6 +207,53 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0..<4))
     }
 
+    func testMissingPageDoesNotLeaveThumbnailRenderPending() {
+        _ = NSApplication.shared
+        let grid = OverviewGridView(frame: NSRect(origin: .zero, size: viewportSize))
+        grid.configure(document: MissingPageDocument())
+        grid.applyLayout(columns: 1, cellSize: CGSize(width: 120, height: 170))
+        grid.layoutSubtreeIfNeeded()
+
+        grid.testingFlushRenders()
+
+        XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
+        XCTAssertTrue(grid.testingThumbnailImageIndices.isEmpty)
+    }
+
+    func testLeavingPDFWhileOverviewIsOpenReleasesPreviousGrid() throws {
+        _ = NSApplication.shared
+        for opensBlankTab in [false, true] {
+            let store = makeIsolatedDocumentStore()
+            let session = try store.open(documentAt: TestPDFFixtures.makeBlankPDF(named: "overview-lifecycle"))
+            let reader = ReaderViewController(documentStore: store)
+            reader.targetSessionID = session.id
+            reader.loadViewIfNeeded()
+            reader.setAllPagesOverviewActive(true)
+            XCTAssertTrue(reader.testingOverviewRetainsDocument)
+
+            if opensBlankTab {
+                reader.targetSessionID = store.newBlankTab().id
+            } else {
+                store.close(sessionID: session.id)
+            }
+
+            XCTAssertFalse(reader.isAllPagesOverviewActive)
+            XCTAssertFalse(reader.testingOverviewRetainsDocument)
+            XCTAssertNil(reader.pdfView.document)
+        }
+    }
+
+    func testEmptyReaderDoesNotEnterOverview() {
+        _ = NSApplication.shared
+        let reader = ReaderViewController(documentStore: makeIsolatedDocumentStore())
+        reader.loadViewIfNeeded()
+
+        reader.setAllPagesOverviewActive(true)
+
+        XCTAssertFalse(reader.isAllPagesOverviewActive)
+        XCTAssertFalse(reader.testingOverviewRetainsDocument)
+    }
+
     private func makeLaidOutGrid(pageCount: Int) -> OverviewGridView {
         let grid = OverviewGridView(frame: NSRect(origin: .zero, size: viewportSize))
         grid.configure(document: TestPDFFixtures.makeBlankDocument(pageCount: pageCount))
@@ -213,4 +261,9 @@ final class OverviewGridViewTests: XCTestCase {
         grid.layoutSubtreeIfNeeded()
         return grid
     }
+}
+
+private final class MissingPageDocument: PDFDocument {
+    override var pageCount: Int { 1 }
+    override func page(at index: Int) -> PDFPage? { nil }
 }

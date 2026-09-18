@@ -2,6 +2,17 @@ import XCTest
 @testable import Serein
 
 final class PDFLibraryScannerTests: XCTestCase {
+    func testCatalogUsesEmptyRelativeFolderForPDFAtLibraryRoot() throws {
+        let rootURL = try TestPDFFixtures.makeRootDirectory(prefix: "library-root")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        try Data("pdf".utf8).write(to: rootURL.appendingPathComponent("Book.pdf"))
+
+        let item = try XCTUnwrap(PDFLibraryCatalog.build(folderURLs: [rootURL]).items.first)
+
+        XCTAssertEqual(item.relativePath, "Book.pdf")
+        XCTAssertEqual(item.relativeFolderPath, "")
+    }
+
     func testScanFindsPDFsRecursivelyAndSortsThem() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

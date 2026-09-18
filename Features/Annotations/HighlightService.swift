@@ -274,10 +274,10 @@ enum HighlightService {
     static func annotationSortOrder(_ lhs: PDFAnnotation, _ rhs: PDFAnnotation) -> Bool {
         let lhsBounds = lhs.bounds
         let rhsBounds = rhs.bounds
-        if abs(lhsBounds.maxY - rhsBounds.maxY) > 0.5 {
+        if lhsBounds.maxY != rhsBounds.maxY {
             return lhsBounds.maxY > rhsBounds.maxY
         }
-        if abs(lhsBounds.minX - rhsBounds.minX) > 0.5 {
+        if lhsBounds.minX != rhsBounds.minX {
             return lhsBounds.minX < rhsBounds.minX
         }
         return lhsBounds.width < rhsBounds.width
@@ -297,13 +297,22 @@ enum HighlightService {
         let records = unsortedRecords.sorted(by: recordSortOrder)
         guard let firstRecord = records.first else { return nil }
 
-        let snippet = records
-            .compactMap(annotationSnippet)
+        let primarySelection = annotationSelection(for: firstRecord)
+        let snippet = records.enumerated()
+            .compactMap { index, record in
+                let selection = index == 0 ? primarySelection : annotationSelection(for: record)
+                return selection?.string.map(PDFTextSanitizer.sanitize)
+            }
+            .filter { $0.isEmpty == false }
             .joined(separator: " ")
+        var seenComments: Set<String> = []
         let comment = records
             .compactMap(\.annotation.contents)
-            .first { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
-            ?? ""
+            .filter {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    && seenComments.insert($0).inserted
+            }
+            .joined(separator: "\n\n")
 
         return DocumentHighlightGroup(
             groupID: groupID,
@@ -312,14 +321,9 @@ enum HighlightService {
             color: HighlightColor.closest(to: firstRecord.annotation.color),
             createdAt: records.compactMap(\.annotation.modificationDate).min(),
             comment: comment,
-            primarySelection: annotationSelection(for: firstRecord),
+            primarySelection: primarySelection,
             records: records
         )
-    }
-
-    private static func annotationSnippet(for record: HighlightAnnotationRecord) -> String? {
-        let extracted = annotationSelection(for: record)?.string.map(PDFTextSanitizer.sanitize)
-        return extracted?.isEmpty == false ? extracted : nil
     }
 
     private static func annotationSelection(for record: HighlightAnnotationRecord) -> PDFSelection? {

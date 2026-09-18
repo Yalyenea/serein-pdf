@@ -3,6 +3,30 @@ import XCTest
 @testable import Serein
 
 final class ReadingStateStoreTests: XCTestCase {
+    func testConcurrentSavesAndFlushesPreserveEveryReadingState() throws {
+        let suiteName = "SereinTests.ReadingStateStore.Concurrent.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = UserDefaultsReadingStateStore(userDefaults: defaults, debounceInterval: 60)
+        let states = (0..<32).map {
+            makeState(url: URL(fileURLWithPath: "/tmp/concurrent-\($0).pdf"), page: $0)
+        }
+
+        DispatchQueue.concurrentPerform(iterations: states.count) { index in
+            do {
+                try store.saveState(states[index])
+                try store.flush()
+            } catch {
+                XCTFail("Concurrent persistence failed: \(error)")
+            }
+        }
+        try store.flush()
+
+        let data = try XCTUnwrap(defaults.data(forKey: UserDefaultsReadingStateStore.stateKey))
+        let persisted = try JSONDecoder().decode([String: PersistedReadingState].self, from: data)
+        XCTAssertEqual(persisted, Dictionary(uniqueKeysWithValues: states.map { ($0.url.absoluteString, $0) }))
+    }
+
     func testSaveAndLoadReadingStateByDocumentURL() throws {
         let suiteName = "SereinTests.ReadingStateStore.\(UUID().uuidString)"
         let userDefaults = UserDefaults(suiteName: suiteName)!

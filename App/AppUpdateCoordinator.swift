@@ -6,6 +6,7 @@ final class AppUpdateCoordinator {
     private var isBusy = false
     private var progressAlert: NSAlert?
     private var progressIndicator: NSProgressIndicator?
+    private var pendingInstall: (() throws -> Void)?
 
     private let tokenProvider: () -> String?
     private let autoCheckEnabledProvider: () -> Bool
@@ -79,6 +80,12 @@ final class AppUpdateCoordinator {
 
         let workDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("SereinUpdateDownload-\(UUID().uuidString)", isDirectory: true)
+        var installScheduled = false
+        defer {
+            if installScheduled == false {
+                try? FileManager.default.removeItem(at: workDir)
+            }
+        }
         let dmgURL = try await service.downloadRelease(release, to: workDir) { [weak self] fraction in
             Task { @MainActor in
                 self?.updateProgress(fraction)
@@ -86,16 +93,27 @@ final class AppUpdateCoordinator {
         }
 
         updateProgressTitle("Installing Serein \(release.version)…")
-        _ = try service.scheduleInstallAndRelaunch(
-            dmgURL: dmgURL,
-            destinationAppURL: Bundle.main.bundleURL
-        )
+        hideProgress()
 
         presentInfo(
             title: "Update ready",
             message: "Serein will quit and relaunch as \(release.version)."
         )
+        pendingInstall = {
+            _ = try service.scheduleInstallAndRelaunch(
+                dmgURL: dmgURL,
+                destinationAppURL: Bundle.main.bundleURL
+            )
+            installScheduled = true
+        }
+        defer { pendingInstall = nil }
         NSApp.terminate(nil)
+    }
+
+    /// Called only after the application has accepted termination and saved its documents.
+    func installPendingUpdate() throws {
+        try pendingInstall?()
+        pendingInstall = nil
     }
 
     private func presentUpdatePrompt(release: AppUpdateService.ReleaseInfo, userInitiated: Bool) -> Bool {
@@ -147,10 +165,7 @@ final class AppUpdateCoordinator {
         if let window = NSApp.keyWindow ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window) { _ in }
         } else {
-            // Keep reference; user sees sheet when possible.
-            DispatchQueue.main.async {
-                alert.layout()
-            }
+            alert.window.makeKeyAndOrderFront(nil)
         }
     }
 
@@ -172,7 +187,16 @@ final class AppUpdateCoordinator {
         if let alert = progressAlert, let window = alert.window.sheetParent {
             window.endSheet(alert.window)
         }
+        progressAlert?.window.orderOut(nil)
         progressAlert = nil
         progressIndicator = nil
     }
 }
+
+#if DEBUG
+extension AppUpdateCoordinator {
+    func testingSetPendingInstall(_ action: @escaping () throws -> Void) {
+        pendingInstall = action
+    }
+}
+#endif

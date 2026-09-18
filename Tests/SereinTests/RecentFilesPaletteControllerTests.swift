@@ -4,6 +4,38 @@ import XCTest
 
 @MainActor
 final class RecentFilesPaletteControllerTests: XCTestCase {
+    func testMarkedQueryTextRetainsEnterAndEscapeForInputMethod() throws {
+        _ = NSApplication.shared
+        let controller = RecentFilesPaletteController { _ in XCTFail("Composing text must not open a PDF") }
+        defer { controller.close() }
+        controller.show(with: [URL(fileURLWithPath: "/tmp/recent.pdf")], relativeTo: nil)
+        let editor = try XCTUnwrap(controller.window?.firstResponder as? NSTextView)
+        editor.setMarkedText("中文", selectedRange: NSRange(location: 2, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertTrue(editor.hasMarkedText())
+        for (characters, keyCode) in [("\r", UInt16(36)), ("\u{1b}", UInt16(53))] {
+            XCTAssertFalse(controller.testingHandlePanelKeyEvent(
+                makeKeyEvent(characters: characters, keyCode: keyCode, window: controller.window)
+            ))
+        }
+        XCTAssertFalse(controller.testingHandleQueryCommand(#selector(NSResponder.insertNewline(_:))))
+        XCTAssertFalse(controller.testingHandleQueryCommand(#selector(NSResponder.cancelOperation(_:))))
+        XCTAssertTrue(controller.window?.isVisible == true)
+    }
+
+    func testReturningToQueryAppendsAfterEntireUnicodeText() {
+        _ = NSApplication.shared
+        let controller = RecentFilesPaletteController { _ in }
+        defer { controller.close() }
+        controller.show(with: [URL(fileURLWithPath: "/tmp/😀a.pdf")], relativeTo: nil)
+        controller.testingSetQuery("😀")
+        XCTAssertTrue(controller.testingHandleQueryCommand(#selector(NSResponder.moveDown(_:))))
+        XCTAssertTrue(controller.testingHandleResultsKeyEvent(
+            makeKeyEvent(characters: "a", keyCode: 0, window: controller.window)
+        ))
+        XCTAssertEqual(controller.testingQuery, "😀a")
+    }
+
     func testEscapeFromReaderClosesUnfocusedRecentPanelAndThenReturnsToReader() throws {
         _ = NSApplication.shared
         let reader = ReaderShortcutWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
