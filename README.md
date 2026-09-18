@@ -6,7 +6,7 @@
 
 Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
-[Website](https://serein.yfff.me) · [Download](https://github.com/Yalyenea/serein-pdf/releases/latest) · [Docs](https://serein.yfff.me/docs.html)
+[Website](http://serein.yfff.me) · [Download](https://github.com/Yalyenea/serein-pdf/releases/latest) · [Docs](http://serein.yfff.me/docs.html)
 
 The release DMG supports Apple silicon Macs running macOS 14 or later.
 

@@ -35,7 +35,7 @@ for path, soup in pages.items():
         if url.fragment and target in pages:
             require(pages[target].find(id=unquote(url.fragment)) is not None, f'missing anchor: {url.geturl()}')
     canonical = soup.select_one('link[rel="canonical"]')
-    expected = 'https://serein.yfff.me/' + ('' if path.name == 'index.html' else path.name)
+    expected = 'http://serein.yfff.me/' + ('' if path.name == 'index.html' else path.name)
     require(canonical is not None and canonical.get('href') == expected, 'incorrect canonical URL')
 
 for required in ('index.html', 'changelog.html', 'docs.html', 'assets/styles.css', 'assets/main.js', 'assets/app-icon.png', 'robots.txt', 'sitemap.xml'):
@@ -44,7 +44,7 @@ for required in ('index.html', 'changelog.html', 'docs.html', 'assets/styles.css
 
 sitemap = ET.parse(root / 'sitemap.xml')
 urls = {el.text for el in sitemap.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')}
-expected_urls = {'https://serein.yfff.me/' + ('' if path.name == 'index.html' else path.name) for path in pages}
+expected_urls = {'http://serein.yfff.me/' + ('' if path.name == 'index.html' else path.name) for path in pages}
 if urls != expected_urls:
     errors.append('sitemap does not match website pages')
 if errors:
