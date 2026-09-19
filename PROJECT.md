@@ -169,7 +169,7 @@ flowchart LR
 **阅读**
 - `Cmd+K`:打开紧凑网格 Command Palette;按分区两列排布当前可执行命令,`↑` / `↓` / `←` / `→` 选择,`Enter` 或点击执行,`Esc` 或再次 `Cmd+K` 关闭;面板打开时可直接按原有第二段组合
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
-- `Cmd+Option+0`:主阅读区按当前页或当前双页的文字字形边界一次缩放,左右各留 12pt,保持垂直阅读位置;结果为手动缩放,无文本时保持现状;`fit_text_width` 可在 Settings → Shortcuts 修改,`Cmd+0` 继续适应页面宽度
+- `Cmd+Option+0`:主阅读区按当前页或当前双页的文字字形边界持续适配,左右各留 12pt,保持垂直阅读位置;保存 `fitTextWidth` 模式,阅读区尺寸或当前页变化后重算,无文本页保留该文档已保存的比例;`fit_text_width` 可在 Settings → Shortcuts 修改,`Cmd+0` 继续适应页面宽度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4` 保持 `Single Page` / `Single Page Continuous` / `Two-Up` / `Two-Up Continuous`;`Book` / `Book · Continuous Turn` 默认无快捷键,可从 View 菜单或 Settings 选择
 - `C` 在当前单页、双页或书籍布局内切换对应连续状态
@@ -215,7 +215,7 @@ flowchart LR
 - `Option+Click` tab:进入 split-edit;已分屏时替换当前焦点 pane,未分屏时以当前 PDF + 目标 PDF 建 pair
 
 **布局**
-- `Cmd+B` / `Cmd+Option+B`:切换左 / 右侧栏
+- `Cmd+B` / `Cmd+Option+B`:切换左 / 右侧栏；侧栏开关或拖动宽度后，适应模式跟随中间阅读区重算，手动缩放按阅读区宽度同比调整，保持横向可视范围及阅读锚点，Lock 开启时同样生效
 - `Cmd+Shift+1` / `Cmd+Shift+2`:垂直 sidebar tabs / 水平 titlebar tabs
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
 - `Cmd+Ctrl+\`:切换同窗分屏;次级 pane 显示紧凑候选,首项为同一个 PDF;`View` 菜单可在左右 / 上下布局间切换(新窗口与重启恢复默认单屏)
@@ -223,7 +223,7 @@ flowchart LR
 - `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
 - 演示中 `P` / `R`:切换临时笔 / 激光,重复按键回到指针;`V`:回到指针;`Cmd+Z`:撤销当前页最后一笔;`E`:清空当前页墨迹;`Esc`:先回到指针,再按退出演示
 - 演示工具栏默认固定在底部;取消固定后自动隐藏,移到阅读区底部中央或点击展开按钮即可显示;激光移动轨迹会自动淡出
-- `Cmd+Ctrl+L`:双侧栏都关闭时打开两个侧栏;否则关闭两个侧栏与 tab chrome
+- `Cmd+Ctrl+L`:双侧栏都关闭时打开两个侧栏;否则关闭两个侧栏与 tab chrome；之后单独打开目录仍保持水平 tabs 隐藏，主动打开文档侧栏或切换 tab 形态可恢复；演示模式保存并恢复独立的 tab chrome 隐藏状态
 - `Cmd+Shift+X`:互换左右侧栏(宽度 / 可见状态随内容迁移)
 
 **系统**
@@ -252,7 +252,7 @@ flowchart LR
 | live `PDFDocument` | 不存入 session,由 `DocumentStore` 按需加载并通过小容量 LRU 保留当前 / 分屏 / 最近文档 |
 | `currentPageIndex: Int` | 当前页 |
 | `displayMode` | 六种阅读模式：单页 / 单页连续 / 双页 / 双页连续 / 书籍 / 书籍连续翻页 |
-| `scaleMode` | `fitWidth` / `fitHeight` / `manual` |
+| `scaleMode` | `fitWidth` / `fitHeight` / `fitTextWidth` / `manual` |
 | `zoomScale: CGFloat` | 缩放比例 |
 | `isHorizontalPanLocked: Bool` | 当前文档的水平平移锁定,随阅读状态保存 |
 | `lastReadPosition` | 页码 + 页内位置 |

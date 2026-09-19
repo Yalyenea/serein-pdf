@@ -280,6 +280,11 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
 
     /// After left/right chrome collapse or width pin, force readers to match the
     /// new center size (fit-width / fit-height reflow + recenter).
+    func prepareReadersForChromeLayoutChange() {
+        primaryReaderViewController.prepareForChromeSizeChange()
+        secondaryReaderViewController.prepareForChromeSizeChange()
+    }
+
     func reflowReadersForChromeLayoutChange() {
         primaryReaderViewController.reflowForContainerSizeChange()
         secondaryReaderViewController.reflowForContainerSizeChange()

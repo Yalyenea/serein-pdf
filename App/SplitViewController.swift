@@ -126,8 +126,19 @@ final class SplitViewController: NSSplitViewController {
         scheduleSidebarWidthApply()
     }
 
+    override func splitViewWillResizeSubviews(_ notification: Notification) {
+        guard !isApplyingChromeLayout, !isApplyingSidebarWidths,
+              view.window != nil else { return }
+        readerWorkspaceViewController.prepareReadersForChromeLayoutChange()
+    }
+
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
+        defer {
+            if !isApplyingChromeLayout, !isApplyingSidebarWidths {
+                scheduleReaderReflow()
+            }
+        }
         syncSidebarVisibilityFromSplitView()
         // Ignore programmatic chrome pin/collapse. Also ignore simultaneous multi-pane
         // redistribution (common on headless CI) which would clobber preferred widths.
@@ -247,6 +258,9 @@ final class SplitViewController: NSSplitViewController {
     ///   reflow fit-width/fit-height so the PDF tracks the center remainder
     private func applyChromeLayout(syncRightSidebarMode: Bool = true, forceWidthReapply: Bool = false) {
         guard isApplyingChromeLayout == false else { return }
+        if forceWidthReapply {
+            readerWorkspaceViewController.prepareReadersForChromeLayoutChange()
+        }
         isApplyingChromeLayout = true
         defer { isApplyingChromeLayout = false }
 
@@ -305,6 +319,18 @@ final class SplitViewController: NSSplitViewController {
             if physicalRight.isCollapsed != rightShouldCollapse {
                 physicalRight.isCollapsed = rightShouldCollapse
             }
+        }
+    }
+
+    private var pendingReaderReflow = false
+
+    private func scheduleReaderReflow() {
+        guard !pendingReaderReflow else { return }
+        pendingReaderReflow = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pendingReaderReflow = false
+            self.readerWorkspaceViewController.reflowReadersForChromeLayoutChange()
         }
     }
 

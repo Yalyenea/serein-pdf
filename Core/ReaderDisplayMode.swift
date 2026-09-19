@@ -88,6 +88,7 @@ enum ReaderScaleMode: String, Codable, Sendable {
     case manual
     case fitHeight = "fit_height"
     case fitWidth = "fit_width"
+    case fitTextWidth = "fit_text_width"
 }
 
 enum ShortcutCommand: String, CaseIterable, Sendable {

@@ -884,35 +884,110 @@ struct WindowChromeTests {
         }
     }
 
-    @Test
-    func sidebarToggleReflowsFitWidthPDF() throws {
+    @Test(arguments: [false, true])
+    func sidebarToggleReflowsFitWidthPDF(globalLock: Bool) throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-toggle-fit-width"))
+        var configuration = store.appConfiguration
+        configuration.reader.globalHorizontalPanLock = globalLock
+        store.updateAppConfiguration(configuration)
+        let session = try store.open(documentAt: makeTemporaryPDF(
+            named: "sidebar-toggle-fit-width",
+            pageSizes: [NSSize(width: 720, height: 3000)]
+        ))
         store.setScaleMode(.fitWidth, scaleFactor: 1, for: session.id)
-        controller.showWindow(nil)
+        prepareMainWindowForLayoutTests(controller)
         flushLayout(controller.window)
 
         let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
         let reader = splitController.readerViewController
         reader.fitToWidth()
         flushLayout(controller.window)
+        controller.scrollHalfPageDown()
+        reader.flushPendingReadingPosition()
+        flushLayout(controller.window)
+        let initialAnchor = try #require(visibleDocumentCenter(in: reader.pdfView))
         let scaleBoth = reader.pdfView.scaleFactor
         let centerBoth = splitController.splitView.arrangedSubviews[1].frame.width
 
-        store.setRightSidebarVisible(false, in: controller.windowID)
-        flushLayout(controller.window)
-        let scaleRightHidden = reader.pdfView.scaleFactor
-        let centerRightHidden = splitController.splitView.arrangedSubviews[1].frame.width
+        for (left, right) in [(true, false), (false, false), (false, true), (true, true),
+                              (false, true), (true, true)] {
+            store.setLeftSidebarVisible(left, in: controller.windowID)
+            store.setRightSidebarVisible(right, in: controller.windowID)
+            flushLayout(controller.window)
+            let expectedScale = try #require(fitWidthScaleExpected(for: reader.pdfView))
+            #expect(abs(reader.pdfView.scaleFactor - expectedScale) < 0.02, "actual=\(reader.pdfView.scaleFactor), expected=\(expectedScale)")
+            #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+            #expect(reader.testingHorizontalPanLockIsEnabled == globalLock)
+            let anchor = try #require(visibleDocumentCenter(in: reader.pdfView))
+            #expect(abs(anchor.y - initialAnchor.y) < 8)
+            if !left || !right {
+                #expect(splitController.splitView.arrangedSubviews[1].frame.width > centerBoth + 50)
+                #expect(reader.pdfView.scaleFactor > scaleBoth + 0.01)
+            }
+        }
 
-        #expect(centerRightHidden > centerBoth + 50)
-        #expect(scaleRightHidden > scaleBoth + 0.01)
+        for divider in [0, 1] {
+            let currentPosition = splitController.splitView.arrangedSubviews[divider].frame.maxX
+            splitController.splitView.setPosition(currentPosition + 60, ofDividerAt: divider)
+            splitController.splitView.adjustSubviews()
+            flushLayout(controller.window)
+            let expectedScale = try #require(fitWidthScaleExpected(for: reader.pdfView))
+            #expect(abs(reader.pdfView.scaleFactor - expectedScale) < 0.02, "actual=\(reader.pdfView.scaleFactor), expected=\(expectedScale)")
+            #expect(store.session(for: session.id)?.scaleMode == .fitWidth)
+            let anchor = try #require(visibleDocumentCenter(in: reader.pdfView))
+            #expect(abs(anchor.y - initialAnchor.y) < 8)
+        }
+    }
 
-        store.setRightSidebarVisible(true, in: controller.windowID)
+    @Test
+    func sidebarChangesPreserveFitHeightAndManualScale() async throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let session = try store.open(documentAt: makeTemporaryPDF(
+            named: "sidebar-height-manual",
+            pageSizes: [NSSize(width: 720, height: 1800)]
+        ))
+        prepareMainWindowForLayoutTests(controller)
         flushLayout(controller.window)
-        #expect(abs(reader.pdfView.scaleFactor - scaleBoth) < 0.08)
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        let reader = splitController.readerViewController
+
+        for manual in [false, true] {
+            reader.fitToHeight()
+            if manual { reader.zoomIn() }
+            flushLayout(controller.window)
+            let originalScale = reader.pdfView.scaleFactor
+            let originalWidth = try #require(pdfClipView(in: reader.pdfView)).frame.width
+            for visible in [false, true] {
+                store.setLeftSidebarVisible(visible, in: controller.windowID)
+                store.setRightSidebarVisible(visible, in: controller.windowID)
+                flushLayout(controller.window)
+                #expect(store.session(for: session.id)?.scaleMode == (manual ? .manual : .fitHeight))
+                let expectedScale = manual ? originalScale * (try #require(pdfClipView(in: reader.pdfView)).frame.width) / originalWidth : try #require(fitHeightScaleExpected(for: reader.pdfView))
+                #expect(abs(reader.pdfView.scaleFactor - expectedScale) < 0.02, "actual=\(reader.pdfView.scaleFactor), expected=\(expectedScale)")
+            }
+            let currentPosition = splitController.splitView.arrangedSubviews[0].frame.maxX
+            // setPosition does not emit the drag-begin delegate callback.
+            splitController.splitViewWillResizeSubviews(Notification(
+                name: NSSplitView.willResizeSubviewsNotification, object: splitController.splitView
+            ))
+            splitController.splitView.setPosition(currentPosition + 40, ofDividerAt: 0)
+            splitController.splitView.adjustSubviews()
+            splitController.splitViewDidResizeSubviews(Notification(
+                name: NSSplitView.didResizeSubviewsNotification, object: splitController.splitView
+            ))
+            try await Task.sleep(for: .milliseconds(100))
+            flushLayout(controller.window)
+            #expect(store.session(for: session.id)?.scaleMode == (manual ? .manual : .fitHeight))
+            let resizedWidth = try #require(pdfClipView(in: reader.pdfView)).frame.width
+            let expectedAfterDrag = manual ? originalScale * resizedWidth / originalWidth : originalScale
+            #expect(abs(reader.pdfView.scaleFactor - expectedAfterDrag) < 0.02, "manual=\(manual), actual=\(reader.pdfView.scaleFactor), expected=\(expectedAfterDrag)")
+        }
     }
 
     @Test
@@ -2876,7 +2951,7 @@ struct WindowChromeTests {
             (clipView.frame.width - 64) / (leftSize.width + rightSize.width + 14),
             (clipView.frame.height - 48) / max(leftSize.height, rightSize.height)
         )
-        #expect(abs(reader.pdfView.scaleFactor - expectedScale) < 0.02)
+        #expect(abs(reader.pdfView.scaleFactor - expectedScale) < 0.02, "actual=\(reader.pdfView.scaleFactor), expected=\(expectedScale)")
         assertBookSpreadVerticallyCentered([leftPage, rightPage], in: reader.pdfView)
 
         let initialScale = reader.pdfView.scaleFactor

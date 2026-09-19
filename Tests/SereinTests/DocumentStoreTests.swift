@@ -99,6 +99,25 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertFalse(store.effectiveHorizontalPanLock(for: second))
     }
 
+    func testTextWidthFitModePersistsAcrossReopenAndRestore() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let readingStates = InMemoryReadingStateStore()
+        let store = makeStore(persistence: persistence, readingStateStore: readingStates)
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "text-fit-state"))
+        store.setScaleMode(.fitTextWidth, scaleFactor: 1.75, for: session.id)
+        let state = try XCTUnwrap(readingStates.states[session.url])
+        let decoded = try JSONDecoder().decode(PersistedReadingState.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(decoded.scaleMode, .fitTextWidth)
+        let restored = makeStore(persistence: persistence, readingStateStore: readingStates)
+        try restored.restorePersistedState()
+        XCTAssertEqual(restored.activeSession?.scaleMode, .fitTextWidth)
+        XCTAssertEqual(restored.activeSession?.zoomScale, 1.75)
+        store.close(sessionID: session.id)
+        let reopened = try store.open(documentAt: session.url)
+        XCTAssertEqual(reopened.scaleMode, .fitTextWidth)
+        XCTAssertEqual(reopened.zoomScale, 1.75)
+    }
+
     func testReadingStateWithoutPanLockStillDecodes() throws {
         let state = PersistedReadingState(
             url: URL(fileURLWithPath: "/test.pdf"), displayMode: .singlePage,

@@ -559,6 +559,13 @@ final class ReaderViewController: NSViewController {
     private var ownsVerticalPageGesture = false
     private var verticalPageTurnAccumulator: CGFloat = 0
     private var didTurnPageInVerticalGesture = false
+    private struct ChromeResizeState {
+        let sessionID: UUID
+        let width: CGFloat
+        let scale: CGFloat
+        let anchor: PDFViewportAnchor
+    }
+    private var chromeResizeState: ChromeResizeState?
     private var pendingFitWidthSessionID: UUID?
     private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
@@ -817,7 +824,7 @@ final class ReaderViewController: NSViewController {
               pdfView.bounds.width > 0,
               pdfView.bounds.height > 0 else { return }
 
-        guard session.scaleMode == .fitWidth || session.scaleMode == .fitHeight else {
+        guard session.scaleMode != .manual else {
             recenterDocumentViewIfNeeded()
             return
         }
@@ -825,7 +832,7 @@ final class ReaderViewController: NSViewController {
         let isPending: Bool
         let boundsChanged: Bool
         switch session.scaleMode {
-        case .fitWidth:
+        case .fitWidth, .fitTextWidth:
             isPending = pendingFitWidthSessionID == session.id
             boundsChanged = abs(pdfView.bounds.width - lastAppliedFitBoundsWidth) > 0.5
                 || session.displayMode.usesBookLayout
@@ -849,6 +856,8 @@ final class ReaderViewController: NSViewController {
         pdfView.layoutSubtreeIfNeeded()
 
         switch session.scaleMode {
+        case .fitTextWidth:
+            applyFitTextWidth(for: session)
         case .fitWidth:
             pendingFitWidthSessionID = nil
             applyFitWidth(for: session)
@@ -1035,12 +1044,19 @@ final class ReaderViewController: NSViewController {
         applyFitWidth(for: session)
     }
 
-    /// Fit the current page or spread's text once, keeping its vertical reading position.
+    /// Keep the current page or spread's text fitted as the reading area changes.
     func fitToTextWidth() {
+        guard let session = targetSession() else { return }
+        applyFitTextWidth(for: session)
+    }
+
+    private func applyFitTextWidth(for session: DocumentSession) {
         guard !isAllPagesOverviewActive,
               !presentationOverlay.isPresentationEnabled,
-              let session = targetSession(), session.id == displayedSessionID,
+              session.id == displayedSessionID,
               let document = pdfView.document, let clipView = pdfClipView() else { return }
+        pendingFitWidthSessionID = nil
+        recordFitWidthBounds()
         let pages = spreadPages(for: session, in: document)
         guard let anchorPage = pages.first else { return }
         var textRect = NSRect.null
@@ -1078,17 +1094,32 @@ final class ReaderViewController: NSViewController {
         pendingFitWidthSessionID = nil
         pendingFitHeightSessionID = nil
         applyProgrammaticScale(scale, viewportAnchor: anchor)
-        displayedScaleMode = .manual
-        documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
+        displayedScaleMode = .fitTextWidth
+        documentStore.setScaleMode(.fitTextWidth, scaleFactor: pdfView.scaleFactor, for: session.id)
         if let position = currentReadingPosition() {
             displayedReadingPosition = position
             documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
         }
     }
 
+    func prepareForChromeSizeChange() {
+        guard chromeResizeState == nil, isViewLoaded, !isApplyingStoreState, !isApplyingProgrammaticScale else { return }
+        flushPendingReadingPositionWriteback()
+        guard let session = targetSession(), session.scaleMode == .manual,
+              session.id == displayedSessionID,
+              let clip = pdfClipView(), clip.frame.width > 0,
+              let anchor = captureViewportAnchor() else { return }
+        chromeResizeState = ChromeResizeState(
+            sessionID: session.id, width: clip.frame.width,
+            scale: pdfView.scaleFactor, anchor: anchor
+        )
+    }
+
     /// Called after split chrome changes so fit modes track the new reader width
     /// instead of leaving the previous scale (which looks like a sidebar overlay).
     func reflowForContainerSizeChange() {
+        let resizeState = chromeResizeState
+        chromeResizeState = nil
         guard isViewLoaded else { return }
         view.layoutSubtreeIfNeeded()
         pdfView.layoutSubtreeIfNeeded()
@@ -1100,6 +1131,8 @@ final class ReaderViewController: NSViewController {
               pdfView.bounds.height > 0 else { return }
 
         switch session.scaleMode {
+        case .fitTextWidth:
+            applyFitTextWidth(for: session)
         case .fitWidth:
             pendingFitWidthSessionID = nil
             // Invalidate so applyFitWidth always recomputes against the settled clip.
@@ -1110,7 +1143,20 @@ final class ReaderViewController: NSViewController {
             lastAppliedFitBoundsHeight = -1
             applyFitHeight(for: session)
         case .manual:
-            break
+            if let resizeState, resizeState.sessionID == session.id,
+               let clip = pdfClipView(), abs(clip.frame.width - resizeState.width) > 0.5 {
+                let scale = min(max(resizeState.scale * clip.frame.width / resizeState.width,
+                                    pdfView.minScaleFactor), pdfView.maxScaleFactor)
+                let wasApplying = isApplyingStoreState
+                isApplyingStoreState = true
+                applyProgrammaticScale(scale, viewportAnchor: resizeState.anchor)
+                documentStore.setScaleMode(.manual, scaleFactor: pdfView.scaleFactor, for: session.id)
+                if let position = currentReadingPosition() {
+                    displayedReadingPosition = position
+                    documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+                }
+                isApplyingStoreState = wasApplying
+            }
         }
         recenterDocumentViewIfNeeded()
     }
@@ -1547,7 +1593,7 @@ final class ReaderViewController: NSViewController {
            let session = targetSession(),
            session.id == displayedSessionID {
             switch session.scaleMode {
-            case .fitWidth:
+            case .fitWidth, .fitTextWidth:
                 pendingFitWidthSessionID = session.id
                 lastAppliedFitBoundsWidth = -1
                 view.needsLayout = true
@@ -2469,6 +2515,10 @@ final class ReaderViewController: NSViewController {
 
         displayedReadingPosition = position
         documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        if session.scaleMode == .fitTextWidth, session.lastReadPosition.pageIndex != pageIndex {
+            pendingFitWidthSessionID = session.id
+            view.needsLayout = true
+        }
         completeExternalNavigation(
             target: NavigationHistoryEntry(sessionID: session.id, position: position)
         )
@@ -2494,7 +2544,7 @@ final class ReaderViewController: NSViewController {
             beginUserMagnification()
         } else {
             switch session.scaleMode {
-            case .fitWidth:
+            case .fitWidth, .fitTextWidth:
                 pendingFitWidthSessionID = session.id
                 lastAppliedFitBoundsWidth = -1
                 view.needsLayout = true
@@ -2759,6 +2809,8 @@ final class ReaderViewController: NSViewController {
 
     private func liveScaleMode(for session: DocumentSession, liveScale: CGFloat) -> ReaderScaleMode? {
         switch session.scaleMode {
+        case .fitTextWidth:
+            return displayedScaleMode == .fitTextWidth ? .fitTextWidth : nil
         case .manual:
             return .manual
         case .fitHeight:
@@ -2925,6 +2977,15 @@ final class ReaderViewController: NSViewController {
 
     private func applyScaleIfNeeded(_ session: DocumentSession) {
         switch session.scaleMode {
+        case .fitTextWidth:
+            if displayedScaleMode != .fitTextWidth {
+                applyProgrammaticScale(session.zoomScale)
+            }
+            if pdfView.bounds.width > 0 {
+                applyFitTextWidth(for: session)
+            } else {
+                pendingFitWidthSessionID = session.id
+            }
         case .fitHeight:
             if pdfView.bounds.height > 0 {
                 pendingFitHeightSessionID = nil

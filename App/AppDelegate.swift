@@ -3002,7 +3002,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(toggleDisplayModeContinuity(_:)):
             return activePDFSession != nil
-        case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)), #selector(fitReaderToTextWidth(_:)):
+        case #selector(fitReaderToTextWidth(_:)):
+            menuItem.state = activePDFSession?.scaleMode == .fitTextWidth ? .on : .off
+            return activePDFSession != nil
+        case #selector(zoomInReader(_:)), #selector(zoomOutReader(_:)):
             return activePDFSession != nil
         case #selector(goToNextPageAction(_:)),
              #selector(goToPreviousPageAction(_:)),

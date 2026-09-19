@@ -5,6 +5,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Reading
+- Keep the horizontal content range and reading anchor when sidebars open, close, or resize, including manual zoom with Lock enabled.
+- Persist Fit Text Width as an adaptive mode and refit on reading-area and page changes; restore the document’s saved scale on pages without text.
+- Keep horizontal tabs hidden when reopening only the outline after immersive mode, and restore tab visibility correctly after demo mode.
 - Add persistent Global Lock (`Shift+L`) for all windows and newly opened PDFs, preserving individual PDF lock states and excluding Book modes.
 
 ## [0.7.0] - 2026-09-19

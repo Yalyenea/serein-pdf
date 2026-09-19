@@ -10,6 +10,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let tabsOnRight: Bool
         let isTabsPaneVisible: Bool
         let isImmersiveModeEnabled: Bool
+        let hidesTitlebarTabs: Bool
         let hasTabs: Bool
     }
 
@@ -29,6 +30,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var allowsTerminationWithoutPrompt = false
     private var demoModeSnapshot: DemoModeSnapshot?
     private var immersiveModeSnapshot: ImmersiveModeSnapshot?
+    private var hidesTitlebarTabs = false
     private var appliedWindowChromeState: WindowChromeState?
     private var appliedWindowTitleState: WindowTitleState?
     var shouldCloseHandler: ((MainWindowController) -> Bool)?
@@ -141,12 +143,25 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let tabsPaneVisible = tabsOnRight
             ? documentStore.isRightSidebarVisible(in: windowID)
             : documentStore.isLeftSidebarVisible(in: windowID)
+        let tabPresentationMode = documentStore.tabPresentationMode(in: windowID)
+        let hasTabs = !documentStore.sessions(in: windowID).isEmpty
+        let changedTabPresentation = appliedWindowChromeState.map {
+            $0.tabPresentationMode != tabPresentationMode
+        } ?? false
+        if changedTabPresentation || tabsPaneVisible || !hasTabs {
+            hidesTitlebarTabs = false
+        } else if isImmersiveModeEnabled,
+                  appliedWindowChromeState?.isImmersiveModeEnabled != true {
+            // Opening only the outline must not undo the user's hidden tab chrome.
+            hidesTitlebarTabs = true
+        }
         let state = WindowChromeState(
-            tabPresentationMode: documentStore.tabPresentationMode(in: windowID),
+            tabPresentationMode: tabPresentationMode,
             tabsOnRight: tabsOnRight,
             isTabsPaneVisible: tabsPaneVisible,
             isImmersiveModeEnabled: isImmersiveModeEnabled,
-            hasTabs: !documentStore.sessions(in: windowID).isEmpty
+            hidesTitlebarTabs: hidesTitlebarTabs,
+            hasTabs: hasTabs
         )
         guard appliedWindowChromeState != state else { return }
         appliedWindowChromeState = state
@@ -154,7 +169,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             state.tabPresentationMode == .horizontalTitlebar &&
             state.hasTabs &&
             !tabsPaneVisible &&
-            !isImmersiveModeEnabled
+            !state.hidesTitlebarTabs
 
         splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
         synchronizeWindowToolbar(isVisible: shouldShowTitlebarTabs)
@@ -391,6 +406,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             documentStore.isRightSidebarVisible(in: windowID) == false
         documentStore.setLeftSidebarVisible(shouldOpenBothSidebars, in: windowID)
         documentStore.setRightSidebarVisible(shouldOpenBothSidebars, in: windowID)
+        hidesTitlebarTabs = !shouldOpenBothSidebars
         applyWindowChromeState()
     }
 
@@ -400,12 +416,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         demoModeSnapshot = DemoModeSnapshot(
             wasFullScreen: window?.styleMask.contains(.fullScreen) == true,
             wasImmersiveModeEnabled: isImmersiveModeEnabled,
+            hidesTitlebarTabs: hidesTitlebarTabs,
             readerState: currentDemoReaderState()
         )
         splitViewController.readerWorkspaceViewController.setPresentationEnabled(true)
         if isImmersiveModeEnabled == false {
             enterImmersiveMode()
         }
+        hidesTitlebarTabs = true
+        applyWindowChromeState()
         applyDemoReaderState()
         if window?.isVisible == true,
            window?.styleMask.contains(.fullScreen) != true {
@@ -421,6 +440,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             self.immersiveModeSnapshot = nil
             restoreImmersiveMode(from: immersiveModeSnapshot)
         }
+        hidesTitlebarTabs = snapshot.hidesTitlebarTabs
+        applyWindowChromeState()
         if snapshot.wasFullScreen == false,
            window?.isVisible == true,
            window?.styleMask.contains(.fullScreen) == true {
@@ -435,6 +456,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         )
         documentStore.setLeftSidebarVisible(false, in: windowID)
         documentStore.setRightSidebarVisible(false, in: windowID)
+        hidesTitlebarTabs = true
         applyWindowChromeState()
     }
 
@@ -869,6 +891,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private struct DemoModeSnapshot {
         let wasFullScreen: Bool
         let wasImmersiveModeEnabled: Bool
+        let hidesTitlebarTabs: Bool
         let readerState: DemoReaderState?
     }
 

@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct ReaderTextWidthTests {
     @Test
-    func fitsAsymmetricTextMarginsAndPersistsManualZoom() throws {
+    func fitsAsymmetricTextMarginsAndPersistsFitMode() throws {
         try withReader { controller, reader, store, sessionID in
             let page = try #require(reader.pdfView.document?.page(at: 0))
             let cropBox = page.bounds(for: .cropBox)
@@ -20,10 +20,99 @@ struct ReaderTextWidthTests {
             try expectTextFillsViewport([page], in: reader.pdfView)
             #expect(reader.pdfView.scaleFactor > pageWidthScale * 1.2)
             let session = try #require(store.session(for: sessionID))
-            #expect(session.scaleMode == .manual)
+            #expect(session.scaleMode == .fitTextWidth)
             #expect(abs(session.zoomScale - reader.pdfView.scaleFactor) < 0.001)
             #expect(page.bounds(for: .cropBox) == cropBox)
             #expect(try Data(contentsOf: session.url) == originalData)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func textFitTracksSidebarsAndRetainsReadingHeight(globalLock: Bool) throws {
+        try withReader { controller, reader, store, sessionID in
+            var configuration = store.appConfiguration
+            configuration.reader.globalHorizontalPanLock = globalLock
+            store.updateAppConfiguration(configuration)
+            controller.scrollHalfPageDown()
+            settle(controller)
+            reader.fitToTextWidth()
+            settle(controller)
+            let page = try #require(reader.pdfView.currentPage)
+            let initialCenter = try viewportCenter(on: page, in: reader.pdfView)
+            for (left, right) in [(true, false), (false, false), (false, true), (true, true)] {
+                store.setLeftSidebarVisible(left, in: controller.windowID)
+                store.setRightSidebarVisible(right, in: controller.windowID)
+                settle(controller)
+                #expect(store.session(for: sessionID)?.scaleMode == .fitTextWidth)
+                try expectTextFillsViewport([page], in: reader.pdfView)
+                #expect(abs(try viewportCenter(on: page, in: reader.pdfView).y - initialCenter.y) < 3)
+            }
+            let split = try #require(controller.window?.contentViewController as? SplitViewController)
+            let dividerPosition = split.splitView.arrangedSubviews[0].frame.maxX
+            split.splitView.setPosition(dividerPosition + 50, ofDividerAt: 0)
+            split.splitView.adjustSubviews()
+            settle(controller)
+            try expectTextFillsViewport([page], in: reader.pdfView)
+            #expect(store.session(for: sessionID)?.scaleMode == .fitTextWidth)
+            #expect(abs(try viewportCenter(on: page, in: reader.pdfView).y - initialCenter.y) < 3)
+
+            reader.zoomIn()
+            settle(controller)
+            #expect(store.session(for: sessionID)?.scaleMode == .manual)
+            let manualScale = reader.pdfView.scaleFactor
+            let manualWidth = try clipView(in: reader.pdfView).frame.width
+            store.setRightSidebarVisible(false, in: controller.windowID)
+            settle(controller)
+            let newWidth = try clipView(in: reader.pdfView).frame.width
+            let expected = manualScale * newWidth / manualWidth
+            #expect(abs(reader.pdfView.scaleFactor - expected) < 0.001, "actual=\(reader.pdfView.scaleFactor), expected=\(expected), max=\(reader.pdfView.maxScaleFactor)")
+        }
+    }
+
+    @Test
+    func textFitRestoresSavedScaleWhenReturningToBlankPage() throws {
+        let url = try makeTextPDF()
+        let document = try #require(PDFDocument(url: url))
+        let blank = try #require(TestPDFFixtures.makeBlankDocument(
+            pageCount: 1, pageSize: NSSize(width: 720, height: 2000)
+        ).page(at: 0))
+        document.insert(blank, at: 1)
+        #expect(document.write(to: url))
+        try withReader(url: url) { controller, reader, store, sessionID in
+            reader.fitToTextWidth()
+            settle(controller)
+            #expect(reader.goToPage(1))
+            settle(controller)
+            reader.flushPendingReadingPosition()
+            let savedScale = reader.pdfView.scaleFactor
+            _ = try store.open(documentAt: TestPDFFixtures.makeBlankPDF(named: "other-scale"))
+            settle(controller)
+            reader.zoomOut()
+            settle(controller)
+            store.activate(sessionID: sessionID)
+            settle(controller)
+            #expect(store.session(for: sessionID)?.scaleMode == .fitTextWidth)
+            #expect(reader.pdfView.currentPage === reader.pdfView.document?.page(at: 1))
+            #expect(abs(reader.pdfView.scaleFactor - savedScale) < 0.001)
+        }
+    }
+
+    @Test
+    func nativePageNavigationRefitsDifferentTextWidths() throws {
+        let url = try makeTextPDF()
+        let document = try #require(PDFDocument(url: url))
+        let narrowDocument = try #require(PDFDocument(url: makeTextPDF(text: "Narrower content")))
+        let narrow = narrowDocument.page(at: 0)
+        document.insert(try #require(narrow), at: 1)
+        #expect(document.write(to: url))
+        try withReader(url: url) { controller, reader, store, sessionID in
+            reader.fitToTextWidth()
+            settle(controller)
+            let second = try #require(reader.pdfView.document?.page(at: 1))
+            reader.pdfView.go(to: second)
+            settle(controller)
+            #expect(store.session(for: sessionID)?.scaleMode == .fitTextWidth)
+            try expectTextFillsViewport([second], in: reader.pdfView)
         }
     }
 
@@ -91,7 +180,7 @@ struct ReaderTextWidthTests {
 
             #expect(reader.pdfView.scaleFactor > scale * 1.2)
             try expectTextFillsViewport([page], in: reader.pdfView)
-            #expect(store.session(for: sessionID)?.scaleMode == .manual)
+            #expect(store.session(for: sessionID)?.scaleMode == .fitTextWidth)
             #expect(store.session(for: sessionID)?.isHorizontalPanLocked == true)
             let clip = try clipView(in: reader.pdfView)
             let lockedX = clip.bounds.origin.x
@@ -282,7 +371,7 @@ private func expectTextFillsViewport(_ pages: [PDFPage], in pdfView: PDFView) th
 }
 
 @MainActor
-private func makeTextPDF(pageCount: Int = 1) throws -> URL {
+private func makeTextPDF(pageCount: Int = 1, text: String = "Readable content with asymmetric margins") throws -> URL {
     let root = try TestPDFFixtures.makeRootDirectory(prefix: "text-width")
     let url = root.appendingPathComponent("asymmetric-text.pdf")
     var box = CGRect(x: 0, y: 0, width: 720, height: 2000)
@@ -292,7 +381,7 @@ private func makeTextPDF(pageCount: Int = 1) throws -> URL {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
         for row in 0..<45 {
-            NSString(string: "Readable content with asymmetric margins").draw(
+            NSString(string: text).draw(
                 at: NSPoint(x: 90, y: 100 + row * 40),
                 withAttributes: [
                     .font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular),
