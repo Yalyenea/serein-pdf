@@ -32,6 +32,16 @@ final class ReaderCommentInteractionTests: XCTestCase {
             return true
         }
 
+        // Seed a non-click currentEvent to expose dependence on prior tests.
+        let previousEvent = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown,
+            location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil,
+            characters: "x", charactersIgnoringModifiers: "x", isARepeat: false, keyCode: 7))
+        NSApp.postEvent(previousEvent, atStart: true)
+        _ = try XCTUnwrap(NSApp.nextEvent(matching: .keyDown, until: .now,
+                                         inMode: .default, dequeue: true))
+        XCTAssertEqual(NSApp.currentEvent?.type, .keyDown)
+
         for rotation in [0, 90, 180, 270] {
             pdfView.document = nil
             page.rotation = rotation
@@ -50,15 +60,22 @@ final class ReaderCommentInteractionTests: XCTestCase {
                     location: pdfView.convert(point, to: nil), modifierFlags: [], timestamp: 0,
                     windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
                 let previousActivations = activations
-                // Dispatch through AppKit so hitTest sees this click as currentEvent
-                // and the assertion covers delivery through PDFKit's native subviews.
-                NSApp.sendEvent(event)
+                // Fetch before dispatch, as the app event loop does, so hitTest sees
+                // this click as currentEvent rather than an event from a prior test.
+                NSApp.postEvent(event, atStart: true)
+                let dispatched = try XCTUnwrap(NSApp.nextEvent(matching: .leftMouseDown,
+                    until: .now, inMode: .default, dequeue: true))
+                XCTAssertEqual(NSApp.currentEvent?.type, .leftMouseDown)
+                NSApp.sendEvent(dispatched)
                 XCTAssertEqual(activations, previousActivations + 1,
                                "Icon click, rotation \(rotation), scale \(scale)")
                 let mouseUp = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseUp,
                     location: event.locationInWindow, modifierFlags: [], timestamp: 0.01,
                     windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 1, pressure: 0))
-                NSApp.sendEvent(mouseUp)
+                NSApp.postEvent(mouseUp, atStart: true)
+                let dispatchedUp = try XCTUnwrap(NSApp.nextEvent(matching: .leftMouseUp,
+                    until: .now, inMode: .default, dequeue: true))
+                NSApp.sendEvent(dispatchedUp)
             }
         }
         XCTAssertEqual(activations, 8)
