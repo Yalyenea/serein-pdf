@@ -2497,6 +2497,37 @@ struct WindowChromeTests {
     }
 
     @Test
+    func globalPanLockUpdatesOpenReadersAndRestoresIndividualState() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "global-lock-first"))
+        flushLayout(controller.window)
+        #expect(controller.toggleHorizontalPanLock())
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "global-lock-second"))
+        flushLayout(controller.window)
+        #expect(!controller.isHorizontalPanLocked)
+        var configuration = store.appConfiguration
+        configuration.reader.globalHorizontalPanLock = true
+        store.updateAppConfiguration(configuration)
+        flushLayout(controller.window)
+        #expect(controller.isHorizontalPanLocked)
+        #expect(controller.toggleHorizontalPanLock())
+        #expect(store.session(for: second.id)?.isHorizontalPanLocked == false)
+        store.activate(sessionID: first.id)
+        flushLayout(controller.window)
+        #expect(controller.isHorizontalPanLocked)
+        configuration.reader.globalHorizontalPanLock = false
+        store.updateAppConfiguration(configuration)
+        flushLayout(controller.window)
+        #expect(controller.isHorizontalPanLocked)
+        store.activate(sessionID: second.id)
+        flushLayout(controller.window)
+        #expect(!controller.isHorizontalPanLocked)
+    }
+
+    @Test
     func horizontalPanLockFollowsDocumentWhenSwitchingTabs() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()

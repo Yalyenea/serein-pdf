@@ -1132,7 +1132,13 @@ final class DocumentStore {
         notifyChange(.content, sessionIDs: [sessionID])
     }
 
+    func effectiveHorizontalPanLock(for session: DocumentSession) -> Bool {
+        !session.isBlank && !session.displayMode.usesBookLayout &&
+            (appConfiguration.reader.globalHorizontalPanLock || session.isHorizontalPanLocked)
+    }
+
     func setHorizontalPanLocked(_ enabled: Bool, for sessionID: UUID) {
+        guard !appConfiguration.reader.globalHorizontalPanLock else { return }
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }),
               !sessions[index].isBlank,
               !enabled || !sessions[index].displayMode.usesBookLayout,

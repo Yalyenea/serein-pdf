@@ -78,6 +78,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Demo mode (`cmd+l`) enters full screen, fits the whole page with stable single-page framing, and hides reader chrome. Use `p` for a temporary pen, `r` for a laser pointer, and `v` for the normal pointer. The bottom toolbar can stay pinned or auto-hide; move to the bottom center to reveal it. `Esc` returns an active tool to the pointer, then exits demo mode; `cmd+l` exits directly and restores the prior layout.
 - Presentation ink stays attached to its PDF page while navigating and remains separate in each window. `cmd+z` undoes the last stroke on the current page; `e` clears that page. Ink is never written to the PDF and is cleared when you leave demo mode or switch documents. The laser trail fades automatically.
 - Immersive mode (`cmd+ctrl+l`) opens both sidebars only when none are visible; otherwise it hides both sidebars and tab chrome while keeping the current window size
+- Global Lock (`shift+l`) locks horizontal panning and magnification gestures across all windows and newly opened PDFs. It persists across restarts, preserves individual PDF lock states, and excludes Book modes. Turn it off to restore each PDF’s own lock; individual `l` toggles are disabled while Global Lock is on.
 - Per-PDF memory: scale, page, and horizontal pan lock persist across launches. Each PDF keeps its own lock state; sidebar widths are window-level runtime state seeded from layout defaults.
 - Switching PDFs briefly shows the current file name at the top of the reader, so fast tab changes stay oriented without adding permanent chrome
 - Config-driven defaults via `~/Library/Application Support/Serein/config.toml`
@@ -138,6 +139,7 @@ dark_theme = "rose_pine_moon" # or "normal"
 [reader]
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
+global_horizontal_pan_lock = false
 reading_focus_width = "page"       # or "column" / "custom"
 reading_focus_custom_width = 0.72  # 0.3–1.0, used by "custom"
 reading_focus_height = 96          # 48–240 pt
@@ -189,6 +191,7 @@ toggle_continuous_reading = "none"
 toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
 toggle_horizontal_pan_lock = "l"
+toggle_global_horizontal_pan_lock = "shift+l"
 book = "none"
 book_continuous = "none"
 toggle_display_mode_continuity = "c"

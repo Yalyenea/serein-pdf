@@ -421,6 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .toggleNightMode: { [weak self] in self?.toggleNightMode(nil) },
             .toggleReadingFocus: { [weak self] in self?.toggleReadingFocusModeAction(nil) },
             .adjustReadingFocus: { [weak self] in self?.showReadingFocusControlsAction(nil) },
+            .toggleGlobalHorizontalPanLock: { [weak self] in self?.toggleGlobalHorizontalPanLockAction(nil) },
             .toggleHorizontalPanLock: { [weak self] in self?.toggleHorizontalPanLockAction(nil) },
             .switchCurrentTheme: { [weak self] in self?.switchCurrentTheme(nil) },
             .openLibraryPDF: { [weak self] in self?.showLibraryPalette(nil) },
@@ -1066,6 +1067,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 action: #selector(showReadingFocusControlsAction(_:))
             ),
             makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleGlobalHorizontalPanLock.menuTitle,
+                command: .toggleGlobalHorizontalPanLock,
+                action: #selector(toggleGlobalHorizontalPanLockAction(_:))
+            ),
+            makeConfiguredMenuItem(
                 title: ShortcutCommand.toggleHorizontalPanLock.menuTitle,
                 command: .toggleHorizontalPanLock,
                 action: #selector(toggleHorizontalPanLockAction(_:))
@@ -1686,6 +1692,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func toggleReadingFocusModeAction(_ sender: Any?) {
         mainWindowController?.toggleReadingFocusMode()
+    }
+
+    @objc
+    private func toggleGlobalHorizontalPanLockAction(_ sender: Any?) {
+        var configuration = appConfiguration
+        configuration.reader.globalHorizontalPanLock.toggle()
+        applyUpdatedConfiguration(configuration)
     }
 
     @objc
@@ -2890,7 +2903,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(toggleReadingFocusModeAction(_:)):
             menuItem.state = controller?.isReadingFocusModeEnabled == true ? .on : .off
             return activePDFSession != nil
+        case #selector(toggleGlobalHorizontalPanLockAction(_:)):
+            menuItem.state = appConfiguration.reader.globalHorizontalPanLock ? .on : .off
+            return true
         case #selector(toggleHorizontalPanLockAction(_:)):
+            let global = appConfiguration.reader.globalHorizontalPanLock
+            menuItem.title = global ? "Horizontal Pan Lock (Global Lock On)" : ShortcutCommand.toggleHorizontalPanLock.menuTitle
+            if global {
+                menuItem.state = controller?.isHorizontalPanLocked == true ? .on : .off
+                return false
+            }
             menuItem.state = controller?.isHorizontalPanLocked == true ? .on : .off
             return activePDFSession.map { $0.displayMode.usesBookLayout == false } == true
         case #selector(showReadingFocusControlsAction(_:)):

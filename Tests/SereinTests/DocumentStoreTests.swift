@@ -75,6 +75,30 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(store.session(for: reopened.id)).isHorizontalPanLocked)
     }
 
+    func testGlobalPanLockPreservesIndividualStatesAndAppliesToNewDocuments() throws {
+        let store = makeStore()
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "global-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "global-second"))
+        store.setHorizontalPanLocked(true, for: first.id)
+        var configuration = store.appConfiguration
+        configuration.reader.globalHorizontalPanLock = true
+        store.updateAppConfiguration(configuration)
+        store.setHorizontalPanLocked(false, for: first.id)
+        store.setHorizontalPanLocked(true, for: second.id)
+        XCTAssertTrue(try XCTUnwrap(store.session(for: first.id)).isHorizontalPanLocked)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: second.id)).isHorizontalPanLocked)
+        XCTAssertTrue(store.effectiveHorizontalPanLock(for: second))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "global-new"))
+        XCTAssertTrue(store.effectiveHorizontalPanLock(for: third))
+        XCTAssertFalse(third.isHorizontalPanLocked)
+        store.setDisplayMode(.book, for: third.id)
+        XCTAssertFalse(store.effectiveHorizontalPanLock(for: try XCTUnwrap(store.session(for: third.id))))
+        configuration.reader.globalHorizontalPanLock = false
+        store.updateAppConfiguration(configuration)
+        XCTAssertTrue(store.effectiveHorizontalPanLock(for: try XCTUnwrap(store.session(for: first.id))))
+        XCTAssertFalse(store.effectiveHorizontalPanLock(for: second))
+    }
+
     func testReadingStateWithoutPanLockStillDecodes() throws {
         let state = PersistedReadingState(
             url: URL(fileURLWithPath: "/test.pdf"), displayMode: .singlePage,

@@ -100,6 +100,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case toggleReadingFocus = "toggle_reading_focus"
     case adjustReadingFocus = "adjust_reading_focus"
     case toggleHorizontalPanLock = "toggle_horizontal_pan_lock"
+    case toggleGlobalHorizontalPanLock = "toggle_global_horizontal_pan_lock"
     case switchCurrentTheme = "switch_current_theme"
     case openLibraryPDF = "open_library_pdf"
     case refreshLibraryIndex = "refresh_library_index"
@@ -187,6 +188,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Toggle Reading Focus"
         case .adjustReadingFocus:
             "Adjust Reading Focus…"
+        case .toggleGlobalHorizontalPanLock:
+            "Global Lock"
         case .toggleHorizontalPanLock:
             "Toggle Horizontal Pan Lock"
         case .switchCurrentTheme:
@@ -398,7 +401,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
              .undoLastHighlight, .redoLastHighlight, .copyHighlightsMarkdown:
             .annotations
         case .toggleNightMode, .toggleReadingFocus, .adjustReadingFocus,
-             .toggleHorizontalPanLock, .switchCurrentTheme, .fitHeight, .fitWidth, .fitTextWidth,
+             .toggleHorizontalPanLock, .toggleGlobalHorizontalPanLock, .switchCurrentTheme, .fitHeight, .fitWidth, .fitTextWidth,
              .zoomIn, .zoomOut, .singlePage, .singlePageContinuous, .twoUp,
              .twoUpContinuous, .book, .bookContinuous, .toggleDisplayModeContinuity,
              .toggleContinuousReading, .toggleAllPagesOverview, .toggleDemoMode:

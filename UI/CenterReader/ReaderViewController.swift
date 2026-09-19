@@ -2697,7 +2697,7 @@ final class ReaderViewController: NSViewController {
             targetReadingPosition,
             force: documentChanged || displayModeChanged
         )
-        applyHorizontalPanLock(refreshedSession.isHorizontalPanLocked)
+        applyHorizontalPanLock(documentStore.effectiveHorizontalPanLock(for: refreshedSession))
         if let reloadedLivePosition,
            reloadedLivePosition != refreshedSession.lastReadPosition {
             documentStore.updateReadingPosition(
@@ -2732,8 +2732,9 @@ final class ReaderViewController: NSViewController {
               pdfView.document === document,
               displayedDisplayMode == session.displayMode else { return false }
 
-        if isHorizontalPanLocked != session.isHorizontalPanLocked {
-            applyHorizontalPanLock(session.isHorizontalPanLocked)
+        updatePanLockIndicator()
+        if isHorizontalPanLocked != documentStore.effectiveHorizontalPanLock(for: session) {
+            applyHorizontalPanLock(documentStore.effectiveHorizontalPanLock(for: session))
             return true
         }
 
@@ -3903,7 +3904,9 @@ final class ReaderViewController: NSViewController {
 
     private func updatePanLockIndicator() {
         panLockIndicator.isHidden = !isHorizontalPanLocked
-        panLockIndicator.stringValue = "H-lock · L"
+        let global = documentStore.appConfiguration.reader.globalHorizontalPanLock
+        panLockIndicator.stringValue = global ? "Global Lock · ⇧L" : "H-lock · L"
+        panLockIndicator.toolTip = global ? "Global Lock is enabled for all PDFs" : "Horizontal pan lock for this PDF"
         panLockIndicator.textColor = NightModeStyle.secondaryTextColor
     }
 

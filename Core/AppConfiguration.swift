@@ -128,6 +128,7 @@ struct AppConfiguration: Equatable, Sendable {
     struct Reader: Equatable, Sendable {
         var defaultDisplayMode: ReaderDisplayMode
         var fitWidthOnOpen: Bool
+        var globalHorizontalPanLock = false
         var readingFocus: ReadingFocusSettings
 
         init(
@@ -229,6 +230,7 @@ struct AppConfiguration: Equatable, Sendable {
             .toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: []),
             .adjustReadingFocus: KeyboardShortcut(key: "f", modifiers: [.option]),
             .toggleHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: []),
+            .toggleGlobalHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: [.shift]),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
             .copyCurrentPDFPath: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
@@ -554,6 +556,7 @@ dark_theme = "rose_pine_moon"
 [reader]
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
+global_horizontal_pan_lock = false
 reading_focus_width = "page"
 reading_focus_custom_width = 0.72
 reading_focus_height = 96
@@ -598,6 +601,7 @@ toggle_night_mode = "i"
 toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
 toggle_horizontal_pan_lock = "l"
+toggle_global_horizontal_pan_lock = "shift+l"
 # Cmd+K, Cmd+T is a built-in chord.
 switch_current_theme = "none"
 # Cmd+K, Cmd+O is a built-in chord.
@@ -687,6 +691,7 @@ dark_theme = "\(configuration.appearance.darkTheme.rawValue)"
 [reader]
 default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
 fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
+global_horizontal_pan_lock = \(configuration.reader.globalHorizontalPanLock ? "true" : "false")
 reading_focus_width = "\(configuration.reader.readingFocus.widthMode.rawValue)"
 reading_focus_custom_width = \(serializedDecimal(configuration.reader.readingFocus.customWidthRatio))
 reading_focus_height = \(Int(configuration.reader.readingFocus.height.rounded()))
@@ -730,6 +735,7 @@ toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: confi
 toggle_reading_focus = "\(serializedShortcut(.toggleReadingFocus, configuration: configuration))"
 adjust_reading_focus = "\(serializedShortcut(.adjustReadingFocus, configuration: configuration))"
 toggle_horizontal_pan_lock = "\(serializedShortcut(.toggleHorizontalPanLock, configuration: configuration))"
+toggle_global_horizontal_pan_lock = "\(serializedShortcut(.toggleGlobalHorizontalPanLock, configuration: configuration))"
 switch_current_theme = "\(serializedShortcut(.switchCurrentTheme, configuration: configuration))"
 open_library_pdf = "\(serializedShortcut(.openLibraryPDF, configuration: configuration))"
 refresh_library_index = "\(serializedShortcut(.refreshLibraryIndex, configuration: configuration))"
@@ -816,6 +822,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "[reader]",
         "default_display_mode",
         "fit_width_on_open",
+        "global_horizontal_pan_lock",
         "reading_focus_width",
         "reading_focus_custom_width",
         "reading_focus_height",
@@ -851,6 +858,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "toggle_reading_focus",
         "adjust_reading_focus",
         "toggle_horizontal_pan_lock",
+        "toggle_global_horizontal_pan_lock",
         "switch_current_theme",
         "open_library_pdf",
         "refresh_library_index",
@@ -1033,6 +1041,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .toggleReadingFocus, to: &configuration)
         case ("shortcuts", "adjust_reading_focus"):
             try applyShortcut(rawValue, command: .adjustReadingFocus, to: &configuration)
+        case ("shortcuts", "toggle_global_horizontal_pan_lock"):
+            try applyShortcut(rawValue, command: .toggleGlobalHorizontalPanLock, to: &configuration)
         case ("shortcuts", "toggle_horizontal_pan_lock"):
             try applyShortcut(rawValue, command: .toggleHorizontalPanLock, to: &configuration)
         case ("shortcuts", "switch_current_theme"):
@@ -1069,6 +1079,8 @@ struct AppConfigurationParser {
                 throw AppConfigurationError.invalidDisplayMode(value)
             }
             configuration.reader.defaultDisplayMode = displayMode
+        case ("reader", "global_horizontal_pan_lock"):
+            configuration.reader.globalHorizontalPanLock = try parseBool(rawValue)
         case ("reader", "fit_width_on_open"):
             configuration.reader.fitWidthOnOpen = try parseBool(rawValue)
         case ("reader", "reading_focus_width"):

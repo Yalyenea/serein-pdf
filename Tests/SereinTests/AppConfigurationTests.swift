@@ -591,6 +591,7 @@ fit_width = "command+9"
         configuration.appearance.darkTheme = .normal
         configuration.reader.defaultDisplayMode = .bookContinuous
         configuration.reader.fitWidthOnOpen = true
+        configuration.reader.globalHorizontalPanLock = true
         configuration.reader.readingFocus = ReadingFocusSettings(
             widthMode: .custom,
             customWidthRatio: 0.58,
@@ -619,6 +620,8 @@ fit_width = "command+9"
         XCTAssertEqual(reloadedConfiguration.appearance.darkTheme, .normal)
         XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .bookContinuous)
         XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
+        XCTAssertTrue(reloadedConfiguration.reader.globalHorizontalPanLock)
+        XCTAssertEqual(reloadedConfiguration.shortcuts.bindings[.toggleGlobalHorizontalPanLock], KeyboardShortcut(key: "l", modifiers: [.shift]))
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.widthMode, .custom)
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.customWidthRatio, 0.58, accuracy: 0.001)
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.height, 128, accuracy: 0.001)

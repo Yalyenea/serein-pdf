@@ -161,6 +161,17 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(triggeredCommands, [.toggleHorizontalPanLock])
     }
 
+    func testShiftLMatchesGlobalLockWithoutMatchingIndividualLock() throws {
+        let bindings = AppConfiguration.default.shortcuts.bindings
+        let global = try XCTUnwrap(bindings[.toggleGlobalHorizontalPanLock])
+        let individual = try XCTUnwrap(bindings[.toggleHorizontalPanLock])
+        let event = makeKeyEvent(characters: "L", modifierFlags: [.shift])
+        XCTAssertTrue(global.matches(event: event))
+        XCTAssertFalse(individual.matches(event: event))
+        XCTAssertEqual(global.menuKeyEquivalent, "l")
+        XCTAssertEqual(global.modifierMask, [.shift])
+    }
+
     func testOptionFReadingFocusShortcutMatchesModifiedCharacterEvent() {
         let shortcut = KeyboardShortcut(key: "f", modifiers: [.option])
         let event = makeKeyEvent(

@@ -4,6 +4,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Reading
+- Add persistent Global Lock (`Shift+L`) for all windows and newly opened PDFs, preserving individual PDF lock states and excluding Book modes.
+
 ## [0.7.0] - 2026-09-19
 
 ### Website and licensing
