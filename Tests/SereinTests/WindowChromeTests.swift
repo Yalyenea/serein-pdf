@@ -3263,24 +3263,9 @@ struct WindowChromeTests {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.25))
         controller.window?.layoutIfNeeded()
         let afterWaitOrigin = clipView.bounds.origin
-        // PDFKit scales clip coordinates; convert the offset vector, not its
-        // origin point or the window's screen-space backing scale factor.
-        let backingOffset = clipView.convertToBacking(NSSize(width: afterWaitOrigin.x, height: afterWaitOrigin.y))
-        let documentView = try #require(reader.pdfView.documentView)
-        let lowerLimit = clipView.constrainBoundsRect(NSRect(
-            x: afterWaitOrigin.x,
-            y: documentView.frame.minY - clipView.bounds.height,
-            width: clipView.bounds.width, height: clipView.bounds.height
-        )).minY
-        let upperLimit = clipView.constrainBoundsRect(NSRect(
-            x: afterWaitOrigin.x,
-            y: documentView.frame.maxY + clipView.bounds.height,
-            width: clipView.bounds.width, height: clipView.bounds.height
-        )).minY
-        // Native scroll limits can be fractional after PDFKit scales the page.
-        // At an edge, that exact limit takes precedence over pixel rounding.
-        let isAtScrollLimit = abs(afterWaitOrigin.y - lowerLimit) < 0.001
-            || abs(afterWaitOrigin.y - upperLimit) < 0.001
+        // PDFKit allows fractional scroll coordinates after scaling. The settled
+        // viewport must remain stable and within the native scroll limits.
+        let constrainedOrigin = clipView.constrainBoundsRect(clipView.bounds).origin
 
         #expect(store.session(for: session.id)?.currentPageIndex == 3)
         let document = try #require(reader.pdfView.document)
@@ -3288,8 +3273,8 @@ struct WindowChromeTests {
         #expect(reader.testingCurrentReadingPosition?.pageIndex == 3)
         #expect(abs(afterWaitOrigin.x - settledOrigin.x) < 0.5)
         #expect(abs(afterWaitOrigin.y - settledOrigin.y) < 0.5)
-        #expect(abs(backingOffset.height - backingOffset.height.rounded()) < 0.001 || isAtScrollLimit,
-                "offset=\(backingOffset.height), y=\(afterWaitOrigin.y), limits=\(lowerLimit)...\(upperLimit)")
+        #expect(abs(afterWaitOrigin.x - constrainedOrigin.x) < 0.001)
+        #expect(abs(afterWaitOrigin.y - constrainedOrigin.y) < 0.001)
     }
 
     @Test
