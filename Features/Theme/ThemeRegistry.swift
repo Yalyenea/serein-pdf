@@ -5,6 +5,39 @@ struct ThemeRGBComponents: Equatable, Sendable {
     let green: CGFloat
     let blue: CGFloat
 
+    init(red: CGFloat, green: CGFloat, blue: CGFloat) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+
+    init(hex: UInt32) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xff) / 255,
+            green: CGFloat((hex >> 8) & 0xff) / 255,
+            blue: CGFloat(hex & 0xff) / 255
+        )
+    }
+
+    var luminance: CGFloat {
+        let linear = linearized
+        return linear.red * 0.2126 + linear.green * 0.7152 + linear.blue * 0.0722
+    }
+
+    func mixed(with other: Self, fraction: CGFloat) -> Self {
+        Self(
+            red: red + (other.red - red) * fraction,
+            green: green + (other.green - green) * fraction,
+            blue: blue + (other.blue - blue) * fraction
+        )
+    }
+
+    func contrastingText(preferred: Self) -> Self {
+        let contrast = (max(luminance, preferred.luminance) + 0.05)
+            / (min(luminance, preferred.luminance) + 0.05)
+        return contrast >= 4.5 ? preferred : Self(hex: luminance > 0.179 ? 0x000000 : 0xffffff)
+    }
+
     var linearized: Self {
         Self(
             red: Self.linearize(red),
@@ -18,6 +51,33 @@ struct ThemeRGBComponents: Equatable, Sendable {
             ? component / 12.92
             : pow((component + 0.055) / 1.055, 2.4)
     }
+}
+
+struct ThemeHexColor: Equatable, Sendable {
+    private let value: UInt32
+
+    init?(hex: String) {
+        guard hex.count == 7, hex.first == "#",
+              hex.dropFirst().allSatisfy({ $0.isASCII && $0.isHexDigit }),
+              let value = UInt32(hex.dropFirst(), radix: 16) else { return nil }
+        self.value = value
+    }
+
+    init?(color: NSColor) {
+        guard let color = color.usingColorSpace(.sRGB) else { return nil }
+        func byte(_ value: CGFloat) -> UInt32 {
+            UInt32((min(1, max(0, value)) * 255).rounded())
+        }
+        value = (byte(color.redComponent) << 16) | (byte(color.greenComponent) << 8) | byte(color.blueComponent)
+    }
+
+    var hexString: String { String(format: "#%06x", value) }
+    var components: ThemeRGBComponents { ThemeRGBComponents(hex: value) }
+}
+
+struct ThemeBackgroundOverrides: Equatable, Sendable {
+    var page: ThemeHexColor?
+    var window: ThemeHexColor?
 }
 
 enum ThemeColorRecipe: Equatable, Sendable {
@@ -123,6 +183,8 @@ struct ThemeDescriptor: Equatable, Sendable {
 struct ThemeSelection: Equatable, Sendable {
     var light: LightTheme
     var dark: DarkTheme
+    var lightBackground = ThemeBackgroundOverrides()
+    var darkBackground = ThemeBackgroundOverrides()
 
     static let `default` = ThemeSelection(light: .normal, dark: .rosePineMoon)
 }
@@ -203,7 +265,7 @@ enum ThemeRegistry {
             highlightPalette: .rosePineDawn,
             pdfStyle: .paper(background: dawnSurface)
         ),
-    ]
+    ].merging(ThemePresets.light) { original, _ in original }
 
     static let darkThemes: [DarkTheme: ThemeDescriptor] = [
         .normal: ThemeDescriptor(
@@ -246,12 +308,12 @@ enum ThemeRegistry {
                 accentPreservation: 0.85
             )
         ),
-    ]
+    ].merging(ThemePresets.dark) { original, _ in original }
 
     static func snapshot(for selection: ThemeSelection) -> ThemeSnapshot {
         ThemeSnapshot(
-            light: lightThemes[selection.light]!,
-            dark: darkThemes[selection.dark]!
+            light: lightThemes[selection.light]!.applying(selection.lightBackground, appearance: .aqua),
+            dark: darkThemes[selection.dark]!.applying(selection.darkBackground, appearance: .darkAqua)
         )
     }
 

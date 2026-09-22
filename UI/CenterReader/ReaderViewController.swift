@@ -3843,7 +3843,7 @@ final class ReaderViewController: NSViewController {
         let isNightModeEnabled = readerState.isNightModeEnabled
         let appearance = NSApp.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
-            let pageBackground = isNightModeEnabled ? NightModeStyle.pageBackgroundColor : NightModeStyle.readerBackdropColor
+            let pageBackground = NightModeStyle.readerBackdropColor
             let usesFlatPDFChrome = NightModeStyle.prefersFlatPDFChrome(for: appearance)
             let showsPageShadows = !isNightModeEnabled && !usesFlatPDFChrome
             if pdfView.pageShadowsEnabled != showsPageShadows {

@@ -68,7 +68,6 @@
 
 - [ ] **M11** 扩展生态预研 + 最小 PoC
 - [ ] **M12-010~014** 空窗体验收尾
-- [ ] **多主题预设** [docs/theme-presets-plan.md](docs/theme-presets-plan.md)
 
 ## 4. 阅读指引
 

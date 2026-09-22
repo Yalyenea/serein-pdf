@@ -2616,7 +2616,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func applyApplicationAppearance() {
         ThemeManager.shared.apply(
             light: appConfiguration.appearance.lightTheme,
-            dark: appConfiguration.appearance.darkTheme
+            dark: appConfiguration.appearance.darkTheme,
+            lightBackground: appConfiguration.appearance.lightBackground,
+            darkBackground: appConfiguration.appearance.darkBackground
         )
         let effectiveMode = temporaryAppearanceMode ?? appConfiguration.appearance.mode
         NSApp.appearance = effectiveMode.appAppearance

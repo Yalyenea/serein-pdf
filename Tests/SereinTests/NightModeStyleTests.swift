@@ -26,6 +26,51 @@ struct NightModeStyleTests {
 
     @Test
     @MainActor
+    func everyPresetMapsPaperAndTextToItsDeclaredEndpoints() throws {
+        defer { ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon) }
+        for theme in LightTheme.allCases where theme != .normal {
+            ThemeManager.shared.apply(light: theme, dark: .normal)
+            let filter = try #require(NightModeStyle.makePDFContentFilters(for: NSAppearance(named: .aqua)).first)
+            let vectors = try matrixVectors(from: filter)
+            assertLinearColor(apply(vectors, to: (1, 1, 1)), matches: resolve(NightModeStyle.pageBackgroundColor, in: .aqua))
+            assertLinearColor(apply(vectors, to: (0, 0, 0)), matches: .black)
+        }
+        for theme in DarkTheme.allCases {
+            ThemeManager.shared.apply(light: .normal, dark: theme)
+            let filter = try #require(NightModeStyle.makePDFContentFilters(for: NSAppearance(named: .darkAqua)).first)
+            let vectors = try matrixVectors(from: filter)
+            assertLinearColor(apply(vectors, to: (1, 1, 1)), matches: resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua))
+            assertLinearColor(apply(vectors, to: (0, 0, 0)), matches: resolve(NightModeStyle.pageForegroundColor, in: .darkAqua))
+        }
+    }
+
+    @Test
+    @MainActor
+    func customBackgroundsKeepReadableEndpointsInEitherAppearance() throws {
+        defer { ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon) }
+        for hex in ["#ffffff", "#000000", "#faeedd", "#102035", "#808080", "#ff00ff"] {
+            let color = try #require(ThemeHexColor(hex: hex))
+            let overrides = ThemeBackgroundOverrides(page: color, window: color)
+            ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon, lightBackground: overrides, darkBackground: overrides)
+            for name in [NSAppearance.Name.aqua, .darkAqua] {
+                let filter = try #require(NightModeStyle.makePDFContentFilters(for: NSAppearance(named: name)).first)
+                let vectors = try matrixVectors(from: filter)
+                let background = resolve(NightModeStyle.pageBackgroundColor, in: name)
+                let foreground = resolve(NightModeStyle.pageForegroundColor, in: name)
+                assertLinearColor(apply(vectors, to: (1, 1, 1)), matches: background)
+                assertLinearColor(apply(vectors, to: (0, 0, 0)), matches: foreground)
+                #expect(ThemeHexColor(color: background) == color)
+                #expect(ThemeHexColor(color: resolve(NightModeStyle.readerBackdropColor, in: name)) == color)
+                let primary = try #require(ThemeHexColor(color: resolve(NightModeStyle.primaryTextColor, in: name))).components
+                let contrast = (max(primary.luminance, color.components.luminance) + 0.05)
+                    / (min(primary.luminance, color.components.luminance) + 0.05)
+                #expect(contrast >= 4.5)
+            }
+        }
+    }
+
+    @Test
+    @MainActor
     func dynamicColorsCaptureImmutableThemeSnapshot() {
         ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
         let normalColor = NightModeStyle.pageBackgroundColor

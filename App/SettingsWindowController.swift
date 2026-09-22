@@ -256,6 +256,12 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     private let modePopUp = NSPopUpButton()
     private let lightThemePopUp = NSPopUpButton()
     private let darkThemePopUp = NSPopUpButton()
+    private let lightPageBackground = NSColorWell()
+    private let lightWindowBackground = NSColorWell()
+    private let darkPageBackground = NSColorWell()
+    private let darkWindowBackground = NSColorWell()
+    private let resetLightBackground = NSButton()
+    private let resetDarkBackground = NSButton()
     private let displayModePopUp = NSPopUpButton()
     private let readingFocusWidthPopUp = NSPopUpButton()
     private let readingFocusCustomWidthSlider = NSSlider(
@@ -437,6 +443,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         selectItem(in: modePopUp, matching: configuration.appearance.mode.rawValue)
         selectItem(in: lightThemePopUp, matching: configuration.appearance.lightTheme.rawValue)
         selectItem(in: darkThemePopUp, matching: configuration.appearance.darkTheme.rawValue)
+        applyBackgroundControls()
         selectItem(in: displayModePopUp, matching: configuration.reader.defaultDisplayMode.rawValue)
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
         applyReadingFocusControls(configuration.reader.readingFocus)
@@ -583,11 +590,13 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         modePopUp.action = #selector(handleGeneralControlChanged(_:))
 
         lightThemePopUp.translatesAutoresizingMaskIntoConstraints = false
+        lightThemePopUp.identifier = NSUserInterfaceItemIdentifier("lightThemePopUp")
         lightThemePopUp.controlSize = .small
         lightThemePopUp.target = self
         lightThemePopUp.action = #selector(handleGeneralControlChanged(_:))
 
         darkThemePopUp.translatesAutoresizingMaskIntoConstraints = false
+        darkThemePopUp.identifier = NSUserInterfaceItemIdentifier("darkThemePopUp")
         darkThemePopUp.controlSize = .small
         darkThemePopUp.target = self
         darkThemePopUp.action = #selector(handleGeneralControlChanged(_:))
@@ -720,8 +729,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
         let appearanceGrid = makeSettingsGrid([
             [makeRowLabel("Mode"), modePopUp],
-            [makeRowLabel("Light Theme"), lightThemePopUp],
-            [makeRowLabel("Dark Theme"), darkThemePopUp],
+            [makeRowLabel("Light Theme"), makeThemeControls(isDark: false)],
+            [makeRowLabel("Dark Theme"), makeThemeControls(isDark: true)],
         ])
         let readingGrid = makeSettingsGrid([
             [makeRowLabel("Default Display"), displayModePopUp],
@@ -763,8 +772,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             sectionsStack.trailingAnchor.constraint(lessThanOrEqualTo: generalContainer.trailingAnchor, constant: -32),
             sectionsStack.topAnchor.constraint(equalTo: generalContainer.topAnchor, constant: 16),
             modePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
-            lightThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
-            darkThemePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
+            lightThemePopUp.widthAnchor.constraint(equalToConstant: 156),
+            darkThemePopUp.widthAnchor.constraint(equalToConstant: 156),
             displayModePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
             readingFocusWidthPopUp.widthAnchor.constraint(equalToConstant: 138),
             autoSavePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
@@ -773,6 +782,91 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             footnoteLabel.topAnchor.constraint(equalTo: sectionsStack.bottomAnchor, constant: 14),
             footnoteBottomConstraint,
         ])
+    }
+
+    private func makeThemeControls(isDark: Bool) -> NSStackView {
+        let prefix = isDark ? "dark" : "light"
+        let page = isDark ? darkPageBackground : lightPageBackground
+        let window = isDark ? darkWindowBackground : lightWindowBackground
+        let reset = isDark ? resetDarkBackground : resetLightBackground
+        for (well, name, label) in [(page, "Page", "PDF page"), (window, "Window", "Window and sidebars")] {
+            well.identifier = NSUserInterfaceItemIdentifier("\(prefix)\(name)Background")
+            well.colorWellStyle = .minimal
+            well.supportsAlpha = false
+            well.target = self
+            well.action = #selector(handleBackgroundChanged(_:))
+            well.setAccessibilityLabel("\(isDark ? "Dark" : "Light") \(label) background")
+            well.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                well.widthAnchor.constraint(equalToConstant: 28),
+                well.heightAnchor.constraint(equalToConstant: 22),
+            ])
+        }
+        reset.identifier = NSUserInterfaceItemIdentifier(isDark ? "resetDarkBackground" : "resetLightBackground")
+        reset.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Reset backgrounds")
+        reset.isBordered = false
+        reset.controlSize = .small
+        reset.target = self
+        reset.action = #selector(handleResetBackground(_:))
+        reset.toolTip = "Use the theme’s page and window backgrounds"
+        reset.widthAnchor.constraint(equalToConstant: 22).isActive = true
+
+        func label(_ title: String) -> NSTextField {
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: 11)
+            label.textColor = .secondaryLabelColor
+            return label
+        }
+        let stack = NSStackView(views: [
+            isDark ? darkThemePopUp : lightThemePopUp,
+            label("Page"), page, label("Window"), window, reset,
+        ])
+        stack.spacing = 6
+        stack.alignment = .centerY
+        return stack
+    }
+
+    private func applyBackgroundControls() {
+        let appearance = configuration.appearance
+        let snapshot = ThemeRegistry.snapshot(for: ThemeSelection(
+            light: appearance.lightTheme, dark: appearance.darkTheme,
+            lightBackground: appearance.lightBackground, darkBackground: appearance.darkBackground
+        ))
+        for (descriptor, name, page, window) in [
+            (snapshot.light, NSAppearance.Name.aqua, lightPageBackground, lightWindowBackground),
+            (snapshot.dark, NSAppearance.Name.darkAqua, darkPageBackground, darkWindowBackground),
+        ] {
+            let resolved = NSAppearance(named: name)!
+            page.color = descriptor.color(for: .pageBackground, appearance: resolved)
+            window.color = descriptor.color(for: .readerBackdrop, appearance: resolved)
+            page.toolTip = "PDF page · \(ThemeHexColor(color: page.color)!.hexString)"
+            window.toolTip = "Window and sidebars · \(ThemeHexColor(color: window.color)!.hexString)"
+        }
+        resetLightBackground.isEnabled = appearance.lightBackground != ThemeBackgroundOverrides()
+        resetDarkBackground.isEnabled = appearance.darkBackground != ThemeBackgroundOverrides()
+    }
+
+    @objc private func handleBackgroundChanged(_ sender: NSColorWell) {
+        guard !isApplyingConfiguration, let color = ThemeHexColor(color: sender.color) else { return }
+        var updated = configuration
+        switch sender {
+        case lightPageBackground: updated.appearance.lightBackground.page = color
+        case lightWindowBackground: updated.appearance.lightBackground.window = color
+        case darkPageBackground: updated.appearance.darkBackground.page = color
+        case darkWindowBackground: updated.appearance.darkBackground.window = color
+        default: return
+        }
+        publishConfigurationIfChanged(updated)
+    }
+
+    @objc private func handleResetBackground(_ sender: NSButton) {
+        var updated = configuration
+        if sender === resetLightBackground {
+            updated.appearance.lightBackground = .init()
+        } else if sender === resetDarkBackground {
+            updated.appearance.darkBackground = .init()
+        }
+        publishConfigurationIfChanged(updated)
     }
 
     private func makeSettingsGrid(_ rows: [[NSView]]) -> NSGridView {

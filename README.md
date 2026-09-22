@@ -49,7 +49,8 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Settings General can edit the default left and right sidebar widths; the legacy opacity key remains config-only for compatibility
 - Theme controls now split into `Mode`, `Light Theme`, and `Dark Theme`
-- Light themes support `Normal` / `Rose Pine Dawn`; dark themes support `Normal` / `Rose Pine Moon`
+- Choose from 17 light and 28 dark themes, including Rose Pine, Catppuccin, Everforest, GitHub, Gruvbox, Nord, Solarized, and Tokyo Night; each menu lists only supported variants
+- Customize `Page` (PDF paper) and `Window` (reader surroundings and sidebars) colors beside each theme in Settings. Light and dark backgrounds save independently, survive theme changes, and reset to the selected theme with the adjacent reset button
 - `i` toggles the current appearance mode between light and dark while keeping your selected light / dark themes
 - `cmd+k`, then `cmd+t` switches the current light or dark theme, VS Code-style
 - Copy the current page as an image (`cmd+option+c` or the reader context menu); the raster includes annotations at 2× mediaBox and does not apply night-mode filters
@@ -134,8 +135,12 @@ and is created on first launch. Edit, then restart Serein.
 ```toml
 [appearance]
 mode = "system"               # or "light" / "dark"
-light_theme = "normal"        # or "rose_pine_dawn"
-dark_theme = "rose_pine_moon" # or "normal"
+light_theme = "normal"        # e.g. "rose_pine_dawn", "catppuccin", "everforest"
+dark_theme = "rose_pine_moon" # e.g. "normal", "nord", "tokyo-night"
+light_page_background = ""   # empty = theme default; otherwise "#RRGGBB"
+light_window_background = ""
+dark_page_background = ""
+dark_window_background = ""
 
 [reader]
 default_display_mode = "single_page_continuous"
@@ -206,8 +211,12 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
   restart goes back to the config defaults.
 - `mode = "system"` follows the current macOS appearance.
 - `light_theme` and `dark_theme` are selected independently, so you can pair
-  `Normal` light with `Rose Pine Moon`, or `Rose Pine Dawn` with `Normal`
-  dark, without changing the mode model.
+  any available light preset with any dark preset. `cmd+k`, then `cmd+t`
+  cycles the current appearance's presets.
+- Background overrides accept opaque `#RRGGBB` colors; an empty string uses
+  the selected theme's color. Invalid colors and unknown theme IDs are reported
+  as configuration errors. Settings changes refresh open readers immediately.
+  Background customization affects display only and does not recolor the PDF file.
 - `sidebars_swapped = true` flips the left and right panes — window-level widths
   travel with the panes so your narrow tabs pane stays narrow after the swap.
 - Empty windows and blank tabs show a large, faint serif italic `Serein` wordmark

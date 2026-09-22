@@ -8,11 +8,15 @@ final class ThemeManager {
 
     private init() {}
 
-    func apply(light: LightTheme, dark: DarkTheme) {
-        selection = ThemeSelection(light: light, dark: dark)
+    func apply(
+        light: LightTheme,
+        dark: DarkTheme,
+        lightBackground: ThemeBackgroundOverrides = .init(),
+        darkBackground: ThemeBackgroundOverrides = .init()
+    ) {
+        selection = ThemeSelection(light: light, dark: dark, lightBackground: lightBackground, darkBackground: darkBackground)
+        snapshot = ThemeRegistry.snapshot(for: selection)
     }
 
-    var snapshot: ThemeSnapshot {
-        ThemeRegistry.snapshot(for: selection)
-    }
+    private(set) var snapshot = ThemeRegistry.snapshot(for: .default)
 }

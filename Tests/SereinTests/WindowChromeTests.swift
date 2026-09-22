@@ -552,9 +552,49 @@ struct WindowChromeTests {
         assertColor(clipView.backgroundColor, matches: pageBackground)
         if let readerBackground = reader.view.layer?.backgroundColor,
            let readerBackgroundColor = NSColor(cgColor: readerBackground) {
-            assertColor(readerBackgroundColor, matches: pageBackground)
+            assertColor(readerBackgroundColor, matches: resolvedColor(NightModeStyle.readerBackdropColor, in: app.effectiveAppearance))
         } else {
             Issue.record("Failed to read reader background")
+        }
+    }
+
+    @Test
+    func customBackgroundRefreshesBothReadersWithoutChangingTheirPositions() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        defer {
+            ThemeManager.shared.apply(light: .normal, dark: .rosePineMoon)
+            app.appearance = previousAppearance
+        }
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "theme-split-first"))
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "theme-split-second"))
+        store.setSplitEnabled(true, in: controller.windowID)
+        store.activate(sessionID: first.id, in: controller.windowID, targetPane: .secondary)
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        let readers = [split.readerWorkspaceViewController.primaryReaderViewController,
+                       split.readerWorkspaceViewController.secondaryReaderViewController]
+        flushLayout(controller.window)
+        let zooms = readers.map { $0.pdfView.scaleFactor }
+        let pages = readers.map { $0.pdfView.currentPage }
+        let overrides = ThemeBackgroundOverrides(page: ThemeHexColor(hex: "#fff2dc"), window: ThemeHexColor(hex: "#283d34"))
+        ThemeManager.shared.apply(light: .everforest, dark: .catppuccin, lightBackground: overrides, darkBackground: overrides)
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            app.appearance = NSAppearance(named: name)
+            controller.refreshThemeAppearance()
+            flushLayout(controller.window)
+            for (index, reader) in readers.enumerated() {
+                #expect(reader.pdfView.currentPage === pages[index])
+                #expect(abs(reader.pdfView.scaleFactor - zooms[index]) < 0.001)
+                let background = try #require(reader.view.layer?.backgroundColor)
+                #expect(ThemeHexColor(color: try #require(NSColor(cgColor: background))) == overrides.window)
+                let container = try #require(findDescendant(of: PDFContainerView.self, in: reader.view))
+                let containerBackground = try #require(container.layer?.backgroundColor)
+                #expect(ThemeHexColor(color: try #require(NSColor(cgColor: containerBackground))) == overrides.window)
+                #expect(reader.pdfView.contentFilters.count == 1)
+            }
         }
     }
 

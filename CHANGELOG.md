@@ -4,6 +4,11 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Appearance
+- Add Rosewash's curated presets for a total of 17 light and 28 dark themes, with independent selections and cycling through the current appearance's themes.
+- Customize PDF page and window/sidebar backgrounds separately for light and dark appearances in Settings. Save colors immediately, preserve them across theme changes, and reset each appearance to its selected theme's defaults.
+- Keep custom page text readable on light or dark paper, synchronize both readers, and use the window background around PDF pages in either appearance.
+
 ### Reading
 - Keep the horizontal content range and reading anchor when sidebars open, close, or resize, including manual zoom with Lock enabled.
 - Persist Fit Text Width as an adaptive mode and refit on reading-area and page changes; restore the document’s saved scale on pages without text.

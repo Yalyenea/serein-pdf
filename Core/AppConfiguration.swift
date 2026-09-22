@@ -36,46 +36,116 @@ enum AppearanceMode: String, CaseIterable, Codable, Sendable {
 enum LightTheme: String, CaseIterable, Codable, Sendable {
     case normal
     case rosePineDawn = "rose_pine_dawn"
+    case absolutely
+    case catppuccin
+    case codex
+    case everforest
+    case github
+    case gruvbox
+    case linear
+    case notion
+    case one
+    case proof
+    case raycast
+    case solarized
+    case vercel
+    case vscodePlus = "vscode-plus"
+    case xcode
 
     var menuTitle: String {
         switch self {
-        case .normal:
-            "Normal"
-        case .rosePineDawn:
-            "Rose Pine Dawn"
+        case .normal: "Normal"
+        case .rosePineDawn: "Rose Pine Dawn"
+        case .absolutely: "Absolutely"
+        case .catppuccin: "Catppuccin"
+        case .codex: "Codex"
+        case .everforest: "Everforest"
+        case .github: "GitHub"
+        case .gruvbox: "Gruvbox"
+        case .linear: "Linear"
+        case .notion: "Notion"
+        case .one: "One"
+        case .proof: "Proof"
+        case .raycast: "Raycast"
+        case .solarized: "Solarized"
+        case .vercel: "Vercel"
+        case .vscodePlus: "VS Code Plus"
+        case .xcode: "Xcode"
         }
     }
 
-    var toggled: LightTheme {
-        switch self {
-        case .normal:
-            .rosePineDawn
-        case .rosePineDawn:
-            .normal
-        }
+    var toggled: Self {
+        let themes = Self.allCases
+        return themes[(themes.firstIndex(of: self)! + 1) % themes.count]
     }
 }
 
 enum DarkTheme: String, CaseIterable, Codable, Sendable {
     case normal
     case rosePineMoon = "rose_pine_moon"
+    case absolutely
+    case ayu
+    case catppuccin
+    case codex
+    case dracula
+    case everforest
+    case github
+    case gruvbox
+    case linear
+    case lobster
+    case material
+    case matrix
+    case monokai
+    case nightOwl = "night-owl"
+    case nord
+    case notion
+    case one
+    case oscurange
+    case raycast
+    case sentry
+    case solarized
+    case temple
+    case tokyoNight = "tokyo-night"
+    case vercel
+    case vscodePlus = "vscode-plus"
+    case xcode
 
     var menuTitle: String {
         switch self {
-        case .normal:
-            "Normal"
-        case .rosePineMoon:
-            "Rose Pine Moon"
+        case .normal: "Normal"
+        case .rosePineMoon: "Rose Pine Moon"
+        case .absolutely: "Absolutely"
+        case .ayu: "Ayu"
+        case .catppuccin: "Catppuccin"
+        case .codex: "Codex"
+        case .dracula: "Dracula"
+        case .everforest: "Everforest"
+        case .github: "GitHub"
+        case .gruvbox: "Gruvbox"
+        case .linear: "Linear"
+        case .lobster: "Lobster"
+        case .material: "Material"
+        case .matrix: "Matrix"
+        case .monokai: "Monokai"
+        case .nightOwl: "Night Owl"
+        case .nord: "Nord"
+        case .notion: "Notion"
+        case .one: "One"
+        case .oscurange: "Oscurange"
+        case .raycast: "Raycast"
+        case .sentry: "Sentry"
+        case .solarized: "Solarized"
+        case .temple: "Temple"
+        case .tokyoNight: "Tokyo Night"
+        case .vercel: "Vercel"
+        case .vscodePlus: "VS Code Plus"
+        case .xcode: "Xcode"
         }
     }
 
-    var toggled: DarkTheme {
-        switch self {
-        case .normal:
-            .rosePineMoon
-        case .rosePineMoon:
-            .normal
-        }
+    var toggled: Self {
+        let themes = Self.allCases
+        return themes[(themes.firstIndex(of: self)! + 1) % themes.count]
     }
 }
 
@@ -117,6 +187,8 @@ struct AppConfiguration: Equatable, Sendable {
         var mode: AppearanceMode
         var lightTheme: LightTheme
         var darkTheme: DarkTheme
+        var lightBackground = ThemeBackgroundOverrides()
+        var darkBackground = ThemeBackgroundOverrides()
 
         static let `default` = Appearance(
             mode: .system,
@@ -496,6 +568,7 @@ enum AppConfigurationError: LocalizedError {
     case invalidAppearanceMode(String)
     case invalidLightTheme(String)
     case invalidDarkTheme(String)
+    case invalidBackgroundColor(String)
     case invalidDisplayMode(String)
     case invalidReadingFocusWidthMode(String)
     case invalidReadingFocusWidthRatio(String)
@@ -519,6 +592,8 @@ enum AppConfigurationError: LocalizedError {
             "Invalid light theme in config: \(value)"
         case let .invalidDarkTheme(value):
             "Invalid dark theme in config: \(value)"
+        case let .invalidBackgroundColor(value):
+            "Invalid background color in config: \(value). Use #RRGGBB or an empty string for the theme default."
         case let .invalidDisplayMode(value):
             "Invalid reader display mode in config: \(value)"
         case let .invalidReadingFocusWidthMode(value):
@@ -552,6 +627,10 @@ struct AppConfigurationFile {
 mode = "system"
 light_theme = "normal"
 dark_theme = "rose_pine_moon"
+light_page_background = ""
+light_window_background = ""
+dark_page_background = ""
+dark_window_background = ""
 
 [reader]
 default_display_mode = "single_page_continuous"
@@ -687,6 +766,10 @@ redo_last_highlight = "command+shift+z"
 mode = "\(configuration.appearance.mode.rawValue)"
 light_theme = "\(configuration.appearance.lightTheme.rawValue)"
 dark_theme = "\(configuration.appearance.darkTheme.rawValue)"
+light_page_background = "\(configuration.appearance.lightBackground.page?.hexString ?? "")"
+light_window_background = "\(configuration.appearance.lightBackground.window?.hexString ?? "")"
+dark_page_background = "\(configuration.appearance.darkBackground.page?.hexString ?? "")"
+dark_window_background = "\(configuration.appearance.darkBackground.window?.hexString ?? "")"
 
 [reader]
 default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
@@ -819,6 +902,10 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "mode",
         "light_theme",
         "dark_theme",
+        "light_page_background",
+        "light_window_background",
+        "dark_page_background",
+        "dark_window_background",
         "[reader]",
         "default_display_mode",
         "fit_width_on_open",
@@ -1027,6 +1114,14 @@ struct AppConfigurationParser {
             default:
                 throw AppConfigurationError.invalidAppearanceMode(value)
             }
+        case ("appearance", "light_page_background"):
+            configuration.appearance.lightBackground.page = try parseBackground(rawValue)
+        case ("appearance", "light_window_background"):
+            configuration.appearance.lightBackground.window = try parseBackground(rawValue)
+        case ("appearance", "dark_page_background"):
+            configuration.appearance.darkBackground.page = try parseBackground(rawValue)
+        case ("appearance", "dark_window_background"):
+            configuration.appearance.darkBackground.window = try parseBackground(rawValue)
         case ("shortcuts", "highlight_selection"):
             try applyShortcut(rawValue, command: .highlightSelection, to: &configuration)
         case ("shortcuts", "underline_selection"):
@@ -1242,6 +1337,15 @@ struct AppConfigurationParser {
         default:
             break
         }
+    }
+
+    private func parseBackground(_ rawValue: String) throws -> ThemeHexColor? {
+        let value = parseString(rawValue)
+        guard !value.isEmpty else { return nil }
+        guard let color = ThemeHexColor(hex: value) else {
+            throw AppConfigurationError.invalidBackgroundColor(value)
+        }
+        return color
     }
 
     private func parseString(_ rawValue: String) -> String {

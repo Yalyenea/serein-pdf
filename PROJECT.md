@@ -134,7 +134,8 @@ flowchart LR
 - 按钮 / tab 视觉重量轻,突出选中态
 - 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
-- 亮色至少支持 `normal` / `rose_pine_dawn`,暗色至少支持 `normal` / `rose_pine_moon`
+- 亮色 17 套、暗色 28 套，包含 Normal 与 Rosewash 对应变体；保留 `rose_pine_dawn` / `rose_pine_moon` 既有 ID，其余采用主题家族 ID
+- Settings 在明暗主题旁分别提供 Page / Window 色井与重置按钮；纸面和窗口 / 侧栏背景独立覆盖、即时保存，切换主题保留覆盖。配置使用 `light_page_background` / `light_window_background` / `dark_page_background` / `dark_window_background`，值为 `#RRGGBB` 或空字符串（主题默认）；非法色值报错。自定义纸面按亮度选择黑字或深色映射，窗口文字按背景对比度调整，不修改 PDF 文件
 - `rose_pine_dawn` 仅把 PDF 白底映射成接近 Obsidian 的暖纸色,保留正文与图表原色;侧栏使用不透明的扁平主题表面
 - `rose_pine_moon` 把 PDF 白底 / 黑字映射到 Moon 纸面 / 正文端点,保留暖冷强调色方向,并用更深的侧栏底色建立层级
 - `Settings` 的 General / Library / Shortcuts 固定为统一紧凑宽度,只允许高度按页适配;General 按 Appearance / Reading / Layout 分组,Shortcuts 支持搜索与分组,使用双层信息紧凑行,内置二段式快捷键以独立键帽显示且禁止横向滚动
@@ -393,7 +394,9 @@ Features/Annotations/                     # 高亮批注功能域
   HighlightUndoOperation.swift            # 撤销栈元素:added / removed
 
 Features/Theme/                           # 主题与夜间模式
-  ThemeRegistry.swift                     # Normal / Dawn / Moon 的不可变 descriptor 与 snapshot
+  ThemeRegistry.swift                     # 主题 descriptor、背景覆盖与不可变 snapshot
+  ThemePresets.swift                      # Rosewash 主题色表与 PDF / chrome 推导
+  ThemeBackground.swift                   # 自定义纸面、窗口背景与文字对比度
   ThemeManager.swift                      # @MainActor 全局主题选择唯一持有者
   NightModeStyle.swift                    # 基于 immutable snapshot 的动态颜色与 PDF 映射 facade
 
@@ -481,10 +484,10 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 - 纯静态网站包含 Features、Changelog、Docs 与 GitHub 入口，支持中英文和明暗主题；通过 GitHub Pages 部署到 `serein.yfff.me`。
 - 截图与 PDF 演示暂缓，后续按需要补充。
 
-### 8.4 多主题预设
+### 8.4 多主题预设与自定义背景 ✅
 
-- 计划:[docs/theme-presets-plan.md](docs/theme-presets-plan.md)
-- 在保留 `Mode + Light Theme + Dark Theme` 的前提下,把主题从硬编码扩展为可注册 curated 预设表
+- 已实现 17 套浅色 / 28 套深色主题、当前外观主题循环及明暗独立的纸面 / 窗口背景覆盖；保留 `Mode + Light Theme + Dark Theme` 模型。
+- 原设计记录：[docs/theme-presets-plan.md](docs/theme-presets-plan.md)。
 
 ### 8.5 工程债(摘要)
 

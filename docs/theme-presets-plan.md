@@ -1,11 +1,15 @@
 # 多主题预设计划（Theme Presets Plan）
 
-> 状态：**规划中**（未开工）  
+> 状态：**已实现（2026-09-22）**；下文保留原设计方案与评估，不作为当前待办清单。
 > 范围：Serein 原生 PDF 阅读器的外观主题扩展  
 > 对照：Rosewash 扩展已落地的 Codex 对齐预设体系  
 > 相关代码：`Features/Theme/`、`Core/AppConfiguration.swift`、`Features/Annotations/HighlightColor.swift`、`App/SettingsWindowController.swift`
 
 ---
+
+落地结果：保留类型化 `LightTheme` / `DarkTheme` 与既有 Rose Pine ID，接入 Rosewash 全部对应变体，加上 Normal 共 17 套浅色、28 套深色。色表位于 `ThemePresets.swift`；新增主题按明暗复用现有高亮 palette，未引入共享 JSON 或完整主题编辑器。快捷键循环当前外观的全部主题，Settings 使用紧凑下拉框。
+
+本次另实现明暗独立的 Page / Window 背景覆盖：`#RRGGBB` 持久化、空值使用主题默认、切换主题保留覆盖、分别重置；非法主题 ID 和色值显式报错。配置与交互以 [README](../README.md#configuration) 和 [PROJECT](../PROJECT.md) 为准。已验证配置往返、原生控件操作、滤镜端点、双阅读区刷新、阅读几何及真实 PDF 显示。
 
 ## 1. 目标
 

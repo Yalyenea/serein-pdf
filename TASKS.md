@@ -20,7 +20,7 @@
 | M11 扩展生态（预研） | 未开始 |
 | M12 Backlog 体验分流 | 空窗 010–014 ✅（其余暂缓项有触发条件再开） |
 | M13.1 网站后续完善 | 待办 |
-| 多主题预设 | 规划中 · [docs/theme-presets-plan.md](docs/theme-presets-plan.md) |
+| 多主题预设与自定义背景 | ✅ · 17 浅色 / 28 深色；见 CHANGELOG |
 | REVIEW 5.1 近期债 | ✅ |
 | REVIEW 5.2 中期重构 | 进行中（S2 / S3 已部分拆分） |
 | 阅读跳转 / CI 侧栏 layout | ✅（已合 main） |
@@ -63,10 +63,6 @@
 #### M13.1 网站后续
 
 - [ ] 截图与 PDF 演示：暂缓，待明确需要时补充。
-
-#### 多主题预设
-
-- [ ] 按 [docs/theme-presets-plan.md](docs/theme-presets-plan.md) 开工（注册表式 curated 预设，不破坏 Mode + Light/Dark Theme 模型）
 
 ### 3.4 手测未覆盖
 
