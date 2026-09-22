@@ -103,7 +103,7 @@ struct WindowChromeTests {
 
         store.setTabPresentationMode(.horizontalTitlebar)
         controller.window?.layoutIfNeeded()
-        #expect(controller.window?.toolbar == nil)
+        #expect(controller.window?.toolbar != nil)
 
         _ = store.newBlankTab()
         controller.window?.layoutIfNeeded()
@@ -395,11 +395,14 @@ struct WindowChromeTests {
     func readingFocusModeIsWindowLocalAndSynchronizesSplitReaders() {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
+        _ = store.newBlankTab()
+        store.setSplitEnabled(true, in: store.defaultWindowID)
         let firstWorkspace = ReaderWorkspaceViewController(
             documentStore: store,
             windowID: store.defaultWindowID
         )
         firstWorkspace.loadViewIfNeeded()
+        #expect(firstWorkspace.allReaderViewControllers.count == 2)
         let secondWindowID = store.createWindow()
         let secondWorkspace = ReaderWorkspaceViewController(
             documentStore: store,
@@ -430,11 +433,14 @@ struct WindowChromeTests {
             height: 96
         )
         let store = makeIsolatedDocumentStore(appConfiguration: configuration)
+        _ = store.newBlankTab()
+        store.setSplitEnabled(true, in: store.defaultWindowID)
         let workspace = ReaderWorkspaceViewController(
             documentStore: store,
             windowID: store.defaultWindowID
         )
         workspace.loadViewIfNeeded()
+        #expect(workspace.allReaderViewControllers.count == 2)
 
         let temporarySettings = ReadingFocusSettings(
             widthMode: .column,
@@ -486,7 +492,7 @@ struct WindowChromeTests {
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
 
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "switch-toast-first"))
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "switch-toast-first"))
         flushLayout(controller.window)
 
         guard let splitController = controller.window?.contentViewController as? SplitViewController else {
@@ -500,7 +506,14 @@ struct WindowChromeTests {
         let second = try store.open(documentAt: makeTemporaryPDF(named: "switch-toast-second"))
         flushLayout(controller.window)
 
+        #expect(splitController.readerViewController === reader)
         #expect(reader.testingSwitchTitleToastTitle == second.title)
+        #expect(reader.testingSwitchTitleToastIsVisible)
+
+        store.activate(sessionID: first.id, in: controller.windowID)
+        flushLayout(controller.window)
+
+        #expect(reader.testingSwitchTitleToastTitle == first.title)
         #expect(reader.testingSwitchTitleToastIsVisible)
     }
 
@@ -1280,7 +1293,7 @@ struct WindowChromeTests {
             return
         }
         let workspace = splitController.readerWorkspaceViewController
-        let splitView = workspace.testingSplitView
+        #expect(workspace.testingSplitView == nil)
         #expect(workspace.testingActiveSplitMinimumConstraintCount == 0)
 
         store.activate(sessionID: first.id, in: windowID)
@@ -1293,6 +1306,7 @@ struct WindowChromeTests {
         store.setSplitLayout(.sideBySide, in: windowID)
         flushLayout(controller.window)
 
+        let splitView = try #require(workspace.testingSplitView)
         let sideBySideFrames = splitView.subviews.map(\.frame)
         #expect(splitView.isVertical)
         #expect(workspace.testingActiveSplitMinimumConstraintCount == 2)
@@ -1326,7 +1340,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func alternateTabActivationUsesBrowserSplitEditSemantics() throws {
+    func alternateTabActivationAddsPaneAndPreservesExistingComparison() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
@@ -1335,26 +1349,32 @@ struct WindowChromeTests {
         let second = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-second"))
         let third = try store.open(documentAt: makeTemporaryPDF(named: "split-edit-third"))
         let windowID = controller.windowID
-        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
-            Issue.record("Failed to locate split controller")
-            return
-        }
-
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        store.setLeftSidebarVisible(false, in: windowID)
+        store.setRightSidebarVisible(false, in: windowID)
+        controller.window?.setContentSize(NSSize(width: 1600, height: 960))
         store.activate(sessionID: first.id, in: windowID)
+        flushLayout(controller.window)
         splitController.verticalTabsViewController.onAlternateSessionActivationRequested?(second.id)
 
         #expect(store.isSplitEnabled(in: windowID))
         #expect(store.displayedSessionID(for: .primary, in: windowID) == first.id)
-        #expect(store.displayedSessionID(for: .secondary, in: windowID) == second.id)
+        let rightID = try #require(store.displayedSessionID(for: .secondary, in: windowID))
+        #expect(store.session(for: rightID)?.url == second.url)
         #expect(store.focusedPane(in: windowID) == .secondary)
 
         store.setFocusedPane(.primary, in: windowID)
         splitController.titlebarTabsController.onAlternateSessionActivationRequested?(third.id)
+        flushLayout(controller.window)
 
-        #expect(store.displayedSessionID(for: .primary, in: windowID) == third.id)
-        #expect(store.displayedSessionID(for: .secondary, in: windowID) == second.id)
-        #expect(store.focusedPane(in: windowID) == .primary)
-        #expect(store.splitPair(in: windowID) == ReaderSplitPair(primarySessionID: third.id, secondarySessionID: second.id))
+        let newPane = store.focusedPane(in: windowID)
+        let newSessionID = try #require(store.displayedSessionID(for: newPane, in: windowID))
+        #expect(store.readerPanes(in: windowID).count == 3)
+        #expect(newPane != .primary && newPane != .secondary)
+        #expect(store.session(for: newSessionID)?.url == third.url)
+        #expect(store.displayedSessionID(for: .primary, in: windowID) == first.id)
+        #expect(store.displayedSessionID(for: .secondary, in: windowID) == rightID)
+        #expect(splitController.readerWorkspaceViewController.allReaderViewControllers.count == 3)
     }
 
     @Test
@@ -1550,9 +1570,12 @@ struct WindowChromeTests {
         controller.window?.layoutIfNeeded()
 
         #expect(store.isSplitEnabled(in: windowID) == false)
-        #expect(store.sessions.map(\.id) == [second.id])
+        #expect(store.sessions(in: windowID).map(\.id) == [first.id, second.id])
         #expect(store.displayedSessionID(for: .primary, in: windowID) == second.id)
         #expect(store.displayedSessionID(for: .secondary, in: windowID) == nil)
+        let workspace = try #require((controller.window?.contentViewController as? SplitViewController)?.readerWorkspaceViewController)
+        #expect(workspace.allReaderViewControllers.count == 1)
+        #expect(controller.window?.firstResponder === workspace.activeReaderViewController().pdfView)
     }
 
     @Test
@@ -1616,17 +1639,11 @@ struct WindowChromeTests {
         store.activate(sessionID: first.id, in: windowID, targetPane: .secondary)
         controller.window?.layoutIfNeeded()
 
-        guard let splitController = controller.window?.contentViewController as? SplitViewController,
-              let workspaceSplitView = splitController.readerWorkspaceViewController.view
-            .subviews
-            .compactMap({ $0 as? NSSplitView })
-            .first else {
-            Issue.record("Failed to locate reader workspace split view")
-            return
-        }
-
-        workspaceSplitView.setPosition(280, ofDividerAt: 0)
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        let workspaceSplitView = try #require(splitController.readerWorkspaceViewController.testingSplitView as? ReaderSplitHostView)
+        workspaceSplitView.ratio = 0.4
         workspaceSplitView.adjustSubviews()
+        workspaceSplitView.onRatioChanged?(workspaceSplitView.splitID, workspaceSplitView.ratio)
         controller.window?.layoutIfNeeded()
 
         let secondaryWidthBefore = workspaceSplitView.subviews[1].frame.width
@@ -1647,16 +1664,31 @@ struct WindowChromeTests {
         store.setTabPresentationMode(.horizontalTitlebar)
         store.setLeftSidebarVisible(false)
         controller.window?.layoutIfNeeded()
-        #expect(controller.window?.toolbar == nil)
+        let window = try #require(controller.window)
+        let splitController = try #require(window.contentViewController as? SplitViewController)
+        let tabsView = splitController.titlebarTabsController.view
+        let selector = try #require(findView(identifier: "workspaceSelector", in: tabsView) as? NSPopUpButton)
+        #expect(window.toolbar != nil)
+        #expect(selector.window === window)
+        #expect(!selector.isHiddenOrHasHiddenAncestor)
+        #expect(selector.itemTitles.contains("New Workspace…"))
+        #expect(findAllDescendants(of: TitlebarTabItemView.self, in: tabsView).isEmpty)
 
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-open"))
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-open"))
         controller.window?.layoutIfNeeded()
 
-        #expect(controller.window?.toolbar != nil)
+        #expect(window.toolbar != nil)
+        #expect(findAllDescendants(of: TitlebarTabItemView.self, in: tabsView).count == 1)
+        #expect(splitController.readerViewController.targetSessionID == session.id)
+        #expect(splitController.readerViewController.pdfView.document != nil)
 
         store.closeActiveSession()
         controller.window?.layoutIfNeeded()
-        #expect(controller.window?.toolbar == nil)
+        #expect(window.toolbar != nil)
+        #expect(selector.window === window)
+        #expect(!selector.isHiddenOrHasHiddenAncestor)
+        #expect(findAllDescendants(of: TitlebarTabItemView.self, in: tabsView).isEmpty)
+        #expect(splitController.readerViewController.pdfView.document == nil)
     }
 
     @Test
@@ -1882,6 +1914,9 @@ struct WindowChromeTests {
         #expect(store.startContinuousReadingFromSelectedSessions(in: store.defaultWindowID))
         for session in sessions {
             store.setDisplayMode(.singlePage, for: session.id)
+            // Switching the visible document's layout now fits its width.
+            // Keep both small fixtures fully visible to exercise page boundaries.
+            store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
         }
         store.activate(sessionID: sessions[0].id, in: store.defaultWindowID)
         flushLayout(controller.window)
@@ -1942,30 +1977,23 @@ struct WindowChromeTests {
     }
 
     @Test
-    func readerWorkspaceStartsCollapsedWhenSplitDisabled() {
+    func readerWorkspaceOnlyCreatesOneReaderWhenSplitDisabled() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
-        controller.window?.layoutIfNeeded()
+        flushLayout(controller.window)
 
-        guard let splitController = controller.window?.contentViewController as? SplitViewController,
-              let workspaceSplitView = splitController.readerWorkspaceViewController.view
-                .subviews
-                .compactMap({ $0 as? NSSplitView })
-                .first else {
-            Issue.record("Failed to locate reader workspace split view")
-            return
-        }
-
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        let workspace = splitController.readerWorkspaceViewController
+        let reader = workspace.primaryReaderViewController
         #expect(store.isSplitEnabled(in: controller.windowID) == false)
-        #expect(workspaceSplitView.subviews[1].isHidden)
-        #expect(splitController.readerWorkspaceViewController.primaryReaderViewController.testingLocalEventMonitoringIsInstalled)
-        #expect(splitController.readerWorkspaceViewController.secondaryReaderViewController.testingLocalEventMonitoringIsInstalled == false)
-        #expect(
-            workspaceSplitView.isSubviewCollapsed(workspaceSplitView.subviews[1]) ||
-            workspaceSplitView.subviews[1].frame.width < 1
-        )
+        #expect(workspace.allReaderViewControllers.count == 1)
+        #expect(workspace.children.compactMap { $0 as? ReaderViewController }.count == 1)
+        #expect(workspace.testingSplitView == nil)
+        #expect(reader.testingLocalEventMonitoringIsInstalled)
+        #expect(reader.view.isHiddenOrHasHiddenAncestor == false)
+        #expect(abs(reader.view.bounds.width - workspace.view.bounds.width) < 1)
     }
 
     @Test
@@ -3323,8 +3351,11 @@ struct WindowChromeTests {
 
         let reader = splitController.readerViewController
         let manualScale = min(reader.pdfView.scaleFactor * 1.2, reader.pdfView.maxScaleFactor)
+        reader.testingBeginUserMagnification()
         reader.pdfView.scaleFactor = manualScale
         flushLayout(controller.window)
+        #expect(store.session(for: session.id)?.scaleMode == .manual)
+        #expect(abs(reader.pdfView.scaleFactor - manualScale) < 0.001)
 
         reader.goToNextPage()
         flushLayout(controller.window)

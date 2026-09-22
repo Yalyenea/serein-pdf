@@ -285,7 +285,7 @@ fit_width = "command+9"
             XCTAssertTrue(content.contains("[access]"))
             // Sample of self-healed defaults (not every key).
             XCTAssertTrue(content.contains("highlight_selection = \"a\""))
-            XCTAssertTrue(content.contains("new_blank_tab = \"command+t\""))
+            XCTAssertTrue(content.contains("new_blank_tab = \"command+option+t\""))
             XCTAssertTrue(content.contains("sidebar_opacity = 0.48"))
         }
     }
@@ -428,6 +428,84 @@ fit_width = "command+9"
         XCTAssertFalse(persistedContent.contains("show_all_tabs = \"command+option+t\""))
     }
 
+    func testLegacyNewBlankTabMovesToOptionCommandTWhenPaneZoomIsIntroduced() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            try """
+            [shortcuts]
+            new_blank_tab = "command+t"
+            """.write(to: fileURL, atomically: true, encoding: .utf8)
+
+            let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+            XCTAssertEqual(configuration.shortcuts.bindings[.newBlankTab], KeyboardShortcut(key: "t", modifiers: [.command, .option]))
+            XCTAssertEqual(configuration.shortcuts.bindings[.togglePaneZoom], KeyboardShortcut(key: "t", modifiers: [.command]))
+            XCTAssertEqual(try AppConfigurationStore(fileURL: fileURL).load(), configuration)
+        }
+    }
+
+    func testExplicitPaneZoomConfigurationPreservesCustomNewBlankTabShortcut() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            try """
+            [shortcuts]
+            new_blank_tab = "command+t"
+            toggle_pane_zoom = "none"
+            """.write(to: fileURL, atomically: true, encoding: .utf8)
+
+            let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+            XCTAssertEqual(configuration.shortcuts.bindings[.newBlankTab], KeyboardShortcut(key: "t", modifiers: [.command]))
+            XCTAssertNil(configuration.shortcuts.bindings[.togglePaneZoom])
+        }
+    }
+
+    func testNewReaderShortcutDefaultsPreserveExistingCustomBindings() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            try """
+            [shortcuts]
+            new_blank_tab = "command+t"
+            show_recent_files_palette = "command+option+t"
+            toggle_night_mode = "t"
+            open_library_pdf = "b"
+            """.write(to: fileURL, atomically: true, encoding: .utf8)
+
+            let configuration = try AppConfigurationStore(fileURL: fileURL).load()
+            XCTAssertEqual(configuration.shortcuts.bindings[.showRecentFilesPalette], KeyboardShortcut(key: "t", modifiers: [.command, .option]))
+            XCTAssertEqual(configuration.shortcuts.bindings[.newBlankTab], KeyboardShortcut(key: "t", modifiers: [.command]))
+            XCTAssertEqual(configuration.shortcuts.bindings[.toggleNightMode], KeyboardShortcut(key: "t", modifiers: []))
+            XCTAssertEqual(configuration.shortcuts.bindings[.openLibraryPDF], KeyboardShortcut(key: "b", modifiers: []))
+            XCTAssertNil(configuration.shortcuts.bindings[.togglePaneZoom])
+            XCTAssertNil(configuration.shortcuts.bindings[.translateSelection])
+            XCTAssertNil(configuration.shortcuts.bindings[.splitCurrentPDFRight])
+        }
+    }
+
+    func testReturnShortcutTokensParseAndRoundTrip() throws {
+        let expected = KeyboardShortcut(key: "return", modifiers: [.option, .shift])
+        XCTAssertEqual(try KeyboardShortcut.parse("option+shift+return"), expected)
+        XCTAssertEqual(try KeyboardShortcut.parse("option+shift+enter"), expected)
+        XCTAssertEqual(try KeyboardShortcut.parse(expected.serializedValue), expected)
+        XCTAssertEqual(expected.menuKeyEquivalent, "\r")
+        XCTAssertEqual(expected.displayString, "⇧⌥↩")
+    }
+
+    func testPaletteSplitShortcutsPersistCustomizationAndClearing() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let fileURL = rootURL.appendingPathComponent("config.toml")
+            try """
+            [shortcuts]
+            palette_split_right = "option+r"
+            palette_split_down = "none"
+            """.write(to: fileURL, atomically: true, encoding: .utf8)
+            let store = try AppConfigurationStore(fileURL: fileURL)
+            let configuration = try store.load()
+            XCTAssertEqual(configuration.shortcuts.bindings[.paletteSplitRight], KeyboardShortcut(key: "r", modifiers: [.option]))
+            XCTAssertNil(configuration.shortcuts.bindings[.paletteSplitDown])
+            try store.save(configuration)
+            XCTAssertEqual(try store.load(), configuration)
+        }
+    }
+
     func testBootstrapMigratesLegacyContinuousReadingShortcutToCopyPath() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -545,12 +623,12 @@ fit_width = "command+9"
         defer { try? FileManager.default.removeItem(at: rootURL) }
         let fileURL = rootURL.appendingPathComponent("config.toml")
         try AppConfigurationFile.defaultContents
-            .replacingOccurrences(of: "new_blank_tab = \"command+t\"\n", with: "")
+            .replacingOccurrences(of: "new_blank_tab = \"command+option+t\"\n", with: "")
             .write(to: fileURL, atomically: true, encoding: .utf8)
 
         _ = try AppConfigurationStore(fileURL: fileURL)
         let content = try String(contentsOf: fileURL, encoding: .utf8)
-        XCTAssertTrue(content.contains("new_blank_tab = \"command+t\""))
+        XCTAssertTrue(content.contains("new_blank_tab = \"command+option+t\""))
     }
 
     private func assignmentKeys(in content: String, section filterSection: String? = nil) -> Set<String> {

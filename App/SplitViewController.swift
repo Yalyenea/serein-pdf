@@ -27,6 +27,7 @@ final class SplitViewController: NSSplitViewController {
     let readerWorkspaceViewController: ReaderWorkspaceViewController
     let rightSidebarViewController: RightSidebarViewController
     let titlebarTabsController: TitlebarTabsController
+    var onReaderControllersDidChange: (() -> Void)?
     private var tabsSidebarItem: NSSplitViewItem!
     private var outlineSidebarItem: NSSplitViewItem!
     private var centerItem: NSSplitViewItem!
@@ -612,11 +613,7 @@ final class SplitViewController: NSSplitViewController {
     private func wireInteractions() {
         let alternateActivation: (UUID) -> Void = { [weak self] sessionID in
             guard let self else { return }
-            let focusedPane = self.documentStore.focusedPane(in: self.windowID)
-            let targetPane = self.documentStore.isSplitEnabled(in: self.windowID)
-                ? focusedPane
-                : focusedPane.other
-            self.documentStore.activate(sessionID: sessionID, in: self.windowID, targetPane: targetPane)
+            _ = self.readerWorkspaceViewController.splitActivePane(layout: .sideBySide, sessionID: sessionID)
         }
         verticalTabsViewController.onAlternateSessionActivationRequested = alternateActivation
         titlebarTabsController.onAlternateSessionActivationRequested = alternateActivation
@@ -626,23 +623,20 @@ final class SplitViewController: NSSplitViewController {
             self?.syncFindStatus()
         }
 
-        for reader in [
-            readerWorkspaceViewController.primaryReaderViewController,
-            readerWorkspaceViewController.secondaryReaderViewController,
-        ] {
-            reader.onFindActionRequested = { [weak self] action in
-                self?.handleFindAction(action)
-            }
-            reader.shouldSuppressAnnotationPreview = { [weak self] groupID in
-                self?.shouldSuppressAnnotationPreview(for: groupID) ?? false
-            }
+        readerWorkspaceViewController.readersDidChange = { [weak self] in
+            self?.wireReaderInteractions()
+            self?.onReaderControllersDidChange?()
         }
+        wireReaderInteractions()
 
         rightSidebarViewController.onActivateSearchMatch = { [weak self] match in
             self?.activateSearchMatch(match)
         }
         rightSidebarViewController.outlineViewController.onNavigationRequested = { [weak self] request in
             _ = self?.readerWorkspaceViewController.navigate(to: request)
+        }
+        rightSidebarViewController.outlineViewController.onQuickNavigationEnded = { [weak self] in
+            self?.readerWorkspaceViewController.focusActiveReader()
         }
         rightSidebarViewController.onWillNavigateFromPages = { [weak self] in
             self?.readerWorkspaceViewController.activeReaderViewController().beginExternalNavigation()
@@ -661,6 +655,26 @@ final class SplitViewController: NSSplitViewController {
         }
         rightSidebarViewController.onSearchSelectionDidChange = { [weak self] _, _ in
             self?.syncFindStatus()
+        }
+    }
+
+    private func wireReaderInteractions() {
+        for reader in readerWorkspaceViewController.allReaderViewControllers {
+            reader.onFindActionRequested = { [weak self] action in
+                self?.handleFindAction(action)
+            }
+            reader.shouldSuppressAnnotationPreview = { [weak self] groupID in
+                self?.shouldSuppressAnnotationPreview(for: groupID) ?? false
+            }
+        }
+    }
+
+    func showQuickOutline() {
+        if documentStore.isOutlineSidebarVisible(in: windowID),
+           documentStore.rightSidebarMode(in: windowID) == .outline {
+            rightSidebarViewController.outlineViewController.focusSearchForQuickNavigation()
+        } else {
+            readerWorkspaceViewController.showQuickOutline()
         }
     }
 

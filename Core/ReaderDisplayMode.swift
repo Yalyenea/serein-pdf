@@ -96,6 +96,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case underlineSelection = "underline_selection"
     case strikethroughSelection = "strikethrough_selection"
     case addComment = "add_comment"
+    case translateSelection = "translate_selection"
     case exitHighlightMode = "exit_highlight_mode"
     case toggleNightMode = "toggle_night_mode"
     case toggleReadingFocus = "toggle_reading_focus"
@@ -153,7 +154,11 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case findNextMatch = "find_next_match"
     case findPreviousMatch = "find_previous_match"
     case gotoPage = "goto_page"
+    case quickOutline = "quick_outline"
     case showRecentFilesPalette = "show_recent_files_palette"
+    case showRecentWindows = "show_recent_windows"
+    case paletteSplitRight = "palette_split_right"
+    case paletteSplitDown = "palette_split_down"
     case openContainingFolder = "open_containing_folder"
     case reopenLastClosed = "reopen_last_closed"
     case newBlankTab = "new_blank_tab"
@@ -164,6 +169,13 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case toggleDemoMode = "toggle_demo_mode"
     case toggleImmersiveMode = "toggle_immersive_mode"
     case toggleReaderSplit = "toggle_reader_split"
+    case splitCurrentPDFRight = "split_current_pdf_right"
+    case splitCurrentPDFDown = "split_current_pdf_down"
+    case focusPaneLeft = "focus_pane_left"
+    case focusPaneDown = "focus_pane_down"
+    case focusPaneUp = "focus_pane_up"
+    case focusPaneRight = "focus_pane_right"
+    case togglePaneZoom = "toggle_pane_zoom"
     case toggleRightSidebarMode = "toggle_right_sidebar_mode"
     case swapSidebars = "swap_sidebars"
     case undoLastHighlight = "undo_last_highlight"
@@ -181,6 +193,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Strikethrough Selection or Enter Strikethrough Mode"
         case .addComment:
             "Add or Edit Comment"
+        case .translateSelection:
+            "Translate Selection…"
         case .exitHighlightMode:
             "Exit Annotation Mode"
         case .toggleNightMode:
@@ -295,8 +309,16 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Find Previous Match"
         case .gotoPage:
             "Go to Page…"
+        case .quickOutline:
+            "Quick Outline…"
         case .showRecentFilesPalette:
             "Open Recent Quickly…"
+        case .showRecentWindows:
+            "Recent Windows…"
+        case .paletteSplitRight:
+            "Open List Selection in Right Split"
+        case .paletteSplitDown:
+            "Open List Selection in Split Below"
         case .openContainingFolder:
             "Reveal in Finder"
         case .reopenLastClosed:
@@ -317,6 +339,20 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Toggle Immersive Mode"
         case .toggleReaderSplit:
             "Toggle Compare Split"
+        case .splitCurrentPDFRight:
+            "Split Current PDF Right"
+        case .splitCurrentPDFDown:
+            "Split Current PDF Down"
+        case .focusPaneLeft:
+            "Focus Pane Left"
+        case .focusPaneDown:
+            "Focus Pane Below"
+        case .focusPaneUp:
+            "Focus Pane Above"
+        case .focusPaneRight:
+            "Focus Pane Right"
+        case .togglePaneZoom:
+            "Toggle Pane Zoom"
         case .toggleRightSidebarMode:
             "Toggle Outline / Pages"
         case .swapSidebars:
@@ -397,7 +433,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     var shortcutSection: ShortcutSection {
         switch self {
         case .highlightSelection, .underlineSelection, .strikethroughSelection,
-             .addComment, .exitHighlightMode, .saveAnnotations, .removeHighlight,
+             .addComment, .translateSelection, .exitHighlightMode, .saveAnnotations, .removeHighlight,
              .highlightColorPink, .highlightColorYellow, .highlightColorGreen,
              .undoLastHighlight, .redoLastHighlight, .copyHighlightsMarkdown:
             .annotations
@@ -409,7 +445,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             .reading
         case .pageDown, .pageUp, .halfPageDown, .halfPageUp, .goToFirstPage,
              .goToLastPage, .navigateBack, .navigateForward, .findAllOpen,
-             .findNextMatch, .findPreviousMatch, .gotoPage:
+             .findNextMatch, .findPreviousMatch, .gotoPage, .quickOutline:
             .navigation
         case .openLibraryPDF, .refreshLibraryIndex, .openLibrarySettings,
              .openShortcutSettings, .shareDocument, .exportCleanCopy,
@@ -419,8 +455,11 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             .documents
         case .toggleLeftSidebar, .toggleRightSidebar, .useSidebarTabs,
              .useTitlebarTabs, .closeCurrentTab, .closeCurrentWindow, .previousTab,
-             .nextTab, .showAllTabs, .newWindow, .mergeAllWindows,
+             .nextTab, .showAllTabs, .showRecentWindows, .paletteSplitRight, .paletteSplitDown,
+             .newWindow, .mergeAllWindows,
              .moveCurrentPDFToNewWindow, .toggleImmersiveMode, .toggleReaderSplit,
+             .splitCurrentPDFRight, .splitCurrentPDFDown, .focusPaneLeft,
+             .focusPaneDown, .focusPaneUp, .focusPaneRight, .togglePaneZoom,
              .toggleRightSidebarMode, .swapSidebars:
             .windows
         }

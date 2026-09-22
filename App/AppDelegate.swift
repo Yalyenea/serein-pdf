@@ -46,9 +46,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var readerShortcutsController: ReaderShortcutsController?
     private var commandPaletteController: CommandPaletteController?
     private var recentFilesPaletteController: RecentFilesPaletteController?
+    private var recentFilesPaletteWindowID: UUID?
+    private var recentWindowsPaletteController: RecentWindowsPaletteController?
+    private var recentWindowsPaletteWindowID: UUID?
     private var libraryPaletteController: PDFLibraryPaletteController?
     private var openTabsPaletteController: OpenTabsPaletteController?
     private var openTabsPaletteWindowID: UUID?
+    private var openTabsPaletteEntries: [WorkspaceDocumentEntry] = []
     private var sharingServicePicker: NSSharingServicePicker?
     private var temporaryShareDirectories: [URL] = []
     private let recentFilesMenu = NSMenu(title: "Open Recent")
@@ -139,6 +143,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 } else {
                     entry.value.goToNextPage()
                 }
+                return true
+            },
+            verticalPageTurnHandler: { [weak self] direction, window in
+                guard let self,
+                      let entry = self.mainWindowControllers.first(where: { $0.value.window === window }),
+                      let session = self.documentStore.activeSession(in: entry.key),
+                      !session.isBlank, !session.displayMode.usesBookLayout else { return false }
+                if direction < 0 { entry.value.goToPreviousPage() }
+                else { entry.value.goToNextPage() }
                 return true
             }
         )
@@ -257,6 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     func applicationDidResignActive(_ notification: Notification) {
         commandPaletteController?.dismiss(restoreParent: false)
         recentFilesPaletteController?.close()
+        recentWindowsPaletteController?.close()
         libraryPaletteController?.close()
         closeOpenTabsPalette()
     }
@@ -475,6 +489,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .findPreviousMatch: { [weak self] in self?.findPreviousMatchAction(nil) },
             .gotoPage: { [weak self] in self?.showGotoPageDialog(nil) },
             .showRecentFilesPalette: { [weak self] in self?.showRecentFilesPalette(nil) },
+            .showRecentWindows: { [weak self] in self?.showRecentWindows(nil) },
+            .translateSelection: { [weak self] in self?.translateSelection(nil) },
+            .quickOutline: { [weak self] in self?.showQuickOutline(nil) },
+            .splitCurrentPDFRight: { [weak self] in self?.splitCurrentPDFRight(nil) },
+            .splitCurrentPDFDown: { [weak self] in self?.splitCurrentPDFDown(nil) },
+            .focusPaneLeft: { [weak self] in self?.focusPaneLeft(nil) },
+            .focusPaneDown: { [weak self] in self?.focusPaneDown(nil) },
+            .focusPaneUp: { [weak self] in self?.focusPaneUp(nil) },
+            .focusPaneRight: { [weak self] in self?.focusPaneRight(nil) },
+            .togglePaneZoom: { [weak self] in self?.togglePaneZoom(nil) },
             .openContainingFolder: { [weak self] in self?.openContainingFolder(nil) },
             .reopenLastClosed: { [weak self] in self?.reopenLastClosed(nil) },
             .newBlankTab: { [weak self] in self?.newBlankTab(nil) },
@@ -570,6 +594,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func handleWindowShouldClose(_ controller: MainWindowController) -> Bool {
+        controller.flushPendingReadingPositions()
         let isLastWindow = mainWindowControllers.count <= 1
         if isLastWindow {
             return controller.prepareForApplicationTermination()
@@ -941,6 +966,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 command: .showAllTabs,
                 action: #selector(showAllTabs(_:))
             ),
+            makeConfiguredMenuItem(title: ShortcutCommand.showRecentWindows.menuTitle,
+                                   command: .showRecentWindows, action: #selector(showRecentWindows(_:))),
             makeConfiguredMenuItem(
                 title: ShortcutCommand.toggleContinuousReading.menuTitle,
                 command: .toggleContinuousReading,
@@ -981,6 +1008,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 command: .addComment,
                 action: #selector(addOrEditComment(_:))
             ),
+            makeConfiguredMenuItem(title: ShortcutCommand.translateSelection.menuTitle,
+                                   command: .translateSelection, action: #selector(translateSelection(_:))),
             makeConfiguredMenuItem(
                 title: ShortcutCommand.exitHighlightMode.menuTitle,
                 command: .exitHighlightMode,
@@ -1027,18 +1056,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func buildViewMenuItem() -> NSMenuItem {
         let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
         let viewMenu = managedMenu(title: "View")
-        let sideBySideSplitItem = NSMenuItem(
-            title: "Split Left & Right",
-            action: #selector(useSideBySideReaderSplit(_:)),
-            keyEquivalent: ""
+        let sideBySideSplitItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.splitCurrentPDFRight.menuTitle,
+            command: .splitCurrentPDFRight,
+            action: #selector(splitCurrentPDFRight(_:))
         )
-        sideBySideSplitItem.target = self
-        let stackedSplitItem = NSMenuItem(
-            title: "Split Top & Bottom",
-            action: #selector(useStackedReaderSplit(_:)),
-            keyEquivalent: ""
+        let stackedSplitItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.splitCurrentPDFDown.menuTitle,
+            command: .splitCurrentPDFDown,
+            action: #selector(splitCurrentPDFDown(_:))
         )
-        stackedSplitItem.target = self
 
         viewMenu.items = [
             makeConfiguredMenuItem(
@@ -1168,6 +1195,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             ),
             sideBySideSplitItem,
             stackedSplitItem,
+            makeConfiguredMenuItem(title: ShortcutCommand.togglePaneZoom.menuTitle,
+                                   command: .togglePaneZoom, action: #selector(togglePaneZoom(_:))),
+            makeConfiguredMenuItem(title: ShortcutCommand.focusPaneLeft.menuTitle,
+                                   command: .focusPaneLeft, action: #selector(focusPaneLeft(_:))),
+            makeConfiguredMenuItem(title: ShortcutCommand.focusPaneDown.menuTitle,
+                                   command: .focusPaneDown, action: #selector(focusPaneDown(_:))),
+            makeConfiguredMenuItem(title: ShortcutCommand.focusPaneUp.menuTitle,
+                                   command: .focusPaneUp, action: #selector(focusPaneUp(_:))),
+            makeConfiguredMenuItem(title: ShortcutCommand.focusPaneRight.menuTitle,
+                                   command: .focusPaneRight, action: #selector(focusPaneRight(_:))),
             makeConfiguredMenuItem(
                 title: ShortcutCommand.toggleRightSidebarMode.menuTitle,
                 command: .toggleRightSidebarMode,
@@ -1188,6 +1225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let navigateMenu = managedMenu(title: "Navigate")
 
         navigateMenu.items = [
+            makeConfiguredMenuItem(title: ShortcutCommand.quickOutline.menuTitle,
+                                   command: .quickOutline, action: #selector(showQuickOutline(_:))),
             makeConfiguredMenuItem(
                 title: "Next Page",
                 command: .pageDown,
@@ -1565,11 +1604,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func showRecentFilesPalette(_ sender: Any?) {
         commandPaletteController?.dismiss(restoreParent: false)
         runRecentFilesCleanupIfNeeded()
+        recentFilesPaletteWindowID = mainWindowController?.windowID
         if recentFilesPaletteController == nil {
-            recentFilesPaletteController = RecentFilesPaletteController { [weak self] urls in
-                self?.openRecentDocuments(urls)
-            }
+            recentFilesPaletteController = RecentFilesPaletteController(
+                onSplitURL: { [weak self] url, layout in
+                    guard let self, let windowID = self.recentFilesPaletteWindowID,
+                          let controller = self.mainWindowControllers[windowID] else { return }
+                    do {
+                        _ = try controller.splitDocument(at: url, layout: layout)
+                        self.bringWindowToFront(windowID)
+                    } catch { self.presentOpenError(error) }
+                },
+                onOpenURLs: { [weak self] urls in
+                    guard let self else { return }
+                    self.openRecentDocuments(urls, preferredWindowID: self.recentFilesPaletteWindowID)
+                }
+            )
         }
+        configurePaletteSplitShortcuts()
         recentFilesPaletteController?.show(
             with: documentStore.recentDocumentURLs,
             relativeTo: mainWindowController?.window
@@ -1607,40 +1659,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func showAllTabs(_ sender: Any?) {
         commandPaletteController?.dismiss(restoreParent: false)
+        let currentEvent = NSApp.currentEvent
+        let heldControl = currentEvent?.type == .keyDown && currentEvent?.modifierFlags.contains(.control) == true
+        let reverse = currentEvent?.modifierFlags.contains(.shift) == true
         if openTabsPaletteController?.window?.isVisible == true {
-            closeOpenTabsPalette()
+            if heldControl { openTabsPaletteController?.advance(reverse: reverse) }
+            else { closeOpenTabsPalette() }
             return
         }
         guard let controller = mainWindowController else { return }
-        let sessions = documentStore.sessions(in: controller.windowID)
-        guard sessions.isEmpty == false else { return }
+        let entries = documentStore.recentDocumentEntries(in: controller.windowID)
+        guard entries.isEmpty == false else { return }
+        openTabsPaletteEntries = entries
         openTabsPaletteWindowID = controller.windowID
 
         if openTabsPaletteController == nil {
-            openTabsPaletteController = OpenTabsPaletteController { [weak self] sessionID, alternatePane in
+            openTabsPaletteController = OpenTabsPaletteController { [weak self] sessionID, layout in
                 guard let self,
-                      let windowID = self.openTabsPaletteWindowID else { return }
-                guard alternatePane else {
-                    self.documentStore.activateTab(sessionID: sessionID, in: windowID)
+                      let windowID = self.openTabsPaletteWindowID,
+                      let entry = self.openTabsPaletteEntries.first(where: { $0.session.id == sessionID }) else { return }
+                guard let layout else {
+                    self.mainWindowControllers[windowID]?.flushPendingReadingPositions()
+                    self.documentStore.activateDocumentEntry(entry)
                     return
                 }
-                let focusedPane = self.documentStore.focusedPane(in: windowID)
-                let targetPane = self.documentStore.isSplitEnabled(in: windowID)
-                    ? focusedPane
-                    : focusedPane.other
-                self.documentStore.activateTab(
-                    sessionID: sessionID,
-                    in: windowID,
-                    targetPane: targetPane
-                )
+                _ = self.mainWindowControllers[windowID]?.splitCurrentPDF(layout: layout, sessionID: sessionID)
             }
         }
+        let activeID = documentStore.activeSessionID(in: controller.windowID).flatMap {
+            documentStore.publicSessionID(forDisplayedSessionID: $0, in: controller.windowID)
+        }
+        configurePaletteSplitShortcuts()
         openTabsPaletteController?.show(
-            with: sessions,
-            activeSessionID: documentStore.activeSessionID(in: controller.windowID),
-            primarySessionID: documentStore.displayedSessionID(for: .primary, in: controller.windowID),
-            secondarySessionID: documentStore.displayedSessionID(for: .secondary, in: controller.windowID),
-            focusedPane: documentStore.focusedPane(in: controller.windowID),
+            items: entries.map {
+                OpenTabsPaletteItem(session: $0.session, isActive: $0.session.id == activeID, workspaceName: $0.workspaceName)
+            },
+            activationMode: heldControl ? .heldControl(reverse: reverse) : .explicitSelection,
             relativeTo: controller.window
         )
     }
@@ -1648,7 +1702,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func closeOpenTabsPalette() {
         openTabsPaletteController?.close()
         openTabsPaletteWindowID = nil
+        openTabsPaletteEntries = []
     }
+
+    @objc
+    private func showRecentWindows(_ sender: Any?) {
+        commandPaletteController?.dismiss(restoreParent: false)
+        recentWindowsPaletteWindowID = mainWindowController?.windowID
+        if recentWindowsPaletteController == nil {
+            recentWindowsPaletteController = RecentWindowsPaletteController(
+                onActivateWindow: { [weak self] windowID in
+                    guard let self else { return }
+                    self.documentStore.reopenWindow(id: windowID)
+                    self.bringWindowToFront(windowID)
+                },
+                onSplitWindow: { [weak self] sourceWindowID, layout in
+                    guard let self,
+                          let targetID = self.recentWindowsPaletteWindowID,
+                          let target = self.mainWindowControllers[targetID],
+                          let sourceSessionID = self.documentStore.activeSessionID(in: sourceWindowID) else { return }
+                    self.mainWindowControllers[sourceWindowID]?.flushPendingReadingPositions()
+                    _ = target.splitCurrentPDF(layout: layout, sessionID: sourceSessionID)
+                    self.bringWindowToFront(targetID)
+                }
+            )
+        }
+        var seen: Set<UUID> = []
+        let orderedIDs = NSApp.orderedWindows.compactMap { controller(for: $0)?.windowID }
+            + documentStore.windowIDs()
+            + documentStore.closedWindowWorkspaces().reversed().map(\.id)
+        let items = orderedIDs.filter { seen.insert($0).inserted }.compactMap { windowID -> RecentWindowsPaletteItem? in
+            guard let window = documentStore.windowWorkspace(for: windowID) else { return nil }
+            let session = documentStore.activeSession(in: windowID)
+            let workspaceName = documentStore.workspaces(in: windowID)
+                .first { $0.id == documentStore.activeWorkspaceID(in: windowID) }?.name ?? "Workspace"
+            let isClosed = !documentStore.windowIDs().contains(windowID)
+            return RecentWindowsPaletteItem(
+                windowID: windowID,
+                title: session?.title ?? workspaceName,
+                documentSummary: "\(workspaceName) · \(window.sessionIDs.count) tabs\(isClosed ? " · Closed" : "")",
+                canSplit: session?.isBlank == false && recentWindowsPaletteWindowID != nil
+            )
+        }
+        configurePaletteSplitShortcuts()
+        recentWindowsPaletteController?.show(with: items, relativeTo: mainWindowController?.window)
+    }
+
+    private func configurePaletteSplitShortcuts() {
+        let right = appConfiguration.shortcuts.bindings[.paletteSplitRight]
+        let down = appConfiguration.shortcuts.bindings[.paletteSplitDown]
+        recentFilesPaletteController?.configureSplitShortcuts(right: right, down: down)
+        recentWindowsPaletteController?.configureSplitShortcuts(right: right, down: down)
+        openTabsPaletteController?.configureSplitShortcuts(right: right, down: down)
+    }
+
+    @objc private func translateSelection(_ sender: Any?) { mainWindowController?.translateSelection() }
+    @objc private func showQuickOutline(_ sender: Any?) { mainWindowController?.showQuickOutline() }
+    @objc private func splitCurrentPDFRight(_ sender: Any?) {
+        _ = mainWindowController?.splitCurrentPDF(layout: .sideBySide)
+    }
+    @objc private func splitCurrentPDFDown(_ sender: Any?) {
+        _ = mainWindowController?.splitCurrentPDF(layout: .stacked)
+    }
+    @objc private func focusPaneLeft(_ sender: Any?) { mainWindowController?.focusReaderPane(.left) }
+    @objc private func focusPaneDown(_ sender: Any?) { mainWindowController?.focusReaderPane(.down) }
+    @objc private func focusPaneUp(_ sender: Any?) { mainWindowController?.focusReaderPane(.up) }
+    @objc private func focusPaneRight(_ sender: Any?) { mainWindowController?.focusReaderPane(.right) }
+    @objc private func togglePaneZoom(_ sender: Any?) { mainWindowController?.toggleReaderPaneZoom() }
 
     @objc
     private func toggleContinuousReading(_ sender: Any?) {
@@ -1719,23 +1839,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc
     private func toggleReaderSplitAction(_ sender: Any?) {
         mainWindowController?.toggleReaderSplit()
-    }
-
-    @objc
-    private func useSideBySideReaderSplit(_ sender: Any?) {
-        showReaderSplit(layout: .sideBySide)
-    }
-
-    @objc
-    private func useStackedReaderSplit(_ sender: Any?) {
-        showReaderSplit(layout: .stacked)
-    }
-
-    private func showReaderSplit(layout: ReaderSplitLayout) {
-        guard let controller = mainWindowController,
-              documentStore.activeSession(in: controller.windowID)?.isBlank == false else { return }
-        documentStore.setSplitLayout(layout, in: controller.windowID)
-        documentStore.setSplitEnabled(true, in: controller.windowID)
     }
 
     @objc
@@ -2465,28 +2568,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @discardableResult
     private func openOrActivateDocumentURLs(_ urls: [URL], in targetWindowID: UUID) throws -> UUID? {
-        var pendingOpenURLs: [URL] = []
-        var seenPendingURLs: Set<URL> = []
-        var frontWindowID: UUID?
-
-        for url in urls {
-            if let location = documentStore.activateOpenDocument(at: url) {
-                frontWindowID = location.windowID
-                continue
-            }
-
-            let normalizedURL = DocumentStore.normalizedDocumentURL(url)
-            if seenPendingURLs.insert(normalizedURL).inserted {
-                pendingOpenURLs.append(url)
-            }
-        }
-
-        if pendingOpenURLs.isEmpty == false {
-            _ = try documentStore.open(documentsAt: pendingOpenURLs, in: targetWindowID)
-            frontWindowID = targetWindowID
-        }
-
-        return frontWindowID
+        guard !urls.isEmpty else { return nil }
+        _ = try documentStore.open(documentsAt: urls, in: targetWindowID)
+        return targetWindowID
     }
 
     private func openRecentDocuments(_ urls: [URL], preferredWindowID: UUID? = nil) {
@@ -2629,6 +2713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         recentFilesPaletteController?.refreshChromeColors()
         libraryPaletteController?.refreshChromeColors()
         openTabsPaletteController?.refreshChromeColors()
+        recentWindowsPaletteController?.refreshChromeColors()
     }
 
     private func refreshThemeChromeIfFollowingSystem() {
@@ -2641,9 +2726,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         recentFilesPaletteController?.refreshChromeColors()
         libraryPaletteController?.refreshChromeColors()
         openTabsPaletteController?.refreshChromeColors()
+        recentWindowsPaletteController?.refreshChromeColors()
     }
 
     private func refreshMenuShortcuts() {
+        configurePaletteSplitShortcuts()
         sendToCodexItem.isHidden = appConfiguration.integrations.codexEnabled == false
         guard let menu = NSApp.mainMenu else { return }
         refreshMenuShortcuts(in: menu)
@@ -2873,6 +2960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let windowID = controller?.windowID
         let activeSession = windowID.flatMap { documentStore.activeSession(in: $0) }
         let activePDFSession = activeSession?.isBlank == false ? activeSession : nil
+        let canUseReaderShortcuts = ReaderShortcutsController.shouldHandlePlainShortcut(for: controller?.window?.firstResponder)
 
         switch menuItem.action {
         case #selector(newBlankTab(_:)):
@@ -2950,7 +3038,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(showRecentFilesPalette(_:)):
             return documentStore.recentDocumentURLs.isEmpty == false
         case #selector(showAllTabs(_:)):
-            return windowID.map { documentStore.sessions(in: $0).isEmpty == false } == true
+            return windowID.map { documentStore.recentDocumentEntries(in: $0).isEmpty == false } == true
+        case #selector(showRecentWindows(_:)):
+            return canUseReaderShortcuts && (!documentStore.windowIDs().isEmpty || !documentStore.closedWindowWorkspaces().isEmpty)
+        case #selector(translateSelection(_:)):
+            return canUseReaderShortcuts && controller?.selectedReaderText != nil
+        case #selector(showQuickOutline(_:)), #selector(splitCurrentPDFRight(_:)), #selector(splitCurrentPDFDown(_:)):
+            return canUseReaderShortcuts && activePDFSession != nil
+        case #selector(focusPaneLeft(_:)), #selector(focusPaneDown(_:)),
+             #selector(focusPaneUp(_:)), #selector(focusPaneRight(_:)):
+            return canUseReaderShortcuts && controller?.isReaderSplitEnabled == true
+        case #selector(togglePaneZoom(_:)):
+            menuItem.state = windowID.flatMap { documentStore.zoomedPane(in: $0) } != nil ? .on : .off
+            return controller?.isReaderSplitEnabled == true
         case #selector(toggleContinuousReading(_:)):
             if let windowID {
                 menuItem.state = documentStore.isContinuousReadingEnabled(in: windowID) ? .on : .off
@@ -2985,7 +3085,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menuItem.state = windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true ? .on : .off
             return controller != nil
         case #selector(closeCurrentTab(_:)):
-            if let windowID,
+            if controller?.isReaderSplitEnabled == true {
+                menuItem.title = menuTitle("Close Focused Pane", for: .closeCurrentTab)
+            } else if let windowID,
                documentStore.selectedSessionIDs(in: windowID).count > 1 {
                 menuItem.title = menuTitle("Close Selected Tabs", for: .closeCurrentTab)
             } else {
@@ -3035,16 +3137,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(toggleReaderSplitAction(_:)):
             menuItem.state = controller?.isReaderSplitEnabled == true ? .on : .off
-            return activePDFSession != nil
-        case #selector(useSideBySideReaderSplit(_:)):
-            menuItem.state = windowID.map {
-                documentStore.isSplitEnabled(in: $0) && documentStore.splitLayout(in: $0) == .sideBySide
-            } == true ? .on : .off
-            return activePDFSession != nil
-        case #selector(useStackedReaderSplit(_:)):
-            menuItem.state = windowID.map {
-                documentStore.isSplitEnabled(in: $0) && documentStore.splitLayout(in: $0) == .stacked
-            } == true ? .on : .off
             return activePDFSession != nil
         case #selector(toggleRightSidebarModeAction(_:)):
             return windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true

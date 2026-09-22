@@ -297,6 +297,7 @@ struct AppConfiguration: Equatable, Sendable {
             .underlineSelection: KeyboardShortcut(key: "u", modifiers: []),
             .strikethroughSelection: KeyboardShortcut(key: "s", modifiers: []),
             .addComment: KeyboardShortcut(key: "m", modifiers: []),
+            .translateSelection: KeyboardShortcut(key: "t", modifiers: []),
             .exitHighlightMode: KeyboardShortcut(key: "escape", modifiers: []),
             .toggleNightMode: KeyboardShortcut(key: "i", modifiers: []),
             .toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: []),
@@ -343,16 +344,27 @@ struct AppConfiguration: Equatable, Sendable {
             .findNextMatch: KeyboardShortcut(key: "g", modifiers: [.command]),
             .findPreviousMatch: KeyboardShortcut(key: "g", modifiers: [.command, .shift]),
             .gotoPage: KeyboardShortcut(key: "g", modifiers: [.command, .option]),
+            .quickOutline: KeyboardShortcut(key: "o", modifiers: []),
             .showRecentFilesPalette: KeyboardShortcut(key: "space", modifiers: [.command, .shift]),
+            .showRecentWindows: KeyboardShortcut(key: "w", modifiers: []),
+            .paletteSplitRight: KeyboardShortcut(key: "return", modifiers: [.option]),
+            .paletteSplitDown: KeyboardShortcut(key: "return", modifiers: [.option, .shift]),
             .openContainingFolder: KeyboardShortcut(key: "r", modifiers: [.command]),
             .reopenLastClosed: KeyboardShortcut(key: "t", modifiers: [.command, .shift]),
-            .newBlankTab: KeyboardShortcut(key: "t", modifiers: [.command]),
+            .newBlankTab: KeyboardShortcut(key: "t", modifiers: [.command, .option]),
             .showAllTabs: KeyboardShortcut(key: "tab", modifiers: [.control]),
             .newWindow: KeyboardShortcut(key: "n", modifiers: [.command, .shift]),
             .toggleAllPagesOverview: KeyboardShortcut(key: "o", modifiers: [.command, .shift]),
             .toggleDemoMode: KeyboardShortcut(key: "l", modifiers: [.command]),
             .toggleImmersiveMode: KeyboardShortcut(key: "l", modifiers: [.command, .control]),
             .toggleReaderSplit: KeyboardShortcut(key: "\\", modifiers: [.command, .control]),
+            .splitCurrentPDFRight: KeyboardShortcut(key: "b", modifiers: []),
+            .splitCurrentPDFDown: KeyboardShortcut(key: "b", modifiers: [.shift]),
+            .focusPaneLeft: KeyboardShortcut(key: "h", modifiers: [.control]),
+            .focusPaneDown: KeyboardShortcut(key: "j", modifiers: [.control]),
+            .focusPaneUp: KeyboardShortcut(key: "k", modifiers: [.control]),
+            .focusPaneRight: KeyboardShortcut(key: "l", modifiers: [.control]),
+            .togglePaneZoom: KeyboardShortcut(key: "t", modifiers: [.command]),
             .toggleRightSidebarMode: KeyboardShortcut(key: "l", modifiers: [.command, .shift]),
             .swapSidebars: KeyboardShortcut(key: "x", modifiers: [.command, .shift]),
             .undoLastHighlight: KeyboardShortcut(key: "z", modifiers: [.command]),
@@ -430,7 +442,8 @@ struct KeyboardShortcut: Equatable, Sendable {
     var modifiers: Set<KeyboardShortcutModifier>
 
     init(key: String, modifiers: Set<KeyboardShortcutModifier>) {
-        self.key = key.lowercased()
+        let normalizedKey = key.lowercased()
+        self.key = normalizedKey == "enter" ? "return" : normalizedKey
         self.modifiers = modifiers
     }
 
@@ -452,6 +465,8 @@ struct KeyboardShortcut: Equatable, Sendable {
             " "
         case "tab":
             "\t"
+        case "return":
+            "\r"
         default:
             key
         }
@@ -461,19 +476,24 @@ struct KeyboardShortcut: Equatable, Sendable {
         let normalizedModifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
         guard normalizedModifiers == modifierMask else { return false }
 
-        guard let characters = event.charactersIgnoringModifiers?.lowercased() else { return false }
-        let normalizedKey = switch characters {
+        return Self.keyToken(for: event) == key
+    }
+
+    static func keyToken(for event: NSEvent) -> String? {
+        if event.keyCode == 36 || event.keyCode == 76 { return "return" }
+        guard let characters = event.charactersIgnoringModifiers?.lowercased() else { return nil }
+        return switch characters {
         case "\u{1b}":
             "escape"
         case " ":
             "space"
-        case "\t":
+        case "\t", "\u{19}":
             "tab"
+        case "\r", "\u{3}":
+            "return"
         default:
             characters
         }
-
-        return normalizedKey == key
     }
 
     var serializedValue: String {
@@ -511,6 +531,8 @@ struct KeyboardShortcut: Equatable, Sendable {
             keyDisplay = "Space"
         case "tab":
             keyDisplay = "Tab"
+        case "return":
+            keyDisplay = "↩"
         default:
             keyDisplay = key.uppercased()
         }
@@ -540,7 +562,7 @@ struct KeyboardShortcut: Equatable, Sendable {
     }
 
     static func isSupportedKeyToken(_ token: String) -> Bool {
-        if token == "escape" || token == "space" || token == "tab" || token == "plus" {
+        if ["escape", "space", "tab", "plus", "return", "enter"].contains(token) {
             return true
         }
         return token.count == 1 && token.unicodeScalars.allSatisfy {
@@ -675,6 +697,7 @@ highlight_selection = "a"
 underline_selection = "u"
 strikethrough_selection = "s"
 add_comment = "m"
+translate_selection = "t"
 exit_highlight_mode = "escape"
 toggle_night_mode = "i"
 toggle_reading_focus = "f"
@@ -738,10 +761,14 @@ find_all_open = "command+shift+f"
 find_next_match = "command+g"
 find_previous_match = "command+shift+g"
 goto_page = "command+option+g"
+quick_outline = "o"
 show_recent_files_palette = "command+shift+space"
+show_recent_windows = "w"
+palette_split_right = "option+return"
+palette_split_down = "shift+option+return"
 open_containing_folder = "command+r"
 reopen_last_closed = "command+shift+t"
-new_blank_tab = "command+t"
+new_blank_tab = "command+option+t"
 new_window = "command+shift+n"
 # Cmd+K, Cmd+M is a built-in chord.
 merge_all_windows = "none"
@@ -751,6 +778,13 @@ toggle_all_pages_overview = "command+shift+o"
 toggle_demo_mode = "command+l"
 toggle_immersive_mode = "command+control+l"
 toggle_reader_split = "command+control+\\"
+split_current_pdf_right = "b"
+split_current_pdf_down = "shift+b"
+focus_pane_left = "control+h"
+focus_pane_down = "control+j"
+focus_pane_up = "control+k"
+focus_pane_right = "control+l"
+toggle_pane_zoom = "command+t"
 toggle_right_sidebar_mode = "command+shift+l"
 swap_sidebars = "command+shift+x"
 undo_last_highlight = "command+z"
@@ -813,6 +847,7 @@ highlight_selection = "\(serializedShortcut(.highlightSelection, configuration: 
 underline_selection = "\(serializedShortcut(.underlineSelection, configuration: configuration))"
 strikethrough_selection = "\(serializedShortcut(.strikethroughSelection, configuration: configuration))"
 add_comment = "\(serializedShortcut(.addComment, configuration: configuration))"
+translate_selection = "\(serializedShortcut(.translateSelection, configuration: configuration))"
 exit_highlight_mode = "\(serializedShortcut(.exitHighlightMode, configuration: configuration))"
 toggle_night_mode = "\(serializedShortcut(.toggleNightMode, configuration: configuration))"
 toggle_reading_focus = "\(serializedShortcut(.toggleReadingFocus, configuration: configuration))"
@@ -870,7 +905,11 @@ find_all_open = "\(serializedShortcut(.findAllOpen, configuration: configuration
 find_next_match = "\(serializedShortcut(.findNextMatch, configuration: configuration))"
 find_previous_match = "\(serializedShortcut(.findPreviousMatch, configuration: configuration))"
 goto_page = "\(serializedShortcut(.gotoPage, configuration: configuration))"
+quick_outline = "\(serializedShortcut(.quickOutline, configuration: configuration))"
 show_recent_files_palette = "\(serializedShortcut(.showRecentFilesPalette, configuration: configuration))"
+show_recent_windows = "\(serializedShortcut(.showRecentWindows, configuration: configuration))"
+palette_split_right = "\(serializedShortcut(.paletteSplitRight, configuration: configuration))"
+palette_split_down = "\(serializedShortcut(.paletteSplitDown, configuration: configuration))"
 open_containing_folder = "\(serializedShortcut(.openContainingFolder, configuration: configuration))"
 reopen_last_closed = "\(serializedShortcut(.reopenLastClosed, configuration: configuration))"
 new_blank_tab = "\(serializedShortcut(.newBlankTab, configuration: configuration))"
@@ -881,6 +920,13 @@ toggle_all_pages_overview = "\(serializedShortcut(.toggleAllPagesOverview, confi
 toggle_demo_mode = "\(serializedShortcut(.toggleDemoMode, configuration: configuration))"
 toggle_immersive_mode = "\(serializedShortcut(.toggleImmersiveMode, configuration: configuration))"
 toggle_reader_split = "\(serializedShortcut(.toggleReaderSplit, configuration: configuration))"
+split_current_pdf_right = "\(serializedShortcut(.splitCurrentPDFRight, configuration: configuration))"
+split_current_pdf_down = "\(serializedShortcut(.splitCurrentPDFDown, configuration: configuration))"
+focus_pane_left = "\(serializedShortcut(.focusPaneLeft, configuration: configuration))"
+focus_pane_down = "\(serializedShortcut(.focusPaneDown, configuration: configuration))"
+focus_pane_up = "\(serializedShortcut(.focusPaneUp, configuration: configuration))"
+focus_pane_right = "\(serializedShortcut(.focusPaneRight, configuration: configuration))"
+toggle_pane_zoom = "\(serializedShortcut(.togglePaneZoom, configuration: configuration))"
 toggle_right_sidebar_mode = "\(serializedShortcut(.toggleRightSidebarMode, configuration: configuration))"
 swap_sidebars = "\(serializedShortcut(.swapSidebars, configuration: configuration))"
 undo_last_highlight = "\(serializedShortcut(.undoLastHighlight, configuration: configuration))"
@@ -940,6 +986,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "underline_selection",
         "strikethrough_selection",
         "add_comment",
+        "translate_selection",
         "exit_highlight_mode",
         "toggle_night_mode",
         "toggle_reading_focus",
@@ -997,7 +1044,11 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "find_next_match",
         "find_previous_match",
         "goto_page",
+        "quick_outline",
         "show_recent_files_palette",
+        "show_recent_windows",
+        "palette_split_right",
+        "palette_split_down",
         "open_containing_folder",
         "reopen_last_closed",
         "new_blank_tab",
@@ -1008,6 +1059,13 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "toggle_demo_mode",
         "toggle_immersive_mode",
         "toggle_reader_split",
+        "split_current_pdf_right",
+        "split_current_pdf_down",
+        "focus_pane_left",
+        "focus_pane_down",
+        "focus_pane_up",
+        "focus_pane_right",
+        "toggle_pane_zoom",
         "toggle_right_sidebar_mode",
         "swap_sidebars",
         "undo_last_highlight",
@@ -1230,6 +1288,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .removeHighlight, to: &configuration)
         case ("shortcuts", "add_comment"):
             try applyShortcut(rawValue, command: .addComment, to: &configuration)
+        case ("shortcuts", "translate_selection"):
+            try applyShortcut(rawValue, command: .translateSelection, to: &configuration)
         case ("shortcuts", "highlight_color_pink"):
             try applyShortcut(rawValue, command: .highlightColorPink, to: &configuration)
         case ("shortcuts", "highlight_color_yellow"):
@@ -1304,8 +1364,16 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .findPreviousMatch, to: &configuration)
         case ("shortcuts", "goto_page"):
             try applyShortcut(rawValue, command: .gotoPage, to: &configuration)
+        case ("shortcuts", "quick_outline"):
+            try applyShortcut(rawValue, command: .quickOutline, to: &configuration)
         case ("shortcuts", "show_recent_files_palette"):
             try applyShortcut(rawValue, command: .showRecentFilesPalette, to: &configuration)
+        case ("shortcuts", "show_recent_windows"):
+            try applyShortcut(rawValue, command: .showRecentWindows, to: &configuration)
+        case ("shortcuts", "palette_split_right"):
+            try applyShortcut(rawValue, command: .paletteSplitRight, to: &configuration)
+        case ("shortcuts", "palette_split_down"):
+            try applyShortcut(rawValue, command: .paletteSplitDown, to: &configuration)
         case ("shortcuts", "open_containing_folder"):
             try applyShortcut(rawValue, command: .openContainingFolder, to: &configuration)
         case ("shortcuts", "reopen_last_closed"):
@@ -1326,6 +1394,20 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .toggleImmersiveMode, to: &configuration)
         case ("shortcuts", "toggle_reader_split"):
             try applyShortcut(rawValue, command: .toggleReaderSplit, to: &configuration)
+        case ("shortcuts", "split_current_pdf_right"):
+            try applyShortcut(rawValue, command: .splitCurrentPDFRight, to: &configuration)
+        case ("shortcuts", "split_current_pdf_down"):
+            try applyShortcut(rawValue, command: .splitCurrentPDFDown, to: &configuration)
+        case ("shortcuts", "focus_pane_left"):
+            try applyShortcut(rawValue, command: .focusPaneLeft, to: &configuration)
+        case ("shortcuts", "focus_pane_down"):
+            try applyShortcut(rawValue, command: .focusPaneDown, to: &configuration)
+        case ("shortcuts", "focus_pane_up"):
+            try applyShortcut(rawValue, command: .focusPaneUp, to: &configuration)
+        case ("shortcuts", "focus_pane_right"):
+            try applyShortcut(rawValue, command: .focusPaneRight, to: &configuration)
+        case ("shortcuts", "toggle_pane_zoom"):
+            try applyShortcut(rawValue, command: .togglePaneZoom, to: &configuration)
         case ("shortcuts", "toggle_right_sidebar_mode"), ("shortcuts", "toggle_left_tabs_mode"):
             try applyShortcut(rawValue, command: .toggleRightSidebarMode, to: &configuration)
         case ("shortcuts", "swap_sidebars"):
@@ -1553,6 +1635,15 @@ struct AppConfigurationStore {
                 ?? KeyboardShortcut(key: "tab", modifiers: [.control])
             didMigrate = true
         }
+        if hasShortcutKey(ShortcutCommand.togglePaneZoom.rawValue) == false,
+           configuration.shortcuts.bindings[.newBlankTab] == KeyboardShortcut(key: "t", modifiers: [.command]),
+           let newBlankTab = AppConfiguration.default.shortcuts.bindings[.newBlankTab],
+           configuration.shortcuts.bindings.contains(where: {
+               $0.key != .newBlankTab && $0.value == newBlankTab
+           }) == false {
+            configuration.shortcuts.bindings[.newBlankTab] = newBlankTab
+            didMigrate = true
+        }
         if hasShortcutKey("copy_current_pdf_path") == false,
            configuration.shortcuts.bindings[.toggleContinuousReading] == legacyContinuousReading {
             configuration.shortcuts.bindings[.copyCurrentPDFPath] =
@@ -1574,7 +1665,12 @@ struct AppConfigurationStore {
             }
             didMigrate = true
         }
-        for command: ShortcutCommand in [.underlineSelection, .strikethroughSelection]
+        for command: ShortcutCommand in [
+            .underlineSelection, .strikethroughSelection, .translateSelection,
+            .quickOutline, .showRecentWindows, .splitCurrentPDFRight, .splitCurrentPDFDown,
+            .paletteSplitRight, .paletteSplitDown,
+            .focusPaneLeft, .focusPaneDown, .focusPaneUp, .focusPaneRight, .togglePaneZoom,
+        ]
         where hasShortcutKey(command.rawValue) == false {
             guard let shortcut = configuration.shortcuts.bindings[command] else { continue }
             let hasConflict = configuration.shortcuts.bindings.contains {

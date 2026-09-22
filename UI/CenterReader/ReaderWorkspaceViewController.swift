@@ -2,274 +2,296 @@ import AppKit
 import PDFKit
 
 private final class ReaderPaneHostView: NSView {
-    var isFocused: Bool = false {
-        didSet {
-            guard oldValue != isFocused else { return }
-            updateAppearance()
-        }
-    }
+    var isFocused = false { didSet { if oldValue != isFocused { refreshAppearance() } } }
+    var onSessionChosen: ((UUID) -> Void)?
+    private let candidateBackdrop = NSView()
+    private let candidatePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let candidateLabel = NSTextField(labelWithString: "Choose a PDF")
+
+    override var isFlipped: Bool { true }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        updateAppearance()
+        translatesAutoresizingMaskIntoConstraints = false
+        refreshAppearance()
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        updateAppearance()
+        refreshAppearance()
     }
 
-    private func updateAppearance() {
+    func installCandidateView() {
+        candidateBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        candidateBackdrop.wantsLayer = true
+        candidateBackdrop.isHidden = true
+        candidateLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        candidateLabel.alignment = .center
+        candidatePopup.controlSize = .small
+        candidatePopup.font = .systemFont(ofSize: 12)
+        candidatePopup.target = self
+        candidatePopup.action = #selector(chooseCandidate(_:))
+        let stack = NSStackView(views: [candidateLabel, candidatePopup])
+        stack.orientation = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        candidateBackdrop.addSubview(stack)
+        addSubview(candidateBackdrop)
+        NSLayoutConstraint.activate([
+            candidateBackdrop.leadingAnchor.constraint(equalTo: leadingAnchor),
+            candidateBackdrop.trailingAnchor.constraint(equalTo: trailingAnchor),
+            candidateBackdrop.topAnchor.constraint(equalTo: topAnchor),
+            candidateBackdrop.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stack.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -32),
+        ])
+        refreshAppearance()
+    }
+
+    func setCandidates(_ candidates: [DocumentSession], isVisible: Bool) {
+        candidateBackdrop.isHidden = !isVisible || candidates.isEmpty
+        guard isVisible else { return }
+        candidatePopup.removeAllItems()
+        candidatePopup.addItem(withTitle: "Choose a PDF…")
+        for candidate in candidates {
+            candidatePopup.addItem(withTitle: candidate.title)
+            candidatePopup.lastItem?.representedObject = candidate.id
+        }
+    }
+
+    func refreshAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.clear.cgColor
-            layer?.cornerRadius = 0
             layer?.borderColor = isFocused ? SplitViewController.chromeStrokeColor.cgColor : NSColor.clear.cgColor
             layer?.borderWidth = isFocused ? 1 : 0
+            candidateBackdrop.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
+            candidateLabel.textColor = NightModeStyle.secondaryTextColor
         }
+    }
+
+    @objc private func chooseCandidate(_ sender: NSPopUpButton) {
+        guard let id = sender.selectedItem?.representedObject as? UUID else { return }
+        onSessionChosen?(id)
     }
 }
 
-final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
-    private static let sideBySideMinimumPaneWidth: CGFloat = 320
-    private static let stackedMinimumPaneHeight: CGFloat = 160
+private final class ReaderWorkspaceContainerView: NSView {
+    override var isFlipped: Bool { true }
+}
 
+final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     let documentStore: DocumentStore
     let windowID: UUID
-    let primaryReaderViewController: ReaderViewController
-    let secondaryReaderViewController: ReaderViewController
     let floatingOutlineViewController: FloatingOutlineViewController
     var onFocusedReaderDidChange: ((PDFView) -> Void)?
+    var readersDidChange: (() -> Void)?
     private(set) var isReadingFocusModeEnabled = false
     private(set) var isPresentationEnabled = false
     private(set) var readingFocusSettingsOverride: ReadingFocusSettings?
-    private var readingFocusControlsPopover: NSPopover?
-    private weak var readingFocusControlsReader: ReaderViewController?
 
     var readingFocusSettings: ReadingFocusSettings {
         readingFocusSettingsOverride ?? documentStore.appConfiguration.reader.readingFocus
     }
 
-    private let splitView = NSSplitView()
-    private let primaryHostView = ReaderPaneHostView()
-    private let secondaryHostView = ReaderPaneHostView()
-    private let splitCandidateBackdrop = NSView()
-    private let splitCandidateLabel = NSTextField(labelWithString: "Second pane")
-    private let splitCandidatePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private var sideBySideMinimumConstraints: [NSLayoutConstraint] = []
-    private var stackedMinimumConstraints: [NSLayoutConstraint] = []
-    private var appliedSplitEnabled: Bool?
-    private var appliedSplitLayout: ReaderSplitLayout?
-    private var appliedSecondarySessionID: UUID?
-    private var displayedPrimarySessionID: UUID?
-    private var displayedSecondarySessionID: UUID?
+    var allReaderViewControllers: [ReaderViewController] {
+        orderedPaneIDs.compactMap { readers[$0] }
+    }
+
+    // These accessors retain their ordered-pane meaning for existing integrations.
+    // Pane identity and layout are exclusively owned by DocumentStore.
+    var primaryReaderViewController: ReaderViewController {
+        loadViewIfNeeded()
+        return readers[orderedPaneIDs[0]]!
+    }
+
+    var secondaryReaderViewController: ReaderViewController {
+        loadViewIfNeeded()
+        return readers[orderedPaneIDs.count > 1 ? orderedPaneIDs[1] : orderedPaneIDs[0]]!
+    }
+
+    private var readers: [ReaderPane: ReaderViewController] = [:]
+    private var hosts: [ReaderPane: ReaderPaneHostView] = [:]
+    private var splitHosts: [UUID: ReaderSplitHostView] = [:]
+    private var orderedPaneIDs: [ReaderPane] = []
+    private var recentFocus: [ReaderPane] = []
+    private let contentContainer = ReaderWorkspaceContainerView()
+    private let zoomContainer = ReaderWorkspaceContainerView()
+    private var renderedRoot: NSView?
+    private var rootConstraints: [NSLayoutConstraint] = []
+    private var zoomConstraints: [NSLayoutConstraint] = []
+    private var appliedLayout: ReaderLayoutNode?
+    private var appliedGroupID: UUID?
+    private var appliedZoomedPane: ReaderPane?
     private var appliedFocusedPane: ReaderPane?
-    private var appliedReadingFocusSettings: ReadingFocusSettings?
     private var appliedSearchSource: SearchSnapshotSource?
-    private var pendingSplitGeometryUpdate = false
-    private var splitGeometryUpdateScheduled = false
+    private var appliedReadingFocusSettings: ReadingFocusSettings?
+    private var isSynchronizingFromStore = false
+    private var dividerReadingPositions: [ReaderPane: ReadingPosition] = [:]
+    private var overviewPaneIDs: Set<ReaderPane> = []
+    private var readingFocusControlsPopover: NSPopover?
+    private weak var readingFocusControlsReader: ReaderViewController?
     private var floatingOutlineWidthConstraint: NSLayoutConstraint!
     private var floatingOutlineHeightConstraint: NSLayoutConstraint!
 
     init(documentStore: DocumentStore, windowID: UUID) {
         self.documentStore = documentStore
         self.windowID = windowID
-        self.primaryReaderViewController = ReaderViewController(
-            documentStore: documentStore,
-            windowID: windowID
-        )
-        self.secondaryReaderViewController = ReaderViewController(
-            documentStore: documentStore,
-            windowID: windowID
-        )
-        self.floatingOutlineViewController = FloatingOutlineViewController(
-            documentStore: documentStore,
-            windowID: windowID
-        )
+        self.floatingOutlineViewController = FloatingOutlineViewController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
-        secondaryReaderViewController.setLocalEventMonitoringEnabled(false)
         title = "Reader Workspace"
-        addChild(primaryReaderViewController)
-        addChild(secondaryReaderViewController)
         addChild(floatingOutlineViewController)
-        floatingOutlineViewController.preferredSizeDidChange = { [weak self] _ in
-            self?.applyFloatingOutlineSize()
-        }
+        floatingOutlineViewController.preferredSizeDidChange = { [weak self] _ in self?.applyFloatingOutlineSize() }
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func loadView() {
+        let container = ReaderWorkspaceContainerView()
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.clear.cgColor
+        for child in [contentContainer, zoomContainer] {
+            child.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(child)
+            NSLayoutConstraint.activate([
+                child.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                child.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                child.topAnchor.constraint(equalTo: container.topAnchor),
+                child.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+        }
+        zoomContainer.isHidden = true
+        let outline = floatingOutlineViewController.view
+        outline.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(outline)
+        floatingOutlineWidthConstraint = outline.widthAnchor.constraint(equalToConstant: 28)
+        floatingOutlineHeightConstraint = outline.heightAnchor.constraint(equalToConstant: 56)
+        NSLayoutConstraint.activate([
+            outline.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+            outline.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            floatingOutlineWidthConstraint, floatingOutlineHeightConstraint,
+        ])
+        view = container
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        primaryReaderViewController.onFocusRequested = { [weak self] in
-            guard let self else { return }
-            self.documentStore.setFocusedPane(.primary, in: self.windowID)
-        }
-        secondaryReaderViewController.onFocusRequested = { [weak self] in
-            guard let self else { return }
-            self.documentStore.setFocusedPane(.secondary, in: self.windowID)
-        }
-        primaryReaderViewController.onPageBoundaryRequested = { [weak self] direction in
-            self?.turnPageAcrossBoundary(direction: direction, in: .primary) ?? false
-        }
-        secondaryReaderViewController.onPageBoundaryRequested = { [weak self] direction in
-            self?.turnPageAcrossBoundary(direction: direction, in: .secondary) ?? false
-        }
-        primaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
-            guard let self else { return nil }
-            return self.activateHistorySession(sessionID, in: .primary)
-        }
-        secondaryReaderViewController.onHistorySessionNavigationRequested = { [weak self] sessionID in
-            guard let self else { return nil }
-            return self.activateHistorySession(sessionID, in: .secondary)
-        }
-        floatingOutlineViewController.onNavigationRequested = { [weak self] request in
-            _ = self?.navigate(to: request)
-        }
-        primaryReaderViewController.onOverviewPresentationDidChange = { [weak self] active in
-            guard let self else { return }
-            self.floatingOutlineViewController.setSuppressed(
-                self.isPresentationEnabled || active || self.secondaryReaderViewController.isAllPagesOverviewActive
-            )
-        }
-        secondaryReaderViewController.onOverviewPresentationDidChange = { [weak self] active in
-            guard let self else { return }
-            self.floatingOutlineViewController.setSuppressed(
-                self.isPresentationEnabled || active || self.primaryReaderViewController.isAllPagesOverviewActive
-            )
-        }
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleDocumentStoreDidChange),
-            name: .documentStoreDidChange,
-            object: documentStore
-        )
+        floatingOutlineViewController.onNavigationRequested = { [weak self] request in _ = self?.navigate(to: request) }
+        floatingOutlineViewController.onQuickNavigationEnded = { [weak self] in self?.focusActiveReader() }
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDocumentStoreDidChange),
+                                               name: .documentStoreDidChange, object: documentStore)
         syncFromStore()
-    }
-
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        requestSplitGeometryUpdate()
     }
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        applyFloatingOutlineSize()
-        let splitLayout = documentStore.splitLayout(in: windowID)
-        if pendingSplitGeometryUpdate, splitLength(for: splitLayout) > 0 {
-            requestSplitGeometryUpdate()
-        }
-    }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    override func loadView() {
-        let container = NSView()
-        container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.clear.cgColor
-
-        splitView.isVertical = true
-        splitView.dividerStyle = .thin
-        splitView.translatesAutoresizingMaskIntoConstraints = false
-        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
-        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
-
-        for host in [primaryHostView, secondaryHostView] {
-            host.translatesAutoresizingMaskIntoConstraints = false
-            splitView.addSubview(host)
-        }
-
-        embed(primaryReaderViewController, in: primaryHostView)
-        embed(secondaryReaderViewController, in: secondaryHostView)
-        installSplitCandidateView()
-
-        container.addSubview(splitView)
-        let floatingOutlineView = floatingOutlineViewController.view
-        floatingOutlineView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(floatingOutlineView)
-        floatingOutlineWidthConstraint = floatingOutlineView.widthAnchor.constraint(equalToConstant: 28)
-        floatingOutlineHeightConstraint = floatingOutlineView.heightAnchor.constraint(equalToConstant: 56)
-        NSLayoutConstraint.activate([
-            splitView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            splitView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            splitView.topAnchor.constraint(equalTo: container.topAnchor),
-            splitView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-
-            floatingOutlineView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-            floatingOutlineView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            floatingOutlineWidthConstraint,
-            floatingOutlineHeightConstraint,
-        ])
-        sideBySideMinimumConstraints = [
-            primaryHostView.widthAnchor.constraint(
-                greaterThanOrEqualToConstant: Self.sideBySideMinimumPaneWidth
-            ),
-            secondaryHostView.widthAnchor.constraint(
-                greaterThanOrEqualToConstant: Self.sideBySideMinimumPaneWidth
-            ),
-        ]
-        stackedMinimumConstraints = [
-            primaryHostView.heightAnchor.constraint(
-                greaterThanOrEqualToConstant: Self.stackedMinimumPaneHeight
-            ),
-            secondaryHostView.heightAnchor.constraint(
-                greaterThanOrEqualToConstant: Self.stackedMinimumPaneHeight
-            ),
-        ]
-        (sideBySideMinimumConstraints + stackedMinimumConstraints).forEach {
-            $0.priority = .defaultLow
-        }
-
-        view = container
+        renderedRoot?.frame = contentContainer.bounds
+        if let pane = appliedZoomedPane { hosts[pane]?.frame = zoomContainer.bounds }
         applyFloatingOutlineSize()
     }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     func activeReaderViewController() -> ReaderViewController {
-        documentStore.focusedPane(in: windowID) == .secondary && documentStore.isSplitEnabled(in: windowID)
-            ? secondaryReaderViewController
-            : primaryReaderViewController
+        loadViewIfNeeded()
+        return readers[documentStore.focusedPane(in: windowID)] ?? primaryReaderViewController
     }
+
+    func readerViewController(for pane: ReaderPane) -> ReaderViewController? { readers[pane] }
 
     func setPresentationEnabled(_ enabled: Bool) {
         isPresentationEnabled = enabled
-        primaryReaderViewController.setPresentationEnabled(enabled)
-        secondaryReaderViewController.setPresentationEnabled(enabled)
-        floatingOutlineViewController.setSuppressed(
-            enabled || primaryReaderViewController.isAllPagesOverviewActive
-                || secondaryReaderViewController.isAllPagesOverviewActive
-        )
+        allReaderViewControllers.forEach { $0.setPresentationEnabled(enabled) }
+        updateFloatingOutlineSuppression()
     }
 
-    var testingSplitView: NSSplitView {
-        splitView
+    func focusActiveReader() {
+        view.window?.makeFirstResponder(activeReaderViewController().pdfView)
     }
 
-    var testingActiveSplitMinimumConstraintCount: Int {
-        (sideBySideMinimumConstraints + stackedMinimumConstraints).filter(\.isActive).count
+    @discardableResult
+    func focusPane(direction: ReaderPaneDirection) -> Bool {
+        guard let layout = documentStore.readerLayout(in: windowID),
+              let target = ReaderPaneGeometry.neighbour(
+                from: documentStore.focusedPane(in: windowID), direction: direction,
+                frames: ReaderPaneGeometry.frames(for: layout, in: contentContainer.bounds), recentFocus: recentFocus
+              ) else { return false }
+        if documentStore.zoomedPane(in: windowID) != nil { documentStore.togglePaneZoom(in: windowID) }
+        documentStore.setFocusedPane(target, in: windowID)
+        focusActiveReader()
+        return true
     }
 
-    var testingPrimaryPaneBorderWidth: CGFloat {
-        primaryHostView.layer?.borderWidth ?? 0
+    func togglePaneZoom() {
+        flushPendingReadingPositions()
+        documentStore.togglePaneZoom(in: windowID)
+        focusActiveReader()
     }
 
-    var testingSecondaryPaneBorderWidth: CGFloat {
-        secondaryHostView.layer?.borderWidth ?? 0
+    @discardableResult
+    func closeFocusedPane() -> Bool {
+        flushPendingReadingPositions()
+        let closed = documentStore.closePane(documentStore.focusedPane(in: windowID), in: windowID)
+        if closed { focusActiveReader() }
+        return closed
     }
 
     func toggleSplit() {
+        if documentStore.isSplitEnabled(in: windowID) == false,
+           canSplitPane(documentStore.focusedPane(in: windowID), layout: documentStore.splitLayout(in: windowID)) == false {
+            NSSound.beep()
+            return
+        }
+        flushPendingReadingPositions()
         documentStore.setSplitEnabled(!documentStore.isSplitEnabled(in: windowID), in: windowID)
     }
 
+    func canSplitPane(_ pane: ReaderPane? = nil, layout: ReaderSplitLayout) -> Bool {
+        loadViewIfNeeded()
+        view.layoutSubtreeIfNeeded()
+        guard let tree = documentStore.readerLayout(in: windowID),
+              let frame = ReaderPaneGeometry.frames(for: tree, in: contentContainer.bounds)[pane ?? documentStore.focusedPane(in: windowID)] else { return false }
+        return ReaderPaneGeometry.canSplit(frame.size, layout: layout)
+    }
+
+    @discardableResult
+    func splitActivePane(
+        layout: ReaderSplitLayout, sessionID: UUID? = nil, readingPosition: ReadingPosition? = nil
+    ) -> Bool {
+        splitPane(from: documentStore.focusedPane(in: windowID), layout: layout,
+                  sessionID: sessionID, readingPosition: readingPosition)
+    }
+
+    @discardableResult
+    func splitPane(
+        from pane: ReaderPane, layout: ReaderSplitLayout,
+        sessionID: UUID? = nil, readingPosition: ReadingPosition? = nil
+    ) -> Bool {
+        guard canSplitPane(pane, layout: layout), let reader = readers[pane] else {
+            NSSound.beep()
+            return false
+        }
+        reader.flushPendingReadingPosition()
+        let position = readingPosition ?? (sessionID == nil || sessionID == reader.displayedSessionID ? reader.currentPosition : nil)
+        guard documentStore.splitPane(from: pane, layout: layout, sessionID: sessionID,
+                                      readingPosition: position, in: windowID) != nil else { return false }
+        focusActiveReader()
+        return true
+    }
+
+    var testingSplitView: NSSplitView? { renderedRoot as? NSSplitView }
+    var testingActiveSplitMinimumConstraintCount: Int { splitHosts.count * 2 }
+    var testingPrimaryPaneBorderWidth: CGFloat { hosts[orderedPaneIDs.first ?? .primary]?.layer?.borderWidth ?? 0 }
+    var testingSecondaryPaneBorderWidth: CGFloat { orderedPaneIDs.count > 1 ? hosts[orderedPaneIDs[1]]?.layer?.borderWidth ?? 0 : 0 }
+    var testingPaneFrames: [ReaderPane: NSRect] {
+        guard let tree = appliedLayout else { return [:] }
+        return ReaderPaneGeometry.frames(for: tree, in: contentContainer.bounds)
+    }
     func fitToWidth() {
         activeReaderViewController().fitToWidth()
     }
@@ -281,13 +303,11 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     /// After left/right chrome collapse or width pin, force readers to match the
     /// new center size (fit-width / fit-height reflow + recenter).
     func prepareReadersForChromeLayoutChange() {
-        primaryReaderViewController.prepareForChromeSizeChange()
-        secondaryReaderViewController.prepareForChromeSizeChange()
+        allReaderViewControllers.forEach { $0.prepareForChromeSizeChange() }
     }
 
     func reflowReadersForChromeLayoutChange() {
-        primaryReaderViewController.reflowForContainerSizeChange()
-        secondaryReaderViewController.reflowForContainerSizeChange()
+        allReaderViewControllers.forEach { $0.reflowForContainerSizeChange() }
     }
 
     func fitToHeight() {
@@ -364,15 +384,16 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     func navigate(to position: ReadingPosition, in sessionID: UUID) -> Bool {
         guard documentStore.session(for: sessionID) != nil else { return false }
         let reader = activeReaderViewController()
-        let sameSession = reader.displayedSessionID == sessionID
-        if sameSession == false {
+        let sameDocument = isSameDocument(reader.displayedSessionID, sessionID)
+        if sameDocument == false {
             reader.recordCurrentPositionForNavigation()
             let focusedPane = documentStore.focusedPane(in: windowID)
             let targetPane = documentStore.isSplitEnabled(in: windowID) ? focusedPane : nil
             documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
-            guard reader.displayedSessionID == sessionID else { return false }
         }
-        return reader.go(to: position, recordHistory: sameSession)
+        let destinationReader = activeReaderViewController()
+        guard isSameDocument(destinationReader.displayedSessionID, sessionID) else { return false }
+        return destinationReader.go(to: position, recordHistory: sameDocument)
     }
 
     @discardableResult
@@ -434,11 +455,10 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         guard let requestedSession = documentStore.session(for: sessionID),
               let workspace = documentStore.windowWorkspace(for: windowID),
               workspace.sessionIDs.contains(sessionID)
-                || workspace.primarySessionID == sessionID
-                || workspace.secondarySessionID == sessionID else { return nil }
+                || documentStore.readerPanes(in: windowID).contains(where: { $0.sessionID == sessionID }) else { return nil }
         let targetPane = documentStore.isSplitEnabled(in: windowID) ? pane : nil
         documentStore.activate(sessionID: sessionID, in: windowID, targetPane: targetPane)
-        let resolvedPane: ReaderPane = documentStore.isSplitEnabled(in: windowID) ? pane : .primary
+        let resolvedPane = documentStore.focusedPane(in: windowID)
         guard let resolvedSessionID = documentStore.displayedSessionID(for: resolvedPane, in: windowID),
               documentStore.session(for: resolvedSessionID)?.url == requestedSession.url else { return nil }
         return resolvedSessionID
@@ -484,8 +504,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     @discardableResult
     func toggleReadingFocusMode() -> Bool {
         isReadingFocusModeEnabled.toggle()
-        primaryReaderViewController.setReadingFocusModeEnabled(isReadingFocusModeEnabled)
-        secondaryReaderViewController.setReadingFocusModeEnabled(isReadingFocusModeEnabled)
+        allReaderViewControllers.forEach { $0.setReadingFocusModeEnabled(isReadingFocusModeEnabled) }
         return isReadingFocusModeEnabled
     }
 
@@ -570,10 +589,10 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     }
 
     func refreshThemeAppearance() {
-        primaryReaderViewController.refreshThemeAppearance()
-        secondaryReaderViewController.refreshThemeAppearance()
+        allReaderViewControllers.forEach { $0.refreshThemeAppearance() }
         floatingOutlineViewController.refreshChromeColors()
-        syncSplitCandidateView()
+        hosts.values.forEach { $0.refreshAppearance() }
+        splitHosts.values.forEach { $0.needsDisplay = true }
     }
 
     func saveAnnotations() throws {
@@ -581,8 +600,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     }
 
     func flushPendingReadingPositions() {
-        primaryReaderViewController.flushPendingReadingPosition()
-        secondaryReaderViewController.flushPendingReadingPosition()
+        allReaderViewControllers.forEach { $0.flushPendingReadingPosition() }
     }
 
     func focus(on highlight: DocumentHighlightGroup) {
@@ -597,157 +615,287 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         activeReaderViewController().hideFindBar()
     }
 
-    @objc
-    private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.affects(windowID: windowID) else { return }
-        guard notification.isOnlySidebarChromeChange == false else { return }
-        // Page/zoom writeback does not change pane layout or search highlight session targets.
-        guard notification.isOnlyReadingPositionChange == false else { return }
-        let change = notification.documentStoreChange
-        guard change.intersection([.content, .tabs, .search, .appearance]).isEmpty == false else {
-            return
+
+    func showQuickOutline() {
+        _ = floatingOutlineViewController.showQuickNavigation()
+    }
+
+    func canSplitActivePane(layout: ReaderSplitLayout) -> Bool {
+        canSplitPane(layout: layout)
+    }
+
+    @discardableResult
+    func splitActivePane(documentAt url: URL, layout: ReaderSplitLayout) throws -> Bool {
+        let pane = documentStore.focusedPane(in: windowID)
+        guard canSplitPane(pane, layout: layout) else {
+            NSSound.beep()
+            return false
         }
+        readers[pane]?.flushPendingReadingPosition()
+        guard try documentStore.splitPane(from: pane, layout: layout, documentAt: url, in: windowID) != nil else { return false }
+        focusActiveReader()
+        return true
+    }
+
+    @objc private func handleDocumentStoreDidChange(_ notification: Notification) {
+        guard notification.affects(windowID: windowID), !notification.isOnlySidebarChromeChange,
+              !notification.isOnlyReadingPositionChange else { return }
+        let change = notification.documentStoreChange
+        guard !change.intersection([.content, .tabs, .search, .appearance]).isEmpty else { return }
         syncFromStore(forceSearchRefresh: change.containsOnly(.search))
     }
 
     private func syncFromStore(forceSearchRefresh: Bool = true) {
+        guard !isSynchronizingFromStore else { return }
+        isSynchronizingFromStore = true
+        defer { isSynchronizingFromStore = false }
+        let layout = documentStore.readerLayout(in: windowID) ?? .pane(.primary)
+        let groupID = documentStore.windowWorkspace(for: windowID)?.activeWorkspace.activeGroup?.id
+        let paneIDs = layout.paneIDs
+        let zoomedPane = documentStore.zoomedPane(in: windowID)
+        let oldIDs = Set(orderedPaneIDs)
+        let addedIDs = Set(paneIDs).subtracting(oldIDs)
+        let layoutChanged = appliedLayout != layout || appliedZoomedPane != zoomedPane
+        let paneCollectionChanged = orderedPaneIDs != paneIDs
+        var anchors: [ReaderPane: ReadingPosition] = [:]
+        var resizedIDs: Set<ReaderPane> = []
+        if layoutChanged {
+            let desiredFrames = ReaderPaneGeometry.frames(for: layout, in: contentContainer.bounds)
+            for pane in paneIDs {
+                guard let reader = readers[pane], let host = hosts[pane] else { continue }
+                let desiredSize = pane == zoomedPane ? contentContainer.bounds.size : desiredFrames[pane]?.size ?? .zero
+                if abs(host.bounds.width - desiredSize.width) > 0.5 || abs(host.bounds.height - desiredSize.height) > 0.5 {
+                    resizedIDs.insert(pane)
+                    anchors[pane] = reader.currentPosition
+                    reader.prepareForChromeSizeChange()
+                }
+            }
+        }
+        for pane in oldIDs.subtracting(paneIDs) {
+            overviewPaneIDs.remove(pane)
+            guard let reader = readers.removeValue(forKey: pane) else { continue }
+            reader.flushPendingReadingPosition()
+            reader.setLocalEventMonitoringEnabled(false)
+            reader.targetSessionID = nil
+            hosts.removeValue(forKey: pane)?.removeFromSuperview()
+            reader.removeFromParent()
+        }
+        for pane in paneIDs where readers[pane] == nil { createReader(for: pane) }
+        orderedPaneIDs = paneIDs
+        var changedSessionIDs: Set<ReaderPane> = []
+        var filledEmptyPaneIDs: Set<ReaderPane> = []
+        var pendingSessionIDs: [ReaderPane: UUID] = [:]
+        for pane in paneIDs {
+            let sessionID = documentStore.displayedSessionID(for: pane, in: windowID)
+            if readers[pane]?.targetSessionID != sessionID {
+                if appliedGroupID == groupID, paneIDs.count > 1, oldIDs.contains(pane), readers[pane]?.targetSessionID == nil {
+                    filledEmptyPaneIDs.insert(pane)
+                }
+                pendingSessionIDs[pane] = sessionID
+                changedSessionIDs.insert(pane)
+                anchors[pane] = sessionID.flatMap { documentStore.session(for: $0)?.lastReadPosition }
+            }
+        }
         applyReadingFocusSettings()
-        let primarySessionID = documentStore.displayedSessionID(for: .primary, in: windowID)
-        let secondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
-        let primarySessionChanged = displayedPrimarySessionID != primarySessionID
-        let secondaryTargetChanged = displayedSecondarySessionID != secondarySessionID
-        if primarySessionChanged {
-            displayedPrimarySessionID = primarySessionID
-            primaryReaderViewController.targetSessionID = primarySessionID
+        if layoutChanged || paneCollectionChanged {
+            // Detach old documents before resizing their hosts. Ordinary tab
+            // switches retain the previous binding so the reader can announce
+            // the new file name.
+            for pane in changedSessionIDs where readers[pane]?.targetSessionID != nil {
+                readers[pane]?.targetSessionID = nil
+            }
         }
-        if secondaryTargetChanged {
-            displayedSecondarySessionID = secondarySessionID
-            secondaryReaderViewController.targetSessionID = secondarySessionID
+        let isNewSplit = appliedGroupID == groupID && appliedLayout != nil && !addedIDs.isEmpty && oldIDs.isSubset(of: Set(paneIDs))
+        if layoutChanged || paneCollectionChanged {
+            NSLayoutConstraint.deactivate(zoomConstraints)
+            zoomConstraints = []
+            NSLayoutConstraint.deactivate(rootConstraints)
+            rootConstraints = []
+            zoomContainer.subviews.forEach { $0.removeFromSuperview() }
+            let root = render(layout)
+            if renderedRoot !== root {
+                if renderedRoot?.superview === contentContainer { renderedRoot?.removeFromSuperview() }
+                contentContainer.addSubview(root)
+                renderedRoot = root
+            }
+            rootConstraints = edgeConstraints(for: root, in: contentContainer)
+            NSLayoutConstraint.activate(rootConstraints)
+            root.frame = contentContainer.bounds
+            root.layoutSubtreeIfNeeded()
+            let liveSplitIDs = splitIDs(in: layout)
+            for id in Set(splitHosts.keys).subtracting(liveSplitIDs) {
+                splitHosts.removeValue(forKey: id)?.removeFromSuperview()
+            }
+            contentContainer.isHidden = zoomedPane != nil
+            zoomContainer.isHidden = zoomedPane == nil
+            if let pane = zoomedPane, let host = hosts[pane] {
+                host.removeFromSuperview()
+                zoomContainer.addSubview(host)
+                host.frame = zoomContainer.bounds
+                zoomConstraints = edgeConstraints(for: host, in: zoomContainer)
+                NSLayoutConstraint.activate(zoomConstraints)
+            }
+            appliedLayout = layout
+            appliedZoomedPane = zoomedPane
+            view.layoutSubtreeIfNeeded()
         }
-
+        // PDFKit restores its viewport while binding a document. New readers
+        // must already occupy their final pane bounds before that restoration.
+        for pane in changedSessionIDs {
+            readers[pane]?.targetSessionID = pendingSessionIDs[pane]
+        }
+        if layoutChanged || paneCollectionChanged {
+            for pane in resizedIDs.union(addedIDs) {
+                guard let reader = readers[pane] else { continue }
+                reader.reflowForContainerSizeChange()
+                if isNewSplit { reader.fitToWidth() }
+                if let anchor = anchors[pane] ?? reader.targetSessionID.flatMap({ documentStore.session(for: $0)?.lastReadPosition }) {
+                    _ = reader.go(to: anchor, recordHistory: false)
+                }
+            }
+        }
+        for pane in filledEmptyPaneIDs {
+            guard let reader = readers[pane] else { continue }
+            reader.reflowForContainerSizeChange()
+            reader.fitToWidth()
+            if let anchor = anchors[pane] { _ = reader.go(to: anchor, recordHistory: false) }
+        }
+        appliedGroupID = groupID
+        let candidates = documentStore.splitCandidateSessions(in: windowID)
+        let focusedPane = documentStore.focusedPane(in: windowID)
+        for pane in paneIDs {
+            readers[pane]?.setLocalEventMonitoringEnabled(zoomedPane == nil || zoomedPane == pane)
+            hosts[pane]?.isFocused = paneIDs.count > 1 && focusedPane == pane
+            hosts[pane]?.setCandidates(candidates, isVisible: paneIDs.count > 1 && readers[pane]?.targetSessionID == nil)
+        }
         documentStore.rebuildSearchIfNeeded(in: windowID)
         let searchSource = documentStore.searchSnapshot(in: windowID).source
-        if forceSearchRefresh || appliedSearchSource != searchSource || primarySessionChanged || secondaryTargetChanged {
+        if forceSearchRefresh || appliedSearchSource != searchSource || !changedSessionIDs.isEmpty {
             appliedSearchSource = searchSource
-            syncSearchHighlights(for: primaryReaderViewController, sessionID: primarySessionID)
-            syncSearchHighlights(for: secondaryReaderViewController, sessionID: secondarySessionID)
+            for reader in allReaderViewControllers { syncSearchHighlights(for: reader, sessionID: reader.targetSessionID) }
         }
-
-        let splitEnabled = documentStore.isSplitEnabled(in: windowID)
-        let splitLayout = documentStore.splitLayout(in: windowID)
-        let splitStateChanged = appliedSplitEnabled != splitEnabled
-        let splitLayoutChanged = appliedSplitLayout != splitLayout
-        let secondarySessionChanged = appliedSecondarySessionID != secondarySessionID
-        if splitStateChanged || splitLayoutChanged {
-            applySplitLayout(splitLayout, splitEnabled: splitEnabled)
-        }
-        let secondaryShouldBeHidden = !splitEnabled
-        if secondaryHostView.isHidden != secondaryShouldBeHidden {
-            secondaryHostView.isHidden = secondaryShouldBeHidden
-        }
-        primaryReaderViewController.setLocalEventMonitoringEnabled(true)
-        secondaryReaderViewController.setLocalEventMonitoringEnabled(splitEnabled)
-        if splitStateChanged || splitLayoutChanged || (splitEnabled && secondarySessionChanged) {
-            requestSplitGeometryUpdate()
-        }
-
-        let focusedPane = documentStore.focusedPane(in: windowID)
-        let focusedPaneChanged = appliedFocusedPane != focusedPane
-        appliedFocusedPane = focusedPane
-        primaryHostView.isFocused = splitEnabled && focusedPane == .primary
-        secondaryHostView.isFocused = splitEnabled && focusedPane == .secondary
-        if splitStateChanged || primarySessionChanged || secondaryTargetChanged {
-            syncSplitCandidateView()
-        }
-        if focusedPaneChanged || splitStateChanged || primarySessionChanged || secondaryTargetChanged {
+        if paneCollectionChanged { readersDidChange?() }
+        if appliedFocusedPane != focusedPane || layoutChanged || !changedSessionIDs.isEmpty {
+            appliedFocusedPane = focusedPane
+            recentFocus.removeAll { $0 == focusedPane || !paneIDs.contains($0) }
+            recentFocus.insert(focusedPane, at: 0)
+            floatingOutlineViewController.bind(to: activeReaderViewController().pdfView)
             onFocusedReaderDidChange?(activeReaderViewController().pdfView)
+            activeReaderViewController().publishViewportPosition(force: true)
         }
+        updateFloatingOutlineSuppression()
+    }
+
+    private func createReader(for pane: ReaderPane) {
+        let reader = ReaderViewController(documentStore: documentStore, windowID: windowID)
+        let host = ReaderPaneHostView()
+        readers[pane] = reader
+        hosts[pane] = host
+        addChild(reader)
+        reader.onFocusRequested = { [weak self] in
+            guard let self else { return }
+            self.documentStore.setFocusedPane(pane, in: self.windowID)
+        }
+        reader.onPageBoundaryRequested = { [weak self] direction in
+            self?.turnPageAcrossBoundary(direction: direction, in: pane) ?? false
+        }
+        reader.onHistorySessionNavigationRequested = { [weak self] id in self?.activateHistorySession(id, in: pane) }
+        reader.onOverviewPresentationDidChange = { [weak self] active in
+            guard let self else { return }
+            if active { self.overviewPaneIDs.insert(pane) }
+            else { self.overviewPaneIDs.remove(pane) }
+            self.updateFloatingOutlineSuppression()
+        }
+        reader.onSplitRequested = { [weak self] sessionID, position, layout in
+            self?.splitPane(from: pane, layout: layout, sessionID: sessionID, readingPosition: position) ?? false
+        }
+        host.onSessionChosen = { [weak self] id in
+            guard let self else { return }
+            self.documentStore.activate(sessionID: id, in: self.windowID, targetPane: pane)
+        }
+        embed(reader, in: host)
+        host.installCandidateView()
+        reader.setReadingFocusModeEnabled(isReadingFocusModeEnabled)
+        reader.setReadingFocusSettings(readingFocusSettings)
+        reader.setPresentationEnabled(isPresentationEnabled)
+    }
+
+    private func render(_ node: ReaderLayoutNode) -> NSView {
+        switch node {
+        case let .pane(pane):
+            return hosts[pane]!
+        case let .split(id, layout, ratio, first, second):
+            let host: ReaderSplitHostView
+            if let existing = splitHosts[id] { host = existing }
+            else {
+                host = ReaderSplitHostView(id: id, layout: layout, ratio: ratio)
+                splitHosts[id] = host
+                host.onWillResize = { [weak self] panes in self?.prepareForDividerResize(panes) }
+                host.onDidResize = { [weak self] panes in self?.completeDividerResize(panes) }
+                host.onRatioChanged = { [weak self] id, ratio in
+                    guard let self else { return }
+                    self.documentStore.updateSplitRatio(ratio, splitID: id, in: self.windowID)
+                }
+            }
+            host.isVertical = layout == .sideBySide
+            host.ratio = ratio
+            host.paneIDs = node.paneIDs
+            host.firstMinimumSize = ReaderPaneGeometry.minimumSize(for: first)
+            host.secondMinimumSize = ReaderPaneGeometry.minimumSize(for: second)
+            host.install(first: render(first), second: render(second))
+            host.resizeSubviews(withOldSize: host.bounds.size)
+            return host
+        }
+    }
+
+    private func splitIDs(in node: ReaderLayoutNode) -> Set<UUID> {
+        switch node {
+        case .pane: return []
+        case let .split(id, _, _, first, second): return Set([id]).union(splitIDs(in: first)).union(splitIDs(in: second))
+        }
+    }
+
+    private func prepareForDividerResize(_ panes: [ReaderPane]) {
+        dividerReadingPositions = [:]
+        for pane in panes {
+            dividerReadingPositions[pane] = readers[pane]?.currentPosition
+            readers[pane]?.prepareForChromeSizeChange()
+        }
+    }
+
+    private func completeDividerResize(_ panes: [ReaderPane]) {
+        for pane in panes {
+            readers[pane]?.reflowForContainerSizeChange()
+            if let anchor = dividerReadingPositions[pane] { _ = readers[pane]?.go(to: anchor, recordHistory: false) }
+        }
+        dividerReadingPositions = [:]
+    }
+
+    private func isSameDocument(_ displayedID: UUID?, _ requestedID: UUID) -> Bool {
+        guard let displayedID else { return false }
+        if displayedID == requestedID { return true }
+        let current = documentStore.publicSessionID(forDisplayedSessionID: displayedID, in: windowID)
+        let requested = documentStore.publicSessionID(forDisplayedSessionID: requestedID, in: windowID)
+        return current != nil && current == requested
+    }
+
+    private func updateFloatingOutlineSuppression() {
+        floatingOutlineViewController.setSuppressed(isPresentationEnabled || !overviewPaneIDs.isEmpty)
     }
 
     private func applyReadingFocusSettings() {
         let settings = readingFocusSettings
         guard appliedReadingFocusSettings != settings else { return }
         appliedReadingFocusSettings = settings
-        primaryReaderViewController.setReadingFocusSettings(settings)
-        secondaryReaderViewController.setReadingFocusSettings(settings)
-    }
-
-    private func installSplitCandidateView() {
-        splitCandidateBackdrop.translatesAutoresizingMaskIntoConstraints = false
-        splitCandidateBackdrop.wantsLayer = true
-        splitCandidateBackdrop.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
-        splitCandidateBackdrop.isHidden = true
-
-        splitCandidateLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        splitCandidateLabel.textColor = NightModeStyle.secondaryTextColor
-        splitCandidateLabel.alignment = .center
-        splitCandidateLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        splitCandidatePopup.controlSize = .small
-        splitCandidatePopup.font = .systemFont(ofSize: 12)
-        splitCandidatePopup.target = self
-        splitCandidatePopup.action = #selector(chooseSplitCandidate(_:))
-        splitCandidatePopup.translatesAutoresizingMaskIntoConstraints = false
-        splitCandidatePopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
-
-        let stack = NSStackView(views: [splitCandidateLabel, splitCandidatePopup])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        splitCandidateBackdrop.addSubview(stack)
-        secondaryHostView.addSubview(splitCandidateBackdrop)
-        NSLayoutConstraint.activate([
-            splitCandidateBackdrop.leadingAnchor.constraint(equalTo: secondaryHostView.leadingAnchor),
-            splitCandidateBackdrop.trailingAnchor.constraint(equalTo: secondaryHostView.trailingAnchor),
-            splitCandidateBackdrop.topAnchor.constraint(equalTo: secondaryHostView.topAnchor),
-            splitCandidateBackdrop.bottomAnchor.constraint(equalTo: secondaryHostView.bottomAnchor),
-            stack.centerXAnchor.constraint(equalTo: splitCandidateBackdrop.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: splitCandidateBackdrop.centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: splitCandidateBackdrop.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: splitCandidateBackdrop.trailingAnchor, constant: -24),
-        ])
-    }
-
-    private func syncSplitCandidateView() {
-        splitCandidateBackdrop.layer?.backgroundColor = SplitViewController.splitBackgroundColor.cgColor
-        splitCandidateLabel.textColor = NightModeStyle.secondaryTextColor
-        let candidates = documentStore.splitCandidateSessions(in: windowID)
-        let shouldShow = documentStore.isSplitEnabled(in: windowID) &&
-            documentStore.displayedSessionID(for: .secondary, in: windowID) == nil &&
-            candidates.isEmpty == false
-        splitCandidateBackdrop.isHidden = !shouldShow
-        guard shouldShow else { return }
-
-        splitCandidatePopup.removeAllItems()
-        let primarySessionID = documentStore.displayedSessionID(for: .primary, in: windowID)
-        for candidate in candidates {
-            let title = candidate.id == primarySessionID ? "Same PDF - \(candidate.title)" : candidate.title
-            splitCandidatePopup.addItem(withTitle: title)
-            splitCandidatePopup.lastItem?.representedObject = candidate.id.uuidString
-        }
-    }
-
-    @objc
-    private func chooseSplitCandidate(_ sender: NSPopUpButton) {
-        guard let uuidString = sender.selectedItem?.representedObject as? String,
-              let sessionID = UUID(uuidString: uuidString) else { return }
-        documentStore.activate(sessionID: sessionID, in: windowID, targetPane: .secondary)
+        allReaderViewControllers.forEach { $0.setReadingFocusSettings(settings) }
     }
 
     private func syncSearchHighlights(for reader: ReaderViewController, sessionID: UUID?) {
-        let snapshot = documentStore.searchSnapshot(in: windowID)
-        guard let sessionID,
-              snapshot.query.isEmpty == false else {
+        guard let sessionID, !documentStore.searchSnapshot(in: windowID).query.isEmpty else {
             reader.clearSearchResults()
             return
         }
-
-        reader.applySearchResults(
-            documentStore.searchSelections(for: sessionID, in: windowID),
-            selectedMatchIndex: nil
-        )
+        reader.applySearchResults(documentStore.searchSelections(for: sessionID, in: windowID), selectedMatchIndex: nil)
     }
 
     private func embed(_ controller: NSViewController, in hostView: NSView) {
@@ -762,105 +910,25 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         ])
     }
 
+    private func edgeConstraints(for child: NSView, in host: NSView) -> [NSLayoutConstraint] {
+        child.translatesAutoresizingMaskIntoConstraints = false
+        return [
+            child.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            child.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            child.topAnchor.constraint(equalTo: host.topAnchor),
+            child.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+        ]
+    }
+
     private func applyFloatingOutlineSize() {
-        guard isViewLoaded,
-              floatingOutlineWidthConstraint != nil,
-              floatingOutlineHeightConstraint != nil else { return }
+        guard isViewLoaded, floatingOutlineWidthConstraint != nil, floatingOutlineHeightConstraint != nil else { return }
         let maximumWidth = max(view.bounds.width - 28, 28)
         let maximumHeight = max(view.bounds.height - 48, 0)
         floatingOutlineViewController.setMaximumAvailableHeight(maximumHeight)
-        let preferredSize = floatingOutlineViewController.preferredSize
-        let width = min(preferredSize.width, maximumWidth)
-        let height = min(preferredSize.height, maximumHeight)
-        if abs(floatingOutlineWidthConstraint.constant - width) > 0.5 {
-            floatingOutlineWidthConstraint.constant = width
-        }
-        if abs(floatingOutlineHeightConstraint.constant - height) > 0.5 {
-            floatingOutlineHeightConstraint.constant = height
-        }
-    }
-
-    private func requestSplitGeometryUpdate() {
-        pendingSplitGeometryUpdate = true
-        applyPendingSplitGeometryUpdate()
-        guard pendingSplitGeometryUpdate else { return }
-        guard splitGeometryUpdateScheduled == false else { return }
-        splitGeometryUpdateScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            self?.splitGeometryUpdateScheduled = false
-            self?.applyPendingSplitGeometryUpdate()
-        }
-    }
-
-    private func applySplitLayout(_ layout: ReaderSplitLayout, splitEnabled: Bool) {
-        let allMinimumConstraints = sideBySideMinimumConstraints + stackedMinimumConstraints
-        let activeMinimumConstraints: [NSLayoutConstraint]
-        if splitEnabled {
-            activeMinimumConstraints = switch layout {
-            case .sideBySide:
-                sideBySideMinimumConstraints
-            case .stacked:
-                stackedMinimumConstraints
-            }
-        } else {
-            activeMinimumConstraints = []
-        }
-        for constraint in allMinimumConstraints {
-            constraint.isActive = activeMinimumConstraints.contains { $0 === constraint }
-        }
-
-        if appliedSplitLayout != layout {
-            splitView.isVertical = layout == .sideBySide
-            appliedSplitLayout = layout
-            splitView.needsLayout = true
-        }
-    }
-
-    private func splitLength(for layout: ReaderSplitLayout) -> CGFloat {
-        switch layout {
-        case .sideBySide:
-            splitView.bounds.width
-        case .stacked:
-            splitView.bounds.height
-        }
-    }
-
-    private func applyPendingSplitGeometryUpdate() {
-        guard pendingSplitGeometryUpdate else { return }
-        let splitLayout = documentStore.splitLayout(in: windowID)
-        let splitEnabled = documentStore.isSplitEnabled(in: windowID)
-        applySplitLayout(splitLayout, splitEnabled: splitEnabled)
-        let length = splitLength(for: splitLayout)
-        guard splitView.subviews.count > 1, length > 0 else { return }
-
-        pendingSplitGeometryUpdate = false
-        let secondarySessionID = documentStore.displayedSessionID(for: .secondary, in: windowID)
-        let shouldFitReadersToWidth = splitEnabled && (
-            appliedSplitEnabled != splitEnabled || appliedSecondarySessionID != secondarySessionID
-        )
-        if splitEnabled {
-            splitView.subviews[1].isHidden = false
-            splitView.setPosition(length / 2, ofDividerAt: 0)
-        } else {
-            splitView.setPosition(length, ofDividerAt: 0)
-            splitView.subviews[1].isHidden = true
-        }
-        splitView.adjustSubviews()
-        if splitEnabled == false {
-            splitView.subviews[1].isHidden = true
-        }
-        splitView.layoutSubtreeIfNeeded()
-        appliedSplitEnabled = splitEnabled
-        appliedSecondarySessionID = secondarySessionID
-        fitReadersToWidthAfterSplitIfNeeded(shouldFitReadersToWidth)
-    }
-
-    private func fitReadersToWidthAfterSplitIfNeeded(_ shouldFit: Bool) {
-        guard shouldFit else { return }
-        view.layoutSubtreeIfNeeded()
-        primaryReaderViewController.view.layoutSubtreeIfNeeded()
-        secondaryReaderViewController.view.layoutSubtreeIfNeeded()
-        primaryReaderViewController.fitToWidth()
-        secondaryReaderViewController.fitToWidth()
+        let size = floatingOutlineViewController.preferredSize
+        let width = min(size.width, maximumWidth)
+        let height = min(size.height, maximumHeight)
+        if abs(floatingOutlineWidthConstraint.constant - width) > 0.5 { floatingOutlineWidthConstraint.constant = width }
+        if abs(floatingOutlineHeightConstraint.constant - height) > 0.5 { floatingOutlineHeightConstraint.constant = height }
     }
 }

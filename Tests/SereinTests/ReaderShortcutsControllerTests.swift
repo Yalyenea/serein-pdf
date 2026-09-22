@@ -4,6 +4,15 @@ import XCTest
 @testable import Serein
 
 private final class PDFMockTextView: NSTextView {}
+private final class PDFComposingTextView: NSTextView {
+    override func hasMarkedText() -> Bool { true }
+}
+private final class ShortcutRecordingTextView: NSTextView {
+    var receivedKeys: [String] = []
+    override func keyDown(with event: NSEvent) {
+        receivedKeys.append(event.charactersIgnoringModifiers ?? "")
+    }
+}
 
 @MainActor
 final class ReaderShortcutsControllerTests: XCTestCase {
@@ -315,6 +324,83 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertFalse(didTurn)
     }
 
+    func testVerticalArrowPageTurnsRequireNoModifiers() {
+        var directions: [Int] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: { [:] },
+            verticalPageTurnHandler: { direction, _ in
+                directions.append(direction)
+                return true
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F700}"), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F701}"), in: window))
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F701}", modifierFlags: [.shift]), in: window))
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F702}"), in: window))
+        XCTAssertEqual(directions, [-1, 1])
+    }
+
+    func testPaneShortcutsRouteModifiedKeysAndLeaveTextEditingAlone() {
+        var triggered: [ShortcutCommand] = []
+        let commands: [ShortcutCommand] = [
+            .translateSelection, .quickOutline, .showRecentWindows,
+            .splitCurrentPDFRight, .splitCurrentPDFDown,
+            .focusPaneLeft, .focusPaneDown, .focusPaneUp, .focusPaneRight,
+        ]
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { AppConfiguration.default.shortcuts.bindings },
+            handlerProvider: {
+                var handlers: [ShortcutCommand: ReaderShortcutsController.ShortcutHandler] = [:]
+                for command in commands {
+                    handlers[command] = { @MainActor in triggered.append(command) }
+                }
+                return handlers
+            }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let events = [
+            makeKeyEvent(characters: "t"),
+            makeKeyEvent(characters: "o"),
+            makeKeyEvent(characters: "w"),
+            makeKeyEvent(characters: "b"),
+            makeKeyEvent(characters: "B", modifierFlags: [.shift]),
+            makeKeyEvent(characters: "h", modifierFlags: [.control]),
+            makeKeyEvent(characters: "j", modifierFlags: [.control]),
+            makeKeyEvent(characters: "k", modifierFlags: [.control]),
+            makeKeyEvent(characters: "l", modifierFlags: [.control]),
+        ]
+
+        for event in events {
+            XCTAssertTrue(controller.handleShortcutEvent(for: event, in: window))
+        }
+        XCTAssertEqual(triggered, commands)
+
+        let editor = NSTextView()
+        window.contentView = editor
+        window.makeFirstResponder(editor)
+        for event in events {
+            XCTAssertFalse(controller.handleShortcutEvent(for: event, in: window))
+        }
+        XCTAssertEqual(triggered, commands)
+    }
+
+    func testReaderShortcutsDoNotInterruptMarkedTextComposition() {
+        XCTAssertFalse(ReaderShortcutsController.shouldHandlePlainShortcut(for: PDFComposingTextView()))
+    }
+
+    func testReturnShortcutMatchesMainKeyboardAndKeypadEvents() {
+        let shortcut = KeyboardShortcut(key: "return", modifiers: [.option])
+        for (characters, keyCode): (String, UInt16) in [("\r", 36), ("\u{3}", 76), ("\r", 0)] {
+            XCTAssertTrue(shortcut.matches(event: makeKeyEvent(characters: characters, keyCode: keyCode, modifierFlags: [.option])))
+        }
+        XCTAssertFalse(shortcut.matches(event: makeKeyEvent(characters: "\r", keyCode: 36)))
+        XCTAssertFalse(shortcut.matches(event: makeKeyEvent(characters: "r", modifierFlags: [.option])))
+        XCTAssertTrue(KeyboardShortcut(key: "tab", modifiers: [.control, .shift]).matches(event: makeKeyEvent(characters: "\u{19}", modifierFlags: [.control, .shift])))
+    }
+
     func testPlainLFallsThroughToConfiguredPanLockOutsideBookMode() {
         var didTogglePanLock = false
         let controller = ReaderShortcutsController(
@@ -402,6 +488,92 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             )
         )
         XCTAssertEqual(triggeredCommands, [.navigateBack, .navigateForward])
+    }
+
+    func testReaderWindowDeliversEditingKeysBeforeMenuEquivalents() {
+        let window = ReaderShortcutWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let editor = ShortcutRecordingTextView()
+        window.contentView = editor
+        window.makeFirstResponder(editor)
+        var readerActionCount = 0
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { AppConfiguration.default.shortcuts.bindings },
+            handlerProvider: {
+                [
+                    .focusPaneLeft: { readerActionCount += 1 },
+                    .focusPaneDown: { readerActionCount += 1 },
+                    .focusPaneUp: { readerActionCount += 1 },
+                    .focusPaneRight: { readerActionCount += 1 },
+                    .splitCurrentPDFDown: { readerActionCount += 1 },
+                    .translateSelection: { readerActionCount += 1 },
+                ]
+            }
+        )
+        window.plainShortcutHandler = { event, window in
+            controller.handleShortcutEvent(for: event, in: window)
+        }
+        let events = [
+            makeKeyEvent(characters: "h", modifierFlags: [.control]),
+            makeKeyEvent(characters: "j", modifierFlags: [.control]),
+            makeKeyEvent(characters: "k", modifierFlags: [.control]),
+            makeKeyEvent(characters: "l", modifierFlags: [.control]),
+            makeKeyEvent(characters: "B", modifierFlags: [.shift]),
+            makeKeyEvent(characters: "t"),
+        ]
+        for event in events {
+            XCTAssertTrue(window.performKeyEquivalent(with: event))
+        }
+        XCTAssertEqual(editor.receivedKeys, ["h", "j", "k", "l", "B", "t"])
+        XCTAssertEqual(readerActionCount, 0)
+    }
+
+    func testControlShiftTabStartsReverseNavigationWhileEditing() {
+        let window = ReaderShortcutWindow(
+            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let editor = ShortcutRecordingTextView()
+        window.contentView = editor
+        window.makeFirstResponder(editor)
+        var navigationCount = 0
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { AppConfiguration.default.shortcuts.bindings },
+            handlerProvider: { [.showAllTabs: { navigationCount += 1 }] }
+        )
+        window.plainShortcutHandler = { event, window in
+            controller.handleShortcutEvent(for: event, in: window)
+        }
+
+        XCTAssertTrue(window.performKeyEquivalent(with: makeKeyEvent(characters: "\u{19}", modifierFlags: [.control, .shift])))
+        XCTAssertTrue(window.performKeyEquivalent(with: makeKeyEvent(characters: "\t", modifierFlags: [.control])))
+        XCTAssertEqual(navigationCount, 2)
+        XCTAssertTrue(editor.receivedKeys.isEmpty)
+    }
+
+    func testReverseTabNavigationRespectsClearedOrReassignedBinding() {
+        var navigationCount = 0
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [.showAllTabs: KeyboardShortcut(key: "t", modifiers: [.command])] },
+            handlerProvider: { [.showAllTabs: { navigationCount += 1 }] }
+        )
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\t", modifierFlags: [.control, .shift]), in: window))
+        XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "t", modifierFlags: [.command]), in: window))
+        XCTAssertEqual(navigationCount, 1)
+
+        let clearedController = ReaderShortcutsController(
+            shortcutsProvider: { [:] },
+            handlerProvider: { [.showAllTabs: { navigationCount += 1 }] }
+        )
+        XCTAssertFalse(clearedController.handleShortcutEvent(for: makeKeyEvent(characters: "\t", modifierFlags: [.control, .shift]), in: window))
+        XCTAssertEqual(navigationCount, 1)
     }
 
     func testReaderWindowRoutesOnlyLeftCommandOneThroughThreeToNumberedTabs() {

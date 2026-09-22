@@ -181,22 +181,8 @@ private final class ShortcutCaptureButton: NSButton {
             return
         }
 
-        guard let characters = event.charactersIgnoringModifiers?.lowercased() else {
-            NSSound.beep()
-            return
-        }
-        let key = switch characters {
-        case "\u{1b}":
-            "escape"
-        case " ":
-            "space"
-        case "\t":
-            "tab"
-        default:
-            characters
-        }
-
-        guard KeyboardShortcut.isSupportedKeyToken(key) else {
+        guard let key = KeyboardShortcut.keyToken(for: event),
+              KeyboardShortcut.isSupportedKeyToken(key) else {
             NSSound.beep()
             return
         }

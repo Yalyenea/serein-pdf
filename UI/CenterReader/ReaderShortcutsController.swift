@@ -4,6 +4,7 @@ import AppKit
 final class ReaderShortcutsController {
     typealias ShortcutHandler = @MainActor () -> Void
     typealias BookPageTurnHandler = @MainActor (_ direction: Int, _ window: NSWindow) -> Bool
+    typealias VerticalPageTurnHandler = @MainActor (_ direction: Int, _ window: NSWindow) -> Bool
 
     private static let highlightModeColorShortcuts: [(KeyboardShortcut, ShortcutCommand)] = [
         (KeyboardShortcut(key: "1", modifiers: []), .highlightColorPink),
@@ -13,23 +14,35 @@ final class ReaderShortcutsController {
     private static let windowRoutedCommands: [ShortcutCommand] = [
         .navigateBack,
         .navigateForward,
+        .translateSelection,
+        .quickOutline,
+        .showRecentWindows,
+        .splitCurrentPDFRight,
+        .splitCurrentPDFDown,
+        .focusPaneLeft,
+        .focusPaneDown,
+        .focusPaneUp,
+        .focusPaneRight,
     ]
 
     private let shortcutsProvider: @MainActor () -> [ShortcutCommand: KeyboardShortcut]
     private let handlerProvider: @MainActor () -> [ShortcutCommand: ShortcutHandler]
     private let isAnnotationModeEnabledProvider: @MainActor (NSWindow) -> Bool
     private let bookPageTurnHandler: BookPageTurnHandler
+    private let verticalPageTurnHandler: VerticalPageTurnHandler
 
     init(
         shortcutsProvider: @escaping @MainActor () -> [ShortcutCommand: KeyboardShortcut],
         handlerProvider: @escaping @MainActor () -> [ShortcutCommand: ShortcutHandler],
         isAnnotationModeEnabledProvider: @escaping @MainActor (NSWindow) -> Bool = { _ in false },
-        bookPageTurnHandler: @escaping BookPageTurnHandler = { _, _ in false }
+        bookPageTurnHandler: @escaping BookPageTurnHandler = { _, _ in false },
+        verticalPageTurnHandler: @escaping VerticalPageTurnHandler = { _, _ in false }
     ) {
         self.shortcutsProvider = shortcutsProvider
         self.handlerProvider = handlerProvider
         self.isAnnotationModeEnabledProvider = isAnnotationModeEnabledProvider
         self.bookPageTurnHandler = bookPageTurnHandler
+        self.verticalPageTurnHandler = verticalPageTurnHandler
     }
 
     func handleShortcutEvent(for event: NSEvent, in window: NSWindow) -> Bool {
@@ -38,11 +51,19 @@ final class ReaderShortcutsController {
             return true
         }
 
+        if handleTabNavigationShortcut(for: event) {
+            return true
+        }
+
         guard Self.shouldHandlePlainShortcut(for: window.firstResponder) else {
             return false
         }
 
         if handleBookPageTurnShortcut(for: event, in: window) {
+            return true
+        }
+
+        if handleVerticalPageTurnShortcut(for: event, in: window) {
             return true
         }
 
@@ -82,6 +103,19 @@ final class ReaderShortcutsController {
         return false
     }
 
+    private func handleVerticalPageTurnShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
+        guard event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
+              let key = event.charactersIgnoringModifiers else { return false }
+        switch key {
+        case "\u{F700}":
+            return verticalPageTurnHandler(-1, window)
+        case "\u{F701}":
+            return verticalPageTurnHandler(1, window)
+        default:
+            return false
+        }
+    }
+
     private func handleFindNavigationShortcut(for event: NSEvent) -> Bool {
         let shortcuts = shortcutsProvider()
         let handlers = handlerProvider()
@@ -93,6 +127,19 @@ final class ReaderShortcutsController {
             return true
         }
         return false
+    }
+
+    private func handleTabNavigationShortcut(for event: NSEvent) -> Bool {
+        guard let shortcut = shortcutsProvider()[.showAllTabs],
+              let handler = handlerProvider()[.showAllTabs] else { return false }
+        let matchesForward = shortcut.matches(event: event)
+        let matchesReverse = shortcut.key == "tab"
+            && shortcut.modifiers.contains(.control)
+            && shortcut.modifiers.contains(.shift) == false
+            && KeyboardShortcut(key: "tab", modifiers: shortcut.modifiers.union([.shift])).matches(event: event)
+        guard matchesForward || matchesReverse else { return false }
+        handler()
+        return true
     }
 
     func handlePlainShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
@@ -129,6 +176,9 @@ final class ReaderShortcutsController {
 
     static func shouldHandlePlainShortcut(for firstResponder: NSResponder?) -> Bool {
         guard let firstResponder else { return true }
+        if let inputClient = firstResponder as? NSTextInputClient, inputClient.hasMarkedText() {
+            return false
+        }
         guard let textView = firstResponder as? NSTextView else { return true }
         let className = NSStringFromClass(type(of: textView))
         return className.contains("PDF") || (textView.isEditable == false && textView.isSelectable == false)

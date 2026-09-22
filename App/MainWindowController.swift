@@ -33,6 +33,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var hidesTitlebarTabs = false
     private var appliedWindowChromeState: WindowChromeState?
     private var appliedWindowTitleState: WindowTitleState?
+    private var readerInteractionInstallers: [(ReaderViewController) -> Void] = []
     var shouldCloseHandler: ((MainWindowController) -> Bool)?
     var didCloseHandler: ((MainWindowController) -> Void)?
 
@@ -66,6 +67,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         window.isRestorable = false
 
         super.init(window: window)
+
+        splitViewController.onReaderControllersDidChange = { [weak self] in
+            guard let self else { return }
+            for reader in self.splitViewController.readerWorkspaceViewController.allReaderViewControllers {
+                self.readerInteractionInstallers.forEach { $0(reader) }
+            }
+        }
 
         window.numberedTabShortcutHandler = { [weak self] oneBasedIndex in
             self?.activateNumberedTab(oneBasedIndex)
@@ -167,7 +175,6 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         appliedWindowChromeState = state
         let shouldShowTitlebarTabs =
             state.tabPresentationMode == .horizontalTitlebar &&
-            state.hasTabs &&
             !tabsPaneVisible &&
             !state.hidesTitlebarTabs
 
@@ -360,6 +367,32 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.readerWorkspaceViewController.toggleSplit()
     }
 
+    @discardableResult
+    func splitCurrentPDF(layout: ReaderSplitLayout, sessionID: UUID? = nil) -> Bool {
+        splitViewController.readerWorkspaceViewController.splitActivePane(layout: layout, sessionID: sessionID)
+    }
+
+    @discardableResult
+    func splitDocument(at url: URL, layout: ReaderSplitLayout) throws -> Bool {
+        try splitViewController.readerWorkspaceViewController.splitActivePane(documentAt: url, layout: layout)
+    }
+
+    func focusReaderPane(_ direction: ReaderPaneDirection) {
+        _ = splitViewController.readerWorkspaceViewController.focusPane(direction: direction)
+    }
+
+    func toggleReaderPaneZoom() {
+        splitViewController.readerWorkspaceViewController.togglePaneZoom()
+    }
+
+    func showQuickOutline() {
+        splitViewController.showQuickOutline()
+    }
+
+    func translateSelection() {
+        splitViewController.readerWorkspaceViewController.activeReaderViewController().translateSelection()
+    }
+
     var isReaderSplitEnabled: Bool {
         documentStore.isSplitEnabled(in: windowID)
     }
@@ -499,11 +532,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func installReaderOpenURLsHandler(_ handler: @escaping ([URL], UUID) -> Void) {
-        let readers = [
-            splitViewController.readerWorkspaceViewController.primaryReaderViewController,
-            splitViewController.readerWorkspaceViewController.secondaryReaderViewController,
-        ]
-        for reader in readers {
+        installReaderInteraction { [weak self] reader in
             reader.onOpenURLsRequested = { [weak self] urls in
                 guard let self else { return }
                 handler(urls, self.windowID)
@@ -515,11 +544,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         selectionHandler: @escaping (String, UUID) -> Void,
         pageImageHandler: @escaping (NSImage, Int, UUID) -> Void
     ) {
-        let readers = [
-            splitViewController.readerWorkspaceViewController.primaryReaderViewController,
-            splitViewController.readerWorkspaceViewController.secondaryReaderViewController,
-        ]
-        for reader in readers {
+        installReaderInteraction { [weak self] reader in
             reader.onSendSelectionToCodexRequested = { [weak self] text in
                 guard let self else { return }
                 selectionHandler(text, self.windowID)
@@ -529,6 +554,11 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 pageImageHandler(image, pageNumber, self.windowID)
             }
         }
+    }
+
+    private func installReaderInteraction(_ installer: @escaping (ReaderViewController) -> Void) {
+        readerInteractionInstallers.append(installer)
+        splitViewController.readerWorkspaceViewController.allReaderViewControllers.forEach(installer)
     }
 
     func installOpenWithMenuProvider(_ provider: @escaping (UUID, UUID) -> NSMenu?) {
@@ -554,28 +584,14 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func requestCloseActiveSession() {
-        let selectedSessionIDs = documentStore.selectedSessionIDsInWindowOrder(in: windowID)
-        if selectedSessionIDs.count > 1 {
-            requestCloseSessions(selectedSessionIDs)
+        if documentStore.isSplitEnabled(in: windowID) {
+            _ = splitViewController.readerWorkspaceViewController.closeFocusedPane()
             return
         }
 
-        if documentStore.isSplitEnabled(in: windowID) {
-            let focusedPane = documentStore.focusedPane(in: windowID)
-            let focusedSessionID = documentStore.displayedSessionID(for: focusedPane, in: windowID)
-            let otherSessionID = documentStore.displayedSessionID(for: focusedPane.other, in: windowID)
-
-            guard let focusedSessionID else {
-                documentStore.setSplitEnabled(false, in: windowID)
-                return
-            }
-
-            guard let otherSessionID, otherSessionID != focusedSessionID else {
-                documentStore.setSplitEnabled(false, in: windowID)
-                return
-            }
-
-            requestCloseSession(focusedSessionID, collapseSplitKeeping: focusedPane.other)
+        let selectedSessionIDs = documentStore.selectedSessionIDsInWindowOrder(in: windowID)
+        if selectedSessionIDs.count > 1 {
+            requestCloseSessions(selectedSessionIDs)
             return
         }
 
@@ -701,7 +717,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 return false
             }
         case .discard:
-            return true
+            do {
+                try dirtySessions.forEach { try documentStore.discardUnsavedAnnotations(for: $0.id) }
+                return true
+            } catch {
+                presentSaveError(error)
+                return false
+            }
         case .cancel:
             return false
         }

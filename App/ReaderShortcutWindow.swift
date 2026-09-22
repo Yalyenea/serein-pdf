@@ -38,12 +38,19 @@ final class ReaderShortcutWindow: NSWindow {
         }
 
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if modifiers.isEmpty {
-            return false
-        }
-        if plainShortcutHandler?(event, self) == true {
+        if modifiers.isEmpty == false, plainShortcutHandler?(event, self) == true {
             return true
         }
+        if event.type == .keyDown,
+           modifiers.contains(.command) == false,
+           let firstResponder,
+           ReaderShortcutsController.shouldHandlePlainShortcut(for: firstResponder) == false {
+            // Deliver typing and native Control bindings before a cached menu
+            // equivalent can turn them into reader commands.
+            firstResponder.keyDown(with: event)
+            return true
+        }
+        if modifiers.isEmpty { return false }
         return super.performKeyEquivalent(with: event)
     }
 
