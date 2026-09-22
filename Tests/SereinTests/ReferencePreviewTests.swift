@@ -36,7 +36,7 @@ final class ReferencePreviewTests: XCTestCase {
         XCTAssertEqual(fixture.view.scaleFactor, originalScale)
     }
 
-    func testOptionClickNavigatesWithoutPreviewing() throws {
+    func testCommandClickNavigatesWithoutPreviewing() throws {
         let fixture = try makeFixture()
         defer { fixture.window.close() }
         var previewCount = 0
@@ -52,10 +52,34 @@ final class ReferencePreviewTests: XCTestCase {
             return true
         }
 
-        fixture.sendClick(modifiers: [.option])
+        fixture.sendClick(modifiers: [.command])
 
         XCTAssertEqual(previewCount, 0)
         XCTAssertEqual(navigationCount, 1)
+    }
+
+    func testOptionClickSplitsWithoutPreviewingOrNavigatingSource() throws {
+        let fixture = try makeFixture()
+        defer { fixture.window.close() }
+        let originalPage = fixture.view.currentPage
+        var previewCount = 0
+        var navigationCount = 0
+        var splitCount = 0
+        fixture.view.onInternalLinkPreviewRequested = { _, _ in previewCount += 1; return true }
+        fixture.view.onInternalLinkNavigationRequested = { _ in navigationCount += 1; return true }
+        fixture.view.onInternalLinkSplitRequested = { destination in
+            splitCount += 1
+            XCTAssertTrue(destination.page === fixture.targetPage)
+            XCTAssertEqual(destination.point, fixture.destination.point)
+            return true
+        }
+
+        fixture.sendClick(modifiers: [.option])
+
+        XCTAssertEqual(splitCount, 1)
+        XCTAssertEqual(previewCount, 0)
+        XCTAssertEqual(navigationCount, 0)
+        XCTAssertTrue(fixture.view.currentPage === originalPage)
     }
 
     func testDeclinedPreviewContinuesThroughNavigation() throws {

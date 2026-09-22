@@ -197,7 +197,12 @@ struct PDFResponsiveScrollingTests {
             }
             #expect(collisionSamples.origins.count >= rapidFlick.count * 2)
             #expect(collisionSamples.origins.contains { abs($0.y - startY) > 0.5 })
-            #expect(abs(clip.bounds.minY - edge.y) < 0.01)
+            // Native scroll deltas round in screen space at fractional zoom.
+            // Reaching the edge means within one backing pixel; the separate
+            // bounds samples still require no overscroll or boundary jitter.
+            let actualBackingY = clip.convertToBacking(clip.bounds.origin).y
+            let edgeBackingY = clip.convertToBacking(edge).y
+            #expect(abs(actualBackingY - edgeBackingY) <= 1)
 
             // Reverse immediately after the momentum ends, without a settling
             // wait or a programmatic position change between the two gestures.

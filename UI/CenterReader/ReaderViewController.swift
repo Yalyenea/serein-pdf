@@ -2,6 +2,10 @@ import AppKit
 import CoreImage
 import PDFKit
 
+extension Notification.Name {
+    static let readerViewportDidChange = Notification.Name("SereinReaderViewportDidChange")
+}
+
 enum FindNavigationAction: Equatable {
     case selectNext
     case selectPrevious
@@ -270,6 +274,7 @@ final class ReaderPDFView: PDFView {
     var onLayoutCompleted: (() -> Void)?
     var onInternalLinkNavigationRequested: ((PDFDestination) -> Bool)?
     var onInternalLinkPreviewRequested: ((PDFDestination, NSRect) -> Bool)?
+    var onInternalLinkSplitRequested: ((PDFDestination) -> Bool)?
     var onAnnotationActivationRequested: ((NSEvent) -> Bool)?
     var onUserMagnificationRequested: (() -> Void)?
     var onZoomInRequested: (() -> Void)?
@@ -433,13 +438,14 @@ final class ReaderPDFView: PDFView {
 
     override func mouseDown(with event: NSEvent) {
         if let link = internalLink(at: event) {
-            if !event.modifierFlags.contains(.option),
-               onInternalLinkPreviewRequested?(link.destination, link.rect) == true {
-                return
+            if event.modifierFlags.contains(.command) {
+                _ = onInternalLinkNavigationRequested?(link.destination)
+            } else if event.modifierFlags.contains(.option) {
+                _ = onInternalLinkSplitRequested?(link.destination)
+            } else if onInternalLinkPreviewRequested?(link.destination, link.rect) != true {
+                _ = onInternalLinkNavigationRequested?(link.destination)
             }
-            if onInternalLinkNavigationRequested?(link.destination) == true {
-                return
-            }
+            return
         }
         if onAnnotationActivationRequested?(event) == true {
             return
@@ -504,6 +510,7 @@ final class ReaderViewController: NSViewController {
     var onOverviewPresentationDidChange: ((Bool) -> Void)?
     var onHistorySessionNavigationRequested: ((UUID) -> UUID?)?
     var onPageBoundaryRequested: (Int) -> Bool = { _ in false }
+    var onSplitRequested: ((UUID, ReadingPosition, ReaderSplitLayout) -> Bool)?
     var onSendSelectionToCodexRequested: ((String) -> Void)?
     var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
     /// When true for a groupID, hover preview is suppressed (e.g. same row selected in Annotations sidebar).
@@ -525,11 +532,13 @@ final class ReaderViewController: NSViewController {
     )
     private let overviewGridView = OverviewGridView()
     private let referencePreview = ReaderReferencePreviewController()
+    private lazy var translationController = ReaderTranslationController(documentStore: documentStore)
     private let findBarView = FindBarView()
     private var pdfContainerTopConstraint: NSLayoutConstraint?
     private var readerState = ReaderState()
     private(set) var displayedSessionID: UUID?
     private var displayedReadingPosition: ReadingPosition?
+    private var lastPublishedViewport: (sessionID: UUID, position: ReadingPosition)?
     private var displayedDisplayMode: ReaderDisplayMode?
     private var displayedScaleMode: ReaderScaleMode?
     private var isApplyingStoreState = false
@@ -631,7 +640,7 @@ final class ReaderViewController: NSViewController {
             self?.annotationInteraction.scheduleOverlayRefresh()
         }
         pdfView.onInternalLinkNavigationRequested = { [weak self] destination in
-            self?.referencePreview.close()
+            self?.referencePreview.dismissUnlessPinned()
             return self?.navigate(toInternalLink: destination) ?? false
         }
         pdfView.onInternalLinkPreviewRequested = { [weak self] destination, rect in
@@ -641,8 +650,24 @@ final class ReaderViewController: NSViewController {
             self.annotationInteraction.dismissCommentEditor()
             return self.referencePreview.show(destination: destination, anchor: rect, in: self.pdfView)
         }
+        pdfView.onInternalLinkSplitRequested = { [weak self] destination in
+            self?.openInSplit(destination: destination, layout: .sideBySide) ?? false
+        }
         referencePreview.onNavigate = { [weak self] destination in
             _ = self?.navigate(toInternalLink: destination)
+        }
+        referencePreview.onSplit = { [weak self] destination, layout in
+            self?.openInSplit(destination: destination, layout: layout) ?? false
+        }
+        pdfContainerView.pageCounterView.onBeginEditing = { [weak self] in
+            self?.onFocusRequested?()
+        }
+        pdfContainerView.pageCounterView.onGoToPage = { [weak self] pageIndex in
+            self?.goToPage(pageIndex) ?? false
+        }
+        pdfContainerView.pageCounterView.onReturnFocus = { [weak self] in
+            guard let self else { return }
+            self.pdfView.window?.makeFirstResponder(self.pdfView)
         }
         pdfView.onUserMagnificationRequested = { [weak self] in
             self?.beginUserMagnification()
@@ -657,7 +682,15 @@ final class ReaderViewController: NSViewController {
             self.annotationInteraction.handlePointerMoved(event)
         }
         pdfView.contextMenuProvider = { [weak self] event in
-            self?.annotationInteraction.makeContextMenu(for: event)
+            guard let self else { return nil }
+            guard let menu = self.annotationInteraction.makeContextMenu(for: event) else { return nil }
+            if self.selectedText?.isEmpty == false {
+                let item = NSMenuItem(title: "Translate Selection…", action: #selector(self.translateSelection), keyEquivalent: "")
+                item.target = self
+                menu.addItem(.separator())
+                menu.addItem(item)
+            }
+            return menu
         }
         pdfView.onAnnotationActivationRequested = { [weak self] event in
             self?.annotationInteraction.activateAnnotation(at: event) ?? false
@@ -813,6 +846,10 @@ final class ReaderViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        defer {
+            syncPageCounter()
+            publishViewportPosition()
+        }
         presentationOverlay.refreshGeometry()
         if isAllPagesOverviewActive {
             reflowOverviewGrid()
@@ -884,6 +921,15 @@ final class ReaderViewController: NSViewController {
 
     func flushPendingReadingPosition() {
         flushPendingReadingPositionWriteback()
+    }
+
+    var currentPosition: ReadingPosition? { currentReadingPosition() }
+
+    @objc func translateSelection() {
+        guard let selection = pdfView.currentSelection,
+              let sessionID = displayedSessionID else { return }
+        onFocusRequested?()
+        _ = translationController.show(selection: selection, sessionID: sessionID, in: pdfView)
     }
 
     override func loadView() {
@@ -1394,6 +1440,21 @@ final class ReaderViewController: NSViewController {
     }
 
     @discardableResult
+    private func openInSplit(destination: PDFDestination, layout: ReaderSplitLayout) -> Bool {
+        guard let sourceSessionID = displayedSessionID,
+              let document = pdfView.document,
+              let page = destination.page else { return false }
+        let pageIndex = document.index(for: page)
+        guard (0..<document.pageCount).contains(pageIndex) else { return false }
+        flushPendingReadingPositionWriteback()
+        return onSplitRequested?(
+            sourceSessionID,
+            ReadingPosition(pageIndex: pageIndex, point: destination.point),
+            layout
+        ) ?? false
+    }
+
+    @discardableResult
     private func jumpToPage(_ pageIndex: Int, recordHistory: Bool) -> Bool {
         guard let document = pdfView.document,
               pageIndex >= 0,
@@ -1589,6 +1650,8 @@ final class ReaderViewController: NSViewController {
         isApplyingStoreState = wasApplying
 
         displayedReadingPosition = storePosition
+        syncPageCounter()
+        publishViewportPosition()
         if wasApplying == false,
            let session = targetSession(),
            session.id == displayedSessionID {
@@ -1779,6 +1842,7 @@ final class ReaderViewController: NSViewController {
             overviewSavedRightSidebar = nil
             onOverviewPresentationDidChange?(false)
         }
+        syncPageCounter()
     }
 
     @discardableResult
@@ -1917,6 +1981,7 @@ final class ReaderViewController: NSViewController {
             referencePreview.close()
         }
         presentationOverlay.setPresentationEnabled(enabled)
+        syncPageCounter()
         syncReadingFocusAvailability()
     }
 
@@ -2435,6 +2500,8 @@ final class ReaderViewController: NSViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.affects(windowID: windowID) else { return }
+        if notification.isOnlyReadingPositionChange,
+           let sessionID = targetSessionID, !notification.affects(sessionID: sessionID) { return }
         if notification.documentStoreChange.containsOnly(.search) {
             syncFindBarStatus()
             completePendingFindNavigationIfNeeded()
@@ -2484,9 +2551,10 @@ final class ReaderViewController: NSViewController {
 
     @objc
     private func handlePDFViewPageChanged(_ notification: Notification) {
+        syncPageCounter()
         annotationInteraction.scheduleOverlayRefresh()
         presentationOverlay.refreshGeometry()
-        referencePreview.close()
+        referencePreview.dismissUnlessPinned()
         annotationInteraction.clearPreview()
         markPDFPrivateViewTreeDirty()
         guard isApplyingStoreState == false,
@@ -2515,6 +2583,7 @@ final class ReaderViewController: NSViewController {
 
         displayedReadingPosition = position
         documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        publishViewportPosition()
         if session.scaleMode == .fitTextWidth, session.lastReadPosition.pageIndex != pageIndex {
             pendingFitWidthSessionID = session.id
             view.needsLayout = true
@@ -2654,9 +2723,13 @@ final class ReaderViewController: NSViewController {
             annotationInteraction.activeSessionID = displayedSessionID
             presentationOverlay.refreshGeometry()
             annotationInteraction.scheduleOverlayRefresh()
+            syncPageCounter()
+            publishViewportPosition()
         }
 
         if displayedSessionID != targetSessionID {
+            pdfContainerView.pageCounterView.cancelEditing(restoreFocus: true)
+            lastPublishedViewport = nil
             resetVerticalPageGesture()
             applyHorizontalPanLock(false)
             presentationOverlay.resetDocument()
@@ -2703,6 +2776,9 @@ final class ReaderViewController: NSViewController {
 
         let previousSessionID = displayedSessionID
         let isNewSession = displayedSessionID != session.id
+        let isDisplayModeTransition = !isNewSession && displayedDisplayMode != nil
+            && displayedDisplayMode != session.displayMode
+        let modeTransitionPosition = isDisplayModeTransition ? currentReadingPosition() : nil
         let liveReadingPosition = isNewSession ? nil : liveReadingPositionForReload()
         let document: PDFDocument
         do {
@@ -2718,15 +2794,28 @@ final class ReaderViewController: NSViewController {
             displayedSessionID = session.id
             return
         }
-        let refreshedSession = targetSession() ?? session
+        var refreshedSession = targetSession() ?? session
         let documentChanged = isNewSession || pdfView.document !== document
         let reloadedLivePosition = documentChanged && !isNewSession
             ? liveReadingPosition.flatMap { clampedReadingPosition($0, in: document) }
             : nil
-        let targetReadingPosition = reloadedLivePosition ?? refreshedSession.lastReadPosition
+        let targetReadingPosition = reloadedLivePosition ?? modeTransitionPosition ?? refreshedSession.lastReadPosition
 
         isApplyingStoreState = true
         defer { isApplyingStoreState = false }
+
+        if isDisplayModeTransition {
+            // The queued scroll sample predates this layout. Preserve the live
+            // top-of-viewport anchor and prevent that sample from restoring an old scale.
+            readingPositionWritebackWorkItem?.cancel()
+            readingPositionWritebackWorkItem = nil
+            pendingReadingPositionWriteback = nil
+            documentStore.updateReadingPosition(targetReadingPosition, scaleFactor: pdfView.scaleFactor, for: refreshedSession.id)
+            if refreshedSession.scaleMode == .manual {
+                documentStore.setScaleMode(.fitWidth, scaleFactor: pdfView.scaleFactor, for: refreshedSession.id)
+            }
+            refreshedSession = targetSession() ?? refreshedSession
+        }
 
         if documentChanged {
             applyHorizontalPanLock(false)
@@ -2790,6 +2879,13 @@ final class ReaderViewController: NSViewController {
 
         guard let livePosition = currentReadingPosition() else { return false }
 
+        // A store-issued manual zoom is a command to this view. Native zoom
+        // events publish their scale before the store notifies its observers.
+        if session.scaleMode == .manual,
+           displayedScaleMode != .manual || abs(pdfView.scaleFactor - session.zoomScale) > 0.001 {
+            return false
+        }
+
         if let displayedReadingPosition,
            readingPosition(displayedReadingPosition, differsFrom: session.lastReadPosition),
            readingPosition(livePosition, differsFrom: session.lastReadPosition) {
@@ -2852,6 +2948,12 @@ final class ReaderViewController: NSViewController {
         guard needsModeSync || needsScaleSync || needsPositionSync else {
             return livePositionIsLagging
         }
+
+        // Publish one viewport transaction. Notifications are synchronous, so
+        // this reader must not sample its unsettled geometry from its own echo.
+        let wasApplying = isApplyingStoreState
+        isApplyingStoreState = true
+        defer { isApplyingStoreState = wasApplying }
 
         displayedScaleMode = liveScaleMode
         if needsPositionSync {
@@ -3259,18 +3361,45 @@ final class ReaderViewController: NSViewController {
         )
     }
 
+    private func syncPageCounter() {
+        let counter = pdfContainerView.pageCounterView
+        guard let document = pdfView.document,
+              let session = targetSession(),
+              session.id == displayedSessionID,
+              !session.isBlank else {
+            counter.update(pageIndex: 0, pageCount: 0, displayMode: .singlePage)
+            return
+        }
+        let index = pdfView.currentPage.map { document.index(for: $0) } ?? session.currentPageIndex
+        counter.update(pageIndex: index, pageCount: document.pageCount, displayMode: session.displayMode)
+        counter.isHidden = isAllPagesOverviewActive || presentationOverlay.isPresentationEnabled || pdfView.isHidden
+    }
+
+    func publishViewportPosition(force: Bool = false) {
+        guard let sessionID = displayedSessionID,
+              pdfView.document != nil,
+              let position = currentReadingPosition() else { return }
+        if !force, let previous = lastPublishedViewport,
+           previous.sessionID == sessionID, previous.position == position { return }
+        lastPublishedViewport = (sessionID, position)
+        NotificationCenter.default.post(
+            name: .readerViewportDidChange,
+            object: pdfView,
+            userInfo: ["position": position, "sessionID": sessionID]
+        )
+    }
+
     private func visibleReadingPosition() -> ReadingPosition? {
         guard let clipView = pdfClipView(),
-              let documentView = pdfDocumentView(),
               let document = pdfView.document,
               clipView.bounds.width > 0,
               clipView.bounds.height > 0 else { return nil }
 
-        let visibleTopLeadingInDocument = NSPoint(
+        let visibleTopLeadingInClip = NSPoint(
             x: clipView.bounds.minX + 1,
-            y: clipView.bounds.maxY - 1
+            y: clipView.isFlipped ? clipView.bounds.minY + 1 : clipView.bounds.maxY - 1
         )
-        let visibleTopLeadingInPDF = pdfView.convert(visibleTopLeadingInDocument, from: documentView)
+        let visibleTopLeadingInPDF = pdfView.convert(visibleTopLeadingInClip, from: clipView)
         guard let page = pdfView.page(for: visibleTopLeadingInPDF, nearest: true) else { return nil }
         let pointOnPage = pdfView.convert(visibleTopLeadingInPDF, to: page)
         return ReadingPosition(pageIndex: document.index(for: page), point: pointOnPage)
@@ -3364,8 +3493,9 @@ final class ReaderViewController: NSViewController {
         if scrollView.contentView is PDFReaderClipView { return }
 
         let previousClip = scrollView.contentView
+        let previousBounds = previousClip.bounds
         let documentView = previousClip.documentView
-        let replacement = PDFReaderClipView(frame: previousClip.bounds)
+        let replacement = PDFReaderClipView(frame: previousClip.frame)
         replacement.drawsBackground = previousClip.drawsBackground
         replacement.backgroundColor = previousClip.backgroundColor
         replacement.postsBoundsChangedNotifications = true
@@ -3373,6 +3503,9 @@ final class ReaderViewController: NSViewController {
         if let documentView {
             scrollView.documentView = documentView
         }
+        // PDFKit expresses zoom through the clip's frame-to-bounds transform.
+        // Replacing the clip must retain both that scale and the scroll origin.
+        replacement.bounds = previousBounds
         markPDFPrivateViewTreeDirty(resetRoots: true)
     }
 
@@ -3399,7 +3532,7 @@ final class ReaderViewController: NSViewController {
         annotationInteraction.scheduleOverlayRefresh()
         presentationOverlay.refreshGeometry()
         guard let clipView = notification.object as? NSClipView else { return }
-        referencePreview.close()
+        referencePreview.dismissUnlessPinned()
         annotationInteraction.clearPreview()
         let previousBounds = lastObservedPDFClipBounds
         lastObservedPDFClipBounds = clipView.bounds
@@ -3426,6 +3559,7 @@ final class ReaderViewController: NSViewController {
             document: document
         ) else { return }
         displayedReadingPosition = position
+        publishViewportPosition()
         scheduleReadingPositionWriteback(
             position,
             scaleFactor: pdfView.scaleFactor,
@@ -3784,14 +3918,13 @@ final class ReaderViewController: NSViewController {
 
     private func restoreTopLeadingReadingPosition(page: PDFPage, point: NSPoint) {
         guard let scrollView = pdfScrollView(),
-              let clipView = pdfClipView(),
-              let documentView = pdfDocumentView() else { return }
+              let clipView = pdfClipView() else { return }
 
         let pointInPDF = pdfView.convert(point, from: page)
-        let pointInDocument = documentView.convert(pointInPDF, from: pdfView)
+        let pointInClip = clipView.convert(pointInPDF, from: pdfView)
         let desiredOrigin = NSPoint(
-            x: pointInDocument.x - 1,
-            y: pointInDocument.y - clipView.bounds.height + 1
+            x: pointInClip.x - 1,
+            y: clipView.isFlipped ? pointInClip.y - 1 : pointInClip.y - clipView.bounds.height + 1
         )
         let targetBounds = clipView.constrainBoundsRect(
             NSRect(origin: desiredOrigin, size: clipView.bounds.size)
@@ -3803,6 +3936,7 @@ final class ReaderViewController: NSViewController {
         scrollView.reflectScrolledClipView(clipView)
         isApplyingScrollClamp = false
     }
+
 
 
     @discardableResult
@@ -3973,6 +4107,7 @@ final class ReaderViewController: NSViewController {
 
     private func applyThemeFilter() {
         referencePreview.applyTheme()
+        translationController.refreshThemeAppearance()
         discoverPDFPrivateViewsIfNeeded()
         let appearance = NSApp.effectiveAppearance
         let signature = "\(appearance.name.rawValue)|\(readerState.isNightModeEnabled)|\(pdfPrivateViewGeneration)"

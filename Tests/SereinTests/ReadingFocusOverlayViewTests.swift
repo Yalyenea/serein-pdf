@@ -253,7 +253,15 @@ final class ReadingFocusOverlayViewTests: XCTestCase {
         container.embedPDFView(content)
         container.layoutSubtreeIfNeeded()
 
-        XCTAssertTrue(container.subviews.last === container.presentationOverlay)
+        XCTAssertTrue(container.subviews.last === container.pageCounterView)
+        XCTAssertLessThan(
+            container.subviews.firstIndex(of: content)!,
+            container.subviews.firstIndex(of: container.readingFocusOverlay)!
+        )
+        XCTAssertLessThan(
+            container.subviews.firstIndex(of: container.readingFocusOverlay)!,
+            container.subviews.firstIndex(of: container.presentationOverlay)!
+        )
         XCTAssertEqual(container.presentationOverlay.frame, container.bounds)
         XCTAssertEqual(container.readingFocusOverlay.frame, container.bounds)
         XCTAssertNil(

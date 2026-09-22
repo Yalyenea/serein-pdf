@@ -28,6 +28,9 @@ struct PDFBoundaryScrollTests {
         }
         let session = try store.open(documentAt: url)
         store.setDisplayMode(mode, for: session.id)
+        // Mode switches now fit the new layout. Boundary clamping is tested at
+        // a fixed manual scale, independently of fit-width reflow.
+        store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
         settle(controller.window)
         let split = try #require(controller.window?.contentViewController as? SplitViewController)
         let reader = split.readerViewController

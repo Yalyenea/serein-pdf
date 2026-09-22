@@ -484,7 +484,7 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertTrue(primary.canGoForward)
     }
 
-    func testDisplayModeSwitchesRestoreExactAnchorInAllModes() throws {
+    func testDisplayModeSwitchesPreserveLiveAnchorWithoutRecordingHistory() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(
             documentAt: TestPDFFixtures.makeBlankPDF(
@@ -504,23 +504,30 @@ final class NavigationHistoryTests: XCTestCase {
             pageIndex: 2,
             point: NSPoint(x: bounds.minX, y: bounds.maxY - 420)
         )
-        XCTAssertTrue(reader.go(to: anchor, recordHistory: false))
-        let historyCount = reader.testingNavigationBackPositions.count
-
         for mode in ReaderDisplayMode.allCases {
+            // Start every transition from a reachable paragraph at manual zoom.
+            // Fit-width Book can show the entire spread, so its viewport corner
+            // is not a paragraph anchor for the next independent transition.
+            store.setDisplayMode(mode == .singlePage ? .twoUp : .singlePage, for: session.id)
+            store.setScaleMode(.manual, scaleFactor: 1.8, for: session.id)
+            XCTAssertTrue(reader.go(to: anchor, recordHistory: false))
+            let expectedAnchor = try XCTUnwrap(reader.testingCurrentReadingPosition)
+            let historyCount = reader.testingNavigationBackPositions.count
+
             store.setDisplayMode(mode, for: session.id)
             reader.view.layoutSubtreeIfNeeded()
             XCTAssertEqual(reader.pdfView.displayMode, mode.pdfDisplayMode)
             XCTAssertEqual(reader.pdfView.displayDirection, mode.displayDirection)
             XCTAssertEqual(reader.pdfView.displaysAsBook, mode.displaysAsBook)
-            XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, anchor)
+            XCTAssertEqual(store.session(for: session.id)?.scaleMode, .fitWidth)
+            XCTAssertEqual(store.session(for: session.id)?.lastReadPosition, expectedAnchor)
             let live = try XCTUnwrap(reader.testingCurrentReadingPosition)
             if mode.usesBookLayout {
                 XCTAssertEqual(live.pageIndex, 1, "page 2 is the right page of book spread 1/2")
             } else {
-                XCTAssertEqual(live.pageIndex, anchor.pageIndex)
-                XCTAssertEqual(live.point.x, anchor.point.x, accuracy: 8)
-                XCTAssertEqual(live.point.y, anchor.point.y, accuracy: 16)
+                XCTAssertEqual(live.pageIndex, expectedAnchor.pageIndex)
+                XCTAssertEqual(live.point.x, expectedAnchor.point.x, accuracy: 8)
+                XCTAssertEqual(live.point.y, expectedAnchor.point.y, accuracy: 16)
             }
             XCTAssertEqual(reader.testingNavigationBackPositions.count, historyCount)
         }

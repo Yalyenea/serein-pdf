@@ -3,6 +3,7 @@ import AppKit
 final class PDFContainerView: NSView {
     let readingFocusOverlay = ReadingFocusOverlayView()
     let presentationOverlay = PresentationAnnotationOverlayView()
+    let pageCounterView = ReaderPageCounterView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -33,6 +34,12 @@ final class PDFContainerView: NSView {
             presentationOverlay.topAnchor.constraint(equalTo: topAnchor),
             presentationOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        pageCounterView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(pageCounterView)
+        NSLayoutConstraint.activate([
+            pageCounterView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            pageCounterView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+        ])
     }
 
     func setReadingFocusEnabled(_ isEnabled: Bool) {
@@ -49,5 +56,6 @@ final class PDFContainerView: NSView {
             layer?.backgroundColor = backgroundColor.cgColor
         }
         readingFocusOverlay.setNightModeEnabled(isEnabled)
+        pageCounterView.refreshThemeAppearance()
     }
 }
