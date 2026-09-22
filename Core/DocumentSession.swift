@@ -42,6 +42,8 @@ struct DocumentSession {
     var url: URL
     var title: String
     var isBlank: Bool
+    /// The public tab that owns an additional reading viewport.
+    var tabSessionID: UUID? = nil
     var pageCount: Int?
     var currentPageIndex: Int
     var displayMode: ReaderDisplayMode

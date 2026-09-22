@@ -18,10 +18,12 @@ private final class NotificationCounterObserver: NSObject {
 
 private final class DocumentStoreChangeRecorder: @unchecked Sendable {
     var observedChange: DocumentStoreChange?
+    var observedSessionIDs: Set<UUID>?
 
     @objc
     func handleDocumentStoreDidChange(_ notification: Notification) {
         observedChange = notification.documentStoreChange
+        observedSessionIDs = notification.userInfo?[DocumentStoreChange.sessionIDsUserInfoKey] as? Set<UUID>
     }
 }
 
@@ -1291,7 +1293,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(counter.count, 1)
     }
 
-    func testPageTurnNotifiesReadingPositionWithoutRewritingWorkspacePersistence() throws {
+    func testPageTurnNotifiesReadingPositionAndPersistsSessionWithoutChangingLayout() throws {
         let persistence = InMemoryDocumentStorePersistence()
         let readingStateStore = InMemoryReadingStateStore()
         let store = makeStore(persistence: persistence, readingStateStore: readingStateStore)
@@ -1307,15 +1309,39 @@ final class DocumentStoreTests: XCTestCase {
         )
         defer { NotificationCenter.default.removeObserver(recorder) }
 
-        // Mutate a field that would be rewritten if notifyChange(.all) ran.
-        persistence.state?.windows[0].searchQuery = "should-not-be-clobbered"
-
         store.updateCurrentPage(index: 1, for: session.id)
 
         XCTAssertEqual(recorder.observedChange, .readingPosition)
-        XCTAssertEqual(persistence.state?.windows.first?.searchQuery, "should-not-be-clobbered")
+        XCTAssertEqual(persistence.state?.workspaceWindows, snapshotAfterOpen.workspaceWindows)
+        XCTAssertEqual(persistence.state?.sessions.first?.readingState?.readingPosition.pageIndex, 1)
         XCTAssertEqual(persistence.state?.sessions.map(\.id), snapshotAfterOpen.sessions.map(\.id))
         XCTAssertEqual(readingStateStore.states[session.url]?.readingPosition.pageIndex, 1)
+    }
+
+    func testReadingChangesStayInOneViewportWhileAnnotationsNotifyAllSharedReaders() throws {
+        let store = makeStore()
+        let source = try store.open(documentAt: makeTemporaryPDF(named: "isolated-notification", pageCount: 3))
+        let windowID = store.defaultWindowID
+        let comparisonPane = try XCTUnwrap(store.splitPane(from: .primary, layout: .sideBySide, in: windowID))
+        let comparisonID = try XCTUnwrap(store.displayedSessionID(for: comparisonPane, in: windowID))
+        let recorder = DocumentStoreChangeRecorder()
+        NotificationCenter.default.addObserver(
+            recorder,
+            selector: #selector(DocumentStoreChangeRecorder.handleDocumentStoreDidChange(_:)),
+            name: .documentStoreDidChange,
+            object: store
+        )
+        defer { NotificationCenter.default.removeObserver(recorder) }
+
+        store.updateReadingPosition(ReadingPosition(pageIndex: 1, point: CGPoint(x: 15, y: 87)), scaleFactor: 1.5, for: source.id)
+        XCTAssertEqual(recorder.observedChange, .readingPosition)
+        XCTAssertEqual(recorder.observedSessionIDs, [source.id])
+        store.setDisplayMode(.twoUp, for: source.id)
+        XCTAssertEqual(recorder.observedChange, .content)
+        XCTAssertEqual(recorder.observedSessionIDs, [source.id])
+        store.setDirty(true, for: source.id)
+        XCTAssertEqual(recorder.observedChange, .annotations)
+        XCTAssertEqual(recorder.observedSessionIDs, [source.id, comparisonID])
     }
 
     func testReadingStateRemainsIndependentAcrossSessions() throws {
@@ -1896,7 +1922,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.session(for: secondaryID)?.zoomScale, session.zoomScale)
     }
 
-    func testComparisonSessionStaysOutOfTabsAndPersistence() throws {
+    func testComparisonSessionStaysOutOfTabsAndPersistsItsIndependentReadingState() throws {
         let persistence = InMemoryDocumentStorePersistence()
         let readingStateStore = InMemoryReadingStateStore()
         let store = DocumentStore(
@@ -1932,9 +1958,9 @@ final class DocumentStoreTests: XCTestCase {
         )
         XCTAssertEqual(store.sessions.count, 2)
         XCTAssertEqual(store.sessions(in: windowID).map(\.id), [session.id])
-        XCTAssertEqual(persistence.state?.sessions.map(\.id), [session.id])
+        XCTAssertEqual(persistence.state?.sessions.map(\.id), [session.id, comparisonID])
         XCTAssertEqual(persistence.state?.windows.first?.sessionIDs, [session.id])
-        XCTAssertNil(persistence.state?.windows.first?.splitState.secondarySessionID)
+        XCTAssertEqual(persistence.state?.windows.first?.splitState.secondarySessionID, comparisonID)
         XCTAssertTrue(notedURLs.isEmpty)
 
         store.updateCurrentPage(index: 2, for: comparisonID)
@@ -1948,6 +1974,11 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(readingStateStore.states[session.url], expectedPrimaryState)
         XCTAssertEqual(readingStateStore.savedStates.count, primarySaveCount)
+        let persistedComparison = try XCTUnwrap(persistence.state?.sessions.first { $0.id == comparisonID })
+        XCTAssertEqual(persistedComparison.tabSessionID, session.id)
+        XCTAssertEqual(persistedComparison.readingState?.readingPosition, ReadingPosition(pageIndex: 1, point: CGPoint(x: 17, y: 29)))
+        XCTAssertEqual(persistedComparison.readingState?.scaleFactor, 1.8)
+        XCTAssertEqual(persistence.state?.sessions.first { $0.id == session.id }?.readingState, expectedPrimaryState)
     }
 
     func testActivatingSameSessionIntoOtherPaneReusesExistingComparisonSession() throws {
@@ -2422,7 +2453,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(store.isPDFDocumentLoaded(for: sessions[2].id))
     }
 
-    func testRestorePersistedStateDefaultsWindowsBackToSinglePane() throws {
+    func testRestorePersistedStatePreservesLegacySplitAndFocusedPane() throws {
         let firstURL = try makeTemporaryPDF(named: "restore-window-first")
         let secondURL = try makeTemporaryPDF(named: "restore-window-second")
         let windowA = UUID()
@@ -2484,16 +2515,25 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.rightSidebarMode(in: windowA), .search)
         XCTAssertEqual(store.searchQuery(in: windowA), "needle")
         XCTAssertEqual(store.searchScope(in: windowA), .allOpen)
-        XCTAssertFalse(store.isSplitEnabled(in: windowA))
-        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowA), secondSessionID)
-        XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowA))
-        XCTAssertEqual(store.focusedPane(in: windowA), .primary)
+        let firstSessionID = try XCTUnwrap(store.sessions.first(where: { $0.url == firstURL })?.id)
+        XCTAssertTrue(store.isSplitEnabled(in: windowA))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowA), firstSessionID)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowA), secondSessionID)
+        XCTAssertEqual(store.focusedPane(in: windowA), .secondary)
         XCTAssertEqual(store.recentlyClosedURLs(in: windowA), [secondURL])
 
         XCTAssertEqual(store.tabPresentationMode(in: windowB), .verticalSidebar)
         XCTAssertEqual(store.rightSidebarMode(in: windowB), .pages)
         XCTAssertFalse(store.isSplitEnabled(in: windowB))
-        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowB), secondSessionID)
+        let independentID = try XCTUnwrap(store.displayedSessionID(for: .primary, in: windowB))
+        XCTAssertNotEqual(independentID, secondSessionID)
+        XCTAssertEqual(store.session(for: independentID)?.url, secondURL)
+        let windowAPosition = try XCTUnwrap(store.session(for: secondSessionID)?.lastReadPosition)
+        let independentPosition = ReadingPosition(pageIndex: 0, point: CGPoint(x: 17, y: 71))
+        store.updateReadingPosition(independentPosition, scaleFactor: 1.7, for: independentID)
+        XCTAssertEqual(store.session(for: secondSessionID)?.lastReadPosition, windowAPosition)
+        XCTAssertEqual(store.session(for: independentID)?.lastReadPosition, independentPosition)
+        XCTAssertTrue(try store.pdfDocument(for: independentID) === store.pdfDocument(for: secondSessionID))
         XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowB))
     }
 
@@ -2540,9 +2580,11 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(store.sessions.count, 2)
         XCTAssertEqual(store.sessions.map(\.url), [duplicateURL, duplicateURL])
-        XCTAssertFalse(store.isSplitEnabled(in: windowID))
-        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), secondSessionID)
-        XCTAssertNil(store.displayedSessionID(for: .secondary, in: windowID))
+        XCTAssertTrue(store.isSplitEnabled(in: windowID))
+        XCTAssertEqual(store.displayedSessionID(for: .primary, in: windowID), firstSessionID)
+        XCTAssertEqual(store.displayedSessionID(for: .secondary, in: windowID), secondSessionID)
+        XCTAssertEqual(store.focusedPane(in: windowID), .secondary)
+        XCTAssertTrue(try store.pdfDocument(for: firstSessionID) === store.pdfDocument(for: secondSessionID))
     }
 
     func testRestorePersistedContinuousReadingState() throws {

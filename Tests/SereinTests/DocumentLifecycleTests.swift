@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class DocumentLifecycleTests: XCTestCase {
-    func testRestoredSameURLSessionsKeepComparisonBoundToItsSource() throws {
+    func testRestoredSameURLTabsShareAnnotationsWhileComparisonsRemainOwnedByTheirTab() throws {
         let url = try fixture("restored-same-url")
         let firstID = UUID()
         let secondID = UUID()
@@ -43,14 +43,15 @@ final class DocumentLifecycleTests: XCTestCase {
         XCTAssertNotEqual(secondComparisonID, firstComparisonID)
         let secondDocument = try store.pdfDocument(for: secondID)
         XCTAssertTrue(try store.pdfDocument(for: secondComparisonID) === secondDocument)
-        XCTAssertFalse(try store.pdfDocument(for: firstID) === secondDocument)
+        XCTAssertTrue(try store.pdfDocument(for: firstID) === secondDocument)
 
         try addHighlight(to: secondComparisonID, in: store)
         XCTAssertTrue(store.session(for: secondID)?.isDirty == true)
-        XCTAssertFalse(store.session(for: firstID)?.isDirty ?? true)
-        XCTAssertTrue(store.annotationGroups(for: firstID).isEmpty)
+        XCTAssertTrue(store.session(for: firstID)?.isDirty == true)
+        XCTAssertEqual(store.annotationGroups(for: firstID).count, 1)
         XCTAssertEqual(store.annotationGroups(for: secondID).count, 1)
-        XCTAssertFalse(store.undoLastHighlight(for: firstID))
+        XCTAssertTrue(store.undoLastHighlight(for: firstID))
+        XCTAssertTrue(store.redoLastHighlight(for: secondID))
         XCTAssertTrue(store.undoLastHighlight(for: secondID))
         XCTAssertTrue(secondDocument.page(at: 0)?.annotations.isEmpty == true)
 
@@ -147,7 +148,7 @@ final class DocumentLifecycleTests: XCTestCase {
         XCTAssertEqual(store.annotationGroups(for: source.id).count, 1)
     }
 
-    func testMergeReleasesComparisonAndRetainsItsUnsavedAnnotations() throws {
+    func testMergePreservesComparisonLayoutAndItsUnsavedAnnotations() throws {
         let store = makeIsolatedDocumentStore()
         let targetWindowID = store.defaultWindowID
         let sourceWindowID = store.createWindow()
@@ -156,8 +157,9 @@ final class DocumentLifecycleTests: XCTestCase {
         try addHighlight(to: comparisonID, in: store)
 
         store.mergeAllWindows(into: targetWindowID)
-        XCTAssertEqual(store.sessions.map(\.id), [source.id])
-        XCTAssertNil(store.session(for: comparisonID))
+        XCTAssertEqual(store.sessions.map(\.id), [source.id, comparisonID])
+        XCTAssertEqual(store.readerPanes(in: targetWindowID).compactMap(\.sessionID), [source.id, comparisonID])
+        XCTAssertTrue(store.isSplitEnabled(in: targetWindowID))
         XCTAssertTrue(store.session(for: source.id)?.isDirty == true)
         XCTAssertEqual(store.annotationGroups(for: source.id).count, 1)
     }

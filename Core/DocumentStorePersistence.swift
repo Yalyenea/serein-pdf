@@ -6,17 +6,31 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
         var id: UUID
         var url: URL
         var title: String?
+        var documentSourceID: UUID?
+        var tabSessionID: UUID?
+        var readingState: PersistedReadingState?
+        var needsInitialReadingPosition: Bool
 
-        init(id: UUID = UUID(), url: URL, title: String? = nil) {
+        init(id: UUID = UUID(), url: URL, title: String? = nil,
+             documentSourceID: UUID? = nil, tabSessionID: UUID? = nil, readingState: PersistedReadingState? = nil,
+             needsInitialReadingPosition: Bool = false) {
             self.id = id
             self.url = url
             self.title = title
+            self.documentSourceID = documentSourceID
+            self.tabSessionID = tabSessionID
+            self.readingState = readingState
+            self.needsInitialReadingPosition = needsInitialReadingPosition
         }
 
         private enum CodingKeys: String, CodingKey {
             case id
             case url
             case title
+            case documentSourceID
+            case tabSessionID
+            case readingState
+            case needsInitialReadingPosition
         }
 
         init(from decoder: Decoder) throws {
@@ -24,6 +38,10 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
             id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
             url = try container.decode(URL.self, forKey: .url)
             title = try container.decodeIfPresent(String.self, forKey: .title)
+            documentSourceID = try container.decodeIfPresent(UUID.self, forKey: .documentSourceID)
+            tabSessionID = try container.decodeIfPresent(UUID.self, forKey: .tabSessionID)
+            readingState = try container.decodeIfPresent(PersistedReadingState.self, forKey: .readingState)
+            needsInitialReadingPosition = try container.decodeIfPresent(Bool.self, forKey: .needsInitialReadingPosition) ?? false
         }
 
         func encode(to encoder: Encoder) throws {
@@ -31,6 +49,10 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
             try container.encode(id, forKey: .id)
             try container.encode(url, forKey: .url)
             try container.encodeIfPresent(title, forKey: .title)
+            try container.encodeIfPresent(documentSourceID, forKey: .documentSourceID)
+            try container.encodeIfPresent(tabSessionID, forKey: .tabSessionID)
+            try container.encodeIfPresent(readingState, forKey: .readingState)
+            try container.encode(needsInitialReadingPosition, forKey: .needsInitialReadingPosition)
         }
     }
 
@@ -138,10 +160,39 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
 
     var sessions: [SessionReference]
     var windows: [WindowRecord]
+    var workspaceWindows: [WindowWorkspace]?
+
+    init(sessions: [SessionReference], workspaceWindows: [WindowWorkspace]) {
+        self.sessions = sessions
+        self.workspaceWindows = workspaceWindows
+        self.windows = Self.windowSummaries(workspaceWindows, sessions: sessions)
+    }
+
+    private static func windowSummaries(_ windows: [WindowWorkspace], sessions: [SessionReference]) -> [WindowRecord] {
+        let urls = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.url) })
+        return windows.map { window in
+            WindowRecord(id: window.id, sessionIDs: window.sessionIDs,
+                         sessionURLs: window.sessionIDs.compactMap { urls[$0] },
+                         continuousReadingSessionIDs: window.continuousReadingState.orderedSessionIDs,
+                         tabPresentationMode: window.tabPresentationMode,
+                         isLeftSidebarVisible: window.isLeftSidebarVisible,
+                         isRightSidebarVisible: window.isRightSidebarVisible,
+                         rightSidebarMode: window.rightSidebarMode,
+                         searchQuery: window.searchQuery, searchScope: window.searchScope,
+                         splitState: SplitStateRecord(isEnabled: window.isSplitEnabled,
+                                                     primarySessionID: window.primarySessionID,
+                                                     secondarySessionID: window.secondarySessionID,
+                                                     primarySessionURL: window.primarySessionID.flatMap { urls[$0] },
+                                                     secondarySessionURL: window.secondarySessionID.flatMap { urls[$0] },
+                                                     focusedPane: window.focusedPane),
+                         recentlyClosedURLs: window.recentlyClosedURLs)
+        }
+    }
 
     init(sessions: [SessionReference], windows: [WindowRecord]) {
         self.sessions = sessions
         self.windows = windows
+        self.workspaceWindows = nil
     }
 
     init(
@@ -152,6 +203,7 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
         isRightSidebarVisible: Bool
     ) {
         self.sessions = sessions
+        self.workspaceWindows = nil
         self.windows = [
             WindowRecord(
                 id: UUID(),
@@ -194,6 +246,8 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case sessions
         case windows
+        case schemaVersion
+        case workspaceWindows
         case activeSessionURL
         case tabPresentationMode
         case isLeftSidebarVisible
@@ -203,6 +257,19 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let sessions = try container.decode([SessionReference].self, forKey: .sessions)
+        if let version = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) {
+            guard version == 2 else {
+                throw DecodingError.dataCorruptedError(forKey: .schemaVersion, in: container, debugDescription: "Unsupported workspace schema version")
+            }
+            let windows = try container.decode([WindowWorkspace].self, forKey: .workspaceWindows)
+            guard windows.allSatisfy({ window in
+                !window.workspaces.isEmpty && window.workspaces.contains { $0.id == window.activeWorkspaceID }
+            }) else {
+                throw DecodingError.dataCorruptedError(forKey: .workspaceWindows, in: container, debugDescription: "Invalid active workspace")
+            }
+            self.init(sessions: sessions, workspaceWindows: windows)
+            return
+        }
 
         if let windows = try container.decodeIfPresent([WindowRecord].self, forKey: .windows) {
             self.init(sessions: sessions, windows: windows)
@@ -227,7 +294,12 @@ struct PersistedDocumentStoreState: Codable, Equatable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(sessions, forKey: .sessions)
-        try container.encode(windows, forKey: .windows)
+        if let workspaceWindows {
+            try container.encode(2, forKey: .schemaVersion)
+            try container.encode(workspaceWindows, forKey: .workspaceWindows)
+        } else {
+            try container.encode(windows, forKey: .windows)
+        }
     }
 }
 

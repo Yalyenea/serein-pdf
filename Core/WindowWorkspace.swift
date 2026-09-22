@@ -34,25 +34,6 @@ enum SearchScope: String, CaseIterable, Codable, Sendable {
     }
 }
 
-enum ReaderPane: String, CaseIterable, Codable, Sendable {
-    case primary
-    case secondary
-
-    var other: ReaderPane {
-        switch self {
-        case .primary:
-            .secondary
-        case .secondary:
-            .primary
-        }
-    }
-}
-
-enum ReaderSplitLayout: Equatable, Sendable {
-    case sideBySide
-    case stacked
-}
-
 struct ContinuousReadingState: Equatable, Codable, Sendable {
     var orderedSessionIDs: [UUID]
 
@@ -89,24 +70,16 @@ struct ReaderSplitPair: Equatable, Sendable {
     }
 }
 
-struct WindowWorkspace: Equatable, Sendable {
+struct WindowWorkspace: Equatable, Codable, Sendable {
     let id: UUID
-    var sessionIDs: [UUID]
-    var selectedSessionIDs: Set<UUID>
-    var continuousReadingState: ContinuousReadingState
+    var workspaces: [NamedWorkspace]
+    var activeWorkspaceID: UUID
+    var isClosed = false
+    var documentMRU: [WorkspaceDocumentReference] = []
     var tabPresentationMode: TabPresentationMode
     var isLeftSidebarVisible: Bool
     var isRightSidebarVisible: Bool
     var rightSidebarMode: RightSidebarMode
-    var searchQuery: String
-    var searchScope: SearchScope
-    var isSplitEnabled: Bool
-    var splitLayout: ReaderSplitLayout
-    var primarySessionID: UUID?
-    var secondarySessionID: UUID?
-    var splitPair: ReaderSplitPair?
-    var focusedPane: ReaderPane
-    var recentlyClosedURLs: [URL]
     var leftSidebarWidth: CGFloat?
     var rightSidebarWidth: CGFloat?
 
@@ -125,48 +98,137 @@ struct WindowWorkspace: Equatable, Sendable {
         splitLayout: ReaderSplitLayout = .sideBySide,
         primarySessionID: UUID? = nil,
         secondarySessionID: UUID? = nil,
-        splitPair: ReaderSplitPair? = nil,
         focusedPane: ReaderPane = .primary,
         recentlyClosedURLs: [URL] = [],
         leftSidebarWidth: CGFloat? = nil,
         rightSidebarWidth: CGFloat? = nil
     ) {
         self.id = id
-        self.sessionIDs = sessionIDs
-        self.selectedSessionIDs = selectedSessionIDs
-        self.continuousReadingState = continuousReadingState
+        var workspace = NamedWorkspace()
+        workspace.sessionIDs = sessionIDs
+        workspace.selectedSessionIDs = selectedSessionIDs
+        workspace.continuousReadingState = continuousReadingState
+        workspace.searchQuery = searchQuery
+        workspace.searchScope = searchScope
+        workspace.recentlyClosedURLs = recentlyClosedURLs
+        if let primarySessionID {
+            var group = ReaderLayoutGroup(sessionID: primarySessionID)
+            if isSplitEnabled {
+                group.root = .split(id: UUID(), layout: splitLayout, ratio: 0.5,
+                                    first: .pane(.primary), second: .pane(.secondary))
+                group.sessionIDsByPane[.secondary] = secondarySessionID
+                group.focusedPane = focusedPane
+            }
+            workspace.activeGroup = group
+        }
+        workspaces = [workspace]
+        activeWorkspaceID = workspace.id
         self.tabPresentationMode = tabPresentationMode
         self.isLeftSidebarVisible = isLeftSidebarVisible
         self.isRightSidebarVisible = isRightSidebarVisible
         self.rightSidebarMode = rightSidebarMode
-        self.searchQuery = searchQuery
-        self.searchScope = searchScope
-        self.isSplitEnabled = isSplitEnabled
-        self.splitLayout = splitLayout
-        self.primarySessionID = primarySessionID
-        self.secondarySessionID = secondarySessionID
-        self.splitPair = splitPair
-        self.focusedPane = focusedPane
-        self.recentlyClosedURLs = recentlyClosedURLs
         self.leftSidebarWidth = leftSidebarWidth
         self.rightSidebarWidth = rightSidebarWidth
     }
 
-    var activeSessionID: UUID? {
-        switch focusedPane {
-        case .primary:
-            primarySessionID ?? secondarySessionID
-        case .secondary:
-            secondarySessionID ?? primarySessionID
+    var activeWorkspace: NamedWorkspace {
+        get { workspaces[workspaces.firstIndex { $0.id == activeWorkspaceID }!] }
+        set { workspaces[workspaces.firstIndex { $0.id == activeWorkspaceID }!] = newValue }
+    }
+
+    var sessionIDs: [UUID] {
+        get { activeWorkspace.sessionIDs }
+        set { activeWorkspace.sessionIDs = newValue }
+    }
+    var selectedSessionIDs: Set<UUID> {
+        get { activeWorkspace.selectedSessionIDs }
+        set { activeWorkspace.selectedSessionIDs = newValue }
+    }
+    var continuousReadingState: ContinuousReadingState {
+        get { activeWorkspace.continuousReadingState }
+        set { activeWorkspace.continuousReadingState = newValue }
+    }
+    var searchQuery: String {
+        get { activeWorkspace.searchQuery }
+        set { activeWorkspace.searchQuery = newValue }
+    }
+    var searchScope: SearchScope {
+        get { activeWorkspace.searchScope }
+        set { activeWorkspace.searchScope = newValue }
+    }
+    var recentlyClosedURLs: [URL] {
+        get { activeWorkspace.recentlyClosedURLs }
+        set { activeWorkspace.recentlyClosedURLs = newValue }
+    }
+    var readerLayout: ReaderLayoutNode? { activeWorkspace.activeGroup?.root }
+    var paneIDs: [ReaderPane] { readerLayout?.paneIDs ?? [] }
+    var activeSessionID: UUID? { activeWorkspace.activeGroup?.sessionIDsByPane[focusedPane] }
+    var focusedPane: ReaderPane {
+        get { activeWorkspace.activeGroup?.focusedPane ?? .primary }
+        set { activeWorkspace.activeGroup?.focusedPane = newValue }
+    }
+    var isSplitEnabled: Bool {
+        get { paneIDs.count > 1 }
+        set {
+            guard newValue != isSplitEnabled else { return }
+            guard var group = activeWorkspace.activeGroup else { return }
+            if newValue {
+                let addedPane: ReaderPane = group.root.paneIDs.contains(.secondary) ? ReaderPane() : .secondary
+                group.root = .split(id: UUID(), layout: .sideBySide, ratio: 0.5,
+                                    first: group.root, second: .pane(addedPane))
+            } else {
+                let retained = group.sessionIDsByPane[group.focusedPane]
+                group.root = .pane(.primary)
+                group.sessionIDsByPane = retained.map { [.primary: $0] } ?? [:]
+                group.focusedPane = .primary
+                group.zoomedPane = nil
+            }
+            activeWorkspace.activeGroup = group
+        }
+    }
+    var splitLayout: ReaderSplitLayout {
+        get {
+            if case let .split(_, layout, _, _, _) = readerLayout { return layout }
+            return .sideBySide
+        }
+        set {
+            guard var group = activeWorkspace.activeGroup,
+                  case let .split(id, _, ratio, first, second) = group.root else { return }
+            group.root = .split(id: id, layout: newValue, ratio: ratio, first: first, second: second)
+            activeWorkspace.activeGroup = group
+        }
+    }
+    var primarySessionID: UUID? {
+        get { paneIDs.first.flatMap { activeWorkspace.activeGroup?.sessionIDsByPane[$0] } }
+        set {
+            if activeWorkspace.activeGroup == nil, let newValue {
+                activeWorkspace.activeGroup = ReaderLayoutGroup(sessionID: newValue)
+            } else if let first = paneIDs.first {
+                activeWorkspace.activeGroup?.sessionIDsByPane[first] = newValue
+            }
+        }
+    }
+    var secondarySessionID: UUID? {
+        get {
+            guard paneIDs.count > 1 else { return nil }
+            return activeWorkspace.activeGroup?.sessionIDsByPane[paneIDs[1]]
+        }
+        set {
+            guard paneIDs.count > 1 else { return }
+            let second = paneIDs[1]
+            activeWorkspace.activeGroup?.sessionIDsByPane[second] = newValue
+        }
+    }
+    var splitPair: ReaderSplitPair? {
+        get {
+            guard let group = activeWorkspace.groups.first(where: { $0.root.paneIDs.count > 1 }),
+                  group.sessionIDs.count >= 2 else { return nil }
+            return ReaderSplitPair(primarySessionID: group.sessionIDs[0], secondarySessionID: group.sessionIDs[1])
         }
     }
 
     mutating func setSession(_ sessionID: UUID?, for pane: ReaderPane) {
-        switch pane {
-        case .primary:
-            primarySessionID = sessionID
-        case .secondary:
-            secondarySessionID = sessionID
-        }
+        guard paneIDs.contains(pane) else { return }
+        activeWorkspace.activeGroup?.sessionIDsByPane[pane] = sessionID
     }
 }
