@@ -7,6 +7,75 @@ import Testing
 @MainActor
 struct FloatingOutlineViewControllerTests {
     @Test
+    func quickNavigationExpandsAndKeepsSearchOpenBeforeTyping() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(documentAt: makeFloatingOutlinePDF(named: "quick-floating"))
+        store.setRightSidebarVisible(false)
+        let controller = FloatingOutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 420),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = controller.view
+        defer { window.close() }
+        window.layoutIfNeeded()
+        var finished = false
+        controller.onQuickNavigationEnded = { finished = true }
+
+        #expect(controller.showQuickNavigation())
+        controller.testingSetHovered(false)
+        #expect(controller.testingIsExpanded)
+        let field = try #require(floatingOutlineView(identifier: "outlineFilterField", in: controller.view) as? NSSearchField)
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        #expect(controller.testingOutlineViewController.control(
+            field, textView: editor, doCommandBy: #selector(NSResponder.cancelOperation(_:))
+        ))
+        #expect(finished)
+        #expect(controller.testingIsExpanded == false)
+    }
+
+    @Test
+    func railAndExpandedOutlineSharePreciseViewportLocationWithoutRebuilding() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeFloatingOutlinePDF(named: "precise-rail"))
+        store.setRightSidebarVisible(false)
+        let controller = FloatingOutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let pdfView = PDFView()
+        controller.bind(to: pdfView)
+        controller.testingSetHovered(true)
+        let outline = controller.testingOutlineViewController
+        let flattenCount = controller.outlineFlattenCount
+        let reloadCount = outline.outlineReloadCount
+
+        NotificationCenter.default.post(
+            name: .readerViewportDidChange,
+            object: pdfView,
+            userInfo: [
+                "sessionID": session.id,
+                "position": ReadingPosition(pageIndex: 1, point: CGPoint(x: 0, y: 220)),
+            ]
+        )
+        #expect(controller.testingActiveItemIndex == 0)
+        #expect(outline.testingActivePath == [0])
+        NotificationCenter.default.post(
+            name: .readerViewportDidChange,
+            object: pdfView,
+            userInfo: [
+                "sessionID": session.id,
+                "position": ReadingPosition(pageIndex: 1, point: CGPoint(x: 0, y: 180)),
+            ]
+        )
+        #expect(controller.testingActiveItemIndex == 1)
+        #expect(outline.testingActivePath == [0, 0])
+        #expect(controller.outlineFlattenCount == flattenCount)
+        #expect(outline.outlineReloadCount == reloadCount)
+    }
+
+    @Test
     func readingPositionChangeDoesNotFlattenOutlineAgain() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(documentAt: makeFloatingOutlinePDF(named: "stable-floating-outline"))

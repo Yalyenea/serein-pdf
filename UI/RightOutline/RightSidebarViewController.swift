@@ -81,6 +81,7 @@ final class RightSidebarViewController: NSViewController {
     }
 
     func configure(pdfView: PDFView) {
+        outlineViewController.bind(to: pdfView)
         configuredPDFView = pdfView
         updateThumbnailBinding()
     }

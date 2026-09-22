@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 
 struct OutlineSourceFingerprint: Equatable {
     struct Session: Equatable {
@@ -76,7 +77,10 @@ private final class OutlineClipView: NSClipView {
 }
 
 private final class OutlineScrollView: NSScrollView {
+    var onManualScroll: (() -> Void)?
+
     override func scrollWheel(with event: NSEvent) {
+        onManualScroll?()
         let isHorizontalOnly = abs(event.scrollingDeltaX) > 0.1 && abs(event.scrollingDeltaY) < 0.1
         guard isHorizontalOnly == false else {
             lockHorizontalPosition()
@@ -93,6 +97,27 @@ private final class OutlineScrollView: NSScrollView {
         contentView.scroll(to: NSPoint(x: 0, y: currentBounds.origin.y))
         reflectScrolledClipView(contentView)
     }
+}
+
+private final class OutlineInteractionView: NSView {
+    var onHoverChanged: ((Bool) -> Void)?
+    private var hoverTrackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHoverChanged?(true) }
+    override func mouseExited(with event: NSEvent) { onHoverChanged?(false) }
 }
 
 private final class OutlineDocumentView: NSView {
@@ -349,6 +374,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     let documentStore: DocumentStore
     let windowID: UUID
     var onNavigationRequested: ((OutlineNavigationRequest) -> Void)?
+    var onQuickNavigationEnded: (() -> Void)?
     var preferredContentHeightDidChange: (() -> Void)?
     var filterFieldFocusDidChange: ((Bool) -> Void)?
     private let isFloatingPresentation: Bool
@@ -361,6 +387,15 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     private let rowsContainerView = OutlineRowsContainerView()
     private let pageCounterLabel = NSTextField(labelWithString: "")
     private var nodes: [OutlineNode] = []
+    private var locationResolver = OutlineLocationResolver(nodes: [])
+    private var displayedReadingLocation: OutlineReadingLocation?
+    private var liveReadingLocation: OutlineReadingLocation?
+    private weak var observedPDFView: PDFView?
+    private var activePath: [Int]?
+    private var isPointerInside = false
+    private var isFollowingSuspended = false
+    private var isFilterFieldFocused = false
+    private var isQuickNavigationActive = false
     private var filterQuery = ""
     private var displayedSourceFingerprint: OutlineSourceFingerprint?
     private(set) var outlineReloadCount = 0
@@ -405,14 +440,53 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     override func viewDidLayout() {
         super.viewDidLayout()
         syncOutlineContentFrame()
+        if isFollowingSuspended == false, isQuickNavigationActive == false, filterQuery.isEmpty {
+            revealSelectedRow()
+        }
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
 
+    func bind(to pdfView: PDFView?) {
+        guard observedPDFView !== pdfView else { return }
+        if let observedPDFView {
+            NotificationCenter.default.removeObserver(self, name: .readerViewportDidChange, object: observedPDFView)
+        }
+        observedPDFView = pdfView
+        liveReadingLocation = nil
+        if let pdfView {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleReaderViewportDidChange(_:)),
+                name: .readerViewportDidChange,
+                object: pdfView
+            )
+        }
+        if isViewLoaded { refreshCurrentLocation(force: true) }
+    }
+
+    @objc
+    private func handleReaderViewportDidChange(_ notification: Notification) {
+        guard let sessionID = notification.userInfo?["sessionID"] as? UUID,
+              let position = notification.userInfo?["position"] as? ReadingPosition,
+              let location = OutlineReadingLocation.capture(from: documentStore, windowID: windowID),
+              location.sessionID == sessionID else { return }
+        liveReadingLocation = OutlineReadingLocation(
+            sessionID: sessionID, sourceSessionID: location.sourceSessionID, position: position
+        )
+        if isViewLoaded { refreshCurrentLocation() }
+    }
+
     override func loadView() {
-        let container = NSView()
+        let container = OutlineInteractionView()
+        container.onHoverChanged = { [weak self] isInside in
+            self?.isPointerInside = isInside
+        }
+        scrollView.onManualScroll = { [weak self] in
+            self?.isFollowingSuspended = true
+        }
         container.wantsLayer = true
         container.layer?.backgroundColor = NSColor.clear.cgColor
 
@@ -552,18 +626,100 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         let nextQuery = filterField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard nextQuery != filterQuery else { return }
         filterQuery = nextQuery
+        isFollowingSuspended = true
         rowViewCache.removeAll()
         renderedRowHeights.removeAll()
         rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         renderOutlineRows()
+        selectInitialQuickNavigationRow()
     }
 
     func controlTextDidBeginEditing(_ obj: Notification) {
+        isFilterFieldFocused = true
+        isQuickNavigationActive = true
+        isFollowingSuspended = true
+        selectInitialQuickNavigationRow()
         filterFieldFocusDidChange?(true)
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
+        isFilterFieldFocused = false
+        isQuickNavigationActive = false
         filterFieldFocusDidChange?(false)
+    }
+
+    @discardableResult
+    func focusSearchForQuickNavigation() -> Bool {
+        loadViewIfNeeded()
+        guard nodes.isEmpty == false, let window = view.window else { return false }
+        guard window.makeFirstResponder(filterField) else { return false }
+        filterField.currentEditor()?.selectAll(nil)
+        isQuickNavigationActive = true
+        isFollowingSuspended = true
+        isFilterFieldFocused = true
+        filterFieldFocusDidChange?(true)
+        selectInitialQuickNavigationRow()
+        return true
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control === filterField else { return false }
+        switch commandSelector {
+        case #selector(NSResponder.moveDown(_:)):
+            moveQuickNavigationSelection(by: 1)
+        case #selector(NSResponder.moveUp(_:)):
+            moveQuickNavigationSelection(by: -1)
+        case #selector(NSResponder.insertNewline(_:)):
+            guard let row = renderedRows.first(where: { $0.path == selectedPath }),
+                  row.node.pageIndex != nil, row.node.destinationPoint != nil else { return true }
+            activate(node: row.node, at: row.path)
+            finishQuickNavigation()
+        case #selector(NSResponder.cancelOperation(_:)):
+            finishQuickNavigation()
+        default:
+            return false
+        }
+        return true
+    }
+
+    private var navigableRows: [VisibleRow] {
+        renderedRows.filter {
+            $0.node.pageIndex != nil && $0.node.destinationPoint != nil
+                && (filterQuery.isEmpty || $0.node.title.localizedCaseInsensitiveContains(filterQuery))
+        }
+    }
+
+    private func selectInitialQuickNavigationRow() {
+        guard isQuickNavigationActive else { return }
+        let rows = navigableRows
+        let nextPath = rows.first(where: { $0.path == selectedPath })?.path ?? rows.first?.path
+        setSelectedPath(nextPath)
+        revealSelectedRow()
+    }
+
+    private func moveQuickNavigationSelection(by delta: Int) {
+        let rows = navigableRows
+        guard rows.isEmpty == false else { return }
+        let currentIndex = rows.firstIndex { $0.path == selectedPath }
+        let nextIndex = min(max((currentIndex ?? (delta > 0 ? -1 : rows.count)) + delta, 0), rows.count - 1)
+        setSelectedPath(rows[nextIndex].path)
+        revealSelectedRow()
+    }
+
+    private func finishQuickNavigation() {
+        isQuickNavigationActive = false
+        isFilterFieldFocused = false
+        if filterQuery.isEmpty == false {
+            filterQuery = ""
+            filterField.stringValue = ""
+            rowViewCache.removeAll()
+            rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
+            renderOutlineRows()
+        }
+        setSelectedPath(activePath)
+        view.window?.makeFirstResponder(nil)
+        filterFieldFocusDidChange?(false)
+        onQuickNavigationEnded?()
     }
 
     @objc
@@ -572,6 +728,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         guard notification.isOnlySidebarChromeChange == false else { return }
         if notification.isOnlyReadingPositionChange {
             updatePageCounter()
+            refreshCurrentLocation()
             return
         }
         let change = notification.documentStoreChange
@@ -584,6 +741,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             reloadOutline()
         }
         updatePageCounter()
+        refreshCurrentLocation()
     }
 
     private func updatePageCounter() {
@@ -619,6 +777,8 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
         outlineReloadCount += 1
         nodes = documentStore.outlineTreeForSidebar(in: windowID)
+        locationResolver = OutlineLocationResolver(nodes: nodes)
+        displayedReadingLocation = nil
         displayedSourceFingerprint = OutlineSourceFingerprint.capture(
             from: documentStore,
             windowID: windowID
@@ -632,6 +792,68 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         rowsContainerView.subviews.forEach { $0.removeFromSuperview() }
         renderOutlineRows()
         updateExpansionToggleButton()
+        refreshCurrentLocation(force: true)
+    }
+
+    private func refreshCurrentLocation(force: Bool = false) {
+        let storedLocation = OutlineReadingLocation.capture(from: documentStore, windowID: windowID)
+        let location = liveReadingLocation?.sessionID == storedLocation?.sessionID
+            ? liveReadingLocation ?? storedLocation : storedLocation
+        let positionChanged = displayedReadingLocation != location
+        guard force || positionChanged else { return }
+        displayedReadingLocation = location
+        activePath = location.flatMap { location in
+            locationResolver.activeEntryIndex(at: location.position, sessionIDs: location.sessionIDs)
+                .map { locationResolver.entries[$0].path }
+        }
+        guard isQuickNavigationActive == false, isFilterFieldFocused == false else { return }
+        setSelectedPath(activePath)
+
+        // Manual outline browsing resumes following only after the pointer leaves
+        // and the document moves again. Merely closing search never steals the scroll.
+        if positionChanged, isPointerInside == false, filterQuery.isEmpty {
+            isFollowingSuspended = false
+        }
+        guard isFollowingSuspended == false, filterQuery.isEmpty, let activePath else { return }
+        var expanded = false
+        for length in 1..<activePath.count {
+            if collapsedPaths.remove(Array(activePath.prefix(length))) != nil { expanded = true }
+        }
+        if expanded { renderOutlineRows() }
+        revealSelectedRow()
+    }
+
+    private func setSelectedPath(_ path: [Int]?) {
+        guard selectedPath != path else { return }
+        let previousPath = selectedPath
+        selectedPath = path
+        for changedPath in [previousPath, path].compactMap({ $0 }) {
+            guard let row = rowViewCache[OutlineRowView.pathKey(changedPath)] else { continue }
+            let isSelected = changedPath == path
+            row.updateAppearance(
+                attributedTitle: attributedTitle(for: row.node, isSelected: isSelected),
+                isExpanded: collapsedPaths.contains(changedPath) == false,
+                isSelected: isSelected
+            )
+        }
+    }
+
+    private func revealSelectedRow() {
+        guard let selectedPath,
+              let row = rowViewCache[OutlineRowView.pathKey(selectedPath)], row.superview != nil,
+              scrollView.contentSize.height > 0 else { return }
+        let visible = scrollView.contentView.bounds
+        let frame = row.frame
+        let nextY: CGFloat
+        if frame.minY < visible.minY {
+            nextY = frame.minY
+        } else if frame.maxY > visible.maxY {
+            nextY = min(frame.minY, frame.maxY - visible.height)
+        } else {
+            return
+        }
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: max(nextY, 0)))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     private func renderOutlineRows() {
@@ -784,12 +1006,14 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     }
 
     private func activate(node: OutlineNode, at path: [Int]) {
-        selectedPath = path
-        updateSelectionHighlights()
+        setSelectedPath(path)
 
         guard let pageIndex = node.pageIndex,
               let destinationPoint = node.destinationPoint else { return }
-        let targetSessionID = node.sourceSessionID ?? documentStore.activeSessionID(in: windowID)
+        let location = OutlineReadingLocation.capture(from: documentStore, windowID: windowID)
+        let targetSessionID = node.sourceSessionID.flatMap { sourceID in
+            location?.sessionIDs.contains(sourceID) == true ? location?.sessionID : sourceID
+        } ?? location?.sessionID
         guard let targetSessionID else { return }
 
         let request = OutlineNavigationRequest(
@@ -802,11 +1026,8 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         onNavigationRequested?(request)
     }
 
-    private func updateSelectionHighlights() {
-        layoutOutlineRows()
-    }
-
     private func toggleNodeExpansion(at path: [Int]) {
+        isFollowingSuspended = true
         if collapsedPaths.contains(path) {
             collapsedPaths.remove(path)
         } else {
@@ -818,6 +1039,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     @objc
     private func toggleOutlineExpansion(_ sender: NSButton) {
         guard expandablePaths.isEmpty == false else { return }
+        isFollowingSuspended = true
 
         if collapsedPaths.isEmpty {
             collapsedPaths = expandablePaths
@@ -932,4 +1154,12 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             attributes: textAttributes(for: node, isSelected: isSelected)
         )
     }
+
+    var testingSelectedPath: [Int]? { selectedPath }
+    var testingActivePath: [Int]? { activePath }
+
+    func testingSetPointerInside(_ isInside: Bool) {
+        isPointerInside = isInside
+    }
+
 }

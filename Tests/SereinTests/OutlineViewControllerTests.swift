@@ -6,6 +6,136 @@ import Testing
 @MainActor
 struct OutlineViewControllerTests {
     @Test
+    func currentHeadingFollowsSamePageScrollWithoutReloading() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeTemporaryPDFWithOutline(
+            named: "same-page-follow",
+            outlinePoints: [CGPoint(x: 0, y: 280), CGPoint(x: 0, y: 120)],
+            outlinePageIndices: [0, 0]
+        ))
+        let controller = OutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let reloadCount = controller.outlineReloadCount
+        let pdfView = PDFView()
+        controller.bind(to: pdfView)
+
+        publishOutlinePosition(ReadingPosition(pageIndex: 0, point: CGPoint(x: 0, y: 240)), sessionID: session.id, pdfView: pdfView)
+        #expect(controller.testingSelectedPath == [0])
+        publishOutlinePosition(ReadingPosition(pageIndex: 0, point: CGPoint(x: 0, y: 100)), sessionID: session.id, pdfView: PDFView())
+        #expect(controller.testingSelectedPath == [0])
+        publishOutlinePosition(ReadingPosition(pageIndex: 0, point: CGPoint(x: 0, y: 100)), sessionID: session.id, pdfView: pdfView)
+        #expect(controller.testingSelectedPath == [1])
+        #expect(controller.outlineReloadCount == reloadCount)
+    }
+
+    @Test
+    func followingExpandsAncestorsAndResumesAfterManualBrowsingEnds() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeTemporaryPDFWithOutline(
+            named: "outline-follow-pause", topLevelCount: 1, includeChild: true
+        ))
+        let controller = OutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 240, height: 360)
+        controller.view.layoutSubtreeIfNeeded()
+        let pdfView = PDFView()
+        controller.bind(to: pdfView)
+        let toggle = try #require(findView(identifier: "outlineExpansionToggleButton", in: controller.view) as? NSButton)
+        controller.testingSetPointerInside(true)
+        toggle.performClick(nil)
+        #expect(outlineRows(in: controller.view).count == 1)
+
+        store.updateReadingPosition(ReadingPosition(pageIndex: 1, point: .zero), scaleFactor: 1, for: session.id)
+        #expect(controller.testingActivePath == [0, 0])
+        #expect(outlineRows(in: controller.view).count == 1)
+
+        controller.testingSetPointerInside(false)
+        #expect(outlineRows(in: controller.view).count == 1)
+        publishOutlinePosition(ReadingPosition(pageIndex: 1, point: CGPoint(x: 0, y: -1)), sessionID: session.id, pdfView: pdfView)
+        #expect(outlineRows(in: controller.view).count == 2)
+        #expect(controller.testingSelectedPath == [0, 0])
+    }
+
+    @Test
+    func readingFollowScrollsOnlyEnoughToRevealCurrentHeading() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "outline-reveal", topLevelCount: 30))
+        let controller = OutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 260, height: 320)
+        controller.view.layoutSubtreeIfNeeded()
+        let pdfView = PDFView()
+        controller.bind(to: pdfView)
+        let scroll = try #require(outlineScrollView(in: controller.view))
+        store.updateReadingPosition(ReadingPosition(pageIndex: 20, point: .zero), scaleFactor: 1, for: session.id)
+        let target = try #require(outlineRows(in: controller.view).first { $0.path == [20] })
+        #expect(abs(scroll.contentView.bounds.maxY - target.frame.maxY) < 1)
+        let followedY = scroll.contentView.bounds.minY
+
+        publishOutlinePosition(ReadingPosition(pageIndex: 20, point: CGPoint(x: 0, y: -1)), sessionID: session.id, pdfView: pdfView)
+        #expect(abs(scroll.contentView.bounds.minY - followedY) < 0.5)
+    }
+
+    @Test
+    func keyboardFilterSelectionRequestsExactDestinationAndEscapeDoesNotNavigate() throws {
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeTemporaryPDFWithOutline(
+            named: "outline-keyboard",
+            outlineTitles: ["Methods A", "Methods B", "Results"],
+            topLevelCount: 3,
+            outlinePoints: [CGPoint(x: 24, y: 260), CGPoint(x: 48, y: 180), CGPoint(x: 0, y: 300)]
+        ))
+        let controller = OutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let field = try #require(findView(identifier: "outlineFilterField", in: controller.view) as? NSSearchField)
+        var requests: [OutlineNavigationRequest] = []
+        var completionCount = 0
+        controller.onNavigationRequested = { requests.append($0) }
+        controller.onQuickNavigationEnded = { completionCount += 1 }
+        controller.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification, object: field))
+        field.stringValue = "methods"
+        controller.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: field))
+        #expect(controller.testingSelectedPath == [0])
+        let editor = NSTextView()
+        #expect(controller.control(field, textView: editor, doCommandBy: #selector(NSResponder.moveDown(_:))))
+        #expect(controller.testingSelectedPath == [1])
+        #expect(controller.control(field, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(requests == [OutlineNavigationRequest(
+            sessionID: session.id,
+            position: ReadingPosition(pageIndex: 1, point: CGPoint(x: 48, y: 180))
+        )])
+        #expect(field.stringValue.isEmpty)
+        #expect(completionCount == 1)
+
+        controller.controlTextDidBeginEditing(Notification(name: NSControl.textDidBeginEditingNotification, object: field))
+        #expect(controller.control(field, textView: editor, doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        #expect(requests.count == 1)
+        #expect(completionCount == 2)
+    }
+
+    @Test
+    func comparisonOutlineUsesFocusedSessionForCurrentHeadingAndNavigation() throws {
+        let store = makeIsolatedDocumentStore()
+        let source = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "outline-comparison"))
+        _ = store.outlineTree(for: source.id)
+        store.setSplitEnabled(true, in: store.defaultWindowID)
+        store.activate(sessionID: source.id, in: store.defaultWindowID, targetPane: .secondary)
+        let comparisonID = try #require(store.activeSessionID(in: store.defaultWindowID))
+        #expect(comparisonID != source.id)
+        let controller = OutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        var request: OutlineNavigationRequest?
+        controller.onNavigationRequested = { request = $0 }
+
+        store.updateReadingPosition(ReadingPosition(pageIndex: 1, point: .zero), scaleFactor: 1, for: comparisonID)
+        #expect(controller.testingSelectedPath == [1])
+        let target = try #require(outlineRows(in: controller.view).first { $0.path == [1] })
+        target.performPrimaryAction()
+        #expect(request?.sessionID == comparisonID)
+        #expect(store.session(for: source.id)?.currentPageIndex == 0)
+    }
+
+    @Test
     func readingPositionChangeDoesNotReloadOutlineTree() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "stable-outline"))
@@ -479,13 +609,23 @@ struct OutlineViewControllerTests {
 }
 
 @MainActor
+private func publishOutlinePosition(_ position: ReadingPosition, sessionID: UUID, pdfView: PDFView) {
+    NotificationCenter.default.post(
+        name: .readerViewportDidChange,
+        object: pdfView,
+        userInfo: ["position": position, "sessionID": sessionID]
+    )
+}
+
+@MainActor
 private func makeTemporaryPDFWithOutline(
     named name: String,
     outlineTitles: [String] = [],
     topLevelCount: Int = 2,
     childrenPerTopLevel: Int = 0,
     includeChild: Bool = false,
-    outlinePoints: [CGPoint] = []
+    outlinePoints: [CGPoint] = [],
+    outlinePageIndices: [Int] = []
 ) throws -> URL {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("\(name)-\(UUID().uuidString)")
@@ -511,8 +651,9 @@ private func makeTemporaryPDFWithOutline(
         let item = PDFOutline()
         item.label = index < outlineTitles.count ? outlineTitles[index] : "\(name) \(index + 1)"
         let destinationPoint = outlinePoints.indices.contains(index) ? outlinePoints[index] : .zero
+        let outlinePageIndex = outlinePageIndices.indices.contains(index) ? outlinePageIndices[index] : index
         item.destination = PDFDestination(
-            page: document.page(at: min(index, pageCount - 1))!,
+            page: document.page(at: min(outlinePageIndex, pageCount - 1))!,
             at: destinationPoint
         )
         if includeChild, index == 0 {

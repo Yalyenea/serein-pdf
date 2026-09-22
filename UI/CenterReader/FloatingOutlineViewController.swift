@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 
 private final class FloatingOutlineHoverView: NSView {
     var onHoverChanged: ((Bool) -> Void)?
@@ -145,16 +146,6 @@ private final class FloatingOutlineMarkerView: NSView {
 }
 
 final class FloatingOutlineViewController: NSViewController {
-    private struct ActiveLocation: Equatable {
-        let sessionID: UUID
-        let pageIndex: Int
-    }
-
-    private struct Item: Hashable {
-        let node: OutlineNode
-        let level: Int
-    }
-
     private static let collapsedWidth: CGFloat = 28
     private static let expandedWidth: CGFloat = 300
     private static let panelContentInset: CGFloat = 4
@@ -170,10 +161,13 @@ final class FloatingOutlineViewController: NSViewController {
     private let panelView = NSView()
     private let topResizeHandle = FloatingOutlineResizeHandleView()
     private let bottomResizeHandle = FloatingOutlineResizeHandleView()
-    private var items: [Item] = []
+    private var locationResolver = OutlineLocationResolver(nodes: [])
+    private var items: [OutlineLocationResolver.Entry] { locationResolver.entries }
     private var itemLevels: [Int] = []
     private var activeItemIndex: Int?
-    private var displayedActiveLocation: ActiveLocation?
+    private var displayedActiveLocation: OutlineReadingLocation?
+    private var liveReadingLocation: OutlineReadingLocation?
+    private weak var observedPDFView: PDFView?
     private var displayedSourceFingerprint: OutlineSourceFingerprint?
     private(set) var outlineFlattenCount = 0
     private var isExpanded = false
@@ -190,6 +184,10 @@ final class FloatingOutlineViewController: NSViewController {
     var onNavigationRequested: ((OutlineNavigationRequest) -> Void)? {
         get { outlineViewController.onNavigationRequested }
         set { outlineViewController.onNavigationRequested = newValue }
+    }
+    var onQuickNavigationEnded: (() -> Void)? {
+        get { outlineViewController.onQuickNavigationEnded }
+        set { outlineViewController.onQuickNavigationEnded = newValue }
     }
 
     var preferredSize: NSSize {
@@ -323,6 +321,37 @@ final class FloatingOutlineViewController: NSViewController {
         NotificationCenter.default.removeObserver(self)
     }
 
+    func bind(to pdfView: PDFView?) {
+        outlineViewController.bind(to: pdfView)
+        guard observedPDFView !== pdfView else { return }
+        if let observedPDFView {
+            NotificationCenter.default.removeObserver(self, name: .readerViewportDidChange, object: observedPDFView)
+        }
+        observedPDFView = pdfView
+        liveReadingLocation = nil
+        if let pdfView {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleReaderViewportDidChange(_:)),
+                name: .readerViewportDidChange,
+                object: pdfView
+            )
+        }
+        refreshActiveItemFromStore(forceMarkerUpdate: true)
+    }
+
+    @objc
+    private func handleReaderViewportDidChange(_ notification: Notification) {
+        guard let sessionID = notification.userInfo?["sessionID"] as? UUID,
+              let position = notification.userInfo?["position"] as? ReadingPosition,
+              let location = OutlineReadingLocation.capture(from: documentStore, windowID: windowID),
+              location.sessionID == sessionID else { return }
+        liveReadingLocation = OutlineReadingLocation(
+            sessionID: sessionID, sourceSessionID: location.sourceSessionID, position: position
+        )
+        refreshActiveItemFromStore()
+    }
+
     func refreshChromeColors() {
         guard isViewLoaded else { return }
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -351,6 +380,18 @@ final class FloatingOutlineViewController: NSViewController {
         guard abs(maximumAvailableHeight - normalizedHeight) > 0.5 else { return }
         maximumAvailableHeight = normalizedHeight
         reportPreferredGeometryIfNeeded()
+    }
+
+    @discardableResult
+    func showQuickNavigation() -> Bool {
+        loadViewIfNeeded()
+        refreshFromStore()
+        guard view.isHidden == false else { return false }
+        setExpanded(true)
+        view.superview?.layoutSubtreeIfNeeded()
+        let didFocus = outlineViewController.focusSearchForQuickNavigation()
+        if didFocus == false { updateExpansionForInteraction() }
+        return didFocus
     }
 
     @objc
@@ -382,7 +423,7 @@ final class FloatingOutlineViewController: NSViewController {
         )
         let outlineChanged = displayedSourceFingerprint != sourceFingerprint
         if outlineChanged {
-            items = Self.flatten(documentStore.outlineTreeForSidebar(in: windowID))
+            locationResolver = OutlineLocationResolver(nodes: documentStore.outlineTreeForSidebar(in: windowID))
             itemLevels = items.map(\.level)
             outlineFlattenCount += 1
             displayedSourceFingerprint = OutlineSourceFingerprint.capture(
@@ -404,25 +445,24 @@ final class FloatingOutlineViewController: NSViewController {
 
     private func refreshActiveItemFromStore(forceMarkerUpdate: Bool = false) {
         guard isViewLoaded, view.isHidden == false else { return }
-        let activeLocation = documentStore.activeSession(in: windowID).map {
-            ActiveLocation(sessionID: $0.id, pageIndex: $0.currentPageIndex)
-        }
+        let storedLocation = OutlineReadingLocation.capture(from: documentStore, windowID: windowID)
+        let activeLocation = liveReadingLocation?.sessionID == storedLocation?.sessionID
+            ? liveReadingLocation ?? storedLocation : storedLocation
         guard forceMarkerUpdate || displayedActiveLocation != activeLocation else { return }
         displayedActiveLocation = activeLocation
-        let nextActiveItemIndex = resolveActiveItemIndex()
+        let nextActiveItemIndex = activeLocation.flatMap {
+            locationResolver.activeEntryIndex(at: $0.position, sessionIDs: $0.sessionIDs)
+        }
         let activeItemChanged = activeItemIndex != nextActiveItemIndex
         guard activeItemChanged || forceMarkerUpdate else { return }
         activeItemIndex = nextActiveItemIndex
         markerView.update(levels: itemLevels, activeItemIndex: activeItemIndex)
-        if isExpanded, activeItemChanged, outlineViewController.isViewLoaded {
-            outlineViewController.view.needsLayout = true
-        }
     }
 
     private func hideFloatingOutline(clearItems: Bool) {
         setExpanded(false)
         if clearItems {
-            items = []
+            locationResolver = OutlineLocationResolver(nodes: [])
             itemLevels = []
         }
         activeItemIndex = nil
@@ -558,40 +598,6 @@ final class FloatingOutlineViewController: NSViewController {
         outlineViewController.refreshChromeColors()
     }
 
-    private func resolveActiveItemIndex() -> Int? {
-        guard let sessionID = documentStore.activeSessionID(in: windowID),
-              let session = documentStore.session(for: sessionID) else { return nil }
-
-        return items.enumerated()
-            .filter { _, item in
-                (item.node.sourceSessionID ?? sessionID) == sessionID &&
-                    (item.node.pageIndex ?? Int.max) <= session.currentPageIndex
-            }
-            .max { lhs, rhs in
-                let lhsPage = lhs.element.node.pageIndex ?? -1
-                let rhsPage = rhs.element.node.pageIndex ?? -1
-                if lhsPage == rhsPage {
-                    return lhs.element.level < rhs.element.level
-                }
-                return lhsPage < rhsPage
-            }?
-            .offset
-    }
-
-    private static func flatten(_ nodes: [OutlineNode]) -> [Item] {
-        var result: [Item] = []
-
-        func append(_ nodes: [OutlineNode], level: Int) {
-            for node in nodes {
-                result.append(Item(node: node, level: level))
-                append(node.children, level: level + 1)
-            }
-        }
-
-        append(nodes, level: 0)
-        return result
-    }
-
     var testingIsPresented: Bool {
         isViewLoaded && view.isHidden == false
     }
@@ -603,6 +609,8 @@ final class FloatingOutlineViewController: NSViewController {
     var testingItemCount: Int {
         items.count
     }
+
+    var testingActiveItemIndex: Int? { activeItemIndex }
 
     var testingOutlineViewController: OutlineViewController {
         installOutlineIfNeeded()
