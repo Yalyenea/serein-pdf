@@ -108,6 +108,9 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
     private let emptyItemsMessage: String
     private let emptyQueryMessage: String
     private let onOpenURLs: ([URL]) -> Void
+    private let onSplitURL: ((URL, ReaderSplitLayout) -> Void)?
+    private var rightSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option])
+    private var downSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option, .shift])
     private var state = RecentFilesPaletteState(recentURLs: [])
     private var isApplyingSelection = false
     private var interactionMode: RecentFilesPaletteInteractionMode = .editingQuery
@@ -117,6 +120,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
 
     private let queryField = NSTextField(frame: .zero)
     private let emptyLabel = NSTextField(labelWithString: "")
+    private let footerLabel = NSTextField(labelWithString: "")
     private let scrollView = NSScrollView()
     private let tableView = RecentFilesPaletteResultsTableView()
 
@@ -125,12 +129,14 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         queryPlaceholder: String = "Filter recent files",
         emptyItemsMessage: String = "No recent files yet.",
         emptyQueryMessage: String = "No recent files match the current query.",
+        onSplitURL: ((URL, ReaderSplitLayout) -> Void)? = nil,
         onOpenURLs: @escaping ([URL]) -> Void
     ) {
         self.queryPlaceholder = queryPlaceholder
         self.emptyItemsMessage = emptyItemsMessage
         self.emptyQueryMessage = emptyQueryMessage
         self.onOpenURLs = onOpenURLs
+        self.onSplitURL = onSplitURL
 
         let panel = RecentFilesPalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 120),
@@ -184,6 +190,12 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func configureSplitShortcuts(right: KeyboardShortcut?, down: KeyboardShortcut?) {
+        rightSplitShortcut = right
+        downSplitShortcut = down
+        updateFooter()
+    }
+
     override func close() {
         stopEscapeEventMonitor()
         super.close()
@@ -223,6 +235,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
                 attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
             )
             emptyLabel.textColor = NightModeStyle.secondaryTextColor
+            footerLabel.textColor = NightModeStyle.tertiaryTextColor
             if let editor = queryField.currentEditor() as? NSTextView {
                 editor.textColor = NightModeStyle.primaryTextColor
                 editor.insertionPointColor = NightModeStyle.primaryTextColor
@@ -289,6 +302,9 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         contentView.addSubview(queryField)
         contentView.addSubview(scrollView)
         contentView.addSubview(emptyLabel)
+        footerLabel.translatesAutoresizingMaskIntoConstraints = false
+        footerLabel.font = .systemFont(ofSize: 10)
+        contentView.addSubview(footerLabel)
 
         NSLayoutConstraint.activate([
             queryField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
@@ -299,7 +315,10 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
             scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
             scrollView.topAnchor.constraint(equalTo: queryField.bottomAnchor, constant: 10),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            scrollView.bottomAnchor.constraint(equalTo: footerLabel.topAnchor, constant: -8),
+            footerLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            footerLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -20),
+            footerLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
 
             emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
@@ -333,6 +352,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
 
         resizePanelToFitResults()
         applyHighlightedSelection()
+        updateFooter()
         isApplyingSelection = false
     }
 
@@ -341,7 +361,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         let visibleRows = min(state.filteredItems.count, Self.maximumVisibleRows)
         let listHeight = visibleRows == 0 ? 44 : CGFloat(visibleRows) * Self.rowHeight
         let availableHeight = (parentWindow?.screen ?? NSScreen.main)?.visibleFrame.height ?? 600
-        let height = min(64 + listHeight, availableHeight - 40)
+        let height = min(86 + listHeight, availableHeight - 40)
         guard window.contentView?.frame.height != height else { return }
         let top = window.frame.maxY
         window.setContentSize(NSSize(width: Self.panelWidth, height: height))
@@ -381,6 +401,36 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         onOpenURLs(urls)
     }
 
+    private func updateFooter() {
+        guard onSplitURL != nil else {
+            footerLabel.stringValue = "↩  Open    Space  Select files    Esc  Cancel"
+            return
+        }
+        guard state.openTargets().count == 1 else {
+            footerLabel.stringValue = state.openTargets().count > 1
+                ? "\(state.openTargets().count) files selected · Select one file to open in a split"
+                : "Select one file to open in a split"
+            return
+        }
+        footerLabel.stringValue = "↩  Open    \(rightSplitShortcut?.displayString ?? "—")  Split right    \(downSplitShortcut?.displayString ?? "—")  Split below"
+    }
+
+    private func handleSplitShortcut(_ event: NSEvent) -> Bool {
+        guard let onSplitURL else { return false }
+        let layout: ReaderSplitLayout
+        if rightSplitShortcut?.matches(event: event) == true { layout = .sideBySide }
+        else if downSplitShortcut?.matches(event: event) == true { layout = .stacked }
+        else { return false }
+        let urls = state.openTargets()
+        guard urls.count == 1, let url = urls.first else {
+            updateFooter()
+            return true
+        }
+        close()
+        onSplitURL(url, layout)
+        return true
+    }
+
     @objc
     private func openClickedItem(_ sender: Any?) {
         guard tableView.clickedRow >= 0,
@@ -391,6 +441,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
     }
 
     private func handleResultsKeyEvent(_ event: NSEvent) -> Bool {
+        if handleSplitShortcut(event) { return true }
         let modifiers = event.modifierFlags.intersection([.command, .option, .control])
         guard modifiers.isEmpty else { return false }
 
@@ -424,6 +475,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
 
     private func handlePanelKeyEvent(_ event: NSEvent) -> Bool {
         guard (window?.firstResponder as? NSTextView)?.hasMarkedText() != true else { return false }
+        if handleSplitShortcut(event) { return true }
         let modifiers = event.modifierFlags.intersection([.command, .option, .control])
         guard modifiers.isEmpty else { return false }
 
@@ -519,6 +571,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         guard isApplyingSelection == false else { return }
         interactionMode = .navigatingResults
         state.setHighlightedIndex(tableView.selectedRow >= 0 ? tableView.selectedRow : nil)
+        updateFooter()
     }
 }
 
@@ -528,6 +581,7 @@ extension RecentFilesPaletteController {
     var testingHighlightedIndex: Int? { state.highlightedIndex }
     var testingSelectedURLs: [URL] { state.selectedURLs }
     var testingQuery: String { queryField.stringValue }
+    var testingFooter: String { footerLabel.stringValue }
     var testingQueryFieldIsFirstResponder: Bool {
         guard let window else { return false }
         if window.firstResponder === queryField { return true }

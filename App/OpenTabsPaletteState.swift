@@ -1,10 +1,8 @@
 import Foundation
 
-enum OpenTabsPaletteMoveDirection {
-    case left
-    case right
-    case up
-    case down
+enum OpenTabsPaletteActivationMode: Equatable {
+    case explicitSelection
+    case heldControl(reverse: Bool)
 }
 
 struct OpenTabsPaletteItem: Equatable, Sendable {
@@ -16,15 +14,18 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
     let isFocusedPane: Bool
     let isActive: Bool
     let isDirty: Bool
+    let workspaceName: String?
 
     init(
         session: DocumentSession,
         isActive: Bool,
+        workspaceName: String? = nil,
         primarySessionID: UUID? = nil,
         secondarySessionID: UUID? = nil,
         focusedPane: ReaderPane = .primary
     ) {
         self.sessionID = session.id
+        self.workspaceName = workspaceName
         self.title = session.title
         self.subtitle = session.isBlank ? "Blank tab" : session.url.path
         self.isActive = isActive
@@ -99,28 +100,27 @@ struct OpenTabsPaletteState {
         highlightedIndex = Self.initialHighlightIndex(in: items)
     }
 
-    mutating func moveHighlight(_ direction: OpenTabsPaletteMoveDirection, columnCount: Int) {
+    mutating func replaceItems(_ items: [OpenTabsPaletteItem], activationMode: OpenTabsPaletteActivationMode) {
+        self.items = items
+        highlightedIndex = Self.initialHighlightIndex(in: items)
+        if case let .heldControl(reverse) = activationMode {
+            if items.contains(where: \.isActive) {
+                moveHighlight(delta: reverse ? -1 : 1)
+            } else if reverse, !items.isEmpty {
+                highlightedIndex = items.count - 1
+            }
+        }
+    }
+
+    mutating func moveHighlight(delta: Int) {
         guard items.isEmpty == false else {
             highlightedIndex = nil
             return
         }
 
         let count = items.count
-        let columns = max(1, columnCount)
         let current = highlightedIndex ?? 0
-        let rowStart = (current / columns) * columns
-        let rowEnd = min(rowStart + columns - 1, count - 1)
-
-        highlightedIndex = switch direction {
-        case .left:
-            max(rowStart, current - 1)
-        case .right:
-            min(rowEnd, current + 1)
-        case .up:
-            max(0, current - columns)
-        case .down:
-            min(count - 1, current + columns)
-        }
+        highlightedIndex = ((current + delta) % count + count) % count
     }
 
     mutating func setHighlightedIndex(_ index: Int?) {

@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class OpenTabsPaletteControllerTests: XCTestCase {
-    func testPanelStartsWithCollectionFocused() throws {
+    func testPanelStartsWithListFocused() throws {
         _ = NSApplication.shared
         let first = try makeSession(title: "First", path: "/tmp/first.pdf")
         let controller = OpenTabsPaletteController { _, _ in }
@@ -19,11 +19,11 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         )
         defer { controller.close() }
 
-        XCTAssertTrue(controller.testingCollectionViewIsFirstResponder)
+        XCTAssertTrue(controller.testingTableIsFirstResponder)
         XCTAssertEqual(controller.testingHighlightedIndex, 0)
     }
 
-    func testVimKeysMoveSelectionAcrossGrid() throws {
+    func testVimKeysMoveSelectionThroughList() throws {
         _ = NSApplication.shared
         let sessions = try (0..<6).map { index in
             try makeSession(title: "PDF \(index)", path: "/tmp/\(index).pdf")
@@ -43,17 +43,12 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         XCTAssertEqual(controller.testingHighlightedIndex, 1)
         XCTAssertEqual(controller.testingSelectedItemCount, 1)
 
-        let columnCount = controller.testingCurrentColumnCount
-        XCTAssertGreaterThan(columnCount, 0)
-        let afterDown = min(sessions.count - 1, 1 + columnCount)
         XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(characters: "j", keyCode: 38, window: controller.window)))
-        XCTAssertEqual(controller.testingHighlightedIndex, afterDown)
+        XCTAssertEqual(controller.testingHighlightedIndex, 2)
         XCTAssertEqual(controller.testingSelectedItemCount, 1)
 
-        // h moves left within the row (absolute expectation, not derived from actual).
-        let afterLeft = max(afterDown / columnCount * columnCount, afterDown - 1)
         XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(characters: "h", keyCode: 4, window: controller.window)))
-        XCTAssertEqual(controller.testingHighlightedIndex, afterLeft)
+        XCTAssertEqual(controller.testingHighlightedIndex, 1)
         XCTAssertEqual(controller.testingSelectedItemCount, 1)
     }
 
@@ -62,7 +57,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         let first = try makeSession(title: "First", path: "/tmp/first.pdf")
         let second = try makeSession(title: "Second", path: "/tmp/second.pdf")
         var activatedSessionID: UUID?
-        var activatedAlternatePane: Bool?
+        var activatedAlternatePane: ReaderSplitLayout?
         let controller = OpenTabsPaletteController { sessionID, alternatePane in
             activatedSessionID = sessionID
             activatedAlternatePane = alternatePane
@@ -81,7 +76,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(characters: "\r", keyCode: 36, window: controller.window)))
 
         XCTAssertEqual(activatedSessionID, second.id)
-        XCTAssertEqual(activatedAlternatePane, false)
+        XCTAssertNil(activatedAlternatePane)
     }
 
     func testOptionEnterActivatesHighlightedSessionInAlternatePane() throws {
@@ -89,7 +84,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         let first = try makeSession(title: "First", path: "/tmp/first.pdf")
         let second = try makeSession(title: "Second", path: "/tmp/second.pdf")
         var activatedSessionID: UUID?
-        var activatedAlternatePane: Bool?
+        var activatedAlternatePane: ReaderSplitLayout?
         let controller = OpenTabsPaletteController { sessionID, alternatePane in
             activatedSessionID = sessionID
             activatedAlternatePane = alternatePane
@@ -112,7 +107,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         )
 
         XCTAssertEqual(activatedSessionID, second.id)
-        XCTAssertEqual(activatedAlternatePane, true)
+        XCTAssertEqual(activatedAlternatePane, .sideBySide)
     }
 
     func testClickActivatesItem() throws {
@@ -120,7 +115,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         let first = try makeSession(title: "First", path: "/tmp/first.pdf")
         let second = try makeSession(title: "Second", path: "/tmp/second.pdf")
         var activatedSessionID: UUID?
-        var activatedAlternatePane: Bool?
+        var activatedAlternatePane: ReaderSplitLayout?
         let controller = OpenTabsPaletteController { sessionID, alternatePane in
             activatedSessionID = sessionID
             activatedAlternatePane = alternatePane
@@ -138,7 +133,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         controller.testingClickItem(at: 1)
 
         XCTAssertEqual(activatedSessionID, second.id)
-        XCTAssertEqual(activatedAlternatePane, false)
+        XCTAssertNil(activatedAlternatePane)
     }
 
     func testEscapeClosesPanelWithoutActivating() throws {
@@ -161,6 +156,68 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
 
         XCTAssertNil(activatedSessionID)
         XCTAssertFalse(controller.testingWindowIsVisible)
+    }
+
+    func testHeldControlCyclesFrozenMRUAndCommitsOnlyOnRelease() throws {
+        _ = NSApplication.shared
+        let sessions = try (0..<3).map { try makeSession(title: "PDF \($0)", path: "/tmp/\($0).pdf") }
+        let items = sessions.enumerated().map {
+            OpenTabsPaletteItem(session: $0.element, isActive: $0.offset == 0, workspaceName: "Workspace \($0.offset)")
+        }
+        var activatedIDs: [UUID] = []
+        let controller = OpenTabsPaletteController { sessionID, _ in activatedIDs.append(sessionID) }
+        controller.show(items: items, activationMode: .heldControl(reverse: false), relativeTo: nil)
+        defer { controller.close() }
+        XCTAssertEqual(controller.testingHighlightedIndex, 1)
+        XCTAssertTrue(activatedIDs.isEmpty)
+
+        XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(
+            characters: "\t", keyCode: 48, modifierFlags: [.control], window: controller.window
+        )))
+        XCTAssertEqual(controller.testingHighlightedIndex, 2)
+        XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(
+            characters: "\t", keyCode: 48, modifierFlags: [.control, .shift], window: controller.window
+        )))
+        XCTAssertEqual(controller.testingHighlightedIndex, 1)
+        XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(
+            characters: String(UnicodeScalar(NSDownArrowFunctionKey)!), keyCode: 125,
+            modifierFlags: [.control], window: controller.window
+        )))
+        XCTAssertEqual(controller.testingHighlightedIndex, 2)
+        XCTAssertEqual(controller.testingItems, items)
+        XCTAssertTrue(activatedIDs.isEmpty)
+
+        controller.testingHandleFlagsChanged(makeFlagsEvent(modifiers: [.control], window: controller.window))
+        XCTAssertTrue(activatedIDs.isEmpty)
+        controller.testingHandleFlagsChanged(makeFlagsEvent(modifiers: [], window: controller.window))
+        XCTAssertEqual(activatedIDs, [sessions[2].id])
+        XCTAssertFalse(controller.testingWindowIsVisible)
+        controller.testingHandleFlagsChanged(makeFlagsEvent(modifiers: [], window: controller.window))
+        XCTAssertEqual(activatedIDs.count, 1)
+    }
+
+    func testEscapeCancelsHeldControlAndExplicitModeIgnoresRelease() throws {
+        _ = NSApplication.shared
+        let session = try makeSession(title: "PDF", path: "/tmp/cancel.pdf")
+        let items = [OpenTabsPaletteItem(session: session, isActive: true)]
+        let controller = OpenTabsPaletteController { _, _ in XCTFail("Must not activate") }
+        defer { controller.close() }
+        controller.show(items: items, activationMode: .heldControl(reverse: false), relativeTo: nil)
+        XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(
+            characters: "\u{1b}", keyCode: 53, modifierFlags: [.control], window: controller.window
+        )))
+        controller.testingHandleFlagsChanged(makeFlagsEvent(modifiers: [], window: controller.window))
+        XCTAssertFalse(controller.testingWindowIsVisible)
+
+        controller.show(items: items, activationMode: .explicitSelection, relativeTo: nil)
+        controller.testingHandleFlagsChanged(makeFlagsEvent(modifiers: [], window: controller.window))
+        XCTAssertTrue(controller.testingWindowIsVisible)
+    }
+
+    private func makeFlagsEvent(modifiers: NSEvent.ModifierFlags, window: NSWindow?) -> NSEvent {
+        NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: modifiers,
+                        timestamp: 0, windowNumber: window?.windowNumber ?? 0, context: nil,
+                        characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 59)!
     }
 
     private func makeSession(title: String, path: String) throws -> DocumentSession {

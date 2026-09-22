@@ -70,7 +70,7 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertGreaterThan(wideButtonWidth, narrowButtonWidth)
     }
 
-    func testEmptyWindowShowsDocumentsHeaderAndSharedHint() throws {
+    func testEmptyWindowShowsWorkspaceSelectorAndSharedHint() throws {
         _ = NSApplication.shared
         let store = makeStore()
 
@@ -82,7 +82,14 @@ final class VerticalTabsViewControllerTests: XCTestCase {
             findDescendant(of: EmptyStateView.self, in: controller.view)
         )
 
-        XCTAssertEqual(controller.testingDocumentsTitle, "Documents")
+        let selector = try XCTUnwrap(
+            findView(identifier: "workspaceSelector", in: controller.view) as? NSPopUpButton
+        )
+        let activeWorkspaceID = try XCTUnwrap(store.activeWorkspaceID(in: store.defaultWindowID))
+        let activeWorkspace = try XCTUnwrap(
+            store.workspaces(in: store.defaultWindowID).first { $0.id == activeWorkspaceID }
+        )
+        XCTAssertEqual(selector.titleOfSelectedItem, activeWorkspace.name)
         XCTAssertTrue(controller.testingEmptyStateVisible)
         XCTAssertFalse(controller.testingCountLabelVisible)
         XCTAssertFalse(controller.testingRecentSectionVisible)

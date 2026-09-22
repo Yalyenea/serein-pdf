@@ -20,6 +20,7 @@ final class TitlebarTabItemView: NSView {
     private var onContextMenu: ((UUID) -> Void)?
     private var onRevealInFinder: ((UUID) -> Void)?
     private var onOpenWithMenu: ((UUID) -> NSMenu?)?
+    private var onMoveToWorkspaceMenu: ((UUID) -> NSMenu?)?
     private var onStartContinuousReading: ((UUID) -> Void)?
     private var onExitContinuousReading: ((UUID) -> Void)?
     private var preEditTitle = ""
@@ -42,6 +43,7 @@ final class TitlebarTabItemView: NSView {
     init(
         sessionID: UUID,
         title: String,
+        filename: String? = nil,
         isSelected: Bool,
         isTabSelected: Bool,
         isDirty: Bool,
@@ -57,7 +59,8 @@ final class TitlebarTabItemView: NSView {
         onRevealInFinder: @escaping (UUID) -> Void,
         onOpenWithMenu: @escaping (UUID) -> NSMenu?,
         onStartContinuousReading: @escaping (UUID) -> Void,
-        onExitContinuousReading: @escaping (UUID) -> Void
+        onExitContinuousReading: @escaping (UUID) -> Void,
+        onMoveToWorkspaceMenu: ((UUID) -> NSMenu?)? = nil
     ) {
         self.sessionID = sessionID
         self.isDirty = isDirty
@@ -71,9 +74,14 @@ final class TitlebarTabItemView: NSView {
         self.onContextMenu = onContextMenu
         self.onRevealInFinder = onRevealInFinder
         self.onOpenWithMenu = onOpenWithMenu
+        self.onMoveToWorkspaceMenu = onMoveToWorkspaceMenu
         self.onStartContinuousReading = onStartContinuousReading
         self.onExitContinuousReading = onExitContinuousReading
         super.init(frame: .zero)
+
+        toolTip = filename
+        titleLabel.toolTip = filename
+        selectButton.toolTip = filename
 
         wantsLayer = true
         layer?.cornerRadius = Self.cornerRadius
@@ -202,6 +210,12 @@ final class TitlebarTabItemView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         onContextMenu?(sessionID)
         let menu = NSMenu()
+        if let workspaces = onMoveToWorkspaceMenu?(sessionID) {
+            let moveItem = NSMenuItem(title: "Move to Workspace", action: nil, keyEquivalent: "")
+            moveItem.submenu = workspaces
+            menu.addItem(moveItem)
+            menu.addItem(.separator())
+        }
         if let openWithMenu = onOpenWithMenu?(sessionID) {
             let revealItem = NSMenuItem(
                 title: "Reveal in Finder",

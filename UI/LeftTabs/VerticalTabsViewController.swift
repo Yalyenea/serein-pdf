@@ -51,7 +51,7 @@ final class VerticalTabsViewController: NSViewController {
     var onOpenRecentURLRequested: ((URL) -> Void)?
     var onRevealInFinderRequested: ((UUID) -> Void)?
     var onOpenWithMenuRequested: ((UUID) -> NSMenu?)?
-    private let documentsTitleLabel = NSTextField(labelWithString: "Documents")
+    private lazy var workspaceSelector = WorkspaceSelectorView(documentStore: documentStore, windowID: windowID)
     private let countLabel = NSTextField(labelWithString: "0 open")
     private let emptyStateView = EmptyStateView(
         title: "No Documents Open",
@@ -109,15 +109,13 @@ final class VerticalTabsViewController: NSViewController {
         container.allowsWindowDragFromBackground = true
         container.layer?.masksToBounds = true
 
-        documentsTitleLabel.font = .systemFont(ofSize: 10, weight: .semibold)
-        documentsTitleLabel.textColor = NightModeStyle.tertiaryTextColor
-        documentsTitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        workspaceSelector.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         countLabel.font = .systemFont(ofSize: 11, weight: .medium)
         countLabel.textColor = NightModeStyle.secondaryTextColor
         countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let headerStack = NSStackView(views: [documentsTitleLabel, NSView(), countLabel])
+        let headerStack = NSStackView(views: [workspaceSelector, NSView(), countLabel])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 8
@@ -198,7 +196,7 @@ final class VerticalTabsViewController: NSViewController {
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             (view as? SidebarMaterialView)?.applySurface()
-            documentsTitleLabel.textColor = NightModeStyle.tertiaryTextColor
+            workspaceSelector.refreshChromeColors()
             countLabel.textColor = NightModeStyle.secondaryTextColor
             emptyStateView.refreshChromeColors()
             recentTitleLabel.textColor = NightModeStyle.tertiaryTextColor
@@ -245,6 +243,7 @@ final class VerticalTabsViewController: NSViewController {
 
     private func rebuildList() {
         guard isViewLoaded else { return }
+        workspaceSelector.refresh()
 
         let fingerprint = TabsFingerprint.capture(
             from: documentStore,
@@ -272,6 +271,7 @@ final class VerticalTabsViewController: NSViewController {
             let itemView = VerticalTabItemView(
                 sessionID: session.id,
                 title: session.title,
+                filename: session.isBlank ? nil : session.url.lastPathComponent,
                 isSelected: activeSessionID == session.id,
                 isTabSelected: selectedSessionIDs.contains(session.id),
                 isDirty: session.isDirty,
@@ -309,6 +309,9 @@ final class VerticalTabsViewController: NSViewController {
                 onExitContinuousReading: { [weak self] _ in
                     guard let self else { return }
                     self.documentStore.stopContinuousReading(in: self.windowID)
+                },
+                onMoveToWorkspaceMenu: { [weak self] sessionID in
+                    self?.workspaceSelector.moveMenu(for: sessionID)
                 }
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false
@@ -485,10 +488,6 @@ extension VerticalTabsViewController {
 
     var testingCountLabelVisible: Bool {
         countLabel.isHidden == false
-    }
-
-    var testingDocumentsTitle: String {
-        documentsTitleLabel.stringValue
     }
 
     var testingRecentListWidth: CGFloat {

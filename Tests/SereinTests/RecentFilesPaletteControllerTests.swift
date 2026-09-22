@@ -4,6 +4,66 @@ import XCTest
 
 @MainActor
 final class RecentFilesPaletteControllerTests: XCTestCase {
+    func testSplitShortcutsPassSingleURLAndRequestedDirectionFromQuery() {
+        _ = NSApplication.shared
+        let url = URL(fileURLWithPath: "/tmp/split.pdf")
+        var splits: [(URL, ReaderSplitLayout)] = []
+        let controller = RecentFilesPaletteController(onSplitURL: { splits.append(($0, $1)) }) { _ in
+            XCTFail("Split must not use normal opening")
+        }
+        defer { controller.close() }
+        let cases: [(NSEvent.ModifierFlags, ReaderSplitLayout)] = [([.option], .sideBySide), ([.option, .shift], .stacked)]
+        for (flags, expected) in cases {
+            controller.show(with: [url], relativeTo: nil)
+            XCTAssertTrue(controller.testingHandlePanelKeyEvent(makeKeyEvent(
+                characters: "\r", keyCode: 36, modifierFlags: flags, window: controller.window
+            )))
+            XCTAssertEqual(splits.last?.0, url)
+            XCTAssertEqual(splits.last?.1, expected)
+            XCTAssertFalse(controller.window?.isVisible == true)
+        }
+        XCTAssertEqual(splits.count, 2)
+    }
+
+    func testMultipleMarkedFilesDisableSplitButKeepBatchOpen() {
+        _ = NSApplication.shared
+        let urls = ["a", "b"].map { URL(fileURLWithPath: "/tmp/\($0).pdf") }
+        var opened: [URL] = []
+        let controller = RecentFilesPaletteController(onSplitURL: { _, _ in XCTFail("Multi-file split must be disabled") }) { opened = $0 }
+        defer { controller.close() }
+        controller.show(with: urls, relativeTo: nil)
+        XCTAssertTrue(controller.testingHandleQueryCommand(#selector(NSResponder.moveDown(_:))))
+        XCTAssertTrue(controller.testingHandleResultsKeyEvent(makeKeyEvent(characters: " ", keyCode: 49, window: controller.window)))
+        XCTAssertTrue(controller.testingHandleResultsKeyEvent(makeKeyEvent(
+            characters: String(UnicodeScalar(NSDownArrowFunctionKey)!), keyCode: 125, window: controller.window
+        )))
+        XCTAssertTrue(controller.testingHandleResultsKeyEvent(makeKeyEvent(characters: " ", keyCode: 49, window: controller.window)))
+        XCTAssertTrue(controller.testingHandlePanelKeyEvent(makeKeyEvent(
+            characters: "\r", keyCode: 36, modifierFlags: [.option], window: controller.window
+        )))
+        XCTAssertTrue(controller.testingFooter.contains("Select one file"))
+        XCTAssertTrue(controller.window?.isVisible == true)
+        XCTAssertTrue(opened.isEmpty)
+        XCTAssertTrue(controller.testingHandlePanelKeyEvent(makeKeyEvent(characters: "\r", keyCode: 36, window: controller.window)))
+        XCTAssertEqual(opened, urls)
+    }
+
+    func testConfiguredSplitKeyReplacesDefaultAndPreservesDirection() {
+        _ = NSApplication.shared
+        var direction: ReaderSplitLayout?
+        let controller = RecentFilesPaletteController(onSplitURL: { _, layout in direction = layout }) { _ in }
+        controller.configureSplitShortcuts(right: nil, down: KeyboardShortcut(key: "d", modifiers: [.command, .option]))
+        controller.show(with: [URL(fileURLWithPath: "/tmp/custom-key.pdf")], relativeTo: nil)
+        defer { controller.close() }
+        XCTAssertFalse(controller.testingHandlePanelKeyEvent(makeKeyEvent(
+            characters: "\r", keyCode: 36, modifierFlags: [.option], window: controller.window
+        )))
+        XCTAssertTrue(controller.testingHandlePanelKeyEvent(makeKeyEvent(
+            characters: "d", keyCode: 2, modifierFlags: [.command, .option], window: controller.window
+        )))
+        XCTAssertEqual(direction, .stacked)
+    }
+
     func testMarkedQueryTextRetainsEnterAndEscapeForInputMethod() throws {
         _ = NSApplication.shared
         let controller = RecentFilesPaletteController { _ in XCTFail("Composing text must not open a PDF") }

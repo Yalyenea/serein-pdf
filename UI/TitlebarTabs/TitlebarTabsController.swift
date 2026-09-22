@@ -50,6 +50,7 @@ final class TitlebarTabsController: NSViewController {
     var onAlternateSessionActivationRequested: ((UUID) -> Void)?
     var onRevealInFinderRequested: ((UUID) -> Void)?
     var onOpenWithMenuRequested: ((UUID) -> NSMenu?)?
+    private lazy var workspaceSelector = WorkspaceSelectorView(documentStore: documentStore, windowID: windowID)
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private let documentContainerView = NSView()
@@ -120,16 +121,25 @@ final class TitlebarTabsController: NSViewController {
         scrollView.documentView = documentContainerView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        container.addSubview(scrollView)
+        workspaceSelector.translatesAutoresizingMaskIntoConstraints = false
+        workspaceSelector.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        let stripStack = NSStackView(views: [workspaceSelector, scrollView])
+        stripStack.orientation = .horizontal
+        stripStack.spacing = 4
+        stripStack.alignment = .centerY
+        stripStack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stripStack)
 
         let stripWidthConstraint = container.widthAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.width)
         self.stripWidthConstraint = stripWidthConstraint
 
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            stripStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stripStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            stripStack.topAnchor.constraint(equalTo: container.topAnchor),
+            stripStack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            workspaceSelector.widthAnchor.constraint(lessThanOrEqualToConstant: 160),
+            scrollView.heightAnchor.constraint(equalTo: container.heightAnchor),
             stripWidthConstraint,
             container.heightAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.height),
             stackView.leadingAnchor.constraint(equalTo: documentContainerView.leadingAnchor, constant: 6),
@@ -147,6 +157,7 @@ final class TitlebarTabsController: NSViewController {
     func refreshChromeColors() {
         guard isViewLoaded else { return }
         applyChromeColors()
+        workspaceSelector.refreshChromeColors()
         stackView.arrangedSubviews
             .compactMap { $0 as? TitlebarTabItemView }
             .forEach { $0.refreshChromeColors() }
@@ -175,9 +186,13 @@ final class TitlebarTabsController: NSViewController {
 
     private func rebuildTabs() {
         guard isViewLoaded else { return }
+        workspaceSelector.refresh()
 
         let fingerprint = TabsFingerprint.capture(from: documentStore, windowID: windowID)
-        guard fingerprint != displayedTabsFingerprint else { return }
+        guard fingerprint != displayedTabsFingerprint else {
+            refreshPreferredStripSize()
+            return
+        }
         displayedTabsFingerprint = fingerprint
 
         stackView.arrangedSubviews.forEach { subview in
@@ -196,6 +211,7 @@ final class TitlebarTabsController: NSViewController {
             let itemView = TitlebarTabItemView(
                 sessionID: session.id,
                 title: session.title,
+                filename: session.isBlank ? nil : session.url.lastPathComponent,
                 isSelected: activeSessionID == session.id,
                 isTabSelected: selectedSessionIDs.contains(session.id),
                 isDirty: session.isDirty,
@@ -233,6 +249,9 @@ final class TitlebarTabsController: NSViewController {
                 onExitContinuousReading: { [weak self] _ in
                     guard let self else { return }
                     self.documentStore.stopContinuousReading(in: self.windowID)
+                },
+                onMoveToWorkspaceMenu: { [weak self] sessionID in
+                    self?.workspaceSelector.moveMenu(for: sessionID)
                 }
             )
             itemView.translatesAutoresizingMaskIntoConstraints = false
@@ -285,6 +304,7 @@ final class TitlebarTabsController: NSViewController {
         }
 
         let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
+            + workspaceSelector.intrinsicContentSize.width + 8
         let width = min(max(fittingWidth, Self.hiddenStripSize.width), Self.maximumVisibleStripSize.width)
         preferredContentSize = NSSize(width: width, height: Self.maximumVisibleStripSize.height)
         stripWidthConstraint?.constant = width
@@ -301,6 +321,7 @@ final class TitlebarTabsController: NSViewController {
 
     private func applyVisibilityState() {
         view.isHidden = !isTabsStripVisible
+        workspaceSelector.isHidden = !isTabsStripVisible
         scrollView.isHidden = !isTabsStripVisible
         view.frame.size = preferredContentSize
     }
@@ -312,8 +333,10 @@ final class TitlebarTabsController: NSViewController {
             guard eventBelongsToOwnWindow(event) else { return event }
             let locationInView = view.convert(event.locationInWindow, from: nil)
             guard view.bounds.contains(locationInView) else { return event }
-            guard let selectedView = stackView.arrangedSubviews.compactMap({ $0 as? TitlebarTabItemView }).first(where: { $0.isSelected }) else { return event }
-            selectedView.beginEditing()
+            guard let itemView = stackView.arrangedSubviews.compactMap({ $0 as? TitlebarTabItemView }).first(where: {
+                $0.bounds.contains($0.convert(event.locationInWindow, from: nil))
+            }) else { return event }
+            itemView.beginEditing()
             return nil
         }
         eventMonitors.append(mouse as Any)
