@@ -5,6 +5,7 @@ import PDFKit
 @MainActor
 final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
     var onNavigate: ((PDFDestination) -> Void)?
+    var onSplit: ((PDFDestination, ReaderSplitLayout) -> Bool)?
     private(set) var content: ReferencePreviewViewController?
     private var panel: ReferencePreviewPanel?
 
@@ -22,6 +23,10 @@ final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
             guard source?.document === document else { return }
             self.onNavigate?(destination)
         }
+        content.onSplit = { [weak self, weak source] destination, layout in
+            guard let self, source?.document === document else { return }
+            if self.onSplit?(destination, layout) == true { self.dismissUnlessPinned() }
+        }
         let available = source.window?.screen?.visibleFrame.size ?? source.bounds.size
         content.preferredContentSize = NSSize(
             width: min(580, max(280, available.width - 80)),
@@ -30,7 +35,7 @@ final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
         guard let owner = source.window else { return false }
         let panel = ReferencePreviewPanel(
             contentRect: NSRect(origin: .zero, size: content.preferredContentSize),
-            styleMask: .borderless, backing: .buffered, defer: false
+            styleMask: [.borderless, .resizable], backing: .buffered, defer: false
         )
         panel.isReleasedWhenClosed = false
         panel.isRestorable = false
@@ -41,6 +46,7 @@ final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = .fullScreenAuxiliary
         panel.appearance = source.effectiveAppearance
         panel.contentViewController = content
+        panel.minSize = NSSize(width: 280, height: 200)
         panel.delegate = self
         let screenFrame = (owner.screen?.visibleFrame ?? owner.frame).insetBy(dx: 8, dy: 8)
         let anchorFrame = owner.convertToScreen(source.convert(anchor.intersection(source.visibleRect), to: nil))
@@ -63,6 +69,7 @@ final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
     func close() {
         guard let panel else { return }
         self.panel = nil
+        content?.stopObservingScroll()
         content = nil
         NotificationCenter.default.removeObserver(self)
         let owner = panel.parent
@@ -73,8 +80,16 @@ final class ReaderReferencePreviewController: NSObject, NSWindowDelegate {
         if restoreFocus, owner?.isVisible == true { owner?.makeKey() }
     }
 
-    func windowDidResignKey(_ notification: Notification) { close() }
-    @objc private func dismissPreview(_ notification: Notification) { close() }
+    func dismissUnlessPinned() {
+        guard content?.isPinned != true else { return }
+        close()
+    }
+
+    func windowDidResignKey(_ notification: Notification) { dismissUnlessPinned() }
+    @objc private func dismissPreview(_ notification: Notification) {
+        if notification.name == NSWindow.willCloseNotification { close() }
+        else { dismissUnlessPinned() }
+    }
 
     func applyTheme() {
         panel?.appearance = panel?.parent?.effectiveAppearance
@@ -87,15 +102,26 @@ private final class ReferencePreviewPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+private final class ReferencePreviewDragView: NSView {
+    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+}
+
 /// Resolve links against the source page; the displayed document contains only a copy.
 private final class ReferencePDFView: PDFView {
     var onCancel: (() -> Void)?
     var onInternalLink: ((PDFDestination) -> Void)?
-    weak var sourcePage: PDFPage?
+    var onSplit: ((ReaderSplitLayout) -> Void)?
+    var sourcePage: ((PDFPage) -> PDFPage?)?
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
             onCancel?()
+            return
+        }
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        if event.charactersIgnoringModifiers?.lowercased() == "b", modifiers.isSubset(of: [.shift]) {
+            onSplit?(modifiers.contains(.shift) ? .stacked : .sideBySide)
             return
         }
         super.keyDown(with: event)
@@ -103,7 +129,7 @@ private final class ReferencePDFView: PDFView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if let page = page(for: point, nearest: false), let sourcePage,
+        if let page = page(for: point, nearest: false), let sourcePage = sourcePage?(page),
            let annotation = sourcePage.annotations.first(where: {
                ($0.type == "Link" || $0.type == "Widget")
                    && $0.bounds.contains(convert(point, to: page))
@@ -124,6 +150,8 @@ private final class ReferencePDFView: PDFView {
 @MainActor
 final class ReferencePreviewViewController: NSViewController {
     private struct Viewport {
+        let sourcePageIndex: Int
+        let loadedPages: ClosedRange<Int>
         let bounds: NSRect
         let scaleFactor: CGFloat
     }
@@ -134,16 +162,24 @@ final class ReferencePreviewViewController: NSViewController {
     }
 
     var onNavigate: ((PDFDestination) -> Void)?
+    var onSplit: ((PDFDestination, ReaderSplitLayout) -> Void)?
     var onClose: (() -> Void)?
+    private(set) var isPinned = false
     private(set) var destination: PDFDestination
     private let sourceDocument: PDFDocument
-    private var previewDocument: PDFDocument
-    private var previewPage: PDFPage
+    private var pages: ReferencePreviewPageWindow
     private let preview = ReferencePDFView()
     private let jump = NSButton()
     private let back = NSButton()
     private let forward = NSButton()
+    private let pin = NSButton()
+    private let split = NSButton()
+    private let closeButton = NSButton()
     private var hasPositioned = false
+    private var isUpdatingPages = false
+    private weak var observedClipView: NSClipView?
+    private var lastClipOrigin: NSPoint?
+    private var scrollMonitor: Any?
     private var visits: [Visit]
     private var visitIndex = 0
 
@@ -152,35 +188,17 @@ final class ReferencePreviewViewController: NSViewController {
 
     private var pageTitle: String {
         guard let page = destination.page else { return "" }
-        return page.label ?? String(sourceDocument.index(for: page) + 1)
+        return String(sourceDocument.index(for: page) + 1)
     }
 
     init?(destination: PDFDestination, document: PDFDocument) {
-        guard let copy = Self.copyPage(for: destination, in: document) else { return nil }
+        guard let page = destination.page, page.document === document,
+              let pages = ReferencePreviewPageWindow(document: document, pageIndex: document.index(for: page)) else { return nil }
         self.destination = destination
         sourceDocument = document
         visits = [Visit(destination: destination)]
-        previewPage = copy
-        previewDocument = PDFDocument()
-        previewDocument.insert(copy, at: 0)
+        self.pages = pages
         super.init(nibName: nil, bundle: nil)
-    }
-
-    private static func copyPage(for destination: PDFDestination, in document: PDFDocument) -> PDFPage? {
-        guard let page = destination.page, page.document === document,
-              let copy = page.copy() as? PDFPage else { return nil }
-        for annotation in copy.annotations {
-            if annotation.type == "Widget" {
-                annotation.isReadOnly = true
-            } else if HighlightService.isMarkupAnnotation(annotation) {
-                annotation.contents = nil
-                if let popup = annotation.popup {
-                    copy.removeAnnotation(popup)
-                    annotation.popup = nil
-                }
-            }
-        }
-        return copy
     }
 
     @available(*, unavailable)
@@ -200,7 +218,7 @@ final class ReferencePreviewViewController: NSViewController {
         jump.isBordered = false
         jump.target = self
         jump.action = #selector(jumpToReference)
-        jump.toolTip = "Jump to reference · Page \(pageTitle) (Option-click a link to jump directly)"
+        jump.toolTip = "Jump to reference · Page \(pageTitle) (Command-click a link to jump directly)"
         jump.wantsLayer = true
         jump.layer?.cornerRadius = 4
         jump.focusRingType = .none
@@ -208,16 +226,28 @@ final class ReferencePreviewViewController: NSViewController {
                                label: "Back", action: #selector(goBack))
         configureHistoryButton(forward, identifier: "referencePreviewForward", symbol: "chevron.right",
                                label: "Forward", action: #selector(goForward))
-        preview.displayMode = .singlePage
+        configureHistoryButton(pin, identifier: "referencePreviewPin", symbol: "pin",
+                               label: "Keep preview open", action: #selector(togglePin))
+        configureHistoryButton(split, identifier: "referencePreviewSplit", symbol: "rectangle.split.2x1",
+                               label: "Open in new split (B; Shift+B below)", action: #selector(splitReference))
+        configureHistoryButton(closeButton, identifier: "referencePreviewClose", symbol: "xmark",
+                               label: "Close preview (Esc)", action: #selector(closePreview))
+        preview.displayMode = .singlePageContinuous
         preview.displayBox = .cropBox
         preview.displaysPageBreaks = false
         preview.pageBreakMargins = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         preview.autoScales = false
-        preview.document = previewDocument
-        preview.sourcePage = destination.page
+        preview.document = pages.document
+        preview.sourcePage = { [weak self] page in
+            guard let self, let index = self.pages.sourceIndex(for: page) else { return nil }
+            return self.sourceDocument.page(at: index)
+        }
         preview.onCancel = { [weak self] in self?.onClose?() }
         preview.onInternalLink = { [weak self] destination in self?.navigate(to: destination) }
-        for child in [preview, back, forward, jump] {
+        preview.onSplit = { [weak self] layout in self?.openSplit(layout: layout) }
+        let drag = ReferencePreviewDragView()
+        drag.toolTip = "Drag to move preview; drag an edge to resize"
+        for child in [preview, drag, back, forward, pin, split, jump, closeButton] {
             child.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(child)
         }
@@ -231,9 +261,25 @@ final class ReferencePreviewViewController: NSViewController {
             forward.widthAnchor.constraint(equalToConstant: 24),
             forward.heightAnchor.constraint(equalToConstant: 24),
             jump.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
-            jump.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
+            jump.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -2),
             jump.widthAnchor.constraint(equalToConstant: 24),
             jump.heightAnchor.constraint(equalToConstant: 24),
+            closeButton.topAnchor.constraint(equalTo: back.topAnchor),
+            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
+            closeButton.widthAnchor.constraint(equalToConstant: 24),
+            closeButton.heightAnchor.constraint(equalToConstant: 24),
+            split.topAnchor.constraint(equalTo: back.topAnchor),
+            split.trailingAnchor.constraint(equalTo: jump.leadingAnchor, constant: -2),
+            split.widthAnchor.constraint(equalToConstant: 24),
+            split.heightAnchor.constraint(equalToConstant: 24),
+            pin.topAnchor.constraint(equalTo: back.topAnchor),
+            pin.trailingAnchor.constraint(equalTo: split.leadingAnchor, constant: -2),
+            pin.widthAnchor.constraint(equalToConstant: 24),
+            pin.heightAnchor.constraint(equalToConstant: 24),
+            drag.topAnchor.constraint(equalTo: view.topAnchor),
+            drag.leadingAnchor.constraint(equalTo: forward.trailingAnchor, constant: 2),
+            drag.trailingAnchor.constraint(equalTo: pin.leadingAnchor, constant: -2),
+            drag.heightAnchor.constraint(equalToConstant: 30),
             preview.topAnchor.constraint(equalTo: view.topAnchor),
             preview.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             preview.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -260,12 +306,13 @@ final class ReferencePreviewViewController: NSViewController {
 
     @discardableResult
     func navigate(to destination: PDFDestination) -> Bool {
-        guard let copy = Self.copyPage(for: destination, in: sourceDocument) else { return false }
+        guard let page = destination.page, page.document === sourceDocument,
+              let pages = ReferencePreviewPageWindow(document: sourceDocument, pageIndex: sourceDocument.index(for: page)) else { return false }
         captureViewport()
         visits.removeSubrange((visitIndex + 1)..<visits.count)
         visits.append(Visit(destination: destination))
         visitIndex = visits.count - 1
-        display(destination: destination, copy: copy)
+        display(destination: destination, pages: pages)
         return true
     }
 
@@ -274,27 +321,41 @@ final class ReferencePreviewViewController: NSViewController {
 
     private func moveInHistory(to index: Int) {
         guard visits.indices.contains(index), index != visitIndex,
-              let copy = Self.copyPage(for: visits[index].destination, in: sourceDocument) else { return }
+              let page = visits[index].destination.page else { return }
+        let viewport = visits[index].viewport
+        let pageIndex = viewport?.sourcePageIndex ?? sourceDocument.index(for: page)
+        guard let pages = ReferencePreviewPageWindow(document: sourceDocument, pageIndex: pageIndex) else { return }
+        if let viewport {
+            while let first = pages.sourceIndices.first, first > viewport.loadedPages.lowerBound {
+                guard pages.extend(forward: false, keeping: pageIndex) else { break }
+            }
+            while let last = pages.sourceIndices.last, last < viewport.loadedPages.upperBound {
+                guard pages.extend(forward: true, keeping: pageIndex) else { break }
+            }
+        }
         captureViewport()
         visitIndex = index
-        display(destination: visits[index].destination, copy: copy)
+        display(destination: visits[index].destination, pages: pages)
     }
 
     private func captureViewport() {
-        guard isViewLoaded, hasPositioned else { return }
-        visits[visitIndex].viewport = Viewport(bounds: preview.convert(preview.bounds, to: previewPage),
-                                             scaleFactor: preview.scaleFactor)
+        visits[visitIndex].viewport = currentViewport()
     }
 
-    private func display(destination: PDFDestination, copy: PDFPage) {
+    private func currentViewport() -> Viewport? {
+        guard isViewLoaded, hasPositioned,
+              let page = preview.page(for: NSPoint(x: preview.bounds.midX, y: preview.bounds.midY), nearest: true),
+              let index = pages.sourceIndex(for: page),
+              let first = pages.sourceIndices.first, let last = pages.sourceIndices.last else { return nil }
+        return Viewport(sourcePageIndex: index, loadedPages: first...last,
+                        bounds: preview.convert(preview.bounds, to: page), scaleFactor: preview.scaleFactor)
+    }
+
+    private func display(destination: PDFDestination, pages: ReferencePreviewPageWindow) {
         self.destination = destination
-        previewPage = copy
-        let document = PDFDocument()
-        document.insert(copy, at: 0)
-        preview.sourcePage = destination.page
-        preview.document = document
-        previewDocument = document
         hasPositioned = false
+        self.pages = pages
+        preview.document = pages.document
         guard isViewLoaded else { return }
         refreshNavigationControls()
         positionReference()
@@ -312,12 +373,41 @@ final class ReferencePreviewViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         positionReference()
+        observeScrollBounds()
         view.window?.makeFirstResponder(preview)
+        if scrollMonitor == nil {
+            scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self, event.window === self.view.window,
+                      self.preview.bounds.contains(self.preview.convert(event.locationInWindow, from: nil)),
+                      abs(event.scrollingDeltaY) > 0 else { return event }
+                self.prepareForScroll(forward: event.scrollingDeltaY < 0)
+                return event
+            }
+        }
+    }
+
+    override func viewWillDisappear() {
+        stopObservingScroll()
+        super.viewWillDisappear()
+    }
+
+    func stopObservingScroll() {
+        if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
+        scrollMonitor = nil
+        if let observedClipView {
+            NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: observedClipView)
+        }
+        observedClipView = nil
     }
 
     func positionReference() {
-        guard !hasPositioned else { return }
-        let page = previewPage
+        guard !hasPositioned, let targetPage = destination.page,
+              let page = pages.page(atSourceIndex: visits[visitIndex].viewport?.sourcePageIndex ?? sourceDocument.index(for: targetPage)) else { return }
+        isUpdatingPages = true
+        defer {
+            isUpdatingPages = false
+            observeScrollBounds()
+        }
         view.layoutSubtreeIfNeeded()
         guard preview.bounds.width > 24, preview.bounds.height > 24 else { return }
         preview.go(to: page)
@@ -399,6 +489,92 @@ final class ReferencePreviewViewController: NSViewController {
         preview.go(to: preview.convert(rect, to: page), on: page)
     }
 
+    private func observeScrollBounds() {
+        guard let clip = preview.documentView?.enclosingScrollView?.contentView else { return }
+        if observedClipView !== clip {
+            if let observedClipView {
+                NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: observedClipView)
+            }
+            observedClipView = clip
+            clip.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(scrollBoundsChanged),
+                                                   name: NSView.boundsDidChangeNotification, object: clip)
+        }
+        lastClipOrigin = clip.bounds.origin
+    }
+
+    @objc private func scrollBoundsChanged() {
+        guard let clip = observedClipView else { return }
+        let previous = lastClipOrigin
+        lastClipOrigin = clip.bounds.origin
+        guard !isUpdatingPages, hasPositioned, let previous,
+              abs(previous.y - clip.bounds.origin.y) > 0.5 else { return }
+        let forward = clip.isFlipped ? clip.bounds.origin.y > previous.y : clip.bounds.origin.y < previous.y
+        prepareForScroll(forward: forward)
+    }
+
+    /// Called for actual scrolling, never for the initial link positioning.
+    /// Restore in source-page coordinates after inserting or evicting a copy;
+    /// an insertion above the reader otherwise shifts PDFKit's document origin.
+    func prepareForScroll(forward: Bool) {
+        guard !isUpdatingPages, let viewport = currentViewport(),
+              let edgeIndex = forward ? pages.sourceIndices.last : pages.sourceIndices.first,
+              let edgePage = pages.page(atSourceIndex: edgeIndex) else { return }
+        let edge = preview.convert(edgePage.bounds(for: .cropBox), from: edgePage)
+        let visible = preview.bounds
+        let distance: CGFloat
+        if forward {
+            distance = preview.isFlipped ? edge.maxY - visible.maxY : visible.minY - edge.minY
+        } else {
+            distance = preview.isFlipped ? visible.minY - edge.minY : edge.maxY - visible.maxY
+        }
+        guard distance < min(180, visible.height * 0.5) else { return }
+        isUpdatingPages = true
+        defer {
+            isUpdatingPages = false
+            observeScrollBounds()
+        }
+        guard pages.extend(forward: forward, keeping: viewport.sourcePageIndex),
+              let page = pages.page(atSourceIndex: viewport.sourcePageIndex) else { return }
+        preview.layoutDocumentView()
+        preview.scaleFactor = viewport.scaleFactor
+        preview.go(to: viewport.bounds, on: page)
+        preview.layoutDocumentView()
+    }
+
+    var currentSourceDestination: PDFDestination? {
+        guard isViewLoaded, hasPositioned else { return destination }
+        let bounds = preview.bounds
+        let point = NSPoint(x: bounds.minX + 1, y: preview.isFlipped ? bounds.minY + 1 : bounds.maxY - 1)
+        guard let copy = preview.page(for: point, nearest: true),
+              let index = pages.sourceIndex(for: copy), let page = sourceDocument.page(at: index) else { return nil }
+        let pageBounds = page.bounds(for: .cropBox)
+        let position = preview.convert(point, to: copy)
+        return PDFDestination(page: page, at: NSPoint(
+            x: min(max(position.x, pageBounds.minX), pageBounds.maxX),
+            y: min(max(position.y, pageBounds.minY), pageBounds.maxY)
+        ))
+    }
+
+    private func openSplit(layout: ReaderSplitLayout) {
+        guard let currentSourceDestination else { return }
+        onSplit?(currentSourceDestination, layout)
+    }
+
+    @objc private func splitReference() {
+        openSplit(layout: NSApp.currentEvent?.modifierFlags.contains(.shift) == true ? .stacked : .sideBySide)
+    }
+
+    @objc private func togglePin() {
+        isPinned.toggle()
+        pin.image = NSImage(systemSymbolName: isPinned ? "pin.fill" : "pin", accessibilityDescription: nil)
+        pin.toolTip = isPinned ? "Unpin preview" : "Keep preview open"
+        pin.setAccessibilityLabel(pin.toolTip)
+        pin.setAccessibilityValue(isPinned ? "Pinned" : "Unpinned")
+    }
+
+    @objc private func closePreview() { onClose?() }
+
     private static func coordinate(_ value: CGFloat, lower: CGFloat, upper: CGFloat, unspecified: CGFloat) -> CGFloat {
         guard value.isFinite, value != kPDFDestinationUnspecifiedValue else { return unspecified }
         return min(max(value, lower), upper)
@@ -408,7 +584,7 @@ final class ReferencePreviewViewController: NSViewController {
         guard isViewLoaded else { return }
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = NightModeStyle.readerBackdropColor.cgColor
-            for button in [back, forward, jump] {
+            for button in [back, forward, pin, split, jump, closeButton] {
                 button.contentTintColor = NightModeStyle.secondaryTextColor
                 button.layer?.backgroundColor = NightModeStyle.paneBackgroundColor.withAlphaComponent(0.92).cgColor
             }
