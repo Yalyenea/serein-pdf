@@ -1,6 +1,6 @@
 # PDF Reader for macOS
 
-面向 macOS 的极简 PDF 阅读器。左侧文档 tabs(可切换到标题栏水平 tabs),右侧 Outline / Pages / Search / Annotations,中间沉浸式阅读区(支持同窗分屏与多窗口)。风格:极简、扁平、紧凑。
+面向 macOS 的极简 PDF 阅读器。左侧文档 tabs(可切换到标题栏水平 tabs),右侧 Outline / Pages / Search / Annotations,中间沉浸式阅读区(支持具名工作区、嵌套分屏与多窗口)。风格:极简、扁平、紧凑。
 
 ## 1. 产品原则
 
@@ -16,6 +16,8 @@
 ### 2.1 V1 涵盖
 
 文档管理 / 空白标签页 / PDF 库文件夹 / 阅读(单页·双页·书籍、适应宽度、缩放、翻页、鼠标跟随聚焦)/ PDF 外部编译热重载 / 多 PDF 连续阅读 / 当前 PDF 路径复制 / 当前页复制为图片 / 选区文字、当前页图片与当前 PDF 发送到 Codex / `serein://open?file=…` 本地 PDF 深链 / Reveal in Finder / Open With 系统阅读器 / Outline / Search / 会话恢复 / 当前文档与跨打开文档搜索 / 文本高亮、下划线与删除线 / 批注评论 / 删除批注 / 手动 & 自动保存 / 批注导出(Markdown / Plain / JSON) / 系统 Share / Clean Copy 导出 / 深色主题 / 反色夜间 / 配置化快捷键 / 设置窗口 / 侧栏显隐 & 互换 / 全览 grid / show all tabs / 历史前进后退 / 重开最近关闭 / find bar / 跳转页 / Vim 翻页 / 批注撤销(50 步) / 同窗分屏 / 多窗口恢复 / macOS 原生绿灯窗口管理。
+
+具名工作区与完整分屏恢复 / 有界多页链接预览 / Apple 选区翻译与译文注释 / 目录位置跟随与快速搜索 / 跨工作区 MRU 切换 / 最近窗口与定向分屏 / 每区页码与就地跳页。Apple 翻译要求 macOS 15+，应用最低版本仍为 macOS 14；论文页内双栏阅读模式（需求 72）暂缓。
 
 ### 2.2 V1 明确不做
 
@@ -47,8 +49,8 @@ flowchart LR
     C --> E["ReaderWorkspaceViewController"]
     C --> F["RightSidebarViewController"]
     C --> G["TitlebarTabsController"]
-    E --> E1["Primary ReaderViewController"]
-    E --> E2["Secondary ReaderViewController"]
+    E --> E2["NSSplitView + ReaderSplitHostView tree"]
+    E2 --> E1["ReaderViewController per pane"]
     E --> E3["FloatingOutlineViewController"]
     F --> F1["OutlineViewController"]
     F --> F2["PDFThumbnailView (Pages)"]
@@ -60,14 +62,11 @@ flowchart LR
     G --> H
     H --> I["DocumentSession"]
     H --> J["WindowWorkspace"]
+    J --> J1["NamedWorkspace + ReaderLayoutGroup"]
     E1 --> K["PDFView / lazy PDFDocument"]
-    E2 --> K
     E1 --> L["HighlightService + Undo"]
-    E2 --> L
     E1 --> M["ThemeManager"]
-    E2 --> M
     E1 --> P["ReadingFocusOverlayView"]
-    E2 --> P
     H --> N["ReadingStateStore"]
     H --> O["RecentFilesStore"]
 ```
@@ -77,13 +76,14 @@ flowchart LR
 | 决策 | 结论 |
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
-| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗独立维护自己的 session/tab 集合,支持合并窗口,并通过菜单或 tab 拖拽把 PDF 原样移到新窗口 / 已有窗口 |
+| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗拥有一组具名工作区,各自保存 tab、搜索与阅读布局;关闭窗口保留工作区组,可从最近窗口恢复;支持合并窗口与跨窗移动 PDF |
+| 工作区入口 | 两种 tab 形态共享紧凑选择器,支持创建 / 重命名 / 切换;tab 右键可移动 PDF 到同窗其他工作区;空工作区保留选择器 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
-| 中栏承载 | `ReaderWorkspaceViewController` 管理单 Reader / 双 Reader 分屏 |
+| 中栏承载 | `ReaderWorkspaceViewController` 按稳定 pane ID 管理动态 Reader,以 `NSSplitView` + `ReaderSplitHostView` 递归呈现分屏树 |
 | 目录来源 | 右栏或浮动目录需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
 | 搜索预览 | find bar 只负责输入 / scope / 大小写 / 全词 / 导航,所有 preview 与命中列表都放右栏 |
-| 搜索范围 | `This Document` / `All Open`;`All Open` 只覆盖当前窗口已打开文档,跨文档命中点击先切 session 再跳转；结果以窗口级 `SearchSnapshot` 显式重建，读取不触发 PDF IO |
-| 多 PDF 连续阅读 | 窗口级连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
+| 搜索范围 | `This Document` / `All Open`;`All Open` 覆盖当前工作区的公开 PDF tabs,跨文档命中点击先切 session 再跳转；结果以窗口级 `SearchSnapshot` 显式重建，读取不触发 PDF IO |
+| 多 PDF 连续阅读 | 工作区内连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
 | PDF 热重载 | `DocumentStore` 通过文件 / 目录事件监听已打开 PDF,空闲时不轮询;原地写入只检查对应文件,原子替换及目录重建后重新绑定监听;只重载 clean sessions,优先恢复 PDFView 实时页码;dirty 批注会话保持内存状态 |
 | PDF 库 | 配置保存库文件夹路径;首次打开库时递归扫描 PDF,建立轻量 root / folder / search 索引并缓存,用轻量搜索面板打开目标文件 |
 | 批注存储 | Serein 多行 highlight / underline / strikeout 仅以 UUID `userName` 组成 group,共享评论仅写入首条批注的标准 `/Contents`,显示一个评论图标;打开旧文件时合并组内相同评论,保留不同内容及外部批注;外部 PDF 批注按 `/NM` 独立识别,避免同作者批注误合并;dirty 后 `Cmd+S` 或自动保存策略触发时写回源 PDF |
@@ -93,14 +93,16 @@ flowchart LR
 | 系统文档集成 | 成功打开真实 PDF 后同步 `NSDocumentController` recent documents;主窗口 `representedURL` / `representedFilename` 跟随当前 active PDF;`serein://open?file=<encoded file URL>` 仅接收单个本地可读 PDF 并复用同一打开管线 |
 | Codex 交接 | `Ctrl+Cmd+C` 按上下文发送:有选区时通过 `codex://new?prompt=…` 预填新任务,无选区时导出当前页临时 PNG;`Ctrl+Cmd+Shift+C` 使用原 PDF;文件通过 macOS 打开事件交给 `com.openai.codex`;Settings 可关闭整个集成;不传 workspace `path`,Codex 客户端可能自行把文件父目录作为 workspace |
 | 外部应用 | `Reveal in Finder` 与 `Open With` 保持独立;File 菜单和两种 tab 右键菜单按系统适配顺序动态列出已安装 PDF 应用,对 dirty PDF 先执行保存确认 |
-| 重复打开 | 外部 `open`、Open Recent、PDF Library 或 `Cmd+O` 选到已打开 PDF 时激活已有 window/session,不创建重复普通 tab |
+| 重复打开 | 普通打开复用当前工作区已有 PDF tab;同一文件可出现在其他工作区 / 窗口,阅读状态独立、底层 PDF 与批注共享;最近入口分屏保留来源窗口 |
 | 自动保存 | 默认 `10 min`,可设 `never` |
-| 分屏默认 | 新窗口始终空白且默认单屏;跨启动恢复也默认回到单屏;分屏只作为当前运行期内的主动切换状态 |
-| 分屏方向 | `ReaderSplitLayout` 为窗口运行期状态,支持左右 `sideBySide` / 上下 `stacked`;切换方向不改 pair、pane session 与焦点 |
-| 分屏 pair | `ReaderSplitPair` 只记录当前运行期绑定的两个 PDF;普通 tab 点击会恢复 pair 或临时离开 pair,只有 `Option` 激活才替换 pane |
-| 同 PDF 对比 | 同一个 PDF 的第二 pane 使用绑定源 session 的内部 comparison session,共享 PDF、批注与撤销,独立页码 / 缩放;不显示成普通 tab、不进入最近 / 重开 / 持久化 / All Open 搜索 |
-| 状态持有 | 阅读状态 / 缩放 / 翻页 / dirty / undoStack 挂在 `DocumentSession`;搜索结果是窗口级 `SearchSnapshot`,session cache 仅为内部构建细节;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;侧栏显隐 / 宽度等窗口 UI 状态挂在 `WindowWorkspace` |
-| 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步双 pane |
+| 分屏恢复 | 新窗口空白;工作区切换和应用重启恢复布局树、各节点方向 / 比例、焦点及各区阅读状态;临时放大不改变保存的布局 |
+| 分屏方向 | `ReaderLayoutNode` 可递归组合左右 `sideBySide` / 上下 `stacked`,支持四宫格及更多阅读区;新增后每区至少 320 × 160 pt,不设固定屏数上限 |
+| 分屏组 | 普通 tab 激活优先当前组,组外文档切换后保留原组;返回组内文档恢复布局;Option 激活、链接与最近入口始终新增阅读区 |
+| 同 PDF 对比 | 每个 pane 使用独立阅读 session,共享源 PDF、批注与撤销,独立页码 / 缩放;内部阅读 session 随布局持久化,通过所属公开 tab 出现在 MRU 与文档切换中 |
+| 状态持有 | 各阅读 session 保存页码 / 缩放 / Lock,同文件共享文档 owner 的 dirty / undo;搜索结果是窗口级 `SearchSnapshot`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;窗口 chrome 在 `WindowWorkspace`,tab 与分屏组在 `NamedWorkspace` |
+| 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步所有 pane |
+| 选区翻译 | `T` 打开 Apple 翻译窗口,自动识别源语言、默认简体中文、可切换目标语言;结果绑定原 PDF / 原选区,点击写入新建粉色高亮与译文评论,同一结果只写一次,保留已有批注并沿用撤销 / 保存 |
+| 目录跟随 | 侧栏与浮动目录共用 `OutlineLocationResolver`,按焦点阅读区顶部的页码与页内坐标确定章节;展开祖先并最小滚动保持可见,手动浏览 / 搜索时暂停 |
 | 文本点选 | 单击设置起点，`Shift` + 单击选择到终点，支持反向、跨页和行首尾空白；连续 `Shift` + 单击调整终点。起点按阅读区独立保存，切换文档或移出窗口时清除；通过本地鼠标事件监听处理，保留 PDFKit 原生拖选与双击选词。 |
 | 演示工具 | 演示模式提供指针、临时笔与激光;墨迹按 PDF 页坐标保存在当前阅读区,翻页保留并随页面定位,各窗口独立,退出演示或切换文档时清空,不写入 PDF;底部工具栏可固定或自动隐藏 |
 | 全览性能 | `OverviewGridView` 缩略图只按可视区 ± 一屏懒栅格化(离主线程、2 并发、像素长边上限 1200);`NSCache` 按字节成本回收,远端页释放位图,退出全览立即清空并取消排队任务、释放其 PDF 和结果;缩放 / resize 只重渲可视区,滚回近访页走缓存不重渲;右栏 Pages 仅在面板可见时绑定 PDFView |
@@ -110,7 +112,7 @@ flowchart LR
 | 右栏无文档态 | 无文档(无 session 或空白 tab)时隐藏 segmented 与各 mode 面板,只显示居中共享空态,模式机制与懒加载保持原样 |
 | 空态组件 | 左 / 右栏空态与 placeholder 共用 `EmptyStateView`(12 semibold / 11 secondary,居中文案块),宿主决定位置;面板级上下文空文案沿用 12pt secondary |
 | 侧栏外观 | 左右侧栏与中栏共用 `readerBackdrop` 实色平面(无 vibrancy 缝、无分割线);`layout.sidebarOpacity` 仅保留配置兼容,Settings 不再暴露无效控件;文档侧栏空白背景可拖窗,不抢 tab / close / scroll 事件 |
-| 高亮撤销 | 每 session 独立 undo 栈,上限 50,无 redo |
+| 高亮撤销 | 同一 PDF 的窗口 / 工作区 / pane 共享 undo 与 redo,撤销栈上限 50 |
 | 视图层订阅 | 通过 `Notification.Name.documentStoreDidChange` 与 `PDFViewPageChanged`,视图层不持业务状态 |
 
 ## 4. UI 与交互
@@ -121,10 +123,10 @@ flowchart LR
 
 | 区域 | 职责 | 边界 |
 |---|---|---|
-| 左栏 Vertical Sidebar | 已打开文档 tabs | 不放 outline / 不放缩略图 / 不做文件树 |
-| 标题栏 Horizontal Tabs | 水平模式下的 tab strip | 占标题栏,不新增内容区 tab bar |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、同窗分屏 | 单窗最多双 Reader;高亮 hover 显示轻量评论预览;正文右键菜单结构统一并按命中启用操作,含复制当前页为图片、发送选区文字 / 当前页图片到 Codex;普通 tab 切换只恢复 / 离开 split pair,`Option` 激活才按焦点 pane 编辑分屏;右栏未显示 Outline(侧栏关闭,或 mode 为 Pages / Search / Annotations)且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 展开;展开高度随可见目录行收缩,受配置 / 当前窗口拖拽值与阅读区可用高度共同限制,超出时内部滚动;拖动上下边缘以中心对称调节高度上限,不触发 PDF reflow |
-| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | Annotations 为全高紧凑评论流(仅页 section + 原文 / 评论,无时间戳,无横向滑动);连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持筛选与一键折叠 / 展开;所有预览类内容都在右栏,仅正文 hover 评论卡与非 Outline 态浮动目录可覆盖中栏 |
+| 左栏 Vertical Sidebar | 工作区选择器与当前工作区文档 tabs | 不放 outline / 不放缩略图 / 不做文件树;悬停显示完整 PDF 文件名 |
+| 标题栏 Horizontal Tabs | 水平模式下的工作区选择器与 tab strip | 占标题栏,不新增内容区 tab bar;空工作区保留选择器 |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、嵌套分屏 | pane 数量由最小可读尺寸限制;右下角常驻实际页序 / 双页范围与总页数,点击就地输入跳页;正文可打开链接预览、翻译和评论小窗;普通 tab 切换保留原分屏组,`Option` 激活新增阅读区;右栏未显示 Outline 且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 或 `O` 展开;内容超出高度上限后内部滚动,拖动上下边缘调整高度不触发 PDF reflow |
+| 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | Annotations 为全高紧凑评论流(仅页 section + 原文 / 评论,无时间戳,无横向滑动);连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;目录树支持筛选与一键折叠 / 展开;搜索预览与命中列表放在右栏,链接 / 翻译 / 批注使用阅读区小窗,非 Outline 态可展开浮动目录 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 
 ### 4.2 视觉规范
@@ -143,8 +145,8 @@ flowchart LR
 - 评论预览卡与右栏评论行使用轻选中态、细色条和受限行数,避免永久详情编辑器挤占列表;预览卡按行 wrap(更宽上限),右栏行内不重复 section 的 Page 文案
 - 切换 PDF 后在阅读区顶部短暂显示当前文件名,帮助快速定位但不常驻占位
 - 阅读聚焦使用单一圆角矩形镂空与统一外围压暗,禁止多方向渐变拼接;轻描边 / 阴影只强化焦点边界,不得污染框内文字
-- 空窗 / 空白 tab 时中栏显示淡色 Baskerville 衬线斜体 `Serein`，按阅读区宽度 82% 缩放并受高度 65% 限制，居中略偏上、随主题换色；打开 PDF 或加载错误时隐藏。无标签时隐藏标题栏 tab 容器，创建标签后恢复
-- 空窗时左栏显示 `Documents` section 标题 + 上移的 Recent 快捷入口(无 recents 或关闭时显示共享提示文案);右栏无文档态只保留居中空态文案,不显示 segmented 等"已就绪"chrome
+- 空窗 / 空白 tab 时中栏显示淡色 Baskerville 衬线斜体 `Serein`，按阅读区宽度 82% 缩放并受高度 65% 限制，居中略偏上、随主题换色；打开 PDF 或加载错误时隐藏。空工作区仍可通过文档侧栏或标题栏选择器切换工作区
+- 空窗时左栏保留工作区选择器并上移 Recent 快捷入口(无 recents 或关闭时显示共享提示文案);右栏无文档态只保留居中空态文案,不显示 segmented 等"已就绪"chrome
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
 ### 4.3 快捷键总表
@@ -158,6 +160,7 @@ flowchart LR
 - `U`:有选区 → 立即加下划线;无选区 → 进入下划线模式
 - `S`:有选区 → 立即加删除线;无选区 → 进入删除线模式
 - `M`:有选区 → 创建高亮并进入评论编辑;无选区且命中高亮 → 编辑已有评论
+- `T`:翻译选中文字,小窗可切换目标语言并将译文写入新高亮评论;macOS 15+ 可用
 - 高亮模式内 `1` / `2` / `3`:切换粉 / 黄 / 绿;文本输入框优先接收数字
 - `Esc`:退出批注模式 / 关闭 Find bar / 退出全览;演示时先将笔或激光切回指针,再按退出演示
 - `D`:删除鼠标所在批注(多行整组删除)
@@ -165,7 +168,7 @@ flowchart LR
 - `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights
 - `File > Export Clean Copy…`:导出移除可见用户批注、保留链接与表单控件的 PDF 副本
 - `File > Export Highlights…` / `Export All Open Highlights…`:导出当前 PDF 或当前窗口全部已打开 PDF 的批注;汇总格式按 Document → Page 分组
-- `Cmd+Z`:撤销最近一次批注新增或删除(上限 50,无 redo)
+- `Cmd+Z`:撤销最近一次批注编辑(上限 50,同一 PDF 的各阅读区共享)
 
 **阅读**
 - `Cmd+K`:打开紧凑网格 Command Palette;按分区两列排布当前可执行命令,`↑` / `↓` / `←` / `→` 选择,`Enter` 或点击执行,`Esc` 或再次 `Cmd+K` 关闭;面板打开时可直接按原有第二段组合
@@ -174,15 +177,20 @@ flowchart LR
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
 - 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4` 保持 `Single Page` / `Single Page Continuous` / `Two-Up` / `Two-Up Continuous`;`Book` / `Book · Continuous Turn` 默认无快捷键,可从 View 菜单或 Settings 选择
 - `C` 在当前单页、双页或书籍布局内切换对应连续状态
+- 手动缩放后切换显示模式,按新单页 / 双页布局适应宽度并保留实时阅读锚点
 - 书籍模式以居中封面开场,之后显示稳定页面尺寸的左右双页;Fit Width 按实际 spread 尺寸保留水平 32pt / 垂直 24pt 安全边距并完整居中,手动缩小到完整可见时继续居中;普通状态每个横向手势翻一组,Continuous Turn 可在持续手势中逐组翻页;放大时先在 spread 内惯性平移,到边缘后翻页,翻页后的惯性不会连跳;`H` / `←` 与 `L` / `→` 分别翻到上一 / 下一 spread
 - `singlePage` 完整放下当前页时双轴居中并钳制空白区域滑动;放大到超出视口后仍允许页内平移
 - `L`:切换当前 PDF 的水平平移锁定(保持当前 X 位置并禁止左右滑动与缩放手势；缩放命令及页面 / 文本适配仍可使用，完成后锁定新的 X 位置；竖直滚动与翻页不受影响;按焦点 pane 操作,各文档独立保存并跨启动恢复;书籍模式不启用)
 - 单页 / 双页非连续模式下,触控板上下滑动先在页内滚动,到边缘后通过与 `J` / `K` 相同的路径翻页;每次手势最多翻一页 / 一组双页,翻页后消耗剩余手势与惯性,惯性本身不触发翻页。
-- `J` / `K`:下一页 / 上一页(文本输入上下文让路)
+- 竖直模式 `J` / `↓` 与 `K` / `↑`:直接下一页 / 上一页或一组双页;Book 使用 `H` / `←` 与 `L` / `→`;放大状态同样直接翻页,文本输入上下文让路
 - `Ctrl+D` / `Ctrl+U`:下滚 / 上滚半页;非连续模式先走完当前 PDF,到边界才切换连续阅读组中的相邻 PDF
 - `G` / `g`:跳到真实文末页底 / 文首页顶
 - `Cmd+Option+G`:跳转到页 N(越界给轻量提示)
-- `Cmd+[` / `Cmd+]`:按 pane 保存 `sessionID + ReadingPosition` 的精确历史;支持同页不同坐标、跨 PDF Outline / Search 与反复后退 / 前进;PDF 内链单击预览目标页,预览使用 6pt 圆角无标题栏面板、铺满宽度;根据目标附近的文字位置识别双栏并放大目标栏,左右正文错行、短公式与上下标不影响分栏识别,栏宽包含公式编号;单栏、跨栏标题或布局不明确时默认按整页文字左右边界缩放,左右各留 12pt;无可提取文字时保持整页宽度;预览内继续点击内链时原地替换页面,左上角后退 / 前进恢复预览的页码、滚动与用户调整的缩放,后退后点新链接会清除前进分支;预览历史独立于主阅读区,关闭后清空;每次仅复制当前页且不显示评论入口,不裁切或修改源 PDF 与批注;阅读区 Option-click 或预览右上角跳转图标才把当前目标居中跳转并入主历史栈,普通滚动和顺序翻页不入栈
+- `Cmd+[` / `Cmd+]`:按 pane 保存 `sessionID + ReadingPosition` 的精确历史;支持同页不同坐标与跨 PDF 跳转,普通滚动和顺序翻页不入栈
+- PDF 内链单击打开可调整大小 / 固定的预览;初始只复制目标页,连续滚动按需加载邻页,最多保留 3 页副本;按文字几何适配目标栏或整页文字宽度,左右各留 12pt,无文本页适配页面宽度;保留预览内链接和独立后退 / 前进的页码、位置、缩放,不修改源 PDF 与批注
+- 阅读区 `Option+Click` 内链直接向右新增分屏,`Command+Click` 当前阅读区跳转;预览按钮或 `B` / `Shift+B` 将预览当前位置向右 / 向下分屏,Jump 按钮跳转来源阅读区
+- `O`:侧栏 Outline 可见时聚焦其搜索框,否则展开浮动目录并聚焦;输入筛选、方向键选择、Enter 跳转、Esc 取消,结束后焦点回正文
+- 各 pane 右下角显示实际页序 / 总页数,双页显示范围;点击就地输入物理页号,Enter 跳转、Esc 取消
 - `Cmd+F` / `Cmd+G` / `Cmd+Shift+G`:Find bar(有 PDF 选中文本时立即带入搜索)/ 下一 / 上一 匹配
 - Find bar 内 `Aa` / `Word`:切换区分大小写 / 全词匹配;`↑` / `↓` / `Enter` 选择上一 / 下一结果 / 首次提交搜索;同一 query + scope + options 连续 `Enter` 继续跳转
 - `F`:开启 / 关闭鼠标跟随阅读聚焦;遮罩按真实 PDF 页宽定位且不阻断选择、链接、拖拽与滚动
@@ -194,32 +202,37 @@ flowchart LR
 - `Cmd+K` → `Cmd+L` / `Cmd+K` → `Cmd+S`:打开 Settings 的 Library / Shortcuts 页
 
 **文档与 tab**
-- `Cmd+T`:新建空白 tab;空白 tab 不绑定 PDF、不进入最近 / 重开历史、不跨启动恢复
+- `Cmd+Option+T`:新建空白 tab;空白 tab 不绑定 PDF、不进入最近 / 重开历史、不跨启动恢复
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
 - `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+Shift+C`:复制当前 PDF 路径到剪贴板
 - `Cmd+Option+C`:复制当前页为图片(2× mediaBox,含批注,不含夜间滤镜);阅读区右键同样提供
 - `Ctrl+Cmd+C`:有选区时发送文字到 Codex,否则发送当前页图片;`Ctrl+Cmd+Shift+C`:发送当前 PDF;Reader 右键按当前上下文只显示一项;Settings > General 可关闭 Codex 集成
 - `File > Open With` 或 PDF tab 右键:动态选择兼容的已安装应用打开 PDF;`Reveal in Finder` 独立保留
-- `Cmd+W`:多选 tabs 时关闭选中的 PDFs;否则关闭当前 tab
+- `Cmd+W`:多屏时只关闭焦点 pane,其余区域补位;单屏时关闭多选 tabs 或当前 tab
 - `Cmd+Shift+W`:关闭当前窗口
 - `Cmd+Shift+T`:重开上次关闭(栈上限 10)
 - `Cmd+Shift+N`:新建窗口
 - `Cmd+K` → `Cmd+M`:合并所有窗口到当前窗口
 - `Cmd+K` → `Cmd+N`:把当前 PDF 移到新窗口
 - `Window > Move Current PDF to Window`:移到指定已有窗口;垂直 / 标题栏 tab 也可直接跨窗拖拽
-- `Cmd+Shift+Space`:最近文件启动器;阅读器抢回焦点后 `Esc` 仍先关闭面板
-- `Ctrl+Tab`:显示当前窗口所有 tabs 的轻量文本总览;点击 / Enter 普通切换,`Option+Click` / `Option+Enter` 进入 split-edit;重复 `Ctrl+Tab` 或 `Esc` 关闭
+- `Cmd+Shift+Space`:最近文件启动器;普通打开支持多选,分屏要求单选;阅读器抢回焦点后 `Esc` 仍先关闭面板
+- `W`:最近窗口列表,可激活打开的窗口或恢复已关闭窗口组
+- 最近文件 / 最近窗口 / 打开标签列表中,`Option+Enter` 向右新增分屏,`Option+Shift+Enter` 向下新增分屏;通过 `palette_split_right` / `palette_split_down` 自定义;跨窗分屏保留来源阅读位置
+- `Ctrl+Tab`:当前窗口全部工作区的 MRU 紧凑列表;按住 Ctrl 连按 Tab / Shift+Tab 循环,也可方向键选择,松 Ctrl 确认并切换到所属工作区,Esc 取消;手势期间冻结列表顺序
 - 多 PDF 连续阅读:批量打开会预选本批 PDF,也可 `Cmd` / `Shift` 点击多选后通过 tab 右键菜单开启 / 退出
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
 - 物理左 `Cmd+1` / `Cmd+2` / `Cmd+3`:激活当前窗口第 1 / 2 / 3 个 tab
-- `Option+Click` tab:进入 split-edit;已分屏时替换当前焦点 pane,未分屏时以当前 PDF + 目标 PDF 建 pair
+- `Option+Click` tab:在当前 pane 右侧新增目标 PDF 阅读区,保留已有对照内容;两种 tab 悬停均显示含扩展名的完整文件名
 
 **布局**
 - `Cmd+B` / `Cmd+Option+B`:切换左 / 右侧栏；侧栏开关或拖动宽度后，适应模式跟随中间阅读区重算，手动缩放按阅读区宽度同比调整，保持横向可视范围及阅读锚点，Lock 开启时同样生效
 - `Cmd+Shift+1` / `Cmd+Shift+2`:垂直 sidebar tabs / 水平 titlebar tabs
 - `Cmd+Shift+L`:右栏 Outline / Pages 切换
-- `Cmd+Ctrl+\`:切换同窗分屏;次级 pane 显示紧凑候选,首项为同一个 PDF;`View` 菜单可在左右 / 上下布局间切换(新窗口与重启恢复默认单屏)
+- `B` / `Shift+B`:向右 / 向下切分当前 pane,复制同一 PDF 的当前页内位置;可重复组合四宫格和更多阅读区,空间不足时停止新增
+- `Ctrl+H/J/K/L`:按左 / 下 / 上 / 右移动 pane 焦点,编辑文本时保留原生输入快捷键
+- `Cmd+T`:焦点 pane 临时占满主阅读空间,再次按恢复布局、位置与比例
+- `Cmd+Ctrl+\`:打开带 PDF 候选的空对照区,或将当前分屏组折叠为焦点文档单屏;View 菜单提供向右 / 向下新增分屏
 - `Cmd+Shift+O`:进入 / 退出全览(自动隐藏左右侧栏,视口自适应铺满页网格,缩放后为手动尺寸,`Esc` 退出)
 - `Cmd+L`:进入 / 退出演示模式(直接全屏播放,页面完整适配并复用单页居中钳制,退出后恢复进入前布局)
 - 演示中 `P` / `R`:切换临时笔 / 激光,重复按键回到指针;`V`:回到指针;`Cmd+Z`:撤销当前页最后一笔;`E`:清空当前页墨迹;`Esc`:先回到指针,再按退出演示
@@ -270,12 +283,12 @@ flowchart LR
 
 - 管理 sessions(open / close / activate / reorder / 跨窗口 move)
 - 维护多个 `WindowWorkspace`,驱动多窗口 / 分屏 / 焦点 pane / 右栏模式 / 搜索 scope
-- 每个 `WindowWorkspace` 独立维护自己的 session/tab 集合,open/close 不跨窗扩散
-- 维护 active session 与运行期 split pair,驱动左栏 tab 与中栏 reader 联动
+- 每个 `WindowWorkspace` 管理自己的 `NamedWorkspace` 集合,open/close 作用于当前工作区;同文件跨工作区共享批注文档
+- 维护公开 tab 与内部阅读 session 的关系,按 `ReaderLayoutGroup` 恢复分屏布局和焦点
 - 按需创建 `PDFDocument`,用小容量 LRU 保留当前 pane / 分屏 pane / 最近文档;干净后台文档可释放
 - 监听已打开 PDF 的外部改写;clean session 清理缓存并触发 UI 重读,Reader 在替换 document 前捕获实时阅读位并恢复;dirty session 不自动刷新
-- 持久化阅读状态 / 最近文件 / 每窗口最近关闭栈(上限 10)
-- `DocumentStoreChange` 区分 chrome / content / `readingPosition`;翻页与缩放写回不触发 tab / search / annotations 列表全量重建,也不重写 workspace 快照
+- 持久化每个阅读 session 的独立状态、具名工作区、布局树与已关闭窗口组;工作区最近关闭 tab 栈上限 10
+- `DocumentStoreChange` 区分 chrome / content / `readingPosition`;翻页与缩放写回不触发 tab / search / annotations 列表全量重建;工作区快照含各 session 阅读状态,磁盘写入串行去重并 debounce
 - Reader 在缩放命令与新增高亮通知前完成待写回阅读状态,避免刷新时恢复旧位置或旧缩放
 - `searchSnapshot(in:)` 纯读；query / scope / options、pane 焦点、tab 与热重载边界显式调用 `rebuildSearchIfNeeded(in:)`
 - `ReadingStateStore` 每文档阅读位:上限 500(LRU)、磁盘写入 debounce、退出时 flush;失败走 `os.Logger`
@@ -287,19 +300,19 @@ flowchart LR
 | 字段 | 说明 |
 |---|---|
 | `id: UUID` | window 唯一标识 |
-| `sessionIDs: [UUID]` | 当前窗口拥有的 tab 顺序 |
-| `selectedSessionIDs` | 当前 tab 多选集合,用于连续阅读入口 |
-| `continuousReadingState` | 当前窗口的多 PDF 连续阅读组,按 session 顺序保存 |
+| `workspaces: [NamedWorkspace]` | 当前窗口的具名工作区集合 |
+| `activeWorkspaceID` | 当前工作区 |
+| `isClosed` | 已关闭但保留、可恢复的窗口组 |
+| `documentMRU` | 当前窗口跨工作区的文档最近使用顺序 |
+| `sessionIDs` / `selectedSessionIDs` | 当前工作区公开 tab 顺序与多选集合的计算入口 |
+| `continuousReadingState` | 当前工作区的有序多 PDF 连续阅读组 |
 | `tabPresentationMode` | 当前窗口 tabs 形态 |
 | `rightSidebarMode` | `outline` / `pages` / `search` / `annotations` |
-| `searchQuery` / `searchScope` | 当前窗口搜索上下文 |
-| `isSplitEnabled` | 当前是否显示双 Reader |
-| `splitLayout` | 当前运行期左右 / 上下分屏方向,不跨启动恢复 |
-| `primarySessionID` / `secondarySessionID` | 两个 pane 当前展示的 session;secondary 可为空候选态 |
-| `splitPair` | 当前运行期绑定的两个 PDF,不跨启动恢复 |
-| `focusedPane` | split-edit 与搜索跳转的落点 |
-| `recentlyClosedURLs` | 本窗最近关闭栈 |
-| `leftSidebarWidth` / `rightSidebarWidth` | 当前窗口运行期侧栏宽度,由配置默认值初始化,不随 PDF 切换 |
+| `searchQuery` / `searchScope` | 当前工作区搜索上下文 |
+| `readerLayout` / `focusedPane` | 当前分屏组的布局树与焦点计算入口 |
+| `isSplitEnabled` | 当前布局是否包含多个 pane |
+| `recentlyClosedURLs` | 当前工作区最近关闭 tab 栈 |
+| `leftSidebarWidth` / `rightSidebarWidth` | 窗口级侧栏宽度,新窗口由配置初始化,随窗口恢复 |
 ### 5.4 辅助模型
 
 | 模型 | 用途 |
@@ -308,7 +321,10 @@ flowchart LR
 | `OutlineNode` | 目录树节点 |
 | `ReadingPosition` | 页码 + 页内定位 |
 | `TabPresentationMode` | `verticalSidebar` / `horizontalTitlebar` |
-| `ReaderSplitPair` | 浏览器式分屏绑定,把"显示分屏"与"绑定哪两个 PDF"分开 |
+| `NamedWorkspace` | 名称、公开 tabs、分屏组、当前组、搜索与最近关闭记录 |
+| `ReaderLayoutGroup` | 布局树、pane → session 映射、焦点与临时放大 pane |
+| `ReaderLayoutNode` / `ReaderPane` | 递归方向 / 比例节点与稳定叶子 ID |
+| `OutlineLocationResolver` | 侧栏与浮动目录共用的页内章节定位 |
 | `AnnotationSavePolicy` | `after10Minutes` / `never` |
 | `HighlightPalette` | Normal / Rose Pine Dawn / Rose Pine Moon 的高亮色预设 |
 | `HighlightUndoOperation` | undo 栈元素 |
@@ -331,9 +347,10 @@ App/                                      # AppKit 入口、窗口与设置/启�
   ShortcutSequenceView.swift              # 单段 / 二段快捷键的符号芯片视图
   RecentFilesPaletteController.swift      # 最近文件启动器的窗口与交互控制器
   RecentFilesPaletteState.swift           # 最近文件启动器的查询匹配与多选状态(纯模型)
+  RecentWindowsPaletteController.swift    # 最近窗口激活 / 恢复与定向分屏
   PDFLibraryPaletteController.swift       # PDF Library 二级浏览面板:库 tab / 文件夹 / PDF 列表 / 搜索
-  OpenTabsPaletteController.swift         # 当前窗口所有 tabs 轻量文本总览
-  OpenTabsPaletteState.swift              # tabs 总览的选中状态(纯模型)
+  OpenTabsPaletteController.swift         # 当前窗口跨工作区 MRU 列表与 Ctrl 松键确认
+  OpenTabsPaletteState.swift              # MRU 列表冻结顺序与选中状态(纯模型)
 
 Core/                                     # 文档 / 窗口 / 配置 / 持久化 核心模型
   AppConfiguration.swift                  # config.toml schema、默认值与 AppConfigurationStore 读写
@@ -343,12 +360,14 @@ Core/                                     # 文档 / 窗口 / 配置 / 持久化
   CleanPDFService.swift                   # 生成保留 Link / Widget、移除可见用户批注的 PDF 副本
   PDFPageImageService.swift               # 当前页栅格化为 NSImage 并写入剪贴板
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
-  DocumentStorePersistence.swift          # UserDefaults 编解码 sessions / workspaces / 非运行期窗口状态
+  DocumentStorePersistence.swift          # UserDefaults 编解码独立阅读状态 / 工作区 / 完整布局与窗口组
   DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等
   PDFFileMonitor.swift                    # 已打开 PDF 的外部改写监听与文件快照
   DocumentAnnotations.swift               # 高亮分组 / 缓存 / 导出 相关数据模型
   DocumentSearch.swift                    # PDF 全文匹配与 preview snippet 构造(DocumentSearchService)
-  WindowWorkspace.swift                   # 单窗口状态:tab 顺序、侧栏、搜索、分屏、焦点 pane
+  WindowWorkspace.swift                   # 窗口级工作区集合、chrome、关闭状态与跨工作区 MRU
+  ReaderLayout.swift                      # 具名工作区、分屏组、递归布局树与稳定 pane ID
+  OutlineLocationResolver.swift          # 根据阅读区顶部页内坐标定位当前章节
   OutlineExtractor.swift                  # PDFDocument.outlineRoot → [OutlineNode] 转换
   OutlineNode.swift                       # Outline 树节点数据结构
   ReaderState.swift                       # 阅读区 UI 状态(夜间、高亮模式、高亮颜色)
@@ -367,10 +386,13 @@ UI/TitlebarTabs/                          # 标题栏水平 tabs
   TitlebarTabItemView.swift               # 单个水平 tab 条目视图
 
 UI/CenterReader/                          # 中栏阅读区
-  ReaderWorkspaceViewController.swift     # 中栏 workspace:单 / 双 Reader 分屏 + 焦点 pane
+  ReaderWorkspaceViewController.swift     # 动态 Reader 生命周期、嵌套分屏、焦点与放大还原
+  ReaderSplitHostView.swift               # 局部分隔比例、最小尺寸与方向邻区几何
+  ReaderPageCounterView.swift             # 各区实际页序 / 双页范围与就地输入跳页
   FloatingOutlineViewController.swift     # 右栏隐藏时的 Notion 式目录 rail + hover / 高度拖拽 overlay
   ReaderViewController.swift              # 单 Reader:PDFView、find bar、高亮、全览 grid 等交互
-  ReaderReferencePreviewController.swift  # 内链预览与独立前进后退;Option-click / 当前预览 Jump 才真正跳转
+  ReaderReferencePreviewController.swift  # 可固定 / 调整大小的连续内链预览、独立历史与当前位置分屏
+  ReferencePreviewPageWindow.swift        # 初始一页、最多三页的邻页副本窗口
   ReaderAnnotationInteractionController.swift # 高亮 hit-test、hover 预览、菜单、评论面板与 pulse
   PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
   ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何
@@ -386,6 +408,12 @@ UI/RightOutline/                          # 右栏 outline / pages / search / an
 
 UI/Shared/                                # 跨栏复用视图
   SidebarMaterialView.swift               # 侧栏主题表面
+  WorkspaceSelectorView.swift             # 工作区创建 / 重命名 / 切换及 tab 移动菜单
+
+Features/Translation/                     # 选区翻译与译文注释
+  ReaderTranslationController.swift       # AppKit 翻译小窗与语言选择
+  AppleTranslationBridge.swift            # macOS 15+ SwiftUI TranslationSession 桥接
+  SelectionTranslation.swift              # 原选区绑定、异步请求校验与单次批注写入
 
 Features/Annotations/                     # 高亮批注功能域
   HighlightColor.swift                    # 高亮颜色枚举(pink / yellow / green)与相近色匹配
@@ -437,8 +465,11 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   CommandPaletteControllerTests.swift     # 命令面板网格、执行与二段式键处理
   RecentFilesPaletteStateTests.swift      # 启动器模型的过滤 / 多选
   RecentFilesPaletteControllerTests.swift # 启动器控制器交互
-  OpenTabsPaletteStateTests.swift         # show all tabs 预览目标与网格选中
-  OpenTabsPaletteControllerTests.swift    # show all tabs 鼠标 / 键盘切换交互
+  OpenTabsPaletteStateTests.swift         # MRU 初选 / 循环 / 冻结顺序
+  OpenTabsPaletteControllerTests.swift    # 列表键盘 / 松键确认 / 取消与分屏
+  WorkspaceLayoutStateTests.swift         # 工作区、嵌套布局、共享文档与持久化
+  WorkspaceWorkflowTests.swift            # 真实 PDF 四区阅读、切换与放大还原
+  SelectionTranslationTests.swift         # 翻译结果绑定、取消、重复写入与批注保存
   WindowChromeTests.swift                 # 窗口 chrome / 工具栏 / titlebar tabs 行为
 ```
 
@@ -458,6 +489,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 | M10–M10.13 体验扩展 | ✅ | Framing、连续阅读、PDF 库、热重载、切换提示、绿灯窗口、空白 tab、路径复制、浏览器式分屏、Go to Page 焦点等;开发 + 手测通过 |
 | M14 窗口工作流交互 | ✅ | PDF 跨已有窗口菜单 / 拖拽移动、热重载实时页码、左右 / 上下分屏、侧栏空白拖窗、左右物理 Command 数字键 |
 | M15 阅读聚焦 | ✅ | `F` 鼠标跟随聚焦、`Option+F` 窗口调节、Settings 默认宽高、双栏半页模式、单路径圆角遮罩与暗色增强 |
+| 阅读功能 71–83 | ✅ | 已确认范围完成;工作区 / 嵌套分屏 / 预览 / 翻译 / 导航 / 页码,846 项测试通过;72 暂缓,81 沿用现有能力;见 [完成记录](docs/archive/reader-workspaces-71-83-20260922.md) |
 
 已完成细项以 commit 历史、[CHANGELOG.md](CHANGELOG.md) 与 [docs/archive/](docs/archive/) 为准;活 [TASKS.md](TASKS.md) 只跟踪未完成项。
 

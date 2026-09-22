@@ -7,13 +7,30 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Appearance
 - Add Rosewash's curated presets for a total of 17 light and 28 dark themes, with independent selections and cycling through the current appearance's themes.
 - Customize PDF page and window/sidebar backgrounds separately for light and dark appearances in Settings. Save colors immediately, preserve them across theme changes, and reset each appearance to its selected theme's defaults.
-- Keep custom page text readable on light or dark paper, synchronize both readers, and use the window background around PDF pages in either appearance.
+- Keep custom page text readable on light or dark paper, synchronize all readers, and use the window background around PDF pages in either appearance.
+
+### Workspaces and comparison
+- Add named workspaces within each window, with create, rename, switch, and move-document actions in both tab layouts. Keep independent reading positions for the same PDF across workspaces while sharing annotations, saving, and undo.
+- Restore nested reader layouts, divider proportions, focused panes, and reading positions across workspace switches and relaunch. Keep closed window groups available in the recent-windows list.
+- Split the focused PDF right with `B` or below with `Shift+B`, supporting four panes and further splits when space permits. Use `Ctrl+H/J/K/L` for directional focus, `Cmd+W` to close only the focused pane, and `Cmd+T` to fill the reader with that pane or restore the layout. Move New Blank Tab to `Cmd+Option+T`.
+- Preserve split groups during ordinary tab switching. Option-clicking tabs and splitting from links or recent lists adds an independent pane without replacing existing content; cross-window comparison leaves the source view intact.
+- Replace the open-tabs overview with a compact MRU list spanning the current window's workspaces. Hold Control to cycle with Tab or Shift+Tab, release to select, or press Esc to cancel; arrow selection is also supported.
+- Add the recent-windows list on `W`, configurable right/below split shortcuts in all three document lists, and full PDF filename tooltips in both tab layouts. Ordinary opening reuses a tab within the active workspace.
 
 ### Reading
 - Keep the horizontal content range and reading anchor when sidebars open, close, or resize, including manual zoom with Lock enabled.
 - Persist Fit Text Width as an adaptive mode and refit on reading-area and page changes; restore the document’s saved scale on pages without text.
 - Keep horizontal tabs hidden when reopening only the outline after immersive mode, and restore tab visibility correctly after demo mode.
 - Add persistent Global Lock (`Shift+L`) for all windows and newly opened PDFs, preserving individual PDF lock states and excluding Book modes.
+- Make link previews resizable and pinnable, with continuous scrolling that starts from one copied page and retains at most three. Preserve internal links, target-column fitting, and independent viewport history. Option-click a link to split directly; Command-click navigates the source reader. Preview split actions use its current reading position.
+- Follow the chapter at the focused reader's top edge in both outlines, including same-page headings. `O` focuses the available outline search, with arrows, Enter, and Esc for navigation; manual browsing pauses automatic scrolling.
+- Fit the new page or spread width when switching display modes after manual zoom, preserving the live reading anchor. Match page-turn arrows to vertical or Book layouts and turn directly even while zoomed.
+- Show a physical page number or spread range in every pane, with an inline page-number field for jumping.
+
+### Translation
+- Add Apple selection translation on `T` for macOS 15 and later, with automatic source detection and a selectable target language defaulting to Simplified Chinese.
+- Write the result as a new highlight and translated comment attached to the original selection. Preserve existing annotations, reject stale requests, prevent duplicate writes, and use the shared undo and save workflow.
+- Validate translation state and annotation integration with controlled responses; live Apple translation and language-model download remain to be checked on device.
 
 ## [0.7.0] - 2026-09-19
 

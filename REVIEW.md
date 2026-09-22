@@ -14,6 +14,7 @@
 | 导航历史 / 阅读位边界（2026-08） | ✅ | pane-local `sessionID + ReadingPosition`；大纲/搜索/内链显式入栈；滚动与顺序翻页不灌栈 |
 | CI 侧栏 layout | ✅ | preferred widths 不被程序化 toggle 写坏 |
 | 搜索快照 / 主题并发 / OCR 移除（2026-08） | ✅ | 窗口级只读 `SearchSnapshot`；主题选择收进 `@MainActor ThemeManager`；扫描件不再走 OCR |
+| 工作区 / 嵌套分屏 / 阅读导航（2026-09-22） | ✅ | 71–83 已确认范围与 846 项测试见 [完成记录](docs/archive/reader-workspaces-71-83-20260922.md)；72 暂缓，Apple 实际翻译待实机验证 |
 
 细项与实现笔记见 archive 与 CHANGELOG。
 
@@ -24,15 +25,15 @@
 | # | 状态 | 问题 | 位置 | 影响 |
 |---|---|---|---|---|
 | S1 | [ ] | `AppDelegate` god object：菜单、share/export、open-URL、palette、config、`validateMenuItem` | `App/AppDelegate.swift` | 全局行为改动回归面大 |
-| S2 | ◐ | `DocumentStore` 仍承载 tab / split / annotation / undo / persistence；搜索已改窗口级显式快照 | `Core/DocumentStore.swift` | 非搜索职责的演进成本仍高 |
+| S2 | ◐ | `DocumentStore` 仍承载 workspace / tab / split / annotation / undo / persistence；搜索已改窗口级显式快照 | `Core/DocumentStore.swift` | 非搜索职责的演进成本仍高 |
 | S3 | ◐ | 批注交互已提取；缩放 / viewport / overview 仍是隐式状态机 | `UI/CenterReader/ReaderViewController.swift` | 剩余几何逻辑易回归、难单测 |
-| S4 | [ ] | 四个 palette 仍缺少共享 panel shell | `App/*PaletteController.swift` | panel 外观与基础键处理改动要同步多处 |
+| S4 | ◐ | 打开标签与最近窗口已共用紧凑 panel / row；各启动器仍未统一 panel shell | `App/*PaletteController.swift` | panel 外观与基础键处理改动仍要同步多处 |
 
 ### 2.2 性能
 
 | # | 状态 | 问题 | 位置 | 影响 |
 |---|---|---|---|---|
-| P1 | ◐ | workspace 一般 content 变更仍全量 JSON 写（LRU/debounce/readingPosition 跳过已做） | `DocumentStore` / `ReadingStateStore` | 多 tab 频繁内容变更时写放大 |
+| P1 | ◐ | workspace 与独立阅读状态仍保存全量快照；串行去重、debounce 与按 URL 的阅读状态 LRU 已做 | `DocumentStore` / `ReadingStateStore` | 多 tab / pane 频繁更新时仍有快照构建与写入成本 |
 
 ### 2.3 正确性 / 工程
 

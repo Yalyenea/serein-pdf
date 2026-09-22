@@ -12,28 +12,30 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 
 ## Features
 
-- Tabbed documents with switchable layouts: left vertical sidebar or adaptive titlebar tabs
+- Tabbed documents with switchable layouts: left vertical sidebar or adaptive titlebar tabs, with the full PDF filename available on hover
+- Named workspaces within each window, with a compact selector for creating, renaming, and switching workspaces; move PDFs between them from either tab context menu. Each workspace retains its documents and reading layouts, including after its window closes.
 - Click a starting point, then Shift-click an endpoint to select text, including across pages and from line-boundary whitespace. Further Shift-clicks adjust the endpoint; an ordinary click starts a new selection.
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
-- `cmd+t` creates an untitled blank tab for a clean reading workspace; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
+- `cmd+option+t` creates an untitled blank tab; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
 - Right pane hosts **Outline + Pages + Search + Annotations**; Annotations is a full-height compact comment feed with inline editing and keyboard navigation, while Outline adds heading filtering, wrapped titles, no horizontal panning, and one-click tree expand/collapse
 - When the Outline pane is not active (right sidebar closed, or open on Pages / Search / Annotations), a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as a translucent, theme-tinted overlay sized to its content, long outlines scroll within the configured maximum height, dragging either vertical edge adjusts that limit symmetrically around its center, and PDFs without an outline show no rail
+- Both outlines follow the chapter at the focused reader's top edge, including headings on the same page. They expand ancestors and keep the current heading visible, pausing while you browse or filter. Press `o` to focus the visible outline's search, use arrows to choose a heading, then `enter` to jump or `esc` to cancel.
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
-- Find bar supports `This Document` / `All Open`, match-case `Aa`, and whole-word `Word`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs open in the current window, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
-- Reader navigation keeps the compact Vim-style layer: `c` toggles continuity within the current Single Page, Two-Up, or Book layout, `j` / `k` page turns, `ctrl+d` / `ctrl+u` half-page scroll, and `g` / `shift+g` jump to the real document edges; Book modes also accept `h` / `←` and `l` / `→` for previous / next spread; `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document Outline, Pages, link, Search, and annotation jumps; clicking an internal link previews the destination in place, while Option-click jumps and stays centered
+- Find bar supports `This Document` / `All Open`, match-case `Aa`, and whole-word `Word`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs in the active workspace, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
+- Reader navigation keeps the compact Vim-style layer: `c` toggles continuity within the current Single Page, Two-Up, or Book layout, `j` / `k` and `↓` / `↑` turn pages in vertical modes, `h` / `l` and `←` / `→` turn Book spreads, `ctrl+d` / `ctrl+u` scroll half a page, and `g` / `shift+g` jump to the document edges. Page-turn keys turn directly even when zoomed in. `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document jumps.
 - Cursor reading focus (`f`) dims the page outside a compact rounded band without blocking PDF interaction; `option+f` adjusts the current window between Page, Column (half-page), and Custom widths plus a configurable height
 - Horizontal pan lock (`l`) preserves the current X position and blocks left/right panning and magnification gestures. Zoom commands and page/text fitting remain available and lock the resulting X position; vertical scroll and page turns stay free.
 - Fit Text Width (`cmd+option+0`) zooms the main reader to the current page or spread's text bounds with 12pt side margins, preserving vertical reading position. The fit mode persists and adapts when the reading area or current page changes; pages without text retain their saved scale. `cmd+0` fits the page width.
-- Compare split in the center reader (`cmd+ctrl+\`) opens a compact candidate chooser and can arrange the two independent readers left/right or top/bottom from the View menu
-- Split follows browser-style tab pairs: a normal click restores the bound pair or leaves it hidden, while `option+click` / `option+enter` edits the focused pane or creates a current + target pair from single-pane mode
-- New windows always start empty and in single-pane mode; relaunch restore also starts single-pane, split stays an explicit in-session toggle
-- Multi-window workspaces (`cmd+shift+n`) with per-window tab sets, sidebar, search, and recently-closed state
-- Opening a PDF that is already open focuses the existing tab and window instead of creating a duplicate tab
+- Split the focused reader right with `b` or below with `shift+b`. Repeat to build nested layouts, including four panes; new splits stop when the available area is too small. Each pane scrolls and zooms independently, while views of the same PDF share annotations and undo.
+- `ctrl+h/j/k/l` moves focus left/down/up/right; `cmd+t` temporarily fills the reading area with the focused pane and restores the saved layout on a second press. Drag dividers to adjust local proportions. `cmd+ctrl+\` also remains available to open an empty comparison pane or collapse the active split group.
+- Ordinary tab switching leaves a split group intact and restores it when you return to a member. Option-clicking a tab, splitting a link, or opening from a recent list always adds a pane without replacing an existing reader.
+- New windows (`cmd+shift+n`) start empty. Workspace switches and relaunch restore the saved split trees, proportions, focus, and independent reading positions. Closed window groups remain available in the recent-windows list.
+- Opening a PDF reuses its tab in the active workspace. The same file can also belong to other workspaces or windows, with independent reading positions and shared PDF annotations.
 - Window commands can merge every Serein window, move the current PDF into a new or existing window, and vertical/titlebar tabs can be dragged directly between windows
 - Main windows participate in native macOS green-button window management: Full Screen, Move & Resize, Fill, Center, and Fill & Arrange on supported macOS versions
-- Show All Tabs (`ctrl+tab`) opens a lightweight text overview for every tab in the current window; `option+enter` / `option+click` uses the same split-edit behavior as the tab strip
+- `ctrl+tab` opens a compact MRU list across every workspace in the current window. Hold Control and press Tab or Shift+Tab to cycle, use arrows to choose, and release Control to open the selection in its owning workspace. Esc cancels; the list order stays fixed during the gesture.
 - Continuous reading groups from the tab context menu let selected PDFs read as one ordered flow; page turns cross PDF boundaries and the right Outline groups every PDF together
-- `cmd+w` closes all selected tabs when multiple PDF tabs are selected; otherwise it closes the current tab/window as usual
+- `cmd+w` closes only the focused pane while split; in a single pane, it closes selected tabs or the current tab/window
 - `cmd+shift+w` closes the current window while preserving the normal close confirmation for unsaved annotations
 - Opening many PDFs stays lazy: tabs are created from URL/title first, while PDFKit documents, outlines, annotation caches, and search caches load only when a reader or sidebar actually needs them
 - Clean PDFs hot-reload when LaTeX, Typst, or another external compiler rewrites the open file in place or replaces it atomically, preserving the live page; PDFs with unsaved Serein annotations are left untouched
@@ -41,10 +43,11 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - PDF Library folders can be configured in Settings; `cmd+k`, then `cmd+o` opens a two-pane library browser with an All tab, per-library tabs, folder scopes, indexed search, and direct PDF opening
 - Compact Command Palette (`cmd+k`) lists current-context actions in a two-column grid, runs the highlighted command with `enter` or a click, and keeps the existing `cmd+k` two-stage shortcuts available inside the visible panel
 - Compact recent-files launcher (`cmd+shift+space`) hides traffic lights, supports title/path filtering, `space` multi-select, `enter` open, and `esc` close even after the reader takes key focus
+- The recent-windows list (`w`) can activate an open window or restore a closed one. In the recent-files, recent-windows, and open-tabs lists, `option+enter` adds a pane on the right and `option+shift+enter` adds one below; these bindings are configurable. Splitting a PDF from another window preserves its source view. Recent-file splits require a single selection.
 - Recent history keeps up to 200 entries and automatically prunes missing file links every 24 hours
 - Opened PDFs are also noted to macOS native recent documents, and the active PDF URL is exposed to the window for system window/document integration
 - Optional recent PDFs footer in the left sidebar (toggle in Settings) for one-click reopen
-- Empty windows auto-collapse the outline pane so the reader owns the window; opening the first document restores it unless you explicitly toggled it while empty. The tabs pane gains a `Documents` section header and, in empty windows, moves Recent PDFs up under it as the quick-reopen entry; the right sidebar shows a single centered "No Document Open" state instead of a ready-but-empty panel.
+- Empty workspaces auto-collapse the outline pane; opening the first document restores it unless you explicitly toggled it while empty. The tabs pane keeps the workspace selector and moves Recent PDFs up as the quick-reopen entry; the right sidebar shows a single centered "No Document Open" state.
 - Blank space in the document sidebar drags the current window while tabs, close buttons, scrolling, and the divider keep their own interactions
 - Swap left and right sidebars on the fly (`cmd+shift+x`) or via Settings
 - Settings General can edit the default left and right sidebar widths; the legacy opacity key remains config-only for compatibility
@@ -63,11 +66,12 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
 - Underline workflow (`u` to underline) shares the compact mode, comment, undo, save, sidebar, and export pipeline
 - Strikethrough uses the same annotation pipeline with the plain `s` shortcut
+- Select text and press `t` for Apple translation in a compact window. The source language is detected automatically; the target defaults to Simplified Chinese and can be changed. Add the result as a new highlight with a translated comment, preserving existing annotations and the original selection even if you switch readers. A result is added only once and uses the normal undo and save workflow. Translation requires macOS 15 or later.
 - Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
 - While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets; `Export All Open Highlights…` groups the current window's annotated PDFs by document and page
 - Highlights, underlines, and strikethroughs with comments preview on hover (delayed, suppressed when the same item is selected in the Annotations pane). Each multiline comment has one compact color dot that sits in nearby whitespace instead of covering following text; identical comments in older Serein groups are consolidated on open. Clicking the icon or preview edits in the same 6pt-corner card, preserving its width and attachment corner. A 150ms pointer grace period lets you move into the card; editing stays open when the pointer leaves. Double-clicking the annotation, `m`, and the context menu also open the editor. The card keeps short comments compact, grows for longer text, and shows `Save ⌘↩` at the bottom right. Esc cancels without a visible footer hint. The card follows the current theme. The Annotations list is a compact snippet + comment feed with a quiet selection; Markdown export remains page-grouped as snippet + comment
-- Internal-link previews fill a 6pt-corner panel without a header. Text positions near the destination identify two-column content and zoom to the target column, including equation numbers even when body lines are staggered or formulas contain short lines and superscripts; single-column content, spanning headings, and uncertain layouts fit the page’s full text width by default with 12pt side margins. Pages without extractable text keep full-page width. Click links inside the preview to replace its page in place; Back/Forward arrows in the upper-left corner restore previous preview pages, scroll positions, and zoom. Following a new link after going back clears the forward branch. Preview history is separate from the main reader and clears when closed. The preview copies one page at a time and suppresses comment popups while preserving the source PDF and annotations. Option-click in the reader, or the upper-right Jump icon for the current preview target, navigates the main reader and records its history.
+- Clicking an internal link opens a resizable preview that can be pinned. It starts with one copied page, loads adjacent pages while scrolling, and keeps at most three copies. Text geometry fits the target column or the page's text width with 12pt side margins; pages without text keep full-page width. Follow links inside the preview and use its independent Back/Forward history to restore page, viewport, and zoom. The source PDF and annotations remain unchanged. Option-click a reader link to split directly; Command-click jumps in the current reader. The preview's split button or `b` / `shift+b` opens its current position to the right / below, while Jump navigates the source reader.
 - Settings includes a searchable, grouped Shortcuts page with capture, clear, reset-all, conflict rejection, and separate keycaps for built-in two-stage shortcuts
 - Settings keeps one compact 680 pt width across General, Library, and Shortcuts; page height may adapt, while shortcut rows keep defaults and actions aligned without horizontal scrolling
 - Find bar (`cmd+f` for current document, `cmd+shift+f` for all open PDFs) preloads selected PDF text when available; Esc clears search and exits
@@ -81,13 +85,15 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Immersive mode (`cmd+ctrl+l`) opens both sidebars only when none are visible; otherwise it hides both sidebars and tab chrome while keeping the current window size. Reopening only the outline keeps horizontal tabs hidden; showing the document sidebar or explicitly switching tab presentation restores tab chrome.
 - Global Lock (`shift+l`) locks horizontal panning and magnification gestures across all windows and newly opened PDFs. It persists across restarts, preserves individual PDF lock states, and excludes Book modes. Turn it off to restore each PDF’s own lock; individual `l` toggles are disabled while Global Lock is on.
 - Opening, closing, or resizing sidebars preserves the reading anchor. Fit modes follow the available reading area; manual zoom scales proportionally with its width to preserve the horizontal content range, including while Lock is enabled.
-- Per-PDF memory: scale, page, and horizontal pan lock persist across launches. Each PDF keeps its own lock state; sidebar widths are window-level runtime state seeded from layout defaults.
+- Switching display modes after manual zoom fits the new page or spread width while preserving the live reading anchor.
+- Each pane shows its physical page number or spread range and total at the bottom right. Click the counter to enter a page number; Enter jumps and Esc cancels in place.
+- Each workspace and pane retains its own scale, page, and horizontal pan lock across launches. Window sidebars retain their widths separately from the reading splits.
 - Switching PDFs briefly shows the current file name at the top of the reader, so fast tab changes stay oriented without adding permanent chrome
 - Config-driven defaults via `~/Library/Application Support/Serein/config.toml`
 
 ## Requirements
 
-- macOS 14+
+- macOS 14+; selection translation requires macOS 15+
 - Swift 6.1 (Xcode 15.3+ toolchain)
 - `just` task runner (`brew install just`)
 - `duti` for setting the default PDF handler (`brew install duti`)
@@ -188,7 +194,19 @@ open_shortcut_settings = "none" # cmd+k, cmd+s is a built-in chord
 share_document = "none"         # cmd+k, cmd+e is a built-in chord
 export_clean_copy = "none"
 add_comment = "m"
-new_blank_tab = "command+t"
+translate_selection = "t"
+quick_outline = "o"
+new_blank_tab = "command+option+t"
+toggle_pane_zoom = "command+t"
+split_current_pdf_right = "b"
+split_current_pdf_down = "shift+b"
+focus_pane_left = "control+h"
+focus_pane_down = "control+j"
+focus_pane_up = "control+k"
+focus_pane_right = "control+l"
+show_recent_windows = "w"
+palette_split_right = "option+return"
+palette_split_down = "option+shift+return"
 copy_current_pdf_path = "command+shift+c"
 copy_current_page_as_image = "command+option+c"
 send_context_to_codex = "command+control+c"
@@ -206,9 +224,8 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 # ...
 ```
 
-- Layout widths seed new and restored windows. Dragging a sidebar changes the
-  current window runtime width, switching PDFs does not resize panes, and
-  restart goes back to the config defaults.
+- Layout widths seed new windows. Dragged sidebar widths belong to the window
+  and restore with it; each reading split saves its own divider proportion.
 - `mode = "system"` follows the current macOS appearance.
 - `light_theme` and `dark_theme` are selected independently, so you can pair
   any available light preset with any dark preset. `cmd+k`, then `cmd+t`
@@ -221,7 +238,8 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
   travel with the panes so your narrow tabs pane stays narrow after the swap.
 - Empty windows and blank tabs show a large, faint serif italic `Serein` wordmark
   that scales with the reader area and follows the theme. It disappears when a
-  PDF or loading error is displayed. Empty windows hide the titlebar tab strip.
+  PDF or loading error is displayed. The workspace selector stays available
+  in an empty workspace, including in titlebar-tab mode.
 - `fit_width_on_open` switches fit-to-width on/off for **all currently open
   documents** as soon as you toggle it — any document you've manually zoomed
   stays pinned at your scale.
@@ -252,6 +270,8 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Underline selection / enter underline mode | `u` |
 | Strikethrough selection / enter strikethrough mode | `s` |
 | Add or edit comment | `m` |
+| Translate selected text | `t` |
+| Focus outline search | `o` |
 | Exit annotation mode | `esc` |
 | Temporarily toggle light / dark mode without changing settings | `i` |
 | Switch current theme | `cmd+k`, then `cmd+t` |
@@ -268,7 +288,7 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Send current PDF to Codex | `ctrl+cmd+shift+c` |
 | Open PDFs / folders (scan PDFs) | `cmd+o` |
 | Open from PDF Library | `cmd+k`, then `cmd+o` |
-| New blank tab | `cmd+t` |
+| New blank tab | `cmd+option+t` |
 | Fit width / height | `cmd+0` / `cmd+9` |
 | Fit text width | `cmd+option+0` |
 | Toggle cursor reading focus | `f` |
@@ -285,17 +305,21 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Highlight color in highlight mode | `1` / `2` / `3` (pink / yellow / green) |
 | Reveal current PDF in Finder | `cmd+r` |
 | Half-page down / up | `ctrl+d` / `ctrl+u` |
+| Previous / next page in vertical modes | `k` / `j` or `↑` / `↓` |
+| Previous / next Book spread | `h` / `l` or `←` / `→` |
 | Jump to first / last page | `g` / `shift+g` |
-| Close selected tabs, or current tab/window | `cmd+w` |
+| Close focused pane; in single-pane mode, close tabs | `cmd+w` |
 | Close current window | `cmd+shift+w` |
 | Reopen closed tab | `cmd+shift+t` |
-| Show all tabs | `ctrl+tab` |
+| Cycle MRU tabs across workspaces | Hold `ctrl`, then `tab` / `shift+tab`; release to open |
 | Toggle continuous reading for selected tabs | Tab context menu |
 | New window | `cmd+shift+n` |
 | Merge all windows | `cmd+k`, then `cmd+m` |
 | Move current PDF to new window | `cmd+k`, then `cmd+n` |
 | Move current PDF to an existing window | Window menu, or drag its tab into that window |
 | Quick recent-files launcher | `cmd+shift+space` |
+| Recent windows | `w` |
+| Split selected recent file / window / tab right or below | `option+enter` / `option+shift+enter` |
 | Toggle sidebar tabs / titlebar tabs | `cmd+shift+1` / `cmd+shift+2` |
 | Toggle left / right sidebar | `cmd+b` / `cmd+option+b` |
 | Toggle demo mode | `cmd+l` |
@@ -304,7 +328,10 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Demo: return to pointer, then exit | `esc` |
 | Toggle immersive mode | `cmd+ctrl+l` |
 | Toggle compare split | `cmd+ctrl+\` |
-| Choose left/right or top/bottom split | View menu |
+| Split focused reader right / below | `b` / `shift+b` |
+| Focus reader left / down / up / right | `ctrl+h` / `ctrl+j` / `ctrl+k` / `ctrl+l` |
+| Fill reading area with focused pane / restore layout | `cmd+t` |
+| Split internal link directly / jump in current reader | `option+click` / `cmd+click` |
 | Toggle right sidebar: Outline / Pages | `cmd+shift+l` |
 | Swap left and right sidebars | `cmd+shift+x` |
 | All-pages overview | `cmd+shift+o` |
