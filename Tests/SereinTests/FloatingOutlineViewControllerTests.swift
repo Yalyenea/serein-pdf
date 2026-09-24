@@ -294,8 +294,8 @@ struct FloatingOutlineViewControllerTests {
         store.updateAppConfiguration(configuration)
         #expect(controller.preferredSize.height == naturalHeight)
 
-        controller.setMaximumAvailableHeight(140)
-        #expect(controller.preferredSize.height == 140)
+        controller.setMaximumAvailableHeight(naturalHeight - 20)
+        #expect(controller.preferredSize.height == naturalHeight - 20)
 
         controller.setMaximumAvailableHeight(700)
         #expect(controller.preferredSize.height == naturalHeight)
@@ -413,12 +413,12 @@ struct FloatingOutlineViewControllerTests {
             windowID: store.defaultWindowID
         )
         controller.loadViewIfNeeded()
-        controller.setMaximumAvailableHeight(800)
+        controller.setMaximumAvailableHeight(760)
         controller.testingSetHovered(true)
 
         controller.testingResizeFromTop(by: 300)
 
-        #expect(controller.preferredSize.height == 800)
+        #expect(controller.preferredSize.height == 760)
     }
 
     @Test

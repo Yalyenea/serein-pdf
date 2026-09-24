@@ -555,7 +555,7 @@ final class ReaderViewController: NSViewController {
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
     private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
-    private let panLockIndicator = NSTextField(labelWithString: "H-lock · L")
+    private let panLockIndicator = NSTextField(labelWithString: "L")
     private let switchTitleToastView = NSView()
     private let switchTitleToastLabel = NSTextField(labelWithString: "")
     private lazy var annotationInteraction = ReaderAnnotationInteractionController(
@@ -4180,9 +4180,11 @@ final class ReaderViewController: NSViewController {
     private func updatePanLockIndicator() {
         panLockIndicator.isHidden = !isHorizontalPanLocked
         let global = documentStore.appConfiguration.reader.globalHorizontalPanLock
-        panLockIndicator.stringValue = global ? "Global Lock · ⇧L" : "H-lock · L"
         panLockIndicator.toolTip = global ? "Global Lock is enabled for all PDFs" : "Horizontal pan lock for this PDF"
-        panLockIndicator.textColor = NightModeStyle.secondaryTextColor
+        panLockIndicator.setAccessibilityLabel(panLockIndicator.toolTip)
+        panLockIndicator.effectiveAppearance.performAsCurrentDrawingAppearance {
+            panLockIndicator.textColor = NightModeStyle.secondaryTextColor
+        }
     }
 
     private func applyThemeFilter() {

@@ -20,6 +20,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add the recent-windows list on `W`, configurable right/below split shortcuts in all three document lists, and full PDF filename tooltips in both tab layouts. Ordinary opening reuses a tab within the active workspace.
 
 ### Reading
+- Simplify sidebar and floating outlines to a single search-and-collapse row, removing the title, page counter, and footer spacing.
+- Show only `L` in the upper-right corner of locked readers, retaining the lock scope in its tooltip.
 - Add Seamless Pages (`Cmd+Option+P`) in View and Settings to remove page gaps while preserving the reading position and zoom.
 - Clamp scrolling to the first and last paper edges while preserving native trackpad momentum in continuous layouts.
 - Add Scroll Speed in Settings (0.5×–3.0×, default 1.0×), applying the same multiplier during direct scrolling and momentum for consistent deceleration.
