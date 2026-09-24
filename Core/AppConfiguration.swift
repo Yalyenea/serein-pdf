@@ -202,6 +202,7 @@ struct AppConfiguration: Equatable, Sendable {
         var fitWidthOnOpen: Bool
         var showPageCounter = true
         var seamlessPages = false
+        var scrollSpeed: CGFloat = 1
         var globalHorizontalPanLock = false
         var readingFocus: ReadingFocusSettings
 
@@ -603,6 +604,7 @@ enum AppConfigurationError: LocalizedError {
     case invalidStringArray(String)
     case invalidAnnotationSavePolicy(String)
     case invalidWidth(String)
+    case invalidScrollSpeed(String)
     case invalidOpacity(String)
     case invalidFloatingOutlineHeight(String)
 
@@ -634,6 +636,8 @@ enum AppConfigurationError: LocalizedError {
             "Invalid string array in config: \(value)"
         case let .invalidAnnotationSavePolicy(value):
             "Invalid annotation auto-save policy in config: \(value)"
+        case let .invalidScrollSpeed(value):
+            "Invalid scroll speed '\(value)'. Expected a number from 0.5 to 3."
         case let .invalidWidth(value):
             "Invalid sidebar width in config: \(value)"
         case let .invalidOpacity(value):
@@ -663,6 +667,7 @@ default_display_mode = "single_page_continuous"
 fit_width_on_open = false
 show_page_counter = true
 seamless_pages = false
+scroll_speed = 1.0
 global_horizontal_pan_lock = false
 reading_focus_width = "page"
 reading_focus_custom_width = 0.72
@@ -818,6 +823,7 @@ default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
 fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
 show_page_counter = \(configuration.reader.showPageCounter ? "true" : "false")
 seamless_pages = \(configuration.reader.seamlessPages ? "true" : "false")
+scroll_speed = \(serializedDecimal(configuration.reader.scrollSpeed))
 global_horizontal_pan_lock = \(configuration.reader.globalHorizontalPanLock ? "true" : "false")
 reading_focus_width = "\(configuration.reader.readingFocus.widthMode.rawValue)"
 reading_focus_custom_width = \(serializedDecimal(configuration.reader.readingFocus.customWidthRatio))
@@ -969,6 +975,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "fit_width_on_open",
         "show_page_counter",
         "seamless_pages",
+        "scroll_speed",
         "global_horizontal_pan_lock",
         "reading_focus_width",
         "reading_focus_custom_width",
@@ -1258,6 +1265,11 @@ struct AppConfigurationParser {
             configuration.reader.showPageCounter = try parseBool(rawValue)
         case ("reader", "seamless_pages"):
             configuration.reader.seamlessPages = try parseBool(rawValue)
+        case ("reader", "scroll_speed"):
+            guard let speed = Double(rawValue), speed.isFinite, (0.5...3).contains(speed) else {
+                throw AppConfigurationError.invalidScrollSpeed(rawValue)
+            }
+            configuration.reader.scrollSpeed = CGFloat(speed)
         case ("shortcuts", "toggle_seamless_pages"):
             try applyShortcut(rawValue, command: .toggleSeamlessPages, to: &configuration)
         case ("reader", "reading_focus_width"):

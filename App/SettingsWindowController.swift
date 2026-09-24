@@ -277,6 +277,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         action: nil
     )
     private let autoSavePopUp = NSPopUpButton()
+    private let scrollSpeedSlider = NSSlider(value: 1, minValue: 0.5, maxValue: 3, target: nil, action: nil)
+    private let scrollSpeedValueLabel = NSTextField(labelWithString: "1.0×")
     private let seamlessPagesCheckbox = NSButton(
         checkboxWithTitle: "Remove gaps between pages", target: nil, action: nil
     )
@@ -442,6 +444,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
         showPageCounterCheckbox.state = configuration.reader.showPageCounter ? .on : .off
         seamlessPagesCheckbox.state = configuration.reader.seamlessPages ? .on : .off
+        scrollSpeedSlider.doubleValue = Double(configuration.reader.scrollSpeed)
+        scrollSpeedValueLabel.stringValue = String(format: "%.1f×", scrollSpeedSlider.doubleValue)
         applyReadingFocusControls(configuration.reader.readingFocus)
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
@@ -513,6 +517,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
         updatedConfiguration.reader.showPageCounter = showPageCounterCheckbox.state == .on
         updatedConfiguration.reader.seamlessPages = seamlessPagesCheckbox.state == .on
+        updatedConfiguration.reader.scrollSpeed = CGFloat((scrollSpeedSlider.doubleValue * 10).rounded() / 10)
+        scrollSpeedValueLabel.stringValue = String(format: "%.1f×", Double(updatedConfiguration.reader.scrollSpeed))
         updatedConfiguration.reader.readingFocus = ReadingFocusSettings(
             widthMode: focusWidthMode,
             customWidthRatio: normalizedReadingFocusCustomWidth(),
@@ -647,6 +653,16 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         seamlessPagesCheckbox.controlSize = .small
         seamlessPagesCheckbox.target = self
         seamlessPagesCheckbox.action = #selector(handleGeneralControlChanged(_:))
+        scrollSpeedSlider.translatesAutoresizingMaskIntoConstraints = false
+        scrollSpeedSlider.identifier = NSUserInterfaceItemIdentifier("scrollSpeedSlider")
+        scrollSpeedSlider.controlSize = .small
+        scrollSpeedSlider.isContinuous = true
+        scrollSpeedSlider.target = self
+        scrollSpeedSlider.action = #selector(handleGeneralControlChanged(_:))
+        scrollSpeedSlider.toolTip = "Base scrolling speed in continuous page layouts. Default: 1.0×."
+        scrollSpeedValueLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        scrollSpeedValueLabel.textColor = .secondaryLabelColor
+        scrollSpeedValueLabel.identifier = NSUserInterfaceItemIdentifier("scrollSpeedValueLabel")
 
         autoSavePopUp.translatesAutoresizingMaskIntoConstraints = false
         autoSavePopUp.controlSize = .small
@@ -746,6 +762,9 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Page Counter"), showPageCounterCheckbox],
             [makeRowLabel("Seamless Pages"), seamlessPagesCheckbox],
+            [makeRowLabel("Scroll Speed"), makeReadingFocusSliderStack(
+                leadingControl: nil, slider: scrollSpeedSlider, valueLabel: scrollSpeedValueLabel
+            )],
             [makeRowLabel("Focus Width"), readingFocusWidthStack],
             [makeRowLabel("Focus Height"), readingFocusHeightStack],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],

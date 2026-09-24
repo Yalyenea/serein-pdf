@@ -2101,6 +2101,30 @@ struct WindowChromeTests {
     }
 
     @Test
+    func settingsScrollSpeedAppliesImmediatelyAndSyncsAcrossAppearances() throws {
+        _ = NSApplication.shared
+        var published: AppConfiguration?
+        let controller = SettingsWindowController(configuration: .default) { published = $0 }
+        defer { controller.close() }
+        controller.showWindow(nil)
+        let content = try #require(controller.window?.contentView)
+        let slider = try #require(findView(identifier: "scrollSpeedSlider", in: content) as? NSSlider)
+        let label = try #require(findView(identifier: "scrollSpeedValueLabel", in: content) as? NSTextField)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            controller.window?.appearance = NSAppearance(named: appearance)
+            slider.doubleValue = 1.7
+            NSApp.sendAction(try #require(slider.action), to: slider.target, from: slider)
+            #expect(published?.reader.scrollSpeed == 1.7)
+            #expect(label.stringValue == "1.7×")
+            controller.sync(configuration: .default)
+            #expect(slider.doubleValue == 1)
+            #expect(label.stringValue == "1.0×")
+            content.layoutSubtreeIfNeeded()
+            #expect(content.bounds.contains(slider.convert(slider.bounds, to: content)))
+        }
+    }
+
+    @Test
     func settingsWindowCanDisableCodexIntegration() throws {
         _ = NSApplication.shared
         var publishedConfigurations: [AppConfiguration] = []

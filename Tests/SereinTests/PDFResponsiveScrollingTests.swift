@@ -7,7 +7,66 @@ import Testing
 @MainActor
 struct PDFResponsiveScrollingTests {
     @Test(arguments: [ReaderDisplayMode.singlePageContinuous, .twoUpContinuous])
-    func continuousReadingStopsOnFingerLiftAndAcceptsNextGesture(mode: ReaderDisplayMode) throws {
+    func continuousScrollDoesNotDriftAfterMomentumEnds(mode: ReaderDisplayMode) throws {
+        let (controller, reader, store, sessionID) = try makePagedReader(mode: mode)
+        defer { controller.close() }
+        let scroll = try #require(reader.pdfView.subviews.compactMap { $0 as? NSScrollView }.first)
+        let clip = scroll.contentView
+        for scale: CGFloat in [1, 1.37] {
+            store.setScaleMode(.manual, scaleFactor: scale, for: sessionID)
+            settle(controller.window)
+            for direction: Int32 in [-1, 1] {
+                clip.scroll(to: NSPoint(x: clip.bounds.minX, y: 2200))
+                scroll.reflectScrolledClipView(clip)
+                settle(controller.window)
+                for step in rapidFlick {
+                    let event = try makeEvent(step, direction: direction)
+                    scroll.scrollWheel(with: try #require(reader.testingRewriteScrollEvent(event)))
+                    if !event.momentumPhase.contains(.ended) {
+                        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.008))
+                    }
+                }
+                let stoppedOrigin = clip.bounds.origin
+                for _ in 0..<30 {
+                    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+                    #expect(abs(clip.bounds.minY - stoppedOrigin.y) < 0.01)
+                }
+            }
+        }
+    }
+
+    @Test(arguments: [ReaderDisplayMode.singlePageContinuous, .twoUpContinuous])
+    func continuousScrollSpeedKeepsNativeResponseAndScalesOnlyDistance(mode: ReaderDisplayMode) throws {
+        let (controller, reader, store, _) = try makePagedReader(mode: mode)
+        defer { controller.close() }
+        for speed: CGFloat in [1, 0.5, 1.7, 3] {
+            var configuration = store.appConfiguration
+            configuration.reader.scrollSpeed = speed
+            store.updateAppConfiguration(configuration)
+            for step in rapidFlick {
+                let source = try makeEvent(step, direction: -1)
+                let cg = try #require(source.cgEvent?.copy())
+                cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
+                let event = try #require(NSEvent(cgEvent: cg))
+                let routed = try #require(reader.testingRewriteScrollEvent(event))
+                if speed == 1 { #expect(routed === event) }
+                #expect(abs(routed.scrollingDeltaY - event.scrollingDeltaY * speed) <= 1)
+                #expect(routed.phase == event.phase)
+                #expect(routed.momentumPhase == event.momentumPhase)
+                #expect(routed.timestamp == event.timestamp)
+                #expect(routed.hasPreciseScrollingDeltas)
+                #expect(routed.scrollingDeltaX == event.scrollingDeltaX)
+                #expect(reader.testingRewriteScrollEvent(event, pointerIsOverPDF: false) === event)
+            }
+            let ended = try makeEvent(WheelStep(delta: 0, phase: 4, expectedPhase: .ended), direction: -1)
+            #expect(reader.testingRewriteScrollEvent(ended) === ended)
+            let momentumEnded = try makeEvent(WheelStep(delta: 0, momentum: 3, expectedMomentum: .ended), direction: -1)
+            #expect(reader.testingRewriteScrollEvent(momentumEnded) === momentumEnded)
+        }
+    }
+
+    @Test(arguments: [ReaderDisplayMode.singlePageContinuous, .twoUpContinuous])
+    func continuousReadingPreservesMomentumAndAcceptsNextGesture(mode: ReaderDisplayMode) throws {
         let (controller, reader, _, _) = try makePagedReader(mode: mode)
         defer { controller.close() }
         let scroll = try #require(reader.pdfView.subviews.compactMap { $0 as? NSScrollView }.first)
@@ -19,19 +78,15 @@ struct PDFResponsiveScrollingTests {
         var liftedY: CGFloat?
         for step in rapidFlick {
             let event = try makeEvent(step, direction: -1)
-            let routed = reader.testingRewriteScrollEvent(event)
-            if event.momentumPhase.isEmpty {
-                #expect(routed === event)
-                scroll.scrollWheel(with: try #require(routed))
-                settle(controller.window)
-                if event.phase.contains(.ended) { liftedY = clip.bounds.minY }
-            } else {
-                #expect(routed == nil)
-                #expect(clip.bounds.minY == liftedY)
-            }
+            let routed = try #require(reader.testingRewriteScrollEvent(event))
+            #expect(routed === event)
+            scroll.scrollWheel(with: routed)
+            if event.phase.contains(.ended) { liftedY = clip.bounds.minY }
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.008))
         }
-        let stoppedY = try #require(liftedY)
-        #expect(stoppedY > startY + 100)
+        #expect(try #require(liftedY) > startY + 100)
+        let stoppedY = clip.bounds.minY
+        #expect(stoppedY > (try #require(liftedY)) + 10)
         settle(controller.window)
         #expect(abs(clip.bounds.minY - stoppedY) < 0.01)
         for step in inwardFlick {
@@ -301,6 +356,7 @@ struct PDFResponsiveScrollingTests {
             wheel1: step.delta * direction, wheel2: 0, wheel3: 0
         ))
         cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: step.phase)
+        cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
         cg.flags = []
         cg.setIntegerValueField(.scrollWheelEventMomentumPhase, value: step.momentum)
         let event = try #require(NSEvent(cgEvent: cg))

@@ -2066,14 +2066,6 @@ final class ReaderViewController: NSViewController {
 
     private func rewriteScrollEventIfNeeded(_ event: NSEvent, pointerIsOverPDF: Bool) -> NSEvent? {
         let displayMode = targetSession()?.displayMode
-        // Continuous reading stops when fingers lift. Direct gestures and
-        // ordinary wheel input retain their original deltas and acceleration.
-        if pointerIsOverPDF,
-           displayMode == .singlePageContinuous || displayMode == .twoUpContinuous,
-           !event.momentumPhase.isEmpty,
-           event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
-            return nil
-        }
         if handleVerticalPageScroll(event, pointerIsOverPDF: pointerIsOverPDF) {
             return nil
         }
@@ -2127,6 +2119,7 @@ final class ReaderViewController: NSViewController {
             return nil
         }
 
+        let event = scaledContinuousScrollEvent(event, pointerIsOverPDF: pointerIsOverPDF)
         guard shouldLockHorizontalPan else { return event }
         guard pointerIsOverPDF else { return event }
 
@@ -2144,6 +2137,31 @@ final class ReaderViewController: NSViewController {
         }
         guard ScrollWheelHorizontalStripper.hasHorizontalComponent(event) else { return event }
         return ScrollWheelHorizontalStripper.verticalOnly(from: event) ?? event
+    }
+
+    private func scaledContinuousScrollEvent(_ event: NSEvent, pointerIsOverPDF: Bool) -> NSEvent {
+        let factor = documentStore.appConfiguration.reader.scrollSpeed
+        let mode = targetSession()?.displayMode
+        guard factor != 1, pointerIsOverPDF,
+              mode == .singlePageContinuous || mode == .twoUpContinuous,
+              event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+              !event.phase.contains(.cancelled),
+              abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX),
+              event.scrollingDeltaY != 0 else { return event }
+        guard let copy = event.cgEvent?.copy() else { return event }
+        // Use the same factor for direct input and momentum so lifting fingers
+        // does not change speed. Preserve the native phase and timing fields.
+        // Snapshot every representation before writing: CGEvent setters can
+        // update related fields. Write precise point deltas last.
+        let fields: [CGEventField] = [
+            .scrollWheelEventDeltaAxis1, .scrollWheelEventFixedPtDeltaAxis1,
+            .scrollWheelEventPointDeltaAxis1
+        ]
+        let values = fields.map { copy.getDoubleValueField($0) * Double(factor) }
+        for (field, value) in zip(fields, values) {
+            copy.setDoubleValueField(field, value: value)
+        }
+        return NSEvent(cgEvent: copy)!
     }
 
     /// Keep PDFKit's wheel-driven page transition out of discrete layouts.

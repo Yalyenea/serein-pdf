@@ -21,7 +21,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Reading
 - Add Seamless Pages (`Cmd+Option+P`) in View and Settings to remove page gaps while preserving the reading position and zoom.
-- Clamp scrolling to the first and last paper edges, and stop continuous trackpad scrolling when fingers lift.
+- Clamp scrolling to the first and last paper edges while preserving native trackpad momentum in continuous layouts.
+- Add Scroll Speed in Settings (0.5×–3.0×, default 1.0×), applying the same multiplier during direct scrolling and momentum for consistent deceleration.
 - Print the focused PDF with `Cmd+P` or File > Print using the native macOS panel. Include unsaved annotations without applying reading themes, and expose the command in the palette and shortcut settings.
 - Keep arrow navigation in focused sidebar lists; route page-turn arrows only from the PDF reader.
 - Preserve native Control editing shortcuts in palettes, Settings, and sheets while a split reader is open; restore reader menu shortcuts when returning to its window.

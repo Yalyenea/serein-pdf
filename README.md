@@ -90,6 +90,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Each workspace and pane retains its own scale, page, and horizontal pan lock across launches. Window sidebars retain their widths separately from the reading splits.
 - Switching PDFs briefly shows the current file name at the top of the reader, so fast tab changes stay oriented without adding permanent chrome
 - Config-driven defaults via `~/Library/Application Support/Serein/config.toml`
+- Continuous layouts preserve native trackpad momentum. Settings → General → Reading → Scroll Speed adjusts direct scrolling and momentum together from 0.5× to 3.0× (default 1.0×).
 
 ## Requirements
 
@@ -154,6 +155,7 @@ fit_width_on_open = false
 global_horizontal_pan_lock = false
 show_page_counter = true
 seamless_pages = false             # remove gaps between pages
+scroll_speed = 1.0                 # continuous scrolling multiplier, 0.5–3.0
 reading_focus_width = "page"       # or "column" / "custom"
 reading_focus_custom_width = 0.72  # 0.3–1.0, used by "custom"
 reading_focus_height = 96          # 48–240 pt

@@ -3,6 +3,22 @@ import XCTest
 @testable import Serein
 
 final class AppConfigurationTests: XCTestCase {
+    func testScrollSpeedPersistenceAndValidation() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let store = try AppConfigurationStore(fileURL: rootURL.appendingPathComponent("config.toml"))
+            var configuration = try store.load()
+            XCTAssertEqual(configuration.reader.scrollSpeed, 1)
+            for speed: CGFloat in [0.5, 1.7, 3] {
+                configuration.reader.scrollSpeed = speed
+                try store.save(configuration)
+                XCTAssertEqual(try store.load(), configuration)
+            }
+        }
+        for invalid in ["0", "-1", "3.1", "nan", "inf", "fast"] {
+            XCTAssertThrowsError(try AppConfigurationParser().parse("[reader]\nscroll_speed = \(invalid)"))
+        }
+    }
+
     func testSeamlessPagesAndShortcutPersist() throws {
         try withTemporaryConfigRoot(self) { rootURL in
             let store = try AppConfigurationStore(fileURL: rootURL.appendingPathComponent("config.toml"))
