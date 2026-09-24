@@ -280,6 +280,7 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Open Library settings | `cmd+k`, then `cmd+l` |
 | Open Shortcuts settings | `cmd+k`, then `cmd+s` |
 | Save annotations | `cmd+s` |
+| Print current PDF | `cmd+p` |
 | Share current PDF | `cmd+k`, then `cmd+e` |
 | Export clean copy | configurable, default none |
 | Copy highlights as Markdown | `cmd+shift+e` |

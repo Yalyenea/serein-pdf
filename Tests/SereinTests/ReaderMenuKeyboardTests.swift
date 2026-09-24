@@ -4,6 +4,40 @@ import XCTest
 
 @MainActor
 final class ReaderMenuKeyboardTests: XCTestCase {
+    func testPrintMenuTracksCurrentPDFAndBlankTab() throws {
+        let app = NSApplication.shared
+        let previousMenu = app.mainMenu
+        let previousWindowsMenu = app.windowsMenu
+        let store = makeIsolatedDocumentStore()
+        let reader = MainWindowController(documentStore: store)
+        let delegate = AppDelegate()
+        let window = try XCTUnwrap(reader.window)
+        delegate.installMenuForTesting(documentStore: store, controllers: [reader])
+        window.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        defer {
+            NotificationCenter.default.removeObserver(delegate)
+            reader.close()
+            app.mainMenu = previousMenu
+            app.windowsMenu = previousWindowsMenu
+        }
+        let item = try XCTUnwrap(find(.printDocument, in: XCTUnwrap(app.mainMenu)))
+        XCTAssertFalse(delegate.validateMenuItem(item))
+
+        let url = try TestPDFFixtures.makeLabeledPDF(named: "print-menu", pageSizes: [NSSize(width: 612, height: 792)])
+        let session = try store.open(documentAt: url, in: reader.windowID)
+        _ = try store.pdfDocument(for: session.id)
+        XCTAssertTrue(delegate.validateMenuItem(item))
+        XCTAssertEqual(item.keyEquivalent, "p")
+        XCTAssertEqual(item.keyEquivalentModifierMask, [.command])
+        store.setDirty(true, for: session.id)
+        XCTAssertTrue(delegate.validateMenuItem(item))
+        store.setDirty(false, for: session.id)
+
+        _ = store.newBlankTab(in: reader.windowID)
+        XCTAssertFalse(delegate.validateMenuItem(item))
+    }
+
     func testAuxiliaryEditorsKeepControlBindingsWithSplitReaderOpen() throws {
         guard ProcessInfo.processInfo.environment["SEREIN_KEYBOARD_TEST_CHILD"] == "1" else {
             try runInIsolatedApplication()

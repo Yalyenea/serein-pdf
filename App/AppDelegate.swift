@@ -442,6 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .openShortcutSettings: { [weak self] in self?.openShortcutSettings(nil) },
             .saveAnnotations: { [weak self] in self?.saveAnnotations(nil) },
             .shareDocument: { [weak self] in self?.shareDocument(nil) },
+            .printDocument: { [weak self] in self?.printDocument(nil) },
             .exportCleanCopy: { [weak self] in self?.exportCleanCopy(nil) },
             .copyHighlightsMarkdown: { [weak self] in self?.copyHighlightsMarkdown(nil) },
             .copyCurrentPDFPath: { [weak self] in self?.copyCurrentPDFPath(nil) },
@@ -848,6 +849,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .exportCleanCopy,
             action: #selector(exportCleanCopy(_:))
         )
+        let printDocumentItem = makeConfiguredMenuItem(
+            title: ShortcutCommand.printDocument.menuTitle,
+            command: .printDocument,
+            action: #selector(printDocument(_:))
+        )
         let exportHighlightsItem = NSMenuItem(
             title: "Export Highlights…",
             action: #selector(exportHighlights(_:)),
@@ -905,6 +911,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             exportHighlightsItem,
             exportAllOpenHighlightsItem,
             copyHighlightsMarkdownItem,
+            .separator(),
+            printDocumentItem,
             .separator(),
             closeItem,
             closeWindowItem,
@@ -2070,6 +2078,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
+    private func printDocument(_ sender: Any?) {
+        guard let controller = mainWindowController,
+              let window = controller.window,
+              window.attachedSheet == nil,
+              let session = documentStore.activeSession(in: controller.windowID),
+              session.isBlank == false else { return }
+
+        do {
+            let document = try documentStore.pdfDocument(for: session.id)
+            guard document.isLocked == false, document.allowsPrinting, document.pageCount > 0 else { return }
+            guard let operation = document.printOperation(
+                for: NSPrintInfo.shared.copy() as? NSPrintInfo,
+                scalingMode: .pageScaleDownToFit,
+                autoRotate: true
+            ) else {
+                throw CocoaError(.featureUnsupported)
+            }
+            operation.jobTitle = session.title
+            operation.showsPrintPanel = true
+            operation.showsProgressPanel = true
+            operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.messageText = "Unable to print PDF"
+            alert.beginSheetModal(for: window)
+        }
+    }
+
+    @objc
     private func shareDocument(_ sender: Any?) {
         guard let context = currentPDFShareContext() else { return }
         guard saveBeforeSharingIfNeeded(context.session) else { return }
@@ -3018,6 +3055,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession?.isDirty == true
         case #selector(shareDocument(_:)), #selector(exportCleanCopy(_:)):
             return activePDFSession != nil
+        case #selector(printDocument(_:)):
+            guard controller?.window?.attachedSheet == nil,
+                  let session = activePDFSession,
+                  let document = documentStore.loadedPDFDocument(for: session.id) else { return false }
+            return document.isLocked == false && document.allowsPrinting && document.pageCount > 0
         case #selector(exportHighlights(_:)), #selector(copyHighlightsMarkdown(_:)):
             return activePDFSession.map(mayHaveHighlights) == true
         case #selector(exportAllOpenHighlights(_:)):

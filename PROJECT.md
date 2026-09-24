@@ -166,6 +166,7 @@ flowchart LR
 - `Esc`:退出批注模式 / 关闭 Find bar / 退出全览;演示时先将笔或激光切回指针,再按退出演示
 - `D`:删除鼠标所在批注(多行整组删除)
 - `Cmd+S`:写回源 PDF
+- `Cmd+P`:通过系统打印面板打印焦点阅读区的 PDF，包含未保存批注，保留 PDF 原色；空白、锁定或禁止打印时禁用。快捷键配置为 `print_document`。
 - `Cmd+K` → `Cmd+E`:系统 Share 当前 PDF,可选 Original / Clean Copy / Highlights
 - `File > Export Clean Copy…`:导出移除可见用户批注、保留链接与表单控件的 PDF 副本
 - `File > Export Highlights…` / `Export All Open Highlights…`:导出当前 PDF 或当前窗口全部已打开 PDF 的批注;汇总格式按 Document → Page 分组

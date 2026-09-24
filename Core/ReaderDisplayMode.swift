@@ -110,6 +110,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case openShortcutSettings = "open_shortcut_settings"
     case saveAnnotations = "save_annotations"
     case shareDocument = "share_document"
+    case printDocument = "print_document"
     case exportCleanCopy = "export_clean_copy"
     case copyHighlightsMarkdown = "copy_highlights_markdown"
     case copyCurrentPDFPath = "copy_current_pdf_path"
@@ -221,6 +222,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             "Save Annotations"
         case .shareDocument:
             "Share…"
+        case .printDocument:
+            "Print…"
         case .exportCleanCopy:
             "Export Clean Copy…"
         case .copyHighlightsMarkdown:
@@ -448,7 +451,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
              .findNextMatch, .findPreviousMatch, .gotoPage, .quickOutline:
             .navigation
         case .openLibraryPDF, .refreshLibraryIndex, .openLibrarySettings,
-             .openShortcutSettings, .shareDocument, .exportCleanCopy,
+             .openShortcutSettings, .shareDocument, .printDocument, .exportCleanCopy,
              .copyCurrentPDFPath, .copyCurrentPageAsImage, .sendContextToCodex,
              .sendCurrentPDFToCodex, .showRecentFilesPalette, .openContainingFolder,
              .reopenLastClosed, .newBlankTab:

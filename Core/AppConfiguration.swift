@@ -306,6 +306,7 @@ struct AppConfiguration: Equatable, Sendable {
             .toggleHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: []),
             .toggleGlobalHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: [.shift]),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
+            .printDocument: KeyboardShortcut(key: "p", modifiers: [.command]),
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
             .copyCurrentPDFPath: KeyboardShortcut(key: "c", modifiers: [.command, .shift]),
             .copyCurrentPageAsImage: KeyboardShortcut(key: "c", modifiers: [.command, .option]),
@@ -719,6 +720,7 @@ open_shortcut_settings = "none"
 save_annotations = "command+s"
 # Cmd+K, Cmd+E is a built-in chord.
 share_document = "none"
+print_document = "command+p"
 export_clean_copy = "none"
 copy_highlights_markdown = "command+shift+e"
 copy_current_pdf_path = "command+shift+c"
@@ -864,6 +866,7 @@ open_library_settings = "\(serializedShortcut(.openLibrarySettings, configuratio
 open_shortcut_settings = "\(serializedShortcut(.openShortcutSettings, configuration: configuration))"
 save_annotations = "\(serializedShortcut(.saveAnnotations, configuration: configuration))"
 share_document = "\(serializedShortcut(.shareDocument, configuration: configuration))"
+print_document = "\(serializedShortcut(.printDocument, configuration: configuration))"
 export_clean_copy = "\(serializedShortcut(.exportCleanCopy, configuration: configuration))"
 copy_highlights_markdown = "\(serializedShortcut(.copyHighlightsMarkdown, configuration: configuration))"
 copy_current_pdf_path = "\(serializedShortcut(.copyCurrentPDFPath, configuration: configuration))"
@@ -1004,6 +1007,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "open_shortcut_settings",
         "save_annotations",
         "share_document",
+        "print_document",
         "export_clean_copy",
         "copy_highlights_markdown",
         "copy_current_pdf_path",
@@ -1216,6 +1220,8 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .saveAnnotations, to: &configuration)
         case ("shortcuts", "share_document"):
             try applyShortcut(rawValue, command: .shareDocument, to: &configuration)
+        case ("shortcuts", "print_document"):
+            try applyShortcut(rawValue, command: .printDocument, to: &configuration)
         case ("shortcuts", "export_clean_copy"):
             try applyShortcut(rawValue, command: .exportCleanCopy, to: &configuration)
         case ("shortcuts", "copy_highlights_markdown"):
