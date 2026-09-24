@@ -2522,6 +2522,9 @@ final class ReaderViewController: NSViewController {
         if syncDisplayedStateWithoutRefreshIfPossible() == false {
             refreshDisplayedDocument()
         }
+        if notification.documentStoreChange.contains(.appearance) {
+            syncPageCounter()
+        }
         if notification.documentStoreChange.contains(.annotations) {
             for page in pdfView.visiblePages {
                 pdfView.annotationsChanged(on: page)
@@ -3363,6 +3366,11 @@ final class ReaderViewController: NSViewController {
 
     private func syncPageCounter() {
         let counter = pdfContainerView.pageCounterView
+        guard documentStore.appConfiguration.reader.showPageCounter else {
+            counter.cancelEditing(restoreFocus: true)
+            counter.isHidden = true
+            return
+        }
         guard let document = pdfView.document,
               let session = targetSession(),
               session.id == displayedSessionID,

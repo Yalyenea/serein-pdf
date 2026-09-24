@@ -3,8 +3,12 @@ import AppKit
 /// A pane-local physical page counter with an inline jump field.
 final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
     var onBeginEditing: (() -> Void)?
+    var onEndEditing: (() -> Void)?
     var onGoToPage: ((Int) -> Bool)?
     var onReturnFocus: (() -> Void)?
+    var drawsBackground = true {
+        didSet { refreshThemeAppearance() }
+    }
 
     private let button = NSButton(title: "", target: nil, action: nil)
     private let field = NSTextField(string: "")
@@ -52,6 +56,11 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshThemeAppearance()
+    }
+
     override var intrinsicContentSize: NSSize {
         let width = NSString(string: displayText).size(withAttributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
@@ -59,7 +68,7 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         return NSSize(width: max(60, ceil(width) + 16), height: 24)
     }
 
-    func update(pageIndex: Int, pageCount: Int, displayMode: ReaderDisplayMode) {
+    func update(pageIndex: Int, pageCount: Int, displayMode: ReaderDisplayMode, displayPrefix: String = "") {
         guard pageCount > 0 else {
             cancelEditing(restoreFocus: false)
             self.pageCount = 0
@@ -72,7 +81,7 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         let pages = range.lowerBound == range.upperBound
             ? "\(range.lowerBound)"
             : "\(range.lowerBound)–\(range.upperBound)"
-        let text = "\(pages) / \(pageCount)"
+        let text = "\(displayPrefix)\(pages) / \(pageCount)"
         guard displayText != text else { return }
         displayText = text
         button.setAccessibilityValue(displayText)
@@ -91,12 +100,20 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
     }
 
     func refreshThemeAppearance() {
-        layer?.backgroundColor = NightModeStyle.readerBackdropColor.withAlphaComponent(0.92).cgColor
-        field.textColor = NightModeStyle.primaryTextColor
-        button.attributedTitle = NSAttributedString(string: displayText, attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
-            .foregroundColor: NightModeStyle.secondaryTextColor,
-        ])
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = drawsBackground
+                ? NightModeStyle.readerBackdropColor.withAlphaComponent(0.92).cgColor
+                : NSColor.clear.cgColor
+            field.textColor = NightModeStyle.primaryTextColor
+            if let editor = field.currentEditor() as? NSTextView {
+                editor.textColor = NightModeStyle.primaryTextColor
+                editor.insertionPointColor = NightModeStyle.primaryTextColor
+            }
+            button.attributedTitle = NSAttributedString(string: displayText, attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: NightModeStyle.secondaryTextColor,
+            ])
+        }
     }
 
     @objc func beginEditing() {
@@ -106,7 +123,6 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         field.stringValue = "\(pageIndex + 1)"
         button.isHidden = true
         field.isHidden = false
-        window?.makeFirstResponder(field)
         field.selectText(nil)
     }
 
@@ -123,8 +139,12 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
     func cancelEditing(restoreFocus: Bool = false) {
         guard isEditing else { return }
         isEditing = false
+        if let editor = field.currentEditor(), window?.firstResponder === editor {
+            window?.makeFirstResponder(nil)
+        }
         field.isHidden = true
         button.isHidden = false
+        onEndEditing?()
         if restoreFocus { onReturnFocus?() }
     }
 
@@ -133,7 +153,7 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         case #selector(NSResponder.insertNewline(_:)):
             if !submitPageNumber(field.stringValue) {
                 NSSound.beep()
-                field.selectText(nil)
+                textView.selectAll(nil)
             }
             return true
         case #selector(NSResponder.cancelOperation(_:)):
@@ -146,5 +166,9 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
 
     func controlTextDidEndEditing(_ notification: Notification) {
         cancelEditing()
+    }
+
+    func controlTextDidBeginEditing(_ notification: Notification) {
+        refreshThemeAppearance()
     }
 }

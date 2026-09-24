@@ -6,6 +6,49 @@ import Testing
 @MainActor
 struct OutlineViewControllerTests {
     @Test
+    func footerJumpUsesBoundDocumentAndHidingCounterReclaimsSpace() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "footer-jump"))
+        let controller = OutlineViewController(documentStore: store, windowID: store.defaultWindowID)
+        controller.loadViewIfNeeded()
+        let pdfView = PDFView()
+        pdfView.document = try store.pdfDocument(for: session.id)
+        controller.bind(to: pdfView)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 280, height: 400),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView = controller.view
+        window.contentView?.layoutSubtreeIfNeeded()
+        let counter = try #require(findView(identifier: "readerPageCounter", in: controller.view) as? ReaderPageCounterView)
+        let scroll = try #require(outlineScrollView(in: controller.view))
+        let visibleHeight = scroll.frame.height
+        var request: OutlineNavigationRequest?
+        controller.onNavigationRequested = { request = $0 }
+        let button = try #require(counter.subviews.compactMap { $0 as? NSButton }.first)
+        button.performClick(nil)
+        let editor = try #require(window.firstResponder as? NSTextView)
+        editor.insertText("2", replacementRange: editor.selectedRange())
+        editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        #expect(request?.sessionID == session.id)
+        #expect(request?.position.pageIndex == 1)
+
+        button.performClick(nil)
+        #expect(counter.isEditing)
+        var configuration = store.appConfiguration
+        configuration.reader.showPageCounter = false
+        store.updateAppConfiguration(configuration)
+        controller.view.layoutSubtreeIfNeeded()
+        #expect(counter.isHidden)
+        #expect(!counter.isEditing)
+        #expect(scroll.frame.height > visibleHeight)
+        configuration.reader.showPageCounter = true
+        store.updateAppConfiguration(configuration)
+        #expect(!counter.isHidden)
+    }
+
+    @Test
     func currentHeadingFollowsSamePageScrollWithoutReloading() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(documentAt: makeTemporaryPDFWithOutline(
@@ -569,6 +612,10 @@ struct OutlineViewControllerTests {
         #expect(rows[0].node.sourceSessionID == sessions[0].id)
         #expect(rows[3].node.isDocumentRoot)
         #expect(rows[3].node.sourceSessionID == sessions[1].id)
+        let counter = try #require(findView(identifier: "readerPageCounter", in: controller.view) as? ReaderPageCounterView)
+        let activeID = try #require(store.activeSessionID(in: store.defaultWindowID))
+        let activeIndex = try #require(sessions.firstIndex { $0.id == activeID })
+        #expect(counter.displayText.hasPrefix("\(activeIndex + 1) / 2 · "))
     }
 
     @Test

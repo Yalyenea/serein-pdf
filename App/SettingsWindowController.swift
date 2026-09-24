@@ -2,7 +2,7 @@ import AppKit
 
 private enum SettingsWindowMetrics {
     static let contentWidth: CGFloat = 680
-    static let generalContentSize = NSSize(width: contentWidth, height: 704)
+    static let generalContentSize = NSSize(width: contentWidth, height: 732)
     static let libraryContentSize = NSSize(width: contentWidth, height: 484)
     static let shortcutsContentSize = NSSize(width: contentWidth, height: 620)
     static let pageSegmentWidth: CGFloat = 88
@@ -271,6 +271,11 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         target: nil,
         action: nil
     )
+    private let showPageCounterCheckbox = NSButton(
+        checkboxWithTitle: "Show at bottom right",
+        target: nil,
+        action: nil
+    )
     private let autoSavePopUp = NSPopUpButton()
     private let swapSidebarsCheckbox = NSButton(
         checkboxWithTitle: "Swap left and right sidebars",
@@ -432,6 +437,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         applyBackgroundControls()
         selectItem(in: displayModePopUp, matching: configuration.reader.defaultDisplayMode.rawValue)
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
+        showPageCounterCheckbox.state = configuration.reader.showPageCounter ? .on : .off
         applyReadingFocusControls(configuration.reader.readingFocus)
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
@@ -501,6 +507,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         updatedConfiguration.appearance.darkTheme = darkTheme
         updatedConfiguration.reader.defaultDisplayMode = displayMode
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
+        updatedConfiguration.reader.showPageCounter = showPageCounterCheckbox.state == .on
         updatedConfiguration.reader.readingFocus = ReadingFocusSettings(
             widthMode: focusWidthMode,
             customWidthRatio: normalizedReadingFocusCustomWidth(),
@@ -625,6 +632,12 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         fitWidthCheckbox.target = self
         fitWidthCheckbox.action = #selector(handleGeneralControlChanged(_:))
 
+        showPageCounterCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        showPageCounterCheckbox.identifier = NSUserInterfaceItemIdentifier("showPageCounterCheckbox")
+        showPageCounterCheckbox.controlSize = .small
+        showPageCounterCheckbox.target = self
+        showPageCounterCheckbox.action = #selector(handleGeneralControlChanged(_:))
+
         autoSavePopUp.translatesAutoresizingMaskIntoConstraints = false
         autoSavePopUp.controlSize = .small
         autoSavePopUp.target = self
@@ -721,6 +734,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         let readingGrid = makeSettingsGrid([
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
+            [makeRowLabel("Page Counter"), showPageCounterCheckbox],
             [makeRowLabel("Focus Width"), readingFocusWidthStack],
             [makeRowLabel("Focus Height"), readingFocusHeightStack],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],

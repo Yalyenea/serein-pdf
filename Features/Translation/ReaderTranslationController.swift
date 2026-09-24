@@ -11,14 +11,15 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
     private var languageTask: Task<Void, Never>?
     private var languages: [Locale.Language] = []
     private let content = NSView()
-    private let sourceLabel = NSTextField(wrappingLabelWithString: "")
-    private let contextLabel = NSTextField(labelWithString: "")
-    private let targetLabel = NSTextField(labelWithString: "Auto →")
     private let languagePicker = NSPopUpButton(frame: .zero, pullsDown: false)
     private let output = NSTextView()
+    private let scroll = NSScrollView()
     private let statusLabel = NSTextField(labelWithString: "")
-    private let addButton = NSButton(title: "Add Annotation", target: nil, action: nil)
+    private let addButton = NSButton(title: "", target: nil, action: nil)
     private let retryButton = NSButton(title: "Retry", target: nil, action: nil)
+    private var textHeight: NSLayoutConstraint!
+    private static let width = AnnotationPreviewView.contentWidth
+    private static let maximumTextHeight: CGFloat = 240
 
     init(documentStore: DocumentStore) {
         self.documentStore = documentStore
@@ -35,23 +36,23 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
         close()
         self.translation = translation
         translation.onChange = { [weak self] in self?.updateResult() }
-        sourceLabel.stringValue = translation.sourceText
-        contextLabel.stringValue = "\(translation.documentTitle) · Page \(translation.pageNumber)"
-        contextLabel.toolTip = translation.documentTitle
         output.string = ""
         languages = [translation.request.targetLanguage]
         updateLanguagePicker()
 
         let panel = TranslationPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 410, height: 310),
-            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 70),
+            styleMask: .borderless,
             backing: .buffered, defer: false
         )
         panel.title = "Translate"
         panel.isReleasedWhenClosed = false
         panel.isRestorable = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate = true
-        panel.minSize = NSSize(width: 330, height: 250)
         panel.delegate = self
         panel.onCancel = { [weak self] in self?.close() }
         panel.collectionBehavior = .fullScreenAuxiliary
@@ -67,15 +68,24 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
             loadSupportedLanguages(for: translation)
         } else {
             panel.contentView = content
-            statusLabel.stringValue = "Translation requires macOS 15 or later."
+            output.string = "Translation requires macOS 15 or later."
             languagePicker.isEnabled = false
             addButton.isEnabled = false
             retryButton.isHidden = true
+            resizeToContent()
         }
+
+        panel.contentView?.wantsLayer = true
+        panel.contentView?.layer?.cornerRadius = 6
+        panel.contentView?.layer?.masksToBounds = true
 
         owner.addChildWindow(panel, ordered: .above)
         NotificationCenter.default.addObserver(
             self, selector: #selector(ownerWillClose(_:)), name: NSWindow.willCloseNotification, object: owner
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(applicationDidResignActive(_:)),
+            name: NSApplication.didResignActiveNotification, object: NSApp
         )
         refreshThemeAppearance()
         position(panel, near: selection, in: source)
@@ -84,6 +94,11 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
     }
 
     func close() {
+        guard let panel else { return }
+        self.panel = nil
+        let owner = panel.parent
+        let restoreFocus = panel.isKeyWindow && NSApp.isActive
+        panel.delegate = nil
         languageTask?.cancel()
         languageTask = nil
         translation?.onChange = nil
@@ -92,45 +107,50 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
         bridge?.cancel()
         bridge = nil
         NotificationCenter.default.removeObserver(self)
-        guard let panel else { return }
-        self.panel = nil
-        panel.delegate = nil
-        panel.parent?.removeChildWindow(panel)
+        owner?.removeChildWindow(panel)
         panel.close()
+        if restoreFocus, owner?.isVisible == true { owner?.makeKey() }
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        // The system may present a language-download sheet inside the translation window.
+        guard panel?.attachedSheet == nil else { return }
+        close()
     }
 
     func windowWillClose(_ notification: Notification) { close() }
     @objc private func ownerWillClose(_ notification: Notification) { close() }
+    @objc private func applicationDidResignActive(_ notification: Notification) { close() }
 
     func refreshThemeAppearance() {
         guard let panel else { return }
         panel.appearance = panel.parent?.effectiveAppearance ?? NSApp.effectiveAppearance
         panel.effectiveAppearance.performAsCurrentDrawingAppearance {
-            panel.backgroundColor = NightModeStyle.paneBackgroundColor
             content.layer?.backgroundColor = NightModeStyle.paneBackgroundColor.cgColor
-            sourceLabel.textColor = NightModeStyle.secondaryTextColor
-            contextLabel.textColor = NightModeStyle.secondaryTextColor
-            targetLabel.textColor = NightModeStyle.secondaryTextColor
+            content.layer?.borderColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.16).cgColor
             statusLabel.textColor = NightModeStyle.secondaryTextColor
             output.textColor = NightModeStyle.primaryTextColor
             output.insertionPointColor = NightModeStyle.primaryTextColor
+            languagePicker.contentTintColor = NightModeStyle.secondaryTextColor
+            addButton.contentTintColor = NightModeStyle.primaryTextColor
+            retryButton.contentTintColor = NightModeStyle.primaryTextColor
         }
     }
 
     private func configureContent() {
         content.wantsLayer = true
-        sourceLabel.maximumNumberOfLines = 3
-        sourceLabel.font = .systemFont(ofSize: 11.5)
-        sourceLabel.lineBreakMode = .byTruncatingTail
-        contextLabel.font = .systemFont(ofSize: 10.5)
-        contextLabel.lineBreakMode = .byTruncatingMiddle
-        targetLabel.font = .systemFont(ofSize: 11)
+        content.layer?.cornerRadius = 6
+        content.layer?.masksToBounds = true
+        content.layer?.borderWidth = 1
         statusLabel.font = .systemFont(ofSize: 10.5)
         statusLabel.lineBreakMode = .byTruncatingTail
         languagePicker.controlSize = .small
+        languagePicker.font = .systemFont(ofSize: 10.5)
+        languagePicker.isBordered = false
         languagePicker.target = self
         languagePicker.action = #selector(changeLanguage(_:))
         languagePicker.setAccessibilityLabel("Translation target language")
+        languagePicker.toolTip = "Translation target language"
 
         output.isEditable = false
         output.isSelectable = true
@@ -144,47 +164,52 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
         output.textContainer?.widthTracksTextView = true
         output.autoresizingMask = [.width]
         output.setAccessibilityLabel("Translation")
-        let scroll = NSScrollView()
         scroll.documentView = output
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
+        scroll.hasHorizontalScroller = false
         scroll.borderType = .noBorder
 
         for button in [addButton, retryButton] {
             button.bezelStyle = .recessed
+            button.isBordered = false
             button.controlSize = .small
+            button.font = .systemFont(ofSize: 10.5, weight: .medium)
             button.target = self
         }
         addButton.action = #selector(addAnnotation(_:))
+        addButton.imagePosition = .imageOnly
+        addButton.image = NSImage(systemSymbolName: "plus.circle", accessibilityDescription: "Add Annotation")
+        addButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        addButton.toolTip = "Add Annotation"
+        addButton.setAccessibilityLabel("Add Annotation")
         retryButton.action = #selector(retry(_:))
-        let header = NSStackView(views: [targetLabel, languagePicker])
-        header.spacing = 6
-        let footer = NSStackView(views: [statusLabel, retryButton, addButton])
-        footer.spacing = 8
-        statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        for view in [contextLabel, header, sourceLabel, scroll, footer] {
+        let actions = NSStackView(views: [retryButton, addButton])
+        actions.spacing = 8
+        for view in [scroll, languagePicker, actions, statusLabel] {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
         }
+        textHeight = scroll.heightAnchor.constraint(equalToConstant: 20)
         NSLayoutConstraint.activate([
-            contextLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
-            contextLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
-            contextLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
-            header.topAnchor.constraint(equalTo: contextLabel.bottomAnchor, constant: 8),
-            header.leadingAnchor.constraint(equalTo: contextLabel.leadingAnchor),
-            header.trailingAnchor.constraint(lessThanOrEqualTo: contextLabel.trailingAnchor),
-            sourceLabel.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 9),
-            sourceLabel.leadingAnchor.constraint(equalTo: contextLabel.leadingAnchor),
-            sourceLabel.trailingAnchor.constraint(equalTo: contextLabel.trailingAnchor),
-            sourceLabel.heightAnchor.constraint(lessThanOrEqualToConstant: 46),
-            scroll.topAnchor.constraint(equalTo: sourceLabel.bottomAnchor, constant: 12),
-            scroll.leadingAnchor.constraint(equalTo: contextLabel.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: contextLabel.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -10),
-            footer.leadingAnchor.constraint(equalTo: contextLabel.leadingAnchor),
-            footer.trailingAnchor.constraint(equalTo: contextLabel.trailingAnchor),
-            footer.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -10),
+            scroll.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
+            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
+            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
+            textHeight,
+            addButton.widthAnchor.constraint(equalToConstant: 22),
+            addButton.heightAnchor.constraint(equalToConstant: 22),
+            languagePicker.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 8),
+            languagePicker.leadingAnchor.constraint(equalTo: scroll.leadingAnchor, constant: -3),
+            languagePicker.widthAnchor.constraint(lessThanOrEqualToConstant: 150),
+            languagePicker.heightAnchor.constraint(equalToConstant: 22),
+            actions.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            actions.centerYAnchor.constraint(equalTo: languagePicker.centerYAnchor),
+            actions.leadingAnchor.constraint(greaterThanOrEqualTo: languagePicker.trailingAnchor, constant: 8),
+            statusLabel.topAnchor.constraint(equalTo: languagePicker.bottomAnchor, constant: 3),
+            statusLabel.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            statusLabel.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
         ])
     }
 
@@ -192,22 +217,47 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
         guard let translation else { return }
         retryButton.isHidden = true
         addButton.isEnabled = false
-        addButton.title = translation.addedGroupID == nil ? "Add Annotation" : "Added"
+        let added = translation.addedGroupID != nil
+        let label = added ? "Annotation Added" : "Add Annotation"
+        addButton.image = NSImage(systemSymbolName: added ? "checkmark.circle" : "plus.circle", accessibilityDescription: label)
+        addButton.toolTip = label
+        addButton.setAccessibilityLabel(label)
+        statusLabel.stringValue = ""
+        statusLabel.toolTip = nil
         switch translation.state {
         case .translating:
-            output.string = ""
-            statusLabel.stringValue = "Translating…"
+            output.string = "Translating…"
         case let .translated(text):
             output.string = text
-            statusLabel.stringValue = translation.addedGroupID == nil ? "" : "Added to PDF"
             addButton.isEnabled = translation.addedGroupID == nil
         case let .failed(message):
             output.string = message
-            statusLabel.stringValue = "Translation failed"
             retryButton.isHidden = false
         case .cancelled:
             break
         }
+        output.scrollToBeginningOfDocument(nil)
+        resizeToContent()
+    }
+
+    private func resizeToContent() {
+        guard let panel, let container = output.textContainer, let layout = output.layoutManager else { return }
+        let width = Self.width - 28
+        output.setFrameSize(NSSize(width: width, height: max(output.frame.height, 20)))
+        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        layout.ensureLayout(for: container)
+        let height = max(20, ceil(layout.usedRect(for: container).height))
+        textHeight.constant = min(height, Self.maximumTextHeight)
+        statusLabel.isHidden = statusLabel.stringValue.isEmpty
+        let statusHeight: CGFloat = statusLabel.isHidden ? 0 : 18
+        let size = NSSize(width: Self.width, height: 12 + textHeight.constant + 8 + 22 + 8 + statusHeight)
+        var frame = NSRect(x: panel.frame.minX, y: panel.frame.maxY - size.height, width: size.width, height: size.height)
+        if let screen = panel.screen ?? panel.parent?.screen {
+            frame.origin.y = max(frame.minY, screen.visibleFrame.minY + 8)
+        }
+        panel.setFrame(frame, display: true)
+        content.layoutSubtreeIfNeeded()
+        output.setFrameSize(NSSize(width: width, height: height))
     }
 
     @available(macOS 15.0, *)
@@ -261,6 +311,7 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
             statusLabel.stringValue = error.localizedDescription
             statusLabel.toolTip = error.localizedDescription
             addButton.isEnabled = false
+            resizeToContent()
         }
     }
 
@@ -282,4 +333,13 @@ private final class TranslationPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+
+    override func sendEvent(_ event: NSEvent) {
+        // Handle Escape before SwiftUI or the selectable text view consumes it.
+        if event.type == .keyDown, event.keyCode == 53 {
+            cancelOperation(nil)
+            return
+        }
+        super.sendEvent(event)
+    }
 }

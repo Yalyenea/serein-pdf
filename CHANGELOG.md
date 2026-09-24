@@ -25,12 +25,17 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Make link previews resizable and pinnable, with continuous scrolling that starts from one copied page and retains at most three. Preserve internal links, target-column fitting, and independent viewport history. Option-click a link to split directly; Command-click navigates the source reader. Preview split actions use its current reading position.
 - Follow the chapter at the focused reader's top edge in both outlines, including same-page headings. `O` focuses the available outline search, with arrows, Enter, and Esc for navigation; manual browsing pauses automatic scrolling.
 - Fit the new page or spread width when switching display modes after manual zoom, preserving the live reading anchor. Match page-turn arrows to vertical or Book layouts and turn directly even while zoomed.
-- Show a physical page number or spread range in every pane, with an inline page-number field for jumping.
+- Show a physical page number or spread range in every pane and the outline footer, with an inline page-number field for jumping. Fix Return/Escape handling and add an immediately applied Settings toggle to hide all counters.
+- Refresh page-counter text, backgrounds, and active editors when themes change.
 
 ### Translation
 - Add Apple selection translation on `T` for macOS 15 and later, with automatic source detection and a selectable target language defaulting to Simplified Chinese.
 - Write the result as a new highlight and translated comment attached to the original selection. Preserve existing annotations, reject stale requests, prevent duplicate writes, and use the shared undo and save workflow.
 - Validate translation state and annotation integration with controlled responses; live Apple translation and language-model download remain to be checked on device.
+- Use a compact translation panel anchored near the selection, detect the source language before starting translation, and dismiss on Escape, outside clicks, or application deactivation while keeping system download sheets usable.
+
+### Website
+- Refresh the bilingual single-page site with reader screenshots, shortcut tables, inline documentation, and light/dark themes.
 
 ## [0.7.0] - 2026-09-19
 

@@ -385,7 +385,8 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     private let scrollView = OutlineScrollView()
     private let outlineDocumentView = OutlineDocumentView()
     private let rowsContainerView = OutlineRowsContainerView()
-    private let pageCounterLabel = NSTextField(labelWithString: "")
+    private let pageCounterView = ReaderPageCounterView()
+    private var bodyBottomConstraint: NSLayoutConstraint!
     private var nodes: [OutlineNode] = []
     private var locationResolver = OutlineLocationResolver(nodes: [])
     private var displayedReadingLocation: OutlineReadingLocation?
@@ -451,6 +452,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
     func bind(to pdfView: PDFView?) {
         guard observedPDFView !== pdfView else { return }
+        pageCounterView.cancelEditing()
         if let observedPDFView {
             NotificationCenter.default.removeObserver(self, name: .readerViewportDidChange, object: observedPDFView)
         }
@@ -531,9 +533,27 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         emptyStateLabel.maximumNumberOfLines = 0
         emptyStateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        pageCounterLabel.font = .systemFont(ofSize: 11, weight: .regular)
-        pageCounterLabel.textColor = NightModeStyle.tertiaryTextColor
-        pageCounterLabel.alignment = .right
+        pageCounterView.drawsBackground = false
+        pageCounterView.onBeginEditing = { [weak self] in self?.filterFieldFocusDidChange?(true) }
+        pageCounterView.onEndEditing = { [weak self] in
+            guard let self else { return }
+            self.filterFieldFocusDidChange?(self.isFilterFieldFocused)
+        }
+        pageCounterView.onGoToPage = { [weak self] pageIndex in
+            guard let self, let pdfView = self.observedPDFView,
+                  let page = pdfView.document?.page(at: pageIndex),
+                  let sessionID = self.documentStore.activeSessionID(in: self.windowID),
+                  let navigate = self.onNavigationRequested else { return false }
+            navigate(OutlineNavigationRequest(
+                sessionID: sessionID,
+                position: .pageTop(pageIndex: pageIndex, pageBounds: page.bounds(for: pdfView.displayBox))
+            ))
+            return true
+        }
+        pageCounterView.onReturnFocus = { [weak self] in
+            guard let pdfView = self?.observedPDFView else { return }
+            pdfView.window?.makeFirstResponder(pdfView)
+        }
 
         rowsContainerView.identifier = NSUserInterfaceItemIdentifier("outlineRowsStack")
         rowsContainerView.autoresizesSubviews = false
@@ -555,11 +575,12 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         scrollView.contentView.backgroundColor = .clear
         scrollView.documentView = outlineDocumentView
 
-        for view in [titleLabel, expansionToggleButton, filterField, emptyStateLabel, scrollView, pageCounterLabel] {
+        for view in [titleLabel, expansionToggleButton, filterField, emptyStateLabel, scrollView, pageCounterView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
 
+        bodyBottomConstraint = scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: Self.titleTopInset),
@@ -588,17 +609,14 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
                 equalTo: filterField.bottomAnchor,
                 constant: Self.filterToBodySpacing
             ),
-            scrollView.bottomAnchor.constraint(
-                equalTo: pageCounterLabel.topAnchor,
-                constant: -Self.bodyToCounterSpacing
-            ),
+            bodyBottomConstraint,
 
-            pageCounterLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            pageCounterLabel.bottomAnchor.constraint(
+            pageCounterView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -6),
+            pageCounterView.bottomAnchor.constraint(
                 equalTo: container.bottomAnchor,
                 constant: -Self.counterBottomInset
             ),
-            pageCounterLabel.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 12),
+            pageCounterView.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: 6),
         ])
 
         view = container
@@ -613,7 +631,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             titleLabel.textColor = NightModeStyle.primaryTextColor
             expansionToggleButton.contentTintColor = NightModeStyle.tertiaryTextColor
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
-            pageCounterLabel.textColor = NightModeStyle.tertiaryTextColor
+            pageCounterView.refreshThemeAppearance()
             if isFloatingPresentation {
                 let filterCell = filterField.cell as! ThemedSearchFieldCell
                 filterCell.applyTheme(to: filterField, placeholder: "Filter headings")
@@ -645,7 +663,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     func controlTextDidEndEditing(_ obj: Notification) {
         isFilterFieldFocused = false
         isQuickNavigationActive = false
-        filterFieldFocusDidChange?(false)
+        filterFieldFocusDidChange?(pageCounterView.isEditing)
     }
 
     @discardableResult
@@ -725,6 +743,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.affects(windowID: windowID) else { return }
+        if notification.documentStoreChange.contains(.appearance) { updatePageCounter() }
         guard notification.isOnlySidebarChromeChange == false else { return }
         if notification.isOnlyReadingPositionChange {
             updatePageCounter()
@@ -738,6 +757,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             windowID: windowID
         )
         if displayedSourceFingerprint != sourceFingerprint {
+            pageCounterView.cancelEditing()
             reloadOutline()
         }
         updatePageCounter()
@@ -745,30 +765,36 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     }
 
     private func updatePageCounter() {
-        guard let session = documentStore.activeSession(in: windowID) else {
-            updatePageCounterLabel(to: "")
+        guard documentStore.appConfiguration.reader.showPageCounter,
+              let session = documentStore.activeSession(in: windowID),
+              let total = documentStore.pageCount(for: session.id), total > 0 else {
+            pageCounterView.cancelEditing(restoreFocus: true)
+            pageCounterView.update(pageIndex: 0, pageCount: 0, displayMode: .singlePage)
+            updatePageCounterLayout()
             return
         }
-        let total = documentStore.pageCount(for: session.id) ?? 0
-        guard total > 0 else {
-            updatePageCounterLabel(to: "")
-            return
-        }
-        let current = min(max(session.currentPageIndex + 1, 1), total)
         let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
-        let nextValue: String
+        let prefix: String
         if documentStore.isContinuousReadingEnabled(in: windowID),
            let index = continuousSessionIDs.firstIndex(of: session.id) {
-            nextValue = "\(index + 1) / \(continuousSessionIDs.count) · \(current) / \(total)"
+            prefix = "\(index + 1) / \(continuousSessionIDs.count) · "
         } else {
-            nextValue = "\(current) / \(total)"
+            prefix = ""
         }
-        updatePageCounterLabel(to: nextValue)
+        pageCounterView.update(pageIndex: session.currentPageIndex, pageCount: total,
+                               displayMode: session.displayMode, displayPrefix: prefix)
+        pageCounterView.isHidden = false
+        updatePageCounterLayout()
     }
 
-    private func updatePageCounterLabel(to value: String) {
-        guard pageCounterLabel.stringValue != value else { return }
-        pageCounterLabel.stringValue = value
+    private var pageCounterHeight: CGFloat {
+        pageCounterView.isHidden ? 0 : Self.bodyToCounterSpacing + pageCounterView.intrinsicContentSize.height
+    }
+
+    private func updatePageCounterLayout() {
+        let bottomInset = -(Self.counterBottomInset + pageCounterHeight)
+        guard bodyBottomConstraint.constant != bottomInset else { return }
+        bodyBottomConstraint.constant = bottomInset
         preferredContentHeightDidChange?()
     }
 
@@ -903,8 +929,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             Self.titleToFilterSpacing +
             Self.filterHeight +
             Self.filterToBodySpacing +
-            Self.bodyToCounterSpacing +
-            ceil(pageCounterLabel.intrinsicContentSize.height) +
+            pageCounterHeight +
             Self.counterBottomInset
 
         return ceil(fixedChromeHeight + bodyHeight)

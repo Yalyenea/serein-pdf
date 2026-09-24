@@ -24,6 +24,7 @@ Native macOS PDF reader.
 - Prefer simple native AppKit solutions over abstraction-heavy designs.
 - Keep left tab UI and titlebar tab UI on one shared document/session model.
 - Default highlight color: light, low-saturation pink.
+- Every new or changed UI component must support all theme presets and live theme switching, including light/dark appearance and custom background colors. Use shared theme colors resolved against the component's effective appearance; refresh text, icons, borders, backgrounds, and active input editors without requiring a page change or reopening the UI. Verify both display and editing states when themes change.
 
 ## Engineering Rules
 

@@ -2070,7 +2070,7 @@ struct WindowChromeTests {
         controller.showWindow(nil)
 
         let window = try #require(controller.window)
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 704))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 732))
         controller.selectPageForTesting(1)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
@@ -2084,7 +2084,33 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 704))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 732))
+    }
+
+    @Test
+    func settingsWindowCanHidePageCounterAndSyncVisibility() throws {
+        _ = NSApplication.shared
+        var publishedConfigurations: [AppConfiguration] = []
+        let controller = SettingsWindowController(configuration: .default) { configuration in
+            publishedConfigurations.append(configuration)
+        }
+        defer { controller.close() }
+        controller.showWindow(nil)
+
+        let contentView = try #require(controller.window?.contentView)
+        let checkbox = try #require(
+            findView(identifier: "showPageCounterCheckbox", in: contentView) as? NSButton
+        )
+        #expect(checkbox.state == .on)
+        checkbox.state = .off
+        let action = try #require(checkbox.action)
+        let target = try #require(checkbox.target)
+        NSApp.sendAction(action, to: target, from: checkbox)
+        #expect(publishedConfigurations.last?.reader.showPageCounter == false)
+
+        controller.sync(configuration: .default)
+        #expect(checkbox.state == .on)
+        #expect(publishedConfigurations.count == 1)
     }
 
     @Test

@@ -22,6 +22,7 @@ final class AppConfigurationTests: XCTestCase {
             // Full default surface: laundry-list key checks live in
             // testConfigKeyListsStayInSyncAndMissingKeysSelfHeal.
             XCTAssertEqual(configuration, .default)
+            XCTAssertTrue(configuration.reader.showPageCounter)
             XCTAssertEqual(
                 configuration.shortcuts.bindings[.fitTextWidth],
                 KeyboardShortcut(key: "0", modifiers: [.command, .option])
@@ -88,6 +89,7 @@ dark_theme = "normal"
 [reader]
 default_display_mode = "two_up"
 fit_width_on_open = false
+show_page_counter = false
 reading_focus_width = "column"
 reading_focus_custom_width = 0.64
 reading_focus_height = 112
@@ -156,6 +158,7 @@ open_library_pdf = "command+option+o"
         XCTAssertEqual(configuration.appearance.darkTheme, .normal)
         XCTAssertEqual(configuration.reader.defaultDisplayMode, .twoUp)
         XCTAssertFalse(configuration.reader.fitWidthOnOpen)
+        XCTAssertFalse(configuration.reader.showPageCounter)
         XCTAssertEqual(configuration.reader.readingFocus.widthMode, .column)
         XCTAssertEqual(configuration.reader.readingFocus.customWidthRatio, 0.64, accuracy: 0.001)
         XCTAssertEqual(configuration.reader.readingFocus.height, 112, accuracy: 0.001)
@@ -616,6 +619,7 @@ fit_width = "command+9"
         )
         XCTAssertTrue(required.contains("new_blank_tab"))
         XCTAssertTrue(required.contains("floating_outline_height"))
+        XCTAssertTrue(required.contains("show_page_counter"))
 
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -669,6 +673,7 @@ fit_width = "command+9"
         configuration.appearance.darkTheme = .normal
         configuration.reader.defaultDisplayMode = .bookContinuous
         configuration.reader.fitWidthOnOpen = true
+        configuration.reader.showPageCounter = false
         configuration.reader.globalHorizontalPanLock = true
         configuration.reader.readingFocus = ReadingFocusSettings(
             widthMode: .custom,
@@ -698,6 +703,7 @@ fit_width = "command+9"
         XCTAssertEqual(reloadedConfiguration.appearance.darkTheme, .normal)
         XCTAssertEqual(reloadedConfiguration.reader.defaultDisplayMode, .bookContinuous)
         XCTAssertTrue(reloadedConfiguration.reader.fitWidthOnOpen)
+        XCTAssertFalse(reloadedConfiguration.reader.showPageCounter)
         XCTAssertTrue(reloadedConfiguration.reader.globalHorizontalPanLock)
         XCTAssertEqual(reloadedConfiguration.shortcuts.bindings[.toggleGlobalHorizontalPanLock], KeyboardShortcut(key: "l", modifiers: [.shift]))
         XCTAssertEqual(reloadedConfiguration.reader.readingFocus.widthMode, .custom)
@@ -717,6 +723,7 @@ fit_width = "command+9"
         XCTAssertTrue(persistedContent.contains("dark_theme = \"normal\""))
         XCTAssertTrue(persistedContent.contains("default_display_mode = \"book_continuous\""))
         XCTAssertTrue(persistedContent.contains("fit_width_on_open = true"))
+        XCTAssertTrue(persistedContent.contains("show_page_counter = false"))
         XCTAssertTrue(persistedContent.contains("reading_focus_width = \"custom\""))
         XCTAssertTrue(persistedContent.contains("reading_focus_custom_width = 0.58"))
         XCTAssertTrue(persistedContent.contains("reading_focus_height = 128"))

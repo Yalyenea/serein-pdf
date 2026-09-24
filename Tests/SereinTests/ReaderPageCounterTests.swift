@@ -6,6 +6,52 @@ import Testing
 @MainActor
 struct ReaderPageCounterTests {
     @Test
+    func buttonOpensFieldEditorAndReturnUsesTypedPage() throws {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 180, height: 80),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let counter = ReaderPageCounterView(frame: NSRect(x: 10, y: 10, width: 100, height: 24))
+        counter.update(pageIndex: 0, pageCount: 12, displayMode: .singlePage)
+        counter.isHidden = false
+        window.contentView?.addSubview(counter)
+        window.contentView?.layoutSubtreeIfNeeded()
+        var target: Int?
+        counter.onGoToPage = { target = $0; return true }
+        counter.onReturnFocus = { window.makeFirstResponder(nil) }
+        let button = try #require(counter.subviews.compactMap { $0 as? NSButton }.first)
+        button.performClick(nil)
+        let editor = try #require(window.firstResponder as? NSTextView)
+        #expect(editor.isFieldEditor)
+        let enter = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: "\r",
+            charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36
+        ))
+        editor.insertText("13", replacementRange: editor.selectedRange())
+        editor.keyDown(with: enter)
+        #expect(counter.isEditing)
+        #expect(target == nil)
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 2))
+        editor.insertText("7", replacementRange: editor.selectedRange())
+        editor.keyDown(with: enter)
+        #expect(target == 6)
+        #expect(!counter.isEditing)
+
+        button.performClick(nil)
+        let nextEditor = try #require(window.firstResponder as? NSTextView)
+        nextEditor.insertText("3", replacementRange: nextEditor.selectedRange())
+        nextEditor.keyDown(with: try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
+            charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53
+        )))
+        #expect(target == 6)
+        #expect(!counter.isEditing)
+    }
+
+    @Test
     func usesPhysicalPageRangesForOrdinaryAndBookSpreads() {
         let counter = ReaderPageCounterView()
         for (mode, index, count, expected): (ReaderDisplayMode, Int, Int, String) in [

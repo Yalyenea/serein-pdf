@@ -200,6 +200,7 @@ struct AppConfiguration: Equatable, Sendable {
     struct Reader: Equatable, Sendable {
         var defaultDisplayMode: ReaderDisplayMode
         var fitWidthOnOpen: Bool
+        var showPageCounter = true
         var globalHorizontalPanLock = false
         var readingFocus: ReadingFocusSettings
 
@@ -657,6 +658,7 @@ dark_window_background = ""
 [reader]
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
+show_page_counter = true
 global_horizontal_pan_lock = false
 reading_focus_width = "page"
 reading_focus_custom_width = 0.72
@@ -808,6 +810,7 @@ dark_window_background = "\(configuration.appearance.darkBackground.window?.hexS
 [reader]
 default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
 fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
+show_page_counter = \(configuration.reader.showPageCounter ? "true" : "false")
 global_horizontal_pan_lock = \(configuration.reader.globalHorizontalPanLock ? "true" : "false")
 reading_focus_width = "\(configuration.reader.readingFocus.widthMode.rawValue)"
 reading_focus_custom_width = \(serializedDecimal(configuration.reader.readingFocus.customWidthRatio))
@@ -955,6 +958,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "[reader]",
         "default_display_mode",
         "fit_width_on_open",
+        "show_page_counter",
         "global_horizontal_pan_lock",
         "reading_focus_width",
         "reading_focus_custom_width",
@@ -1236,6 +1240,8 @@ struct AppConfigurationParser {
             configuration.reader.globalHorizontalPanLock = try parseBool(rawValue)
         case ("reader", "fit_width_on_open"):
             configuration.reader.fitWidthOnOpen = try parseBool(rawValue)
+        case ("reader", "show_page_counter"):
+            configuration.reader.showPageCounter = try parseBool(rawValue)
         case ("reader", "reading_focus_width"):
             let value = parseString(rawValue)
             guard let widthMode = ReadingFocusWidthMode(rawValue: value) else {

@@ -60,17 +60,21 @@ final class AppleTranslationBridge: TranslationTaskHosting {
     }
 
     func start(_ request: SelectionTranslation.Request) {
+        guard let source = request.sourceLanguage else {
+            cancel()
+            model.translation.complete(request, with: .failure(SelectionTranslationError.unrecognizedLanguage))
+            return
+        }
         model.request = request
-        if model.configuration?.target == request.targetLanguage {
+        if model.configuration?.source == source, model.configuration?.target == request.targetLanguage {
             model.configuration?.invalidate()
         } else {
-            model.configuration = TranslationSession.Configuration(source: nil, target: request.targetLanguage)
+            model.configuration = TranslationSession.Configuration(source: source, target: request.targetLanguage)
         }
     }
 
     func cancel() {
         model.configuration = nil
         model.request = nil
-        view.removeFromSuperview()
     }
 }

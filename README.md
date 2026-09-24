@@ -6,7 +6,7 @@
 
 Native macOS PDF reader — Swift + AppKit + PDFKit. Minimal, flat, compact.
 
-[Website](http://serein.yfff.me) · [Download](https://github.com/Yalyenea/serein-pdf/releases/latest) · [Docs](http://serein.yfff.me/docs.html)
+[Website](http://serein.yfff.me) · [Download](https://github.com/Yalyenea/serein-pdf/releases/latest) · [Docs](http://serein.yfff.me/#docs)
 
 The release DMG supports Apple silicon Macs running macOS 14 or later.
 
@@ -86,7 +86,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Global Lock (`shift+l`) locks horizontal panning and magnification gestures across all windows and newly opened PDFs. It persists across restarts, preserves individual PDF lock states, and excludes Book modes. Turn it off to restore each PDF’s own lock; individual `l` toggles are disabled while Global Lock is on.
 - Opening, closing, or resizing sidebars preserves the reading anchor. Fit modes follow the available reading area; manual zoom scales proportionally with its width to preserve the horizontal content range, including while Lock is enabled.
 - Switching display modes after manual zoom fits the new page or spread width while preserving the live reading anchor.
-- Each pane shows its physical page number or spread range and total at the bottom right. Click the counter to enter a page number; Enter jumps and Esc cancels in place.
+- Each pane and the outline footer show a physical page number or spread range and total. Click the counter to enter a page number; Enter jumps and Esc cancels in place. Settings can hide all page counters immediately.
 - Each workspace and pane retains its own scale, page, and horizontal pan lock across launches. Window sidebars retain their widths separately from the reading splits.
 - Switching PDFs briefly shows the current file name at the top of the reader, so fast tab changes stay oriented without adding permanent chrome
 - Config-driven defaults via `~/Library/Application Support/Serein/config.toml`
@@ -152,6 +152,7 @@ dark_window_background = ""
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
 global_horizontal_pan_lock = false
+show_page_counter = true
 reading_focus_width = "page"       # or "column" / "custom"
 reading_focus_custom_width = 0.72  # 0.3–1.0, used by "custom"
 reading_focus_height = 96          # 48–240 pt

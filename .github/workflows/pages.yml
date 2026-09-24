@@ -26,7 +26,7 @@ jobs:
       - name: Stage public files
         run: |
           mkdir -p .tmp/site
-          cp Website/*.html Website/robots.txt Website/sitemap.xml .tmp/site/
+          cp Website/*.html .tmp/site/
           cp -R Website/assets .tmp/site/assets
       - uses: actions/upload-pages-artifact@v4
         if: github.event_name != 'pull_request'

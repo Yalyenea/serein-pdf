@@ -29,7 +29,7 @@ run:
 website:
     uv run python -m http.server 4173 --bind 127.0.0.1 --directory Website
 
-# Check website pages, translations, navigation, and local links.
+# Check website translations, local links, and anchors.
 website-check:
     uv run --with beautifulsoup4 Scripts/check-website.py
     node --check Website/assets/main.js

@@ -51,7 +51,7 @@ final class PDFContainerView: NSView {
     }
 
     func setNightModeEnabled(_ isEnabled: Bool) {
-        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
             let backgroundColor = NightModeStyle.readerBackdropColor
             layer?.backgroundColor = backgroundColor.cgColor
         }

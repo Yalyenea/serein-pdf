@@ -1,8 +1,10 @@
 import AppKit
+import NaturalLanguage
 import PDFKit
 
 enum SelectionTranslationError: LocalizedError {
     case missingSelection
+    case unrecognizedLanguage
     case sourceDocumentChanged
     case missingTranslation
     case unableToAnnotate
@@ -10,6 +12,7 @@ enum SelectionTranslationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingSelection: "Select some text to translate."
+        case .unrecognizedLanguage: "Could not detect the language. Select a longer passage and try again."
         case .sourceDocumentChanged: "The original PDF was closed or reloaded. Select the text again to add an annotation."
         case .missingTranslation: "No translation is available to add."
         case .unableToAnnotate: "The selected text could not be highlighted."
@@ -24,6 +27,12 @@ final class SelectionTranslation {
         let id = UUID()
         let text: String
         let targetLanguage: Locale.Language
+
+        var sourceLanguage: Locale.Language? {
+            guard let language = NLLanguageRecognizer.dominantLanguage(for: text),
+                  language != .undetermined else { return nil }
+            return Locale.Language(identifier: language.rawValue)
+        }
     }
 
     enum State: Equatable {
@@ -33,9 +42,6 @@ final class SelectionTranslation {
         case cancelled
     }
 
-    let sourceText: String
-    let documentTitle: String
-    let pageNumber: Int
     private(set) var request: Request
     private(set) var state: State = .translating
     private(set) var addedGroupID: String?
@@ -48,7 +54,7 @@ final class SelectionTranslation {
 
     init(selection: PDFSelection, sessionID: UUID, documentStore: DocumentStore) throws {
         guard let sourceID = documentStore.sharedDocumentSessionID(for: sessionID),
-              let session = documentStore.session(for: sourceID),
+              documentStore.session(for: sourceID) != nil,
               let document = documentStore.loadedPDFDocument(for: sourceID),
               let snapshot = selection.copy() as? PDFSelection,
               let text = snapshot.string.map(PDFTextSanitizer.sanitize),
@@ -61,32 +67,16 @@ final class SelectionTranslation {
         self.sessionID = sourceID
         self.document = document
         self.selection = snapshot
-        sourceText = text
-        documentTitle = session.url.lastPathComponent
-        pageNumber = document.index(for: snapshot.pages[0]) + 1
         request = Request(text: text, targetLanguage: Locale.Language(identifier: "zh-Hans"))
     }
 
     @discardableResult
     func selectTargetLanguage(_ language: Locale.Language) -> Request {
-        request = Request(text: sourceText, targetLanguage: language)
+        request = Request(text: request.text, targetLanguage: language)
         state = .translating
         addedGroupID = nil
         onChange?()
         return request
-    }
-
-    func translate(
-        _ request: Request,
-        using operation: @MainActor (String, Locale.Language) async throws -> String
-    ) async {
-        guard self.request.id == request.id, state != .cancelled else { return }
-        do {
-            let result = try await operation(request.text, request.targetLanguage)
-            complete(request, with: .success(result))
-        } catch {
-            complete(request, with: .failure(error))
-        }
     }
 
     func complete(_ request: Request, with result: Result<String, Error>) {
