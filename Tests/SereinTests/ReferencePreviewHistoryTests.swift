@@ -198,61 +198,6 @@ final class ReferencePreviewHistoryTests: XCTestCase {
         XCTAssertTrue(reopened.destination.page === fixture.pages[1])
     }
 
-    func testRenderHistoryControlsWhenRequested() throws {
-        guard let path = ProcessInfo.processInfo.environment["SEREIN_REFERENCE_SNAPSHOTS"] else { return }
-        let directory = URL(fileURLWithPath: path, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let fixture = try PreviewHistoryFixture()
-        defer { fixture.close() }
-        let content = try fixture.show()
-        for state in ["initial", "back", "both"] {
-            if state == "back" { XCTAssertTrue(content.navigate(to: fixture.destination(on: 2))) }
-            if state == "both" {
-                XCTAssertTrue(content.navigate(to: fixture.destination(on: 0)))
-                content.goBack()
-            }
-            content.view.layoutSubtreeIfNeeded()
-            content.view.displayIfNeeded()
-            let bitmap = try XCTUnwrap(content.view.bitmapImageRepForCachingDisplay(in: content.view.bounds))
-            content.view.cacheDisplay(in: content.view.bounds, to: bitmap)
-            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-            try png.write(to: directory.appendingPathComponent("reference-history-\(state).png"))
-        }
-    }
-
-    func testRealPDFLinkChainWhenRequested() throws {
-        guard let path = ProcessInfo.processInfo.environment["SEREIN_REFERENCE_PDF"] else { return }
-        let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: path)))
-        func destinations(on page: PDFPage) -> [PDFDestination] {
-            page.annotations.compactMap { ($0.action as? PDFActionGoTo)?.destination ?? $0.destination }
-                .filter { $0.page?.document === document }
-        }
-        let first = try XCTUnwrap((0..<document.pageCount).compactMap { document.page(at: $0) }
-            .flatMap { destinations(on: $0) }.first { destinations(on: $0.page!).isEmpty == false })
-        let next = try XCTUnwrap(destinations(on: first.page!).first)
-        let content = try XCTUnwrap(ReferencePreviewViewController(destination: first, document: document))
-        content.preferredContentSize = NSSize(width: 580, height: 360)
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: content.preferredContentSize),
-                              styleMask: .borderless, backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentViewController = content
-        defer { window.close() }
-        content.positionReference()
-        XCTAssertTrue(content.navigate(to: next))
-        content.goBack()
-        XCTAssertTrue(content.destination.page === first.page)
-        content.goForward()
-        XCTAssertTrue(content.destination.page === next.page)
-        content.view.layoutSubtreeIfNeeded()
-
-        if let output = ProcessInfo.processInfo.environment["SEREIN_REFERENCE_SNAPSHOTS"] {
-            let bitmap = try XCTUnwrap(content.view.bitmapImageRepForCachingDisplay(in: content.view.bounds))
-            content.view.cacheDisplay(in: content.view.bounds, to: bitmap)
-            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-            try png.write(to: URL(fileURLWithPath: output).appendingPathComponent("reference-history-real-pdf.png"))
-        }
-    }
-
     private func assertViewport(_ preview: PDFView, matches expected: PreviewViewport, file: StaticString = #filePath, line: UInt = #line) throws {
         let page = try XCTUnwrap(preview.currentPage)
         preview.layoutDocumentView()

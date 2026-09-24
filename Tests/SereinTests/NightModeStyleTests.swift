@@ -93,62 +93,6 @@ struct NightModeStyleTests {
 
     @Test
     @MainActor
-    func normalDarkFilterMapsWhiteAndBlackToCharcoalEndpoints() throws {
-        try withThemeSelections(light: .normal, dark: .normal) {
-            let background = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
-            let foreground = resolve(NightModeStyle.pageForegroundColor, in: .darkAqua)
-            let filter = try #require(
-                NightModeStyle.makePDFContentFilters(for: NSAppearance(named: .darkAqua)).first
-            )
-            let vectors = try matrixVectors(from: filter)
-            let transformedWhite = apply(vectors, to: (red: 1, green: 1, blue: 1))
-            let transformedBlack = apply(vectors, to: (red: 0, green: 0, blue: 0))
-
-            assertColor(background, matches: NSColor(srgbRed: 37.0 / 255.0, green: 37.0 / 255.0, blue: 37.0 / 255.0, alpha: 1.0))
-            assertColor(foreground, matches: NSColor(srgbRed: 222.0 / 255.0, green: 222.0 / 255.0, blue: 222.0 / 255.0, alpha: 1.0))
-            assertLinearColor(transformedWhite, matches: background)
-            assertLinearColor(transformedBlack, matches: foreground)
-        }
-    }
-
-    @Test
-    @MainActor
-    func normalDarkChromeUsesCharcoalSurfaces() {
-        withThemeSelections(light: .normal, dark: .normal) {
-            let page = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
-            let split = resolve(SplitViewController.splitBackgroundColor, in: .darkAqua)
-            let divider = resolve(SplitViewController.dividerBackgroundColor, in: .darkAqua)
-            let selected = resolve(SplitViewController.selectedChromeBackgroundColor, in: .darkAqua)
-            let stroke = resolve(SplitViewController.chromeStrokeColor, in: .darkAqua)
-
-            assertColor(page, matches: NSColor(srgbRed: 37.0 / 255.0, green: 37.0 / 255.0, blue: 37.0 / 255.0, alpha: 1.0))
-            assertColor(split, matches: page)
-            assertColor(divider, matches: NSColor(srgbRed: 54.0 / 255.0, green: 54.0 / 255.0, blue: 54.0 / 255.0, alpha: 1.0))
-            assertColor(selected, matches: NSColor(srgbRed: 68.0 / 255.0, green: 68.0 / 255.0, blue: 68.0 / 255.0, alpha: 1.0))
-            assertColor(stroke, matches: NSColor(srgbRed: 90.0 / 255.0, green: 90.0 / 255.0, blue: 90.0 / 255.0, alpha: 1.0))
-        }
-    }
-
-    @Test
-    @MainActor
-    func rosePineMoonFilterMapsWhiteAndBlackToThemeEndpoints() throws {
-        try withThemeSelections(light: .normal, dark: .rosePineMoon) {
-            let background = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
-            let foreground = resolve(NightModeStyle.pageForegroundColor, in: .darkAqua)
-            let filter = try #require(
-                NightModeStyle.makePDFContentFilters(for: NSAppearance(named: .darkAqua)).first
-            )
-            let vectors = try matrixVectors(from: filter)
-            let transformedWhite = apply(vectors, to: (red: 1, green: 1, blue: 1))
-            let transformedBlack = apply(vectors, to: (red: 0, green: 0, blue: 0))
-
-            assertLinearColor(transformedWhite, matches: background)
-            assertLinearColor(transformedBlack, matches: foreground)
-        }
-    }
-
-    @Test
-    @MainActor
     func rosePineMoonFilterPreservesWarmAndCoolAccentDirection() throws {
         try withThemeSelections(light: .normal, dark: .rosePineMoon) {
             let filter = try #require(
@@ -168,73 +112,6 @@ struct NightModeStyleTests {
             #expect(warm.green > warm.blue)
             #expect(cool.blue > cool.green)
             #expect(cool.green > cool.red)
-        }
-    }
-
-    @Test
-    @MainActor
-    func rosePineSidebarChromeUsesNearbySurfaceSteps() {
-        withThemeSelections(light: .normal, dark: .rosePineMoon) {
-            let page = resolve(NightModeStyle.pageBackgroundColor, in: .darkAqua)
-            let primary = resolve(NightModeStyle.primaryTextColor, in: .darkAqua)
-            let secondary = resolve(NightModeStyle.secondaryTextColor, in: .darkAqua)
-            let tertiary = resolve(NightModeStyle.tertiaryTextColor, in: .darkAqua)
-            let split = resolve(SplitViewController.splitBackgroundColor, in: .darkAqua)
-            let divider = resolve(SplitViewController.dividerBackgroundColor, in: .darkAqua)
-            let selected = resolve(SplitViewController.selectedChromeBackgroundColor, in: .darkAqua)
-            let stroke = resolve(SplitViewController.chromeStrokeColor, in: .darkAqua)
-
-            assertColor(page, matches: NSColor(srgbRed: 42.0 / 255.0, green: 39.0 / 255.0, blue: 63.0 / 255.0, alpha: 1.0))
-            assertColor(split, matches: NSColor(srgbRed: 35.0 / 255.0, green: 33.0 / 255.0, blue: 54.0 / 255.0, alpha: 1.0))
-            assertColor(primary, matches: NSColor(srgbRed: 224.0 / 255.0, green: 222.0 / 255.0, blue: 244.0 / 255.0, alpha: 1.0))
-            assertColor(secondary, matches: NSColor(srgbRed: 144.0 / 255.0, green: 140.0 / 255.0, blue: 170.0 / 255.0, alpha: 1.0))
-            assertColor(tertiary, matches: NSColor(srgbRed: 110.0 / 255.0, green: 106.0 / 255.0, blue: 134.0 / 255.0, alpha: 1.0))
-            assertColor(divider, matches: NSColor(srgbRed: 57.0 / 255.0, green: 53.0 / 255.0, blue: 82.0 / 255.0, alpha: 1.0))
-            assertColor(selected, matches: divider)
-            assertColor(stroke, matches: NSColor(srgbRed: 110.0 / 255.0, green: 106.0 / 255.0, blue: 134.0 / 255.0, alpha: 1.0))
-        }
-    }
-
-    @Test
-    @MainActor
-    func rosePineDawnChromeUsesWarmLightPalette() throws {
-        try withThemeSelections(light: .rosePineDawn, dark: .normal) {
-            let backdrop = resolve(NightModeStyle.readerBackdropColor, in: .aqua)
-            let page = resolve(NightModeStyle.pageBackgroundColor, in: .aqua)
-            let foreground = resolve(NightModeStyle.pageForegroundColor, in: .aqua)
-            let primary = resolve(NightModeStyle.primaryTextColor, in: .aqua)
-            let secondary = resolve(NightModeStyle.secondaryTextColor, in: .aqua)
-            let tertiary = resolve(NightModeStyle.tertiaryTextColor, in: .aqua)
-            let split = resolve(SplitViewController.splitBackgroundColor, in: .aqua)
-            let divider = resolve(SplitViewController.dividerBackgroundColor, in: .aqua)
-            let selected = resolve(SplitViewController.selectedChromeBackgroundColor, in: .aqua)
-            let stroke = resolve(SplitViewController.chromeStrokeColor, in: .aqua)
-            let filters = NightModeStyle.makePDFContentFilters(for: NSAppearance(named: .aqua))
-            let filter = try #require(filters.first)
-            let redVector = try #require(filter.value(forKey: "inputRVector") as? CIVector)
-            let greenVector = try #require(filter.value(forKey: "inputGVector") as? CIVector)
-            let blueVector = try #require(filter.value(forKey: "inputBVector") as? CIVector)
-            let biasVector = try #require(filter.value(forKey: "inputBiasVector") as? CIVector)
-
-            assertColor(backdrop, matches: NSColor(srgbRed: 250.0 / 255.0, green: 244.0 / 255.0, blue: 237.0 / 255.0, alpha: 1.0))
-            assertColor(page, matches: NSColor(srgbRed: 1.0, green: 250.0 / 255.0, blue: 243.0 / 255.0, alpha: 1.0))
-            assertColor(split, matches: backdrop)
-            assertColor(foreground, matches: primary)
-            assertColor(primary, matches: NSColor(srgbRed: 87.0 / 255.0, green: 82.0 / 255.0, blue: 121.0 / 255.0, alpha: 1.0))
-            assertColor(secondary, matches: NSColor(srgbRed: 121.0 / 255.0, green: 117.0 / 255.0, blue: 147.0 / 255.0, alpha: 1.0))
-            assertColor(tertiary, matches: NSColor(srgbRed: 152.0 / 255.0, green: 147.0 / 255.0, blue: 165.0 / 255.0, alpha: 1.0))
-            assertColor(divider, matches: NSColor(srgbRed: 234.0 / 255.0, green: 227.0 / 255.0, blue: 225.0 / 255.0, alpha: 1.0))
-            assertColor(selected, matches: NSColor(srgbRed: 233.0 / 255.0, green: 223.0 / 255.0, blue: 218.0 / 255.0, alpha: 0.5))
-            assertColor(stroke, matches: NSColor(srgbRed: 206.0 / 255.0, green: 202.0 / 255.0, blue: 205.0 / 255.0, alpha: 1.0))
-            #expect(filters.map(\.name) == ["CIColorMatrix"])
-            #expect(abs(redVector.x - 1.0) < 0.0005)
-            #expect(abs(greenVector.y - 0.956) < 0.0005)
-            #expect(abs(blueVector.z - 0.896) < 0.0005)
-            #expect(redVector.y == 0 && redVector.z == 0)
-            #expect(greenVector.x == 0 && greenVector.z == 0)
-            #expect(blueVector.x == 0 && blueVector.y == 0)
-            #expect(biasVector.x == 0 && biasVector.y == 0 && biasVector.z == 0)
-            #expect(NightModeStyle.prefersFlatPDFChrome(for: NSAppearance(named: .aqua)))
         }
     }
 

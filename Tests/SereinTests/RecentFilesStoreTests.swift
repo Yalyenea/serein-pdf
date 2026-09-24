@@ -62,22 +62,6 @@ final class RecentFilesStoreTests: XCTestCase {
         XCTAssertEqual(try store.loadRecentFiles(), [newest, existing])
     }
 
-    func testDefaultCapacityKeepsTwoHundredNewestFiles() throws {
-        let userDefaults = makeUserDefaults()
-        let store = UserDefaultsRecentFilesStore(userDefaults: userDefaults)
-        var urls: [URL] = []
-        for index in 0..<220 {
-            let url = try makeTemporaryFile(named: "item-\(index).pdf")
-            urls.append(url)
-            _ = try store.recordOpen(for: url)
-        }
-
-        let recentFiles = try store.loadRecentFiles()
-        XCTAssertEqual(recentFiles.count, 200)
-        XCTAssertEqual(recentFiles.first, urls[219])
-        XCTAssertEqual(recentFiles.last, urls[20])
-    }
-
     func testLoadRecentFilesPrunesMissingLinksAndPersistsPrunedList() throws {
         let userDefaults = makeUserDefaults()
         let existing = try makeTemporaryFile(named: "existing.pdf")

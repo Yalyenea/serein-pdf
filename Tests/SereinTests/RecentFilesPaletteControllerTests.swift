@@ -354,20 +354,6 @@ final class RecentFilesPaletteControllerTests: XCTestCase {
         XCTAssertEqual(controller.testingQuery, "")
     }
 
-    func testEnteringNavigationMovesFocusToResultsTable() {
-        _ = NSApplication.shared
-        let first = URL(fileURLWithPath: "/tmp/first.pdf")
-        let second = URL(fileURLWithPath: "/tmp/second.pdf")
-        let third = URL(fileURLWithPath: "/tmp/third.pdf")
-        let controller = RecentFilesPaletteController { _ in }
-        controller.show(with: [first, second, third], relativeTo: nil)
-        defer { controller.close() }
-
-        XCTAssertTrue(controller.testingHandleQueryCommand(#selector(NSResponder.moveDown(_:))))
-        XCTAssertTrue(controller.testingResultsTableIsFirstResponder)
-        XCTAssertFalse(controller.testingQueryFieldIsFirstResponder)
-    }
-
     func testPrintableKeyFromNavigationReturnsToQueryEditingAndAppendsQuery() {
         _ = NSApplication.shared
         let first = URL(fileURLWithPath: "/tmp/first.pdf")

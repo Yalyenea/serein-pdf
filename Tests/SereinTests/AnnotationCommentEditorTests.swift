@@ -210,41 +210,6 @@ final class AnnotationCommentEditorTests: XCTestCase {
         XCTAssertTrue(panel.canBecomeKey)
     }
 
-    func testRenderThemePreviewsWhenRequested() throws {
-        guard let path = ProcessInfo.processInfo.environment["SEREIN_COMMENT_SNAPSHOTS"] else { return }
-        let directory = URL(fileURLWithPath: path, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let original = ThemeManager.shared.selection
-        defer { ThemeManager.shared.apply(light: original.light, dark: original.dark) }
-        let themes: [(String, LightTheme, DarkTheme, NSAppearance.Name)] = [
-            ("normal-light", .normal, .normal, .aqua),
-            ("rose-pine-dawn", .rosePineDawn, .rosePineMoon, .aqua),
-            ("normal-dark", .normal, .normal, .darkAqua),
-            ("rose-pine-moon", .rosePineDawn, .rosePineMoon, .darkAqua),
-        ]
-        for (name, light, dark, appearance) in themes {
-            ThemeManager.shared.apply(light: light, dark: dark)
-            let (editor, window, hostWindow) = makeEditor(comment: "还要大于，以保证 P 正定。\n第二行评论保持原位，点击后可以直接编辑。", appearance: appearance, editing: false)
-            defer { window.close(); hostWindow.close() }
-            window.refreshThemeAppearance()
-            for state in ["preview", "editing", "empty"] {
-                if state == "editing" { window.beginEditing() }
-                if state == "empty" {
-                    let text = try XCTUnwrap(descendants(NSTextView.self, in: editor.view).first)
-                    text.string = ""
-                    text.didChangeText()
-                }
-                layout(editor, in: window)
-                let content = try XCTUnwrap(window.contentView)
-                let bitmap = try XCTUnwrap(content.bitmapImageRepForCachingDisplay(in: content.bounds))
-                content.cacheDisplay(in: content.bounds, to: bitmap)
-                XCTAssertLessThan(try XCTUnwrap(bitmap.colorAt(x: 0, y: 0)).alphaComponent, 0.1)
-                let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-                try png.write(to: directory.appendingPathComponent("comment-\(name)-\(state).png"))
-            }
-        }
-    }
-
     private func makeEditor(
         comment: String,
         appearance: NSAppearance.Name = .aqua,

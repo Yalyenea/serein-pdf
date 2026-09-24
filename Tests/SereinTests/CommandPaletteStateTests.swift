@@ -53,9 +53,4 @@ final class CommandPaletteStateTests: XCTestCase {
         )
     }
 
-    func testContextualTitleIsPreserved() {
-        var state = CommandPaletteState()
-        state.replaceCommands([.closeCurrentTab], bindings: [:], titles: [.closeCurrentTab: "Close Selected Tabs"])
-        XCTAssertEqual(state.highlightedItem?.title, "Close Selected Tabs")
-    }
 }

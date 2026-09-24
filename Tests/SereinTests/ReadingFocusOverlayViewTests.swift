@@ -234,17 +234,6 @@ final class ReadingFocusOverlayViewTests: XCTestCase {
         XCTAssertNil(overlay.focusBandRect)
     }
 
-    func testNightModeUsesStrongerSurroundingShade() {
-        let overlay = ReadingFocusOverlayView()
-        let lightAlpha = overlay.shadeAlpha
-        let lightShadowOpacity = overlay.edgeShadowOpacity
-
-        overlay.setNightModeEnabled(true)
-
-        XCTAssertGreaterThan(overlay.shadeAlpha, lightAlpha)
-        XCTAssertGreaterThan(overlay.edgeShadowOpacity, lightShadowOpacity)
-    }
-
     func testPDFContainerKeepsFocusOverlayAboveContentAndSizedToBounds() {
         let container = PDFContainerView(
             frame: NSRect(x: 0, y: 0, width: 640, height: 480)

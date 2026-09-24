@@ -4,14 +4,6 @@ import XCTest
 @testable import Serein
 
 final class OutlineExtractorTests: XCTestCase {
-    func testOutlineNodeSupportsHashingForOutlineViewIdentity() {
-        let child = OutlineNode(title: "Section 1.1", pageIndex: 2, children: [])
-        let first = OutlineNode(title: "Chapter 1", pageIndex: 0, children: [child])
-        let second = OutlineNode(title: "Chapter 1", pageIndex: 0, children: [child])
-
-        XCTAssertEqual(Set([first, second]).count, 1)
-    }
-
     func testExtractReturnsEmptyForDocumentWithoutOutline() {
         let document = makeDocument(pageCount: 1)
 

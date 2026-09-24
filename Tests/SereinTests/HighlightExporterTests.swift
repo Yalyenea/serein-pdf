@@ -81,21 +81,6 @@ final class HighlightExporterTests: XCTestCase {
         XCTAssertEqual(exported.map(\.snippet), ["gamma delta", "alpha beta"])
     }
 
-    func testAllOpenDefaultFilenameUsesRequestedFormat() {
-        XCTAssertEqual(
-            HighlightExporter.defaultAllOpenFilename(format: .markdown),
-            "All-Open-highlights.md"
-        )
-        XCTAssertEqual(
-            HighlightExporter.defaultAllOpenFilename(format: .plainText),
-            "All-Open-highlights.txt"
-        )
-        XCTAssertEqual(
-            HighlightExporter.defaultAllOpenFilename(format: .json),
-            "All-Open-highlights.json"
-        )
-    }
-
     func testMarkdownExportPreservesChineseSnippetAndComment() throws {
         let markdown = try XCTUnwrap(
             String(

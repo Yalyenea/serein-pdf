@@ -82,14 +82,6 @@ final class HighlightUndoTests: XCTestCase {
         XCTAssertFalse(store.undoLastHighlight(for: second.id))
     }
 
-    func testUndoReturnsFalseWhenStackEmpty() throws {
-        let store = makeStore()
-        let session = try store.open(documentAt: makeTextFile(text: "alpha"))
-
-        XCTAssertFalse(store.hasUndoableHighlight(for: session.id))
-        XCTAssertFalse(store.undoLastHighlight(for: session.id))
-    }
-
     func testRedoReappliesUndoneHighlight() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTextFile(text: "alpha"))

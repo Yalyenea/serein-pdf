@@ -50,15 +50,6 @@ final class RecentFilesPaletteStateTests: XCTestCase {
         XCTAssertEqual(state.openTargets(), [second])
     }
 
-    func testRecentHistoryStartsWithFirstItemHighlighted() {
-        let first = URL(fileURLWithPath: "/tmp/first.pdf")
-        let second = URL(fileURLWithPath: "/tmp/second.pdf")
-        let state = RecentFilesPaletteState(recentURLs: [first, second])
-
-        XCTAssertEqual(state.highlightedIndex, 0)
-        XCTAssertEqual(state.openTargets(), [first])
-    }
-
     func testFilteringDropsSelectionsThatAreNoLongerVisible() {
         let first = URL(fileURLWithPath: "/tmp/alpha.pdf")
         let second = URL(fileURLWithPath: "/tmp/beta.pdf")

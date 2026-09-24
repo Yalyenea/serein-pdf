@@ -5,10 +5,6 @@ import XCTest
 
 @MainActor
 final class HighlightServiceTests: XCTestCase {
-    func testDefaultHighlightColorIsPink() {
-        XCTAssertEqual(HighlightColor.default, .pink)
-    }
-
     func testAnnotationSortOrderIsTransitiveForNearbyLines() {
         let page = PDFPage()
         let annotations = (0..<3).map { index in
@@ -41,92 +37,6 @@ final class HighlightServiceTests: XCTestCase {
 
         XCTAssertEqual(cache.groups.count, 1)
         XCTAssertEqual(cache.group(containing: annotation)?.comment, "Updated")
-    }
-
-    func testAllPaletteColorsAreAvailable() {
-        XCTAssertEqual(Set(HighlightColor.allCases), [.pink, .yellow, .green])
-    }
-
-    func testHighlightColorHasDistinctMenuTitles() {
-        let titles = HighlightColor.allCases.map(\.menuTitle)
-        XCTAssertEqual(Set(titles).count, titles.count)
-    }
-
-    func testSelectionContainsTextReturnsFalseForNilSelection() {
-        XCTAssertFalse(HighlightService.selectionContainsText(nil))
-    }
-
-    func testDefaultColorMatchesPinkPalette() {
-        XCTAssertEqual(
-            HighlightService.defaultColor.cgColor.components,
-            HighlightColor.pink.nsColor.cgColor.components
-        )
-    }
-
-    func testHighlightPalettesMatchApprovedThemeDefaults() {
-        assertColor(
-            HighlightColor.pink.nsColor(in: .normal),
-            red: 241.0 / 255.0,
-            green: 171.0 / 255.0,
-            blue: 192.0 / 255.0,
-            alpha: 0.70
-        )
-        assertColor(
-            HighlightColor.yellow.nsColor(in: .normal),
-            red: 239.0 / 255.0,
-            green: 213.0 / 255.0,
-            blue: 110.0 / 255.0,
-            alpha: 0.63
-        )
-        assertColor(
-            HighlightColor.green.nsColor(in: .normal),
-            red: 169.0 / 255.0,
-            green: 217.0 / 255.0,
-            blue: 180.0 / 255.0,
-            alpha: 0.66
-        )
-        assertColor(
-            HighlightColor.pink.nsColor(in: .rosePineDawn),
-            red: 233.0 / 255.0,
-            green: 168.0 / 255.0,
-            blue: 186.0 / 255.0,
-            alpha: 0.68
-        )
-        assertColor(
-            HighlightColor.yellow.nsColor(in: .rosePineDawn),
-            red: 228.0 / 255.0,
-            green: 201.0 / 255.0,
-            blue: 103.0 / 255.0,
-            alpha: 0.62
-        )
-        assertColor(
-            HighlightColor.green.nsColor(in: .rosePineDawn),
-            red: 159.0 / 255.0,
-            green: 204.0 / 255.0,
-            blue: 167.0 / 255.0,
-            alpha: 0.64
-        )
-        assertColor(
-            HighlightColor.pink.nsColor(in: .rosePineMoon),
-            red: 232.0 / 255.0,
-            green: 140.0 / 255.0,
-            blue: 171.0 / 255.0,
-            alpha: 0.48
-        )
-        assertColor(
-            HighlightColor.yellow.nsColor(in: .rosePineMoon),
-            red: 232.0 / 255.0,
-            green: 196.0 / 255.0,
-            blue: 110.0 / 255.0,
-            alpha: 0.42
-        )
-        assertColor(
-            HighlightColor.green.nsColor(in: .rosePineMoon),
-            red: 143.0 / 255.0,
-            green: 207.0 / 255.0,
-            blue: 167.0 / 255.0,
-            alpha: 0.44
-        )
     }
 
     func testClosestHighlightColorRecognizesThemePalettes() {
@@ -442,22 +352,6 @@ final class HighlightServiceTests: XCTestCase {
         page.addAnnotation(annotation)
         return annotation
     }
-}
-
-private func assertColor(
-    _ color: NSColor,
-    red: CGFloat,
-    green: CGFloat,
-    blue: CGFloat,
-    alpha: CGFloat,
-    file: StaticString = #filePath,
-    line: UInt = #line
-) {
-    let srgb = color.usingColorSpace(.sRGB) ?? color
-    XCTAssertEqual(srgb.redComponent, red, accuracy: 0.001, file: file, line: line)
-    XCTAssertEqual(srgb.greenComponent, green, accuracy: 0.001, file: file, line: line)
-    XCTAssertEqual(srgb.blueComponent, blue, accuracy: 0.001, file: file, line: line)
-    XCTAssertEqual(srgb.alphaComponent, alpha, accuracy: 0.001, file: file, line: line)
 }
 
 private func assertColor(

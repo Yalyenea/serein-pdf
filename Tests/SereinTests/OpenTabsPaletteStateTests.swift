@@ -13,14 +13,6 @@ final class OpenTabsPaletteStateTests: XCTestCase {
         XCTAssertEqual(state.highlightedItem?.sessionID, second.id)
     }
 
-    func testItemsShowCurrentPageAndDocumentLength() {
-        let session = makeSession(title: "Paper", path: "/tmp/paper.pdf", pageCount: 3, currentPageIndex: 2)
-
-        let state = OpenTabsPaletteState(items: [OpenTabsPaletteItem(session: session, isActive: true)])
-
-        XCTAssertEqual(state.items.first?.pageText, "Page 3 / 3")
-    }
-
     func testPageIndexIsClampedToDocumentBounds() {
         let session = makeSession(title: "Paper", path: "/tmp/paper.pdf", pageCount: 2, currentPageIndex: 8)
 

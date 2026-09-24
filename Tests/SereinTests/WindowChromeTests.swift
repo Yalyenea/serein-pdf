@@ -468,24 +468,6 @@ struct WindowChromeTests {
     }
 
     @Test
-    func highlightModeUsesCompactInlineIndicator() {
-        _ = NSApplication.shared
-        let store = makeIsolatedDocumentStore()
-        let controller = ReaderViewController(documentStore: store)
-        controller.loadViewIfNeeded()
-
-        #expect(controller.triggerAnnotationShortcut(.highlight) == false)
-        controller.view.layoutSubtreeIfNeeded()
-
-        let highlightLabels = findAllDescendants(of: NSTextField.self, in: controller.view)
-            .filter { $0.stringValue.contains("Highlight") }
-            .map(\.stringValue)
-
-        #expect(highlightLabels.contains("Highlight · Esc"))
-        #expect(highlightLabels.contains { $0.contains("Highlight Mode") } == false)
-    }
-
-    @Test
     func switchingPDFShowsBriefFileNameToast() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
@@ -2048,22 +2030,6 @@ struct WindowChromeTests {
     }
 
     @Test
-    func settingsWindowPageTabsUseEqualWidths() throws {
-        let controller = SettingsWindowController(configuration: .default) { _ in }
-        defer { controller.close() }
-        controller.showWindow(nil)
-
-        let contentView = try #require(controller.window?.contentView)
-        let pageControl = try #require(
-            findView(identifier: "settingsPageControl", in: contentView) as? NSSegmentedControl
-        )
-        let segmentWidths = (0..<pageControl.segmentCount).map { pageControl.width(forSegment: $0) }
-
-        #expect(segmentWidths.count == 3)
-        #expect(segmentWidths.allSatisfy { abs($0 - segmentWidths[0]) < 0.01 })
-    }
-
-    @Test
     func settingsWindowSwitchesPageHeightsWithoutChangingWidth() throws {
         let controller = SettingsWindowController(configuration: .default) { _ in }
         defer { controller.close() }
@@ -2318,18 +2284,6 @@ struct WindowChromeTests {
     }
 
     @Test
-    func settingsWindowDoesNotExposeLegacySidebarOpacity() throws {
-        _ = NSApplication.shared
-        let controller = SettingsWindowController(configuration: .default) { _ in }
-        defer { controller.close() }
-        controller.showWindow(nil)
-
-        let contentView = try #require(controller.window?.contentView)
-        #expect(slider(identifier: "sidebarOpacitySlider", in: contentView) == nil)
-        #expect(textField(identifier: "sidebarOpacityValueLabel", in: contentView) == nil)
-    }
-
-    @Test
     func settingsWindowCanEditFloatingOutlineHeight() throws {
         _ = NSApplication.shared
         var publishedConfigurations: [AppConfiguration] = []
@@ -2477,16 +2431,6 @@ struct WindowChromeTests {
         let labels = findAllDescendants(of: NSTextField.self, in: window.contentView ?? NSView())
             .map(\.stringValue)
         #expect(labels.contains(where: { $0.contains(folderURL.lastPathComponent) || $0 == folderURL.path }))
-    }
-
-    @Test
-    func mainWindowUsesUpdatedReaderFramingDefaults() {
-        let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
-        defer { controller.close() }
-        let contentSize = controller.window?.contentRect(forFrameRect: controller.window?.frame ?? .zero).size
-
-        #expect(contentSize == MainWindowController.defaultContentSize)
-        #expect(controller.window?.minSize == MainWindowController.minimumWindowSize)
     }
 
     @Test

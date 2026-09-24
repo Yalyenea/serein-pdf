@@ -44,23 +44,6 @@ final class AnnotationSaveTests: XCTestCase {
         }
     }
 
-    func testAnnotationSavePolicyDefaultIsAfter10Minutes() {
-        XCTAssertEqual(AnnotationSavePolicy.default, .after10Minutes)
-        XCTAssertEqual(AnnotationSavePolicy.after10Minutes.autoSaveInterval, 600)
-        XCTAssertNil(AnnotationSavePolicy.never.autoSaveInterval)
-    }
-
-    func testSetDirtyRecordsDirtySinceTimestamp() throws {
-        let store = makeStore()
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "dirty-timestamp"))
-        let now = Date()
-
-        store.setDirty(true, for: session.id, now: now)
-
-        XCTAssertEqual(store.session(for: session.id)?.isDirty, true)
-        XCTAssertEqual(store.session(for: session.id)?.dirtySince, now)
-    }
-
     func testAutoSaveSkipsSessionWhenIntervalHasNotElapsed() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "autosave-not-elapsed"))

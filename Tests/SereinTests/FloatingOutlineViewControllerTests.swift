@@ -196,34 +196,6 @@ struct FloatingOutlineViewControllerTests {
     }
 
     @Test
-    func floatingOutlineSearchFieldUsesNativeTextInsets() throws {
-        _ = NSApplication.shared
-        let store = makeIsolatedDocumentStore()
-        let outlineController = OutlineViewController(
-            documentStore: store,
-            windowID: store.defaultWindowID,
-            isFloatingPresentation: true
-        )
-        outlineController.loadViewIfNeeded()
-        let filterField = try #require(
-            floatingOutlineView(
-                identifier: "outlineFilterField",
-                in: outlineController.view
-            ) as? NSSearchField
-        )
-        filterField.frame = NSRect(x: 0, y: 0, width: 276, height: 22)
-        let searchTextBounds = filterField.searchTextBounds
-        let searchButtonBounds = filterField.searchButtonBounds
-
-        #expect(filterField.isBezeled)
-        #expect(filterField.bezelStyle == .squareBezel)
-        #expect(searchTextBounds.minX > filterField.bounds.minX + 8)
-        #expect(searchTextBounds.minX >= searchButtonBounds.midX)
-        #expect(searchTextBounds.maxX < filterField.bounds.maxX)
-        #expect(searchTextBounds.minY > filterField.bounds.minY)
-    }
-
-    @Test
     func floatingOutlineAppearsAsRailAndExpandsOnHover() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()

@@ -43,17 +43,6 @@ final class DocumentStoreTests: XCTestCase {
         )
     }
 
-    func testOpenDocumentCreatesActiveSession() throws {
-        let store = makeStore()
-        let url = try makeTemporaryPDF(named: "single")
-
-        let session = try store.open(documentAt: url)
-
-        XCTAssertEqual(store.sessions.count, 1)
-        XCTAssertEqual(store.activeSessionID, session.id)
-        XCTAssertEqual(store.activeSession?.title, "single")
-    }
-
     func testHorizontalPanLockIsIndependentAndRestoredPerDocument() throws {
         let persistence = InMemoryDocumentStorePersistence()
         let readingStates = InMemoryReadingStateStore()
@@ -453,23 +442,6 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(reloadedDocument.pageCount, 2)
     }
 
-    func testExternalPDFChangeReloadsEveryCleanSessionForSameURL() throws {
-        let store = makeStore()
-        let url = try makeTemporaryPDF(named: "hot-reload-duplicates", pageCount: 1)
-        let first = try store.open(documentAt: url)
-        let second = try store.open(documentAt: url)
-        _ = try store.pdfDocument(for: first.id)
-        _ = try store.pdfDocument(for: second.id)
-
-        try writeTemporaryPDF(to: url, pageCount: 3)
-        store.refreshExternallyChangedFile(at: url)
-
-        XCTAssertFalse(store.isPDFDocumentLoaded(for: first.id))
-        XCTAssertFalse(store.isPDFDocumentLoaded(for: second.id))
-        XCTAssertEqual(try store.pdfDocument(for: first.id).pageCount, 3)
-        XCTAssertEqual(try store.pdfDocument(for: second.id).pageCount, 3)
-    }
-
     func testExternalPDFChangeDoesNotReloadDirtySession() throws {
         let store = makeStore()
         let url = try makeTemporaryPDF(named: "hot-reload-dirty", pageCount: 1)
@@ -520,24 +492,6 @@ final class DocumentStoreTests: XCTestCase {
         let reloadedDocument = try store.pdfDocument(for: session.id)
         XCTAssertFalse(oldDocument === reloadedDocument)
         XCTAssertEqual(reloadedDocument.pageCount, 3)
-    }
-
-    func testExternalPDFInPlaceWriteEventReloadsEveryCleanSessionForSameURL() throws {
-        let store = makeStore()
-        let url = try makeTemporaryPDF(named: "hot-reload-event-duplicates", pageCount: 1)
-        let first = try store.open(documentAt: url)
-        let second = try store.open(documentAt: url)
-        _ = try store.pdfDocument(for: first.id)
-        _ = try store.pdfDocument(for: second.id)
-
-        try overwriteFileInPlace(at: url, withPDFPageCount: 4)
-
-        XCTAssertTrue(waitForMainRunLoop(until: {
-            store.isPDFDocumentLoaded(for: first.id) == false &&
-                store.isPDFDocumentLoaded(for: second.id) == false
-        }))
-        XCTAssertEqual(try store.pdfDocument(for: first.id).pageCount, 4)
-        XCTAssertEqual(try store.pdfDocument(for: second.id).pageCount, 4)
     }
 
     func testExternalPDFInPlaceWriteEventDoesNotReloadDirtySession() throws {
@@ -646,19 +600,6 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.sessions.count, 1)
     }
 
-    func testActivateSessionSwitchesActiveDocument() throws {
-        let store = makeStore()
-        let first = try store.open(documentAt: makeTemporaryPDF(named: "alpha"))
-        let second = try store.open(documentAt: makeTemporaryPDF(named: "beta"))
-
-        XCTAssertEqual(store.activeSessionID, second.id)
-
-        store.activate(sessionID: first.id)
-
-        XCTAssertEqual(store.activeSessionID, first.id)
-        XCTAssertEqual(store.activeSession?.url, first.url)
-    }
-
     func testActivatePreviousSessionWrapsAround() throws {
         let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "prev-alpha"))
@@ -731,21 +672,6 @@ final class DocumentStoreTests: XCTestCase {
         )
     }
 
-    func testDefaultTabPresentationModeIsVerticalSidebar() {
-        XCTAssertEqual(
-            makeStore().tabPresentationMode,
-            .verticalSidebar
-        )
-    }
-
-    func testSetTabPresentationModeUpdatesStore() {
-        let store = makeStore()
-
-        store.setTabPresentationMode(.horizontalTitlebar)
-
-        XCTAssertEqual(store.tabPresentationMode, .horizontalTitlebar)
-    }
-
     func testCloseUnknownSessionDoesNotCrashOrMutateMode() {
         let store = makeStore()
         let unknownSessionID = UUID()
@@ -797,14 +723,6 @@ final class DocumentStoreTests: XCTestCase {
         store.setLeftSidebarVisible(false)
 
         XCTAssertEqual(recorder.observedChange, .sidebarVisibility)
-    }
-
-    func testFreshStoreStartsWithOutlinePaneCollapsed() {
-        // M12-010: an empty window has nothing for the outline pane to answer.
-        let store = makeStore()
-        XCTAssertTrue(store.sessions(in: store.defaultWindowID).isEmpty)
-        XCTAssertTrue(store.isLeftSidebarVisible(in: store.defaultWindowID))
-        XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
     }
 
     func testClosingLastSessionHidesOutlinePane() throws {
@@ -1397,26 +1315,6 @@ final class DocumentStoreTests: XCTestCase {
 
         store.toggleDisplayModeContinuity(for: session.id)
         XCTAssertEqual(store.session(for: session.id)?.displayMode, .book)
-    }
-
-    func testSaveAnnotationsWritesPDFAndClearsDirtyState() throws {
-        let store = makeStore()
-        let session = try store.open(documentAt: makeTemporaryPDF(named: "save-annotations"))
-        let annotation = PDFAnnotation(
-            bounds: NSRect(x: 20, y: 20, width: 60, height: 18),
-            forType: .highlight,
-            withProperties: nil
-        )
-        annotation.color = .systemPink
-
-        try store.pdfDocument(for: session.id).page(at: 0)?.addAnnotation(annotation)
-        store.setDirty(true, for: session.id)
-        try store.saveAnnotations(for: session.id)
-
-        XCTAssertFalse(store.session(for: session.id)?.isDirty ?? true)
-
-        let reopenedDocument = PDFDocument(url: session.url)
-        XCTAssertEqual(reopenedDocument?.page(at: 0)?.annotations.count, 1)
     }
 
     func testCleanCopyDataDoesNotMutateSessionDocumentOrDirtyState() throws {

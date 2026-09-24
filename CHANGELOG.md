@@ -41,6 +41,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 ### Website
 - Refresh the bilingual single-page site with reader screenshots, shortcut tables, inline documentation, and light/dark themes.
 
+### Maintenance
+- Remove 47 redundant or low-value tests and unused screenshot helpers. Retain 822 tests covering persistence, PDF interactions, keyboard routing, and theme updates.
+
 ## [0.7.0] - 2026-09-19
 
 ### Website and licensing

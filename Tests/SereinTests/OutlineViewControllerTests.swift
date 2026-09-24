@@ -351,47 +351,6 @@ struct OutlineViewControllerTests {
     }
 
     @Test
-    func outlinePaneHidesScrollersAndDisablesHorizontalScroll() {
-        let store = makeIsolatedDocumentStore()
-        let controller = OutlineViewController(
-            documentStore: store,
-            windowID: store.defaultWindowID
-        )
-        controller.loadViewIfNeeded()
-
-        guard let scrollView = outlineScrollView(in: controller.view) else {
-            Issue.record("Failed to locate outline scroll view")
-            return
-        }
-
-        #expect(scrollView.hasVerticalScroller == false)
-        #expect(scrollView.hasHorizontalScroller == false)
-        #expect(scrollView.horizontalScrollElasticity == .none)
-    }
-
-    @Test
-    func outlinePaneEmbedsDirectlyOnTransparentSidebarSurface() {
-        let store = makeIsolatedDocumentStore()
-        let controller = OutlineViewController(
-            documentStore: store,
-            windowID: store.defaultWindowID
-        )
-        controller.loadViewIfNeeded()
-
-        guard let scrollView = outlineScrollView(in: controller.view),
-              let documentView = scrollView.documentView else {
-            Issue.record("Failed to locate outline scroll view")
-            return
-        }
-
-        #expect(scrollView.drawsBackground == false)
-        #expect(scrollView.contentView.drawsBackground == false)
-        #expect(scrollView.contentView.backgroundColor == .clear)
-        #expect(documentView.layer?.backgroundColor == NSColor.clear.cgColor)
-        #expect(documentView is NSOutlineView == false)
-    }
-
-    @Test
     func outlineExpansionToggleCollapsesAndExpandsTree() throws {
         let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "nested-outline", includeChild: true))

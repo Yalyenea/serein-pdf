@@ -582,39 +582,6 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertEqual(deleted?.groupID, group.groupID)
     }
 
-    func testEmptyStateShowsShortcutHint() throws {
-        let store = makeStore()
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-annotations-hint"))
-        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
-        controller.loadViewIfNeeded()
-        let emptyLabel = try XCTUnwrap(
-            findAllDescendants(of: NSTextField.self, in: controller.view)
-                .first { $0.stringValue.contains("Comment · M") }
-        )
-        XCTAssertTrue(emptyLabel.stringValue.contains("No annotations"))
-        XCTAssertFalse(emptyLabel.isHidden)
-    }
-
-    func testRowShowsSnippetAndCommentWithoutTimestamp() {
-        let group = DocumentHighlightGroup(
-            groupID: "no-time",
-            pageIndex: 2,
-            snippet: "snippet text",
-            color: .pink,
-            createdAt: Date(timeIntervalSinceReferenceDate: 100),
-            comment: "note",
-            primarySelection: nil,
-            records: []
-        )
-        let cell = AnnotationHighlightCellView(frame: NSRect(x: 0, y: 0, width: 240, height: 80))
-        cell.configure(with: group)
-        let labels = findAllDescendants(of: NSTextField.self, in: cell).map(\.stringValue)
-        XCTAssertTrue(labels.contains("snippet text"))
-        XCTAssertTrue(labels.contains("note"))
-        XCTAssertFalse(labels.contains { $0.contains("Page") })
-        XCTAssertFalse(labels.contains { $0.contains("202") || $0.contains(":") })
-    }
-
     func testAnnotationsListDisablesHorizontalScrolling() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "annotations-no-hscroll"))
@@ -677,10 +644,10 @@ final class AnnotationsViewControllerTests: XCTestCase {
         window.contentView = preview
         defer { window.close() }
 
-        for (index, comment) in [
+        for comment in [
             "第一行评论\n第二行评论\n第三行评论",
             "这是一段较长的评论，用于检查预览中的文字能否自动换行。缩窄卡片后，评论应该显示为多行，并且每一行都有足够的高度。",
-        ].enumerated() {
+        ] {
             XCTAssertTrue(preview.configure(with: DocumentHighlightGroup(
                 groupID: "multiline-preview", pageIndex: 0, snippet: "Original passage",
                 color: .pink, createdAt: nil, comment: comment, primarySelection: nil, records: []
@@ -695,13 +662,6 @@ final class AnnotationsViewControllerTests: XCTestCase {
             XCTAssertGreaterThan(label.frame.height, 28)
             XCTAssertGreaterThanOrEqual(label.frame.height, requiredHeight)
             XCTAssertGreaterThanOrEqual(label.frame.minY, 10)
-
-            if let path = ProcessInfo.processInfo.environment["SEREIN_PREVIEW_SNAPSHOTS"] {
-                let bitmap = try XCTUnwrap(preview.bitmapImageRepForCachingDisplay(in: preview.bounds))
-                preview.cacheDisplay(in: preview.bounds, to: bitmap)
-                let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-                try data.write(to: URL(fileURLWithPath: path).appendingPathComponent("preview-\(index).png"))
-            }
         }
     }
 

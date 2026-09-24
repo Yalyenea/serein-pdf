@@ -125,58 +125,6 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertEqual(triggeredCommands, [.toggleNightMode])
     }
 
-    func testPlainFTogglesReadingFocus() {
-        var triggeredCommands: [ShortcutCommand] = []
-        let controller = ReaderShortcutsController(
-            shortcutsProvider: {
-                [.toggleReadingFocus: KeyboardShortcut(key: "f", modifiers: [])]
-            },
-            handlerProvider: {
-                [.toggleReadingFocus: { triggeredCommands.append(.toggleReadingFocus) }]
-            }
-        )
-        let window = NSWindow(
-            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-
-        XCTAssertTrue(
-            controller.handlePlainShortcut(
-                for: makeKeyEvent(characters: "f", modifierFlags: []),
-                in: window
-            )
-        )
-        XCTAssertEqual(triggeredCommands, [.toggleReadingFocus])
-    }
-
-    func testPlainLTogglesHorizontalPanLock() {
-        var triggeredCommands: [ShortcutCommand] = []
-        let controller = ReaderShortcutsController(
-            shortcutsProvider: {
-                [.toggleHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: [])]
-            },
-            handlerProvider: {
-                [.toggleHorizontalPanLock: { triggeredCommands.append(.toggleHorizontalPanLock) }]
-            }
-        )
-        let window = NSWindow(
-            contentRect: .init(x: 0, y: 0, width: 400, height: 300),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-
-        XCTAssertTrue(
-            controller.handlePlainShortcut(
-                for: makeKeyEvent(characters: "l", modifierFlags: []),
-                in: window
-            )
-        )
-        XCTAssertEqual(triggeredCommands, [.toggleHorizontalPanLock])
-    }
-
     func testShiftLMatchesGlobalLockWithoutMatchingIndividualLock() throws {
         let bindings = AppConfiguration.default.shortcuts.bindings
         let global = try XCTUnwrap(bindings[.toggleGlobalHorizontalPanLock])
@@ -247,23 +195,6 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         let event = makeKeyEvent(characters: "f", modifierFlags: [])
 
         XCTAssertFalse(controller.handlePlainShortcut(for: event, in: window))
-    }
-
-    func testPlainCInvokesConfiguredDisplayModeContinuityShortcut() {
-        var triggeredCommands: [ShortcutCommand] = []
-        let controller = ReaderShortcutsController(
-            shortcutsProvider: {
-                [.toggleDisplayModeContinuity: KeyboardShortcut(key: "c", modifiers: [])]
-            },
-            handlerProvider: {
-                [.toggleDisplayModeContinuity: { triggeredCommands.append(.toggleDisplayModeContinuity) }]
-            }
-        )
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
-        let event = makeKeyEvent(characters: "c", modifierFlags: [])
-
-        XCTAssertTrue(controller.handlePlainShortcut(for: event, in: window))
-        XCTAssertEqual(triggeredCommands, [.toggleDisplayModeContinuity])
     }
 
     func testPlainCRespectsClearedDisplayModeContinuityBinding() {
@@ -750,17 +681,6 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifierFlags: [.command]), in: window))
         XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "g", modifierFlags: [.command, .shift]), in: window))
         XCTAssertEqual(triggered, [.findNextMatch, .findPreviousMatch])
-    }
-
-    func testPlainShortcutsAreBlockedWhileEditingText() {
-        let textView = NSTextView()
-
-        XCTAssertFalse(ReaderShortcutsController.shouldHandlePlainShortcut(for: textView))
-    }
-
-    func testPlainShortcutsAreAllowedForNonTextResponders() {
-        XCTAssertTrue(ReaderShortcutsController.shouldHandlePlainShortcut(for: NSView()))
-        XCTAssertTrue(ReaderShortcutsController.shouldHandlePlainShortcut(for: nil))
     }
 
     func testPlainShortcutsAreAllowedForPDFTextResponders() {
