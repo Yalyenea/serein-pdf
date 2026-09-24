@@ -277,6 +277,9 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         action: nil
     )
     private let autoSavePopUp = NSPopUpButton()
+    private let seamlessPagesCheckbox = NSButton(
+        checkboxWithTitle: "Remove gaps between pages", target: nil, action: nil
+    )
     private let swapSidebarsCheckbox = NSButton(
         checkboxWithTitle: "Swap left and right sidebars",
         target: nil,
@@ -438,6 +441,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         selectItem(in: displayModePopUp, matching: configuration.reader.defaultDisplayMode.rawValue)
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
         showPageCounterCheckbox.state = configuration.reader.showPageCounter ? .on : .off
+        seamlessPagesCheckbox.state = configuration.reader.seamlessPages ? .on : .off
         applyReadingFocusControls(configuration.reader.readingFocus)
         selectItem(in: autoSavePopUp, matching: configuration.annotations.autoSavePolicy.rawValue)
         swapSidebarsCheckbox.state = configuration.layout.sidebarsSwapped ? .on : .off
@@ -508,6 +512,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         updatedConfiguration.reader.defaultDisplayMode = displayMode
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
         updatedConfiguration.reader.showPageCounter = showPageCounterCheckbox.state == .on
+        updatedConfiguration.reader.seamlessPages = seamlessPagesCheckbox.state == .on
         updatedConfiguration.reader.readingFocus = ReadingFocusSettings(
             widthMode: focusWidthMode,
             customWidthRatio: normalizedReadingFocusCustomWidth(),
@@ -637,6 +642,11 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         showPageCounterCheckbox.controlSize = .small
         showPageCounterCheckbox.target = self
         showPageCounterCheckbox.action = #selector(handleGeneralControlChanged(_:))
+        seamlessPagesCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        seamlessPagesCheckbox.identifier = NSUserInterfaceItemIdentifier("seamlessPagesCheckbox")
+        seamlessPagesCheckbox.controlSize = .small
+        seamlessPagesCheckbox.target = self
+        seamlessPagesCheckbox.action = #selector(handleGeneralControlChanged(_:))
 
         autoSavePopUp.translatesAutoresizingMaskIntoConstraints = false
         autoSavePopUp.controlSize = .small
@@ -735,6 +745,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             [makeRowLabel("Default Display"), displayModePopUp],
             [makeRowLabel("Open Behavior"), fitWidthCheckbox],
             [makeRowLabel("Page Counter"), showPageCounterCheckbox],
+            [makeRowLabel("Seamless Pages"), seamlessPagesCheckbox],
             [makeRowLabel("Focus Width"), readingFocusWidthStack],
             [makeRowLabel("Focus Height"), readingFocusHeightStack],
             [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],

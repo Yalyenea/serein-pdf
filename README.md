@@ -153,6 +153,7 @@ default_display_mode = "single_page_continuous"
 fit_width_on_open = false
 global_horizontal_pan_lock = false
 show_page_counter = true
+seamless_pages = false             # remove gaps between pages
 reading_focus_width = "page"       # or "column" / "custom"
 reading_focus_custom_width = 0.72  # 0.3–1.0, used by "custom"
 reading_focus_height = 96          # 48–240 pt
@@ -297,6 +298,7 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Adjust current-window focus width / height | `option+f` |
 | Toggle horizontal pan lock (preserve current X, block magnification gestures) | `l` |
 | Toggle current layout continuity | `c` |
+| Toggle seamless pages | `cmd+option+p` |
 | Select document tabs 1–3 | physical left `cmd+1` / `cmd+2` / `cmd+3` |
 | Single Page Continuous | physical right `cmd+2` |
 | Other original display modes | physical right `cmd+1` / `cmd+3` / `cmd+4` |

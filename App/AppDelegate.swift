@@ -434,6 +434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .toggleReadingFocus: { [weak self] in self?.toggleReadingFocusModeAction(nil) },
             .adjustReadingFocus: { [weak self] in self?.showReadingFocusControlsAction(nil) },
             .toggleGlobalHorizontalPanLock: { [weak self] in self?.toggleGlobalHorizontalPanLockAction(nil) },
+            .toggleSeamlessPages: { [weak self] in self?.toggleSeamlessPagesAction(nil) },
             .toggleHorizontalPanLock: { [weak self] in self?.toggleHorizontalPanLockAction(nil) },
             .switchCurrentTheme: { [weak self] in self?.switchCurrentTheme(nil) },
             .openLibraryPDF: { [weak self] in self?.showLibraryPalette(nil) },
@@ -1074,6 +1075,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         )
 
         viewMenu.items = [
+            makeConfiguredMenuItem(
+                title: ShortcutCommand.toggleSeamlessPages.menuTitle,
+                command: .toggleSeamlessPages,
+                action: #selector(toggleSeamlessPagesAction(_:))
+            ),
             makeConfiguredMenuItem(
                 title: "Toggle Left Sidebar",
                 command: .toggleLeftSidebar,
@@ -1827,6 +1833,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func toggleGlobalHorizontalPanLockAction(_ sender: Any?) {
         var configuration = appConfiguration
         configuration.reader.globalHorizontalPanLock.toggle()
+        applyUpdatedConfiguration(configuration)
+    }
+
+    @objc
+    private func toggleSeamlessPagesAction(_ sender: Any?) {
+        var configuration = appConfiguration
+        configuration.reader.seamlessPages.toggle()
         applyUpdatedConfiguration(configuration)
     }
 
@@ -3039,6 +3052,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return activePDFSession != nil
         case #selector(toggleGlobalHorizontalPanLockAction(_:)):
             menuItem.state = appConfiguration.reader.globalHorizontalPanLock ? .on : .off
+            return true
+        case #selector(toggleSeamlessPagesAction(_:)):
+            menuItem.state = appConfiguration.reader.seamlessPages ? .on : .off
             return true
         case #selector(toggleHorizontalPanLockAction(_:)):
             let global = appConfiguration.reader.globalHorizontalPanLock

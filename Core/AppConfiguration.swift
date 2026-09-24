@@ -201,6 +201,7 @@ struct AppConfiguration: Equatable, Sendable {
         var defaultDisplayMode: ReaderDisplayMode
         var fitWidthOnOpen: Bool
         var showPageCounter = true
+        var seamlessPages = false
         var globalHorizontalPanLock = false
         var readingFocus: ReadingFocusSettings
 
@@ -305,6 +306,7 @@ struct AppConfiguration: Equatable, Sendable {
             .adjustReadingFocus: KeyboardShortcut(key: "f", modifiers: [.option]),
             .toggleHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: []),
             .toggleGlobalHorizontalPanLock: KeyboardShortcut(key: "l", modifiers: [.shift]),
+            .toggleSeamlessPages: KeyboardShortcut(key: "p", modifiers: [.command, .option]),
             .saveAnnotations: KeyboardShortcut(key: "s", modifiers: [.command]),
             .printDocument: KeyboardShortcut(key: "p", modifiers: [.command]),
             .copyHighlightsMarkdown: KeyboardShortcut(key: "e", modifiers: [.command, .shift]),
@@ -660,6 +662,7 @@ dark_window_background = ""
 default_display_mode = "single_page_continuous"
 fit_width_on_open = false
 show_page_counter = true
+seamless_pages = false
 global_horizontal_pan_lock = false
 reading_focus_width = "page"
 reading_focus_custom_width = 0.72
@@ -707,6 +710,7 @@ toggle_reading_focus = "f"
 adjust_reading_focus = "option+f"
 toggle_horizontal_pan_lock = "l"
 toggle_global_horizontal_pan_lock = "shift+l"
+toggle_seamless_pages = "command+option+p"
 # Cmd+K, Cmd+T is a built-in chord.
 switch_current_theme = "none"
 # Cmd+K, Cmd+O is a built-in chord.
@@ -813,6 +817,7 @@ dark_window_background = "\(configuration.appearance.darkBackground.window?.hexS
 default_display_mode = "\(configuration.reader.defaultDisplayMode.rawValue)"
 fit_width_on_open = \(configuration.reader.fitWidthOnOpen ? "true" : "false")
 show_page_counter = \(configuration.reader.showPageCounter ? "true" : "false")
+seamless_pages = \(configuration.reader.seamlessPages ? "true" : "false")
 global_horizontal_pan_lock = \(configuration.reader.globalHorizontalPanLock ? "true" : "false")
 reading_focus_width = "\(configuration.reader.readingFocus.widthMode.rawValue)"
 reading_focus_custom_width = \(serializedDecimal(configuration.reader.readingFocus.customWidthRatio))
@@ -859,6 +864,7 @@ toggle_reading_focus = "\(serializedShortcut(.toggleReadingFocus, configuration:
 adjust_reading_focus = "\(serializedShortcut(.adjustReadingFocus, configuration: configuration))"
 toggle_horizontal_pan_lock = "\(serializedShortcut(.toggleHorizontalPanLock, configuration: configuration))"
 toggle_global_horizontal_pan_lock = "\(serializedShortcut(.toggleGlobalHorizontalPanLock, configuration: configuration))"
+toggle_seamless_pages = "\(serializedShortcut(.toggleSeamlessPages, configuration: configuration))"
 switch_current_theme = "\(serializedShortcut(.switchCurrentTheme, configuration: configuration))"
 open_library_pdf = "\(serializedShortcut(.openLibraryPDF, configuration: configuration))"
 refresh_library_index = "\(serializedShortcut(.refreshLibraryIndex, configuration: configuration))"
@@ -962,6 +968,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "default_display_mode",
         "fit_width_on_open",
         "show_page_counter",
+        "seamless_pages",
         "global_horizontal_pan_lock",
         "reading_focus_width",
         "reading_focus_custom_width",
@@ -1000,6 +1007,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "adjust_reading_focus",
         "toggle_horizontal_pan_lock",
         "toggle_global_horizontal_pan_lock",
+        "toggle_seamless_pages",
         "switch_current_theme",
         "open_library_pdf",
         "refresh_library_index",
@@ -1248,6 +1256,10 @@ struct AppConfigurationParser {
             configuration.reader.fitWidthOnOpen = try parseBool(rawValue)
         case ("reader", "show_page_counter"):
             configuration.reader.showPageCounter = try parseBool(rawValue)
+        case ("reader", "seamless_pages"):
+            configuration.reader.seamlessPages = try parseBool(rawValue)
+        case ("shortcuts", "toggle_seamless_pages"):
+            try applyShortcut(rawValue, command: .toggleSeamlessPages, to: &configuration)
         case ("reader", "reading_focus_width"):
             let value = parseString(rawValue)
             guard let widthMode = ReadingFocusWidthMode(rawValue: value) else {

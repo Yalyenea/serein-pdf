@@ -2080,6 +2080,27 @@ struct WindowChromeTests {
     }
 
     @Test
+    func settingsWindowTogglesSeamlessPagesAndSyncsExternalChanges() throws {
+        _ = NSApplication.shared
+        var published: AppConfiguration?
+        let controller = SettingsWindowController(configuration: .default) { published = $0 }
+        defer { controller.close() }
+        controller.showWindow(nil)
+        let contentView = try #require(controller.window?.contentView)
+        let checkbox = try #require(findView(identifier: "seamlessPagesCheckbox", in: contentView) as? NSButton)
+        #expect(checkbox.state == .off)
+        checkbox.state = .on
+        let action = try #require(checkbox.action)
+        let target = try #require(checkbox.target)
+        NSApp.sendAction(action, to: target, from: checkbox)
+        #expect(published?.reader.seamlessPages == true)
+        controller.sync(configuration: .default)
+        #expect(checkbox.state == .off)
+        contentView.layoutSubtreeIfNeeded()
+        #expect(contentView.bounds.contains(checkbox.convert(checkbox.bounds, to: contentView)))
+    }
+
+    @Test
     func settingsWindowCanDisableCodexIntegration() throws {
         _ = NSApplication.shared
         var publishedConfigurations: [AppConfiguration] = []

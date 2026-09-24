@@ -6,6 +6,45 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct ReaderModeTransitionTests {
+    @Test(arguments: [ReaderDisplayMode.singlePageContinuous, .twoUpContinuous])
+    func seamlessPagesRemoveActualGapsAndPreserveLivePosition(_ mode: ReaderDisplayMode) throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: TestPDFFixtures.makeBlankPDF(
+            named: "seamless-pages", pageCount: 8, pageSize: NSSize(width: 500, height: 1800)
+        ))
+        store.setDisplayMode(mode, for: session.id)
+        store.setScaleMode(.manual, scaleFactor: 1.37, for: session.id)
+        let reader = makeReader(store: store, sessionID: session.id)
+        #expect(reader.go(to: ReadingPosition(pageIndex: 2, point: NSPoint(x: 0, y: 1400)), recordHistory: false))
+        let position = try #require(reader.currentPosition)
+        let document = try #require(reader.pdfView.document)
+        let first = try #require(document.page(at: 2))
+        let next = try #require(document.page(at: mode == .twoUpContinuous ? 4 : 3))
+        func gap() -> CGFloat {
+            let a = reader.pdfView.convert(first.bounds(for: .cropBox), from: first)
+            let b = reader.pdfView.convert(next.bounds(for: .cropBox), from: next)
+            return max(a.minY, b.minY) - min(a.maxY, b.maxY)
+        }
+        let originalGap = gap()
+        #expect(originalGap > 1)
+        for enabled in [true, false, true] {
+            var configuration = store.appConfiguration
+            configuration.reader.seamlessPages = enabled
+            store.updateAppConfiguration(configuration)
+            reader.view.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+            #expect(abs(gap() - (enabled ? 0 : originalGap)) < 0.1)
+            let live = try #require(reader.currentPosition)
+            #expect(live.pageIndex == position.pageIndex)
+            #expect(abs(live.point.y - position.point.y) < 2)
+            #expect(abs(reader.pdfView.scaleFactor - 1.37) < 0.001)
+            #expect(store.session(for: session.id)?.scaleMode == .manual)
+        }
+        let newReader = makeReader(store: store, sessionID: session.id)
+        #expect(!newReader.pdfView.displaysPageBreaks)
+    }
+
     @Test(arguments: ReaderDisplayMode.allCases)
     func manualZoomRefitsNewLayoutAndKeepsLiveReadingPosition(_ mode: ReaderDisplayMode) throws {
         _ = NSApplication.shared

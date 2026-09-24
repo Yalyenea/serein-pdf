@@ -203,6 +203,7 @@ private final class PDFReaderClipView: NSClipView {
 
     /// When non-nil, every horizontal scroll/bounds change is forced to this X.
     var forcedOriginX: CGFloat?
+    weak var pdfView: PDFView?
 
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
         var bounds = super.constrainBoundsRect(proposedBounds)
@@ -215,11 +216,42 @@ private final class PDFReaderClipView: NSClipView {
         }
         if documentView.frame.height <= bounds.height + 0.5 {
             bounds.origin.y = 0
+        } else if let paperBounds = paperBounds(), paperBounds.height > bounds.height {
+            bounds.origin.y = min(max(bounds.origin.y, paperBounds.minY), paperBounds.maxY - bounds.height)
         }
         if let forcedOriginX {
             bounds.origin.x = forcedOriginX
         }
         return bounds
+    }
+
+    private func paperBounds() -> NSRect? {
+        guard let pdfView, let document = pdfView.document, document.pageCount > 0 else { return nil }
+        let indices: [Int]
+        switch pdfView.displayMode {
+        case .singlePageContinuous:
+            indices = [0, document.pageCount - 1]
+        case .twoUpContinuous:
+            indices = [0, 1, document.pageCount - 2, document.pageCount - 1]
+        case .singlePage:
+            guard let page = pdfView.currentPage else { return nil }
+            indices = [document.index(for: page)]
+        case .twoUp:
+            guard let page = pdfView.currentPage else { return nil }
+            let index = document.index(for: page)
+            let lead = pdfView.displaysAsBook && index > 0 ? (index - 1) / 2 * 2 + 1 : index / 2 * 2
+            indices = pdfView.displaysAsBook && lead == 0 ? [0] : [lead, lead + 1]
+        @unknown default:
+            return nil
+        }
+        // Convert actual paper edges, excluding PDFKit's outer page margins.
+        // Interior page gaps and fully visible, centered pages stay unchanged.
+        return Set(indices).filter { (0..<document.pageCount).contains($0) }.compactMap {
+            document.page(at: $0)
+        }.reduce(nil) { (bounds: NSRect?, page) in
+            let rect = convert(pdfView.convert(page.bounds(for: pdfView.displayBox), from: page), from: pdfView)
+            return bounds.map { $0.union(rect) } ?? rect
+        }
     }
 
     override func scroll(to newOrigin: NSPoint) {
@@ -804,7 +836,9 @@ final class ReaderViewController: NSViewController {
                 guard let self else { return event }
                 var rewritten: NSEvent? = event
                 MainActor.assumeIsolated {
-                    rewritten = self.rewriteScrollEventIfNeeded(event)
+                    rewritten = self.rewriteScrollEventIfNeeded(
+                        event, pointerIsOverPDF: self.pointerEventIsOverPDFContent(event)
+                    )
                 }
                 return rewritten
             }
@@ -950,7 +984,7 @@ final class ReaderViewController: NSViewController {
         pdfView.backgroundColor = NSColor.white
         pdfView.isHidden = true
         // Page spacing is geometry; keep it identical across appearance changes.
-        pdfView.displaysPageBreaks = true
+        pdfView.displaysPageBreaks = !documentStore.appConfiguration.reader.seamlessPages
         pdfView.pageShadowsEnabled = false
 
         emptyStateErrorLabel.font = .systemFont(ofSize: 14, weight: .medium)
@@ -2030,8 +2064,17 @@ final class ReaderViewController: NSViewController {
         updatePanLockIndicator()
     }
 
-    private func rewriteScrollEventIfNeeded(_ event: NSEvent) -> NSEvent? {
-        if handleVerticalPageScroll(event, pointerIsOverPDF: pointerEventIsOverPDFContent(event)) {
+    private func rewriteScrollEventIfNeeded(_ event: NSEvent, pointerIsOverPDF: Bool) -> NSEvent? {
+        let displayMode = targetSession()?.displayMode
+        // Continuous reading stops when fingers lift. Direct gestures and
+        // ordinary wheel input retain their original deltas and acceleration.
+        if pointerIsOverPDF,
+           displayMode == .singlePageContinuous || displayMode == .twoUpContinuous,
+           !event.momentumPhase.isEmpty,
+           event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
+            return nil
+        }
+        if handleVerticalPageScroll(event, pointerIsOverPDF: pointerIsOverPDF) {
             return nil
         }
         let phase = event.phase
@@ -2039,8 +2082,6 @@ final class ReaderViewController: NSViewController {
         let startsGesture = phase.contains(.mayBegin) || phase.contains(.began)
         let endsGesture = phase.contains(.ended) || phase.contains(.cancelled)
         let endsMomentum = momentumPhase.contains(.ended) || momentumPhase.contains(.cancelled)
-        let pointerIsOverPDF = pointerEventIsOverPDFContent(event)
-        let displayMode = targetSession()?.displayMode
 
         if startsGesture {
             resetBookPageTurnState()
@@ -2087,7 +2128,7 @@ final class ReaderViewController: NSViewController {
         }
 
         guard shouldLockHorizontalPan else { return event }
-        guard pointerEventIsOverPDFContent(event) else { return event }
+        guard pointerIsOverPDF else { return event }
 
         // Preview-style Option/Command+scroll zoom would scale around the
         // cursor and shift the locked X. Drop it with pinch.
@@ -2781,7 +2822,9 @@ final class ReaderViewController: NSViewController {
         let isNewSession = displayedSessionID != session.id
         let isDisplayModeTransition = !isNewSession && displayedDisplayMode != nil
             && displayedDisplayMode != session.displayMode
-        let modeTransitionPosition = isDisplayModeTransition ? currentReadingPosition() : nil
+        let pageSpacingChanged = pdfView.displaysPageBreaks == documentStore.appConfiguration.reader.seamlessPages
+        let modeTransitionPosition = (isDisplayModeTransition || pageSpacingChanged) && !isNewSession
+            ? currentReadingPosition() : nil
         let liveReadingPosition = isNewSession ? nil : liveReadingPositionForReload()
         let document: PDFDocument
         do {
@@ -2807,14 +2850,14 @@ final class ReaderViewController: NSViewController {
         isApplyingStoreState = true
         defer { isApplyingStoreState = false }
 
-        if isDisplayModeTransition {
+        if !isNewSession && (isDisplayModeTransition || pageSpacingChanged) {
             // The queued scroll sample predates this layout. Preserve the live
             // top-of-viewport anchor and prevent that sample from restoring an old scale.
             readingPositionWritebackWorkItem?.cancel()
             readingPositionWritebackWorkItem = nil
             pendingReadingPositionWriteback = nil
             documentStore.updateReadingPosition(targetReadingPosition, scaleFactor: pdfView.scaleFactor, for: refreshedSession.id)
-            if refreshedSession.scaleMode == .manual {
+            if isDisplayModeTransition && refreshedSession.scaleMode == .manual {
                 documentStore.setScaleMode(.fitWidth, scaleFactor: pdfView.scaleFactor, for: refreshedSession.id)
             }
             refreshedSession = targetSession() ?? refreshedSession
@@ -2833,11 +2876,17 @@ final class ReaderViewController: NSViewController {
             displayedScaleMode = nil
         }
 
+        if pageSpacingChanged {
+            pdfView.displaysPageBreaks = !documentStore.appConfiguration.reader.seamlessPages
+            pdfView.layoutDocumentView()
+            pdfView.layoutSubtreeIfNeeded()
+            markPDFPrivateViewTreeDirty()
+        }
         let displayModeChanged = applyDisplayModeIfNeeded(refreshedSession)
         applyScaleIfNeeded(refreshedSession)
         applyReadingPositionIfNeeded(
             targetReadingPosition,
-            force: documentChanged || displayModeChanged
+            force: documentChanged || displayModeChanged || pageSpacingChanged
         )
         applyHorizontalPanLock(documentStore.effectiveHorizontalPanLock(for: refreshedSession))
         if let reloadedLivePosition,
@@ -2872,6 +2921,7 @@ final class ReaderViewController: NSViewController {
               session.id == displayedSessionID,
               let document = documentStore.loadedPDFDocument(for: session.id),
               pdfView.document === document,
+              pdfView.displaysPageBreaks == !documentStore.appConfiguration.reader.seamlessPages,
               displayedDisplayMode == session.displayMode else { return false }
 
         updatePanLockIndicator()
@@ -3470,6 +3520,8 @@ final class ReaderViewController: NSViewController {
 
     private func configurePDFScrollBehaviorIfNeeded() {
         guard let scrollView = pdfScrollView() else { return }
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         scrollView.verticalScrollElasticity = .none
         scrollView.horizontalScrollElasticity = .none
         scrollView.usesPredominantAxisScrolling = true
@@ -3504,6 +3556,7 @@ final class ReaderViewController: NSViewController {
         let previousBounds = previousClip.bounds
         let documentView = previousClip.documentView
         let replacement = PDFReaderClipView(frame: previousClip.frame)
+        replacement.pdfView = pdfView
         replacement.drawsBackground = previousClip.drawsBackground
         replacement.backgroundColor = previousClip.backgroundColor
         replacement.postsBoundsChangedNotifications = true
@@ -3988,6 +4041,7 @@ final class ReaderViewController: NSViewController {
             let pageBackground = NightModeStyle.readerBackdropColor
             let usesFlatPDFChrome = NightModeStyle.prefersFlatPDFChrome(for: appearance)
             let showsPageShadows = !isNightModeEnabled && !usesFlatPDFChrome
+                && !documentStore.appConfiguration.reader.seamlessPages
             if pdfView.pageShadowsEnabled != showsPageShadows {
                 pdfView.pageShadowsEnabled = showsPageShadows
             }
@@ -4213,6 +4267,10 @@ extension ReaderViewController {
 
     func testingHandleVerticalPageScroll(_ event: NSEvent, pointerIsOverPDF: Bool = true) -> Bool {
         handleVerticalPageScroll(event, pointerIsOverPDF: pointerIsOverPDF)
+    }
+
+    func testingRewriteScrollEvent(_ event: NSEvent, pointerIsOverPDF: Bool = true) -> NSEvent? {
+        rewriteScrollEventIfNeeded(event, pointerIsOverPDF: pointerIsOverPDF)
     }
 
     func testingPositionBelongsToCurrentSpread(

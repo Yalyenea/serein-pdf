@@ -3,6 +3,20 @@ import XCTest
 @testable import Serein
 
 final class AppConfigurationTests: XCTestCase {
+    func testSeamlessPagesAndShortcutPersist() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let store = try AppConfigurationStore(fileURL: rootURL.appendingPathComponent("config.toml"))
+            var configuration = try store.load()
+            XCTAssertFalse(configuration.reader.seamlessPages)
+            XCTAssertEqual(configuration.shortcuts.bindings[.toggleSeamlessPages],
+                           KeyboardShortcut(key: "p", modifiers: [.command, .option]))
+            configuration.reader.seamlessPages = true
+            configuration.shortcuts.bindings[.toggleSeamlessPages] = KeyboardShortcut(key: "j", modifiers: [.command, .option])
+            try store.save(configuration)
+            XCTAssertEqual(try store.load(), configuration)
+        }
+    }
+
     func testPlusShortcutsRoundTripWithoutConfusingModifierSeparator() throws {
         let modifiers: [Set<KeyboardShortcutModifier>] = [[], [.command], [.shift], [.command, .shift]]
         for flags in modifiers {

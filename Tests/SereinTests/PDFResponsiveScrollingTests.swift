@@ -6,6 +6,50 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct PDFResponsiveScrollingTests {
+    @Test(arguments: [ReaderDisplayMode.singlePageContinuous, .twoUpContinuous])
+    func continuousReadingStopsOnFingerLiftAndAcceptsNextGesture(mode: ReaderDisplayMode) throws {
+        let (controller, reader, _, _) = try makePagedReader(mode: mode)
+        defer { controller.close() }
+        let scroll = try #require(reader.pdfView.subviews.compactMap { $0 as? NSScrollView }.first)
+        let clip = scroll.contentView
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: 200))
+        scroll.reflectScrolledClipView(clip)
+        settle(controller.window)
+        let startY = clip.bounds.minY
+        var liftedY: CGFloat?
+        for step in rapidFlick {
+            let event = try makeEvent(step, direction: -1)
+            let routed = reader.testingRewriteScrollEvent(event)
+            if event.momentumPhase.isEmpty {
+                #expect(routed === event)
+                scroll.scrollWheel(with: try #require(routed))
+                settle(controller.window)
+                if event.phase.contains(.ended) { liftedY = clip.bounds.minY }
+            } else {
+                #expect(routed == nil)
+                #expect(clip.bounds.minY == liftedY)
+            }
+        }
+        let stoppedY = try #require(liftedY)
+        #expect(stoppedY > startY + 100)
+        settle(controller.window)
+        #expect(abs(clip.bounds.minY - stoppedY) < 0.01)
+        for step in inwardFlick {
+            let event = try makeEvent(step, direction: 1)
+            if let routed = reader.testingRewriteScrollEvent(event) {
+                scroll.scrollWheel(with: routed)
+            }
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+        }
+        settle(controller.window)
+        #expect(clip.bounds.minY < stoppedY - 10)
+
+        let outside = try makeEvent(WheelStep(delta: 25, momentum: 1, expectedMomentum: .began), direction: -1)
+        #expect(reader.testingRewriteScrollEvent(outside, pointerIsOverPDF: false) === outside)
+        let wheel = try makeEvent(WheelStep(delta: 25), direction: -1)
+        #expect(reader.testingRewriteScrollEvent(wheel) === wheel)
+    }
+
     @Test(arguments: [ReaderDisplayMode.singlePage, .twoUp])
     func discreteTrackpadTurnsMatchKeyboardAndConsumeRemainingGesture(mode: ReaderDisplayMode) throws {
         let (controller, reader, store, sessionID) = try makePagedReader(mode: mode)

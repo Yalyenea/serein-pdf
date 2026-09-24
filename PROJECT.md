@@ -122,6 +122,8 @@ flowchart LR
 
 ### 4.1 信息架构
 
+无缝页面：`Cmd+Option+P`、View 菜单与 Settings → General → Reading 切换页间空隙，`reader.seamless_pages` 默认关闭；切换保留阅读位置与缩放。滚动边界贴合首尾纸面；单页与双页连续模式在手指离开触控板时停止滚动。
+
 | 区域 | 职责 | 边界 |
 |---|---|---|
 | 左栏 Vertical Sidebar | 工作区选择器与当前工作区文档 tabs | 不放 outline / 不放缩略图 / 不做文件树;悬停显示完整 PDF 文件名 |

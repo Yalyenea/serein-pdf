@@ -6,6 +6,53 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct PDFBoundaryScrollTests {
+    @Test(arguments: [ReaderDisplayMode.singlePage, .singlePageContinuous, .twoUp, .twoUpContinuous, .book, .bookContinuous],
+          [TabPresentationMode.verticalSidebar, .horizontalTitlebar])
+    func pageEdgesMeetViewportWithoutOuterGaps(mode: ReaderDisplayMode, tabs: TabPresentationMode) throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let url: URL
+        if let path = ProcessInfo.processInfo.environment["SEREIN_BOUNDARY_TEST_PDF"] {
+            url = URL(fileURLWithPath: path)
+        } else {
+            url = try TestPDFFixtures.makeLabeledPDF(named: "outer-page-edges", pageSizes: Array(repeating: NSSize(width: 612, height: 792), count: 3))
+        }
+        let session = try store.open(documentAt: url)
+        store.setDisplayMode(mode, for: session.id)
+        store.setTabPresentationMode(tabs, in: controller.windowID)
+        controller.showWindow(nil)
+        settle(controller.window)
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        let reader = split.readerViewController
+        reader.fitToWidth()
+        settle(controller.window)
+        let scroll = try #require(reader.pdfView.subviews.compactMap { $0 as? NSScrollView }.first)
+        let clip = scroll.contentView
+        let document = try #require(reader.pdfView.document)
+        // Exercise both window chrome layouts with paper taller than the viewport.
+        let firstPage = try #require(document.page(at: 0))
+        while reader.pdfView.convert(firstPage.bounds(for: reader.pdfView.displayBox), from: firstPage).height <= clip.frame.height + 20,
+              reader.pdfView.scaleFactor < reader.pdfView.maxScaleFactor {
+            reader.zoomIn()
+            settle(controller.window)
+        }
+        try #require(reader.pdfView.convert(firstPage.bounds(for: reader.pdfView.displayBox), from: firstPage).height > clip.frame.height)
+        for atEnd in [false, true] {
+            if atEnd { reader.goToLastPage() } else { reader.goToFirstPage() }
+            settle(controller.window)
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: atEnd ? 1_000_000 : -1_000_000))
+            scroll.reflectScrolledClipView(clip)
+            settle(controller.window)
+            let page = try #require(document.page(at: atEnd ? document.pageCount - 1 : 0))
+            let pageInPDF = reader.pdfView.convert(page.bounds(for: reader.pdfView.displayBox), from: page)
+            let pageInClip = clip.convert(pageInPDF, from: reader.pdfView)
+            let gap = atEnd ? clip.bounds.maxY - pageInClip.maxY : pageInClip.minY - clip.bounds.minY
+            #expect(abs(gap) < 1)
+        }
+    }
+
     @Test(arguments: [ReaderDisplayMode.singlePage, .singlePageContinuous, .twoUp, .twoUpContinuous])
     func documentEdgesRejectTinyOffsetsAndWheelOverscroll(mode: ReaderDisplayMode) throws {
         _ = NSApplication.shared
