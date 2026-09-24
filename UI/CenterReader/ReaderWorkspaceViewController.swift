@@ -102,16 +102,9 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         orderedPaneIDs.compactMap { readers[$0] }
     }
 
-    // These accessors retain their ordered-pane meaning for existing integrations.
-    // Pane identity and layout are exclusively owned by DocumentStore.
     var primaryReaderViewController: ReaderViewController {
         loadViewIfNeeded()
         return readers[orderedPaneIDs[0]]!
-    }
-
-    var secondaryReaderViewController: ReaderViewController {
-        loadViewIfNeeded()
-        return readers[orderedPaneIDs.count > 1 ? orderedPaneIDs[1] : orderedPaneIDs[0]]!
     }
 
     private var readers: [ReaderPane: ReaderViewController] = [:]
@@ -276,7 +269,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             NSSound.beep()
             return false
         }
-        reader.flushPendingReadingPosition()
+        flushPendingReadingPositions()
         let position = readingPosition ?? (sessionID == nil || sessionID == reader.displayedSessionID ? reader.currentPosition : nil)
         guard documentStore.splitPane(from: pane, layout: layout, sessionID: sessionID,
                                       readingPosition: position, in: windowID) != nil else { return false }
@@ -620,10 +613,6 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         _ = floatingOutlineViewController.showQuickNavigation()
     }
 
-    func canSplitActivePane(layout: ReaderSplitLayout) -> Bool {
-        canSplitPane(layout: layout)
-    }
-
     @discardableResult
     func splitActivePane(documentAt url: URL, layout: ReaderSplitLayout) throws -> Bool {
         let pane = documentStore.focusedPane(in: windowID)
@@ -631,7 +620,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             NSSound.beep()
             return false
         }
-        readers[pane]?.flushPendingReadingPosition()
+        flushPendingReadingPositions()
         guard try documentStore.splitPane(from: pane, layout: layout, documentAt: url, in: windowID) != nil else { return false }
         focusActiveReader()
         return true

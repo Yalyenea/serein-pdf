@@ -719,7 +719,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
         store.activate(sessionID: session.id, in: store.defaultWindowID, targetPane: .secondary)
         store.setFocusedPane(.primary, in: store.defaultWindowID)
         flushAnnotationNavigationLayout(windowController.window)
-        let secondaryReader = split.readerWorkspaceViewController.secondaryReaderViewController
+        let secondaryReader = split.readerWorkspaceViewController.allReaderViewControllers[1]
         let event = try XCTUnwrap(
             NSEvent.mouseEvent(
                 with: .rightMouseDown,

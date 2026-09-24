@@ -402,16 +402,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             name: .documentStoreDidChange, object: documentStore
         )
         NotificationCenter.default.addObserver(
-            self, selector: #selector(handleReaderWindowDidBecomeKey),
+            self, selector: #selector(handleWindowDidBecomeKey),
             name: NSWindow.didBecomeKeyNotification, object: nil
         )
     }
 
     @objc
-    private func handleReaderWindowDidBecomeKey(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              controller(for: window) != nil else { return }
-        refreshManagedMenuState()
+    private func handleWindowDidBecomeKey(_ notification: Notification) {
+        refreshMenuShortcuts()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -1341,7 +1339,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         item.target = self
         item.representedObject = command
 
-        if let shortcut = appConfiguration.shortcuts.bindings[command] {
+        if let shortcut = appConfiguration.shortcuts.bindings[command],
+           shouldExposeMenuKeyEquivalent(shortcut, for: command) {
             item.keyEquivalent = shortcut.menuKeyEquivalent
             item.keyEquivalentModifierMask = shortcut.modifierMask
         }
@@ -1740,12 +1739,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return RecentWindowsPaletteItem(
                 windowID: windowID,
                 title: session?.title ?? workspaceName,
-                documentSummary: "\(workspaceName) · \(window.sessionIDs.count) tabs\(isClosed ? " · Closed" : "")",
+                documentSummary: "\(workspaceName) · \(window.sessionIDs.count) \(window.sessionIDs.count == 1 ? "tab" : "tabs")\(isClosed ? " · Closed" : "")",
                 canSplit: session?.isBlank == false && recentWindowsPaletteWindowID != nil
             )
         }
         configurePaletteSplitShortcuts()
-        recentWindowsPaletteController?.show(with: items, relativeTo: mainWindowController?.window)
+        recentWindowsPaletteController?.show(
+            with: items, currentWindowID: recentWindowsPaletteWindowID, relativeTo: mainWindowController?.window
+        )
     }
 
     private func configurePaletteSplitShortcuts() {
@@ -2737,7 +2738,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         refreshManagedMenuState(in: menu)
     }
 
-    private func shouldExposeMenuKeyEquivalent(_ shortcut: KeyboardShortcut) -> Bool {
+    private func shouldExposeMenuKeyEquivalent(_ shortcut: KeyboardShortcut, for command: ShortcutCommand) -> Bool {
+        // A disabled menu equivalent still consumes native Control editing keys.
+        if ReaderShortcutsController.windowRoutedCommands.contains(command),
+           controller(for: NSApp.keyWindow) == nil {
+            return false
+        }
         guard commandPaletteController?.window?.isVisible == true else { return true }
         return ShortcutCommand.allCases.contains { command in
             command.builtInShortcutSequence?.strokes.last == shortcut
@@ -2749,7 +2755,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             if let command = item.representedObject as? ShortcutCommand {
                 item.title = menuTitle(command.menuTitle, for: command)
                 if let shortcut = appConfiguration.shortcuts.bindings[command],
-                   shouldExposeMenuKeyEquivalent(shortcut) {
+                   shouldExposeMenuKeyEquivalent(shortcut, for: command) {
                     item.keyEquivalent = shortcut.menuKeyEquivalent
                     item.keyEquivalentModifierMask = shortcut.modifierMask
                 } else {
@@ -2960,7 +2966,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let windowID = controller?.windowID
         let activeSession = windowID.flatMap { documentStore.activeSession(in: $0) }
         let activePDFSession = activeSession?.isBlank == false ? activeSession : nil
-        let canUseReaderShortcuts = ReaderShortcutsController.shouldHandlePlainShortcut(for: controller?.window?.firstResponder)
+        let canUseReaderShortcuts = (commandWindowContext != nil || NSApp.keyWindow === controller?.window)
+            && ReaderShortcutsController.shouldHandlePlainShortcut(for: controller?.window?.firstResponder)
 
         switch menuItem.action {
         case #selector(newBlankTab(_:)):

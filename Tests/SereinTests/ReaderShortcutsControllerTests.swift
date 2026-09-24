@@ -1,5 +1,6 @@
 import AppKit
 import IOKit
+import PDFKit
 import XCTest
 @testable import Serein
 
@@ -11,6 +12,12 @@ private final class ShortcutRecordingTextView: NSTextView {
     var receivedKeys: [String] = []
     override func keyDown(with event: NSEvent) {
         receivedKeys.append(event.charactersIgnoringModifiers ?? "")
+    }
+}
+private final class ShortcutTableDataSource: NSObject, NSTableViewDataSource {
+    func numberOfRows(in tableView: NSTableView) -> Int { 3 }
+    func tableView(_ tableView: NSTableView, objectValueFor tableColumn: NSTableColumn?, row: Int) -> Any? {
+        "Result \(row + 1)"
     }
 }
 
@@ -290,6 +297,9 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+        let pdfView = PDFView()
+        window.contentView = pdfView
+        window.makeFirstResponder(pdfView)
 
         XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "h", modifierFlags: []), in: window))
         XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F702}", modifierFlags: []), in: window))
@@ -314,6 +324,9 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+        let pdfView = PDFView()
+        window.contentView = pdfView
+        window.makeFirstResponder(pdfView)
 
         XCTAssertFalse(
             controller.handleShortcutEvent(
@@ -335,12 +348,56 @@ final class ReaderShortcutsControllerTests: XCTestCase {
             }
         )
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        let pdfView = PDFView()
+        window.contentView = pdfView
+        window.makeFirstResponder(pdfView)
 
         XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F700}"), in: window))
         XCTAssertTrue(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F701}"), in: window))
         XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F701}", modifierFlags: [.shift]), in: window))
         XCTAssertFalse(controller.handleShortcutEvent(for: makeKeyEvent(characters: "\u{F702}"), in: window))
         XCTAssertEqual(directions, [-1, 1])
+    }
+
+    func testWindowSendsArrowKeysToFocusedTableAndPageTurnsToPDF() {
+        _ = NSApplication.shared
+        let window = ReaderShortcutWindow(contentRect: .init(x: 0, y: 0, width: 500, height: 400),
+                                          styleMask: [.titled], backing: .buffered, defer: false)
+        defer { window.orderOut(nil) }
+        let table = NSTableView(frame: NSRect(x: 0, y: 0, width: 200, height: 300))
+        let dataSource = ShortcutTableDataSource()
+        table.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("result")))
+        table.dataSource = dataSource
+        table.reloadData()
+        let pdfView = PDFView(frame: NSRect(x: 200, y: 0, width: 300, height: 400))
+        window.contentView?.addSubview(table)
+        window.contentView?.addSubview(pdfView)
+        var turns: [Int] = []
+        let controller = ReaderShortcutsController(
+            shortcutsProvider: { [:] }, handlerProvider: { [:] },
+            bookPageTurnHandler: { direction, _ in turns.append(direction); return true },
+            verticalPageTurnHandler: { direction, _ in turns.append(direction); return true }
+        )
+        window.plainShortcutHandler = { controller.handleShortcutEvent(for: $0, in: $1) }
+        window.makeKeyAndOrderFront(nil)
+        XCTAssertTrue(window.makeFirstResponder(table))
+        table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        window.sendEvent(makeKeyEvent(characters: "\u{F701}", keyCode: 125, window: window))
+        XCTAssertEqual(table.selectedRow, 1)
+        window.sendEvent(makeKeyEvent(characters: "\u{F700}", keyCode: 126, window: window))
+        XCTAssertEqual(table.selectedRow, 0)
+        for (key, code) in [("\u{F702}", UInt16(123)), ("\u{F703}", UInt16(124))] {
+            window.sendEvent(makeKeyEvent(characters: key, keyCode: code, window: window))
+        }
+        XCTAssertTrue(turns.isEmpty)
+
+        XCTAssertTrue(window.makeFirstResponder(pdfView))
+        for (key, code) in [("\u{F700}", UInt16(126)), ("\u{F701}", UInt16(125)),
+                            ("\u{F702}", UInt16(123)), ("\u{F703}", UInt16(124))] {
+            window.sendEvent(makeKeyEvent(characters: key, keyCode: code, window: window))
+        }
+        XCTAssertEqual(turns, [-1, 1, -1, 1])
+        withExtendedLifetime(dataSource) {}
     }
 
     func testPaneShortcutsRouteModifiedKeysAndLeaveTextEditingAlone() {

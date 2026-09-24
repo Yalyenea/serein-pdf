@@ -11,29 +11,6 @@ private final class RecentFilesPaletteResultsTableView: NSTableView {
     }
 }
 
-private final class RecentFilesPalettePanel: NSPanel {
-    var onKeyEvent: ((NSEvent) -> Bool)?
-
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown,
-           onKeyEvent?(event) == true {
-            return
-        }
-        super.sendEvent(event)
-    }
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.type == .keyDown, onKeyEvent?(event) == true {
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
-    }
-
-    override func cancelOperation(_ sender: Any?) {
-        close()
-    }
-}
-
 enum RecentFilesPaletteInteractionMode {
     case editingQuery
     case navigatingResults
@@ -138,7 +115,7 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
         self.onOpenURLs = onOpenURLs
         self.onSplitURL = onSplitURL
 
-        let panel = RecentFilesPalettePanel(
+        let panel = CompactPalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 120),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,

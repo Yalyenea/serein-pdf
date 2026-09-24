@@ -55,8 +55,8 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
         updateFooter()
     }
 
-    func show(with items: [RecentWindowsPaletteItem], relativeTo parentWindow: NSWindow?) {
-        self.items = items
+    func show(with items: [RecentWindowsPaletteItem], currentWindowID: UUID?, relativeTo parentWindow: NSWindow?) {
+        self.items = items.filter { $0.windowID != currentWindowID } + items.filter { $0.windowID == currentWindowID }
         self.parentWindow = parentWindow
         queryField.stringValue = ""
         filterItems()
@@ -76,6 +76,10 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
             window.backgroundColor = NightModeStyle.splitBackgroundColor
             window.contentView?.layer?.backgroundColor = NightModeStyle.splitBackgroundColor.cgColor
             queryField.textColor = NightModeStyle.primaryTextColor
+            if let editor = queryField.currentEditor() as? NSTextView {
+                editor.textColor = NightModeStyle.primaryTextColor
+                editor.insertionPointColor = NightModeStyle.primaryTextColor
+            }
             queryField.placeholderAttributedString = NSAttributedString(
                 string: "Filter recent windows", attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
             )
@@ -234,6 +238,12 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
 
 #if DEBUG
 extension RecentWindowsPaletteController {
+    var testingItems: [RecentWindowsPaletteItem] { filteredItems }
+    var testingQueryFrameOnScreen: NSRect? {
+        guard let window else { return nil }
+        window.contentView?.layoutSubtreeIfNeeded()
+        return window.convertToScreen(queryField.convert(queryField.bounds, to: nil))
+    }
     var testingHighlightedWindowID: UUID? { highlightedItem?.windowID }
     var testingFooter: String { footerLabel.stringValue }
     func testingHandleKeyEvent(_ event: NSEvent) -> Bool { handleKeyEvent(event) }

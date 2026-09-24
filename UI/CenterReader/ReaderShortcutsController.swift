@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 
 @MainActor
 final class ReaderShortcutsController {
@@ -11,7 +12,7 @@ final class ReaderShortcutsController {
         (KeyboardShortcut(key: "2", modifiers: []), .highlightColorYellow),
         (KeyboardShortcut(key: "3", modifiers: []), .highlightColorGreen),
     ]
-    private static let windowRoutedCommands: [ShortcutCommand] = [
+    static let windowRoutedCommands: [ShortcutCommand] = [
         .navigateBack,
         .navigateForward,
         .translateSelection,
@@ -75,7 +76,8 @@ final class ReaderShortcutsController {
     }
 
     private func handleBookPageTurnShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
-        guard event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
+        guard Self.hasPDFKeyboardFocus(in: window),
+              event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
               let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
 
         let direction: Int
@@ -104,7 +106,8 @@ final class ReaderShortcutsController {
     }
 
     private func handleVerticalPageTurnShortcut(for event: NSEvent, in window: NSWindow) -> Bool {
-        guard event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
+        guard Self.hasPDFKeyboardFocus(in: window),
+              event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
               let key = event.charactersIgnoringModifiers else { return false }
         switch key {
         case "\u{F700}":
@@ -182,5 +185,14 @@ final class ReaderShortcutsController {
         guard let textView = firstResponder as? NSTextView else { return true }
         let className = NSStringFromClass(type(of: textView))
         return className.contains("PDF") || (textView.isEditable == false && textView.isSelectable == false)
+    }
+
+    private static func hasPDFKeyboardFocus(in window: NSWindow) -> Bool {
+        var view = window.firstResponder as? NSView
+        while let candidate = view {
+            if candidate is PDFView { return true }
+            view = candidate.superview
+        }
+        return false
     }
 }

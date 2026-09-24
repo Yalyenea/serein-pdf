@@ -94,11 +94,6 @@ extension Notification {
     }
 }
 
-struct DocumentOpenLocation: Equatable, Sendable {
-    var windowID: UUID
-    var sessionID: UUID
-}
-
 @MainActor
 final class DocumentStore {
     private let persistence: DocumentStorePersistence
@@ -278,8 +273,11 @@ final class DocumentStore {
     }
 
     func closeWindow(id windowID: UUID) {
-        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
-        windowWorkspaces[index].isClosed = true
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              !windowWorkspaces[index].isClosed else { return }
+        var window = windowWorkspaces.remove(at: index)
+        window.isClosed = true
+        windowWorkspaces.append(window)
         cancelSearchOperation(in: windowID)
         searchSnapshots.removeValue(forKey: windowID)
         searchOptionsByWindowID.removeValue(forKey: windowID)
@@ -453,33 +451,6 @@ final class DocumentStore {
 
     static func normalizedDocumentURL(_ url: URL) -> URL {
         url.standardizedFileURL.resolvingSymlinksInPath()
-    }
-
-    func openLocation(for url: URL) -> DocumentOpenLocation? {
-        let normalizedURL = Self.normalizedDocumentURL(url)
-        for window in windowWorkspaces {
-            for workspace in window.workspaces {
-                for sessionID in workspace.sessionIDs {
-                    guard let session = session(for: sessionID), !session.isBlank,
-                          Self.normalizedDocumentURL(session.url) == normalizedURL else { continue }
-                    return DocumentOpenLocation(windowID: window.id, sessionID: sessionID)
-                }
-            }
-        }
-        return nil
-    }
-
-    @discardableResult
-    func activateOpenDocument(at url: URL) -> DocumentOpenLocation? {
-        guard let location = openLocation(for: url) else { return nil }
-        reopenWindow(id: location.windowID)
-        if let workspaceID = workspaces(in: location.windowID).first(where: { $0.sessionIDs.contains(location.sessionID) })?.id {
-            activateWorkspace(workspaceID, in: location.windowID)
-        }
-        selectSessions([location.sessionID], in: location.windowID, notify: false)
-        activateSession(sessionID: location.sessionID, in: location.windowID, targetPane: nil, notify: false)
-        notifyChange(.tabs, windowIDs: [location.windowID])
-        return location
     }
 
     @discardableResult
@@ -2690,8 +2661,10 @@ extension DocumentStore {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
               var group = windowWorkspaces[index].activeWorkspace.activeGroup,
               group.root.paneIDs.contains(pane),
-              let sourceID = sessionID ?? group.sessionIDsByPane[pane],
-              let source = session(for: sourceID), !source.isBlank else { return nil }
+              let requestedID = sessionID ?? group.sessionIDsByPane[pane] else { return nil }
+        let sourceID = sessionID != nil && readingPosition == nil
+            ? readingSessionID(forTab: requestedID) : requestedID
+        guard let source = session(for: sourceID), !source.isBlank else { return nil }
         do {
             let publicSession = try ensurePublicSession(documentAt: source.url, seed: source, in: windowID)
             let alreadyHasReader = windowWorkspaces[index].activeWorkspace.groups.contains {
@@ -2734,6 +2707,20 @@ extension DocumentStore {
         guard readerPanes(in: windowID).contains(where: { $0.id == pane && $0.sessionID != nil }) else { return nil }
         let target = try ensurePublicSession(documentAt: url, seed: nil, in: windowID)
         return splitPane(from: pane, layout: layout, sessionID: target.id, in: windowID)
+    }
+
+    /// A tab can remain open after its original reader has been replaced by a comparison pane.
+    private func readingSessionID(forTab sessionID: UUID) -> UUID {
+        guard let workspace = windowWorkspaces.lazy.flatMap(\.workspaces)
+            .first(where: { $0.sessionIDs.contains(sessionID) }) else { return sessionID }
+        for group in workspace.groups.reversed() {
+            let matches: (UUID) -> Bool = { id in
+                id == sessionID || self.session(for: id)?.tabSessionID == sessionID
+            }
+            if let focused = group.sessionIDsByPane[group.focusedPane], matches(focused) { return focused }
+            if let displayed = group.sessionIDs.first(where: matches) { return displayed }
+        }
+        return sessionID
     }
 
     @discardableResult

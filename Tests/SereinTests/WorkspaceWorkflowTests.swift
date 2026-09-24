@@ -9,6 +9,20 @@ struct WorkspaceWorkflowTests {
     @Test
     func menuCommandsBuildFourPanesAndRestoreWorkspace() async throws {
         _ = NSApplication.shared
+        let previousPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.accessory)
+        NSApp.activate(ignoringOtherApps: true)
+        defer { NSApp.setActivationPolicy(previousPolicy) }
+        // Let AppKit finish activation so menu validation uses a real key window.
+        Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                NSApp.stop(nil)
+                NSApp.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero,
+                    modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                    subtype: 0, data1: 0, data2: 0)!, atStart: false)
+            }
+        }
+        NSApp.run()
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         let window = try #require(controller.window)

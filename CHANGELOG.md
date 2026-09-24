@@ -10,6 +10,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Keep custom page text readable on light or dark paper, synchronize all readers, and use the window background around PDF pages in either appearance.
 
 ### Workspaces and comparison
+- Default the recent-windows list to another window and retain closing order across relaunch. Keep saved window groups available for reopening.
+- Copy the current comparison pane's position and zoom when splitting from document lists, even after the original pane has closed. Show configured split shortcuts in the open-tabs footer and complete quick Control-Tab taps when Control is already released.
 - Add named workspaces within each window, with create, rename, switch, and move-document actions in both tab layouts. Keep independent reading positions for the same PDF across workspaces while sharing annotations, saving, and undo.
 - Restore nested reader layouts, divider proportions, focused panes, and reading positions across workspace switches and relaunch. Keep closed window groups available in the recent-windows list.
 - Split the focused PDF right with `B` or below with `Shift+B`, supporting four panes and further splits when space permits. Use `Ctrl+H/J/K/L` for directional focus, `Cmd+W` to close only the focused pane, and `Cmd+T` to fill the reader with that pane or restore the layout. Move New Blank Tab to `Cmd+Option+T`.
@@ -18,6 +20,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add the recent-windows list on `W`, configurable right/below split shortcuts in all three document lists, and full PDF filename tooltips in both tab layouts. Ordinary opening reuses a tab within the active workspace.
 
 ### Reading
+- Keep arrow navigation in focused sidebar lists; route page-turn arrows only from the PDF reader.
+- Preserve native Control editing shortcuts in palettes, Settings, and sheets while a split reader is open; restore reader menu shortcuts when returning to its window.
 - Keep the horizontal content range and reading anchor when sidebars open, close, or resize, including manual zoom with Lock enabled.
 - Persist Fit Text Width as an adaptive mode and refit on reading-area and page changes; restore the document’s saved scale on pages without text.
 - Keep horizontal tabs hidden when reopening only the outline after immersive mode, and restore tab visibility correctly after demo mode.

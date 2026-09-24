@@ -10,8 +10,6 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
     let title: String
     let subtitle: String
     let pageText: String
-    let paneBadge: String?
-    let isFocusedPane: Bool
     let isActive: Bool
     let isDirty: Bool
     let workspaceName: String?
@@ -19,10 +17,7 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
     init(
         session: DocumentSession,
         isActive: Bool,
-        workspaceName: String? = nil,
-        primarySessionID: UUID? = nil,
-        secondarySessionID: UUID? = nil,
-        focusedPane: ReaderPane = .primary
+        workspaceName: String? = nil
     ) {
         self.sessionID = session.id
         self.workspaceName = workspaceName
@@ -42,16 +37,6 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
                 self.pageText = "Page \(pageIndex + 1)"
             }
         }
-        if session.id == primarySessionID {
-            self.paneBadge = "P"
-            self.isFocusedPane = focusedPane == .primary
-        } else if session.id == secondarySessionID {
-            self.paneBadge = "S"
-            self.isFocusedPane = focusedPane == .secondary
-        } else {
-            self.paneBadge = nil
-            self.isFocusedPane = false
-        }
     }
 }
 
@@ -59,45 +44,14 @@ struct OpenTabsPaletteState {
     private(set) var items: [OpenTabsPaletteItem] = []
     private(set) var highlightedIndex: Int?
 
-    init(
-        sessions: [DocumentSession],
-        activeSessionID: UUID?,
-        primarySessionID: UUID? = nil,
-        secondarySessionID: UUID? = nil,
-        focusedPane: ReaderPane = .primary
-    ) {
-        replaceSessions(
-            sessions,
-            activeSessionID: activeSessionID,
-            primarySessionID: primarySessionID,
-            secondarySessionID: secondarySessionID,
-            focusedPane: focusedPane
-        )
+    init(items: [OpenTabsPaletteItem] = [], activationMode: OpenTabsPaletteActivationMode = .explicitSelection) {
+        replaceItems(items, activationMode: activationMode)
     }
 
     var highlightedItem: OpenTabsPaletteItem? {
         guard let highlightedIndex,
               items.indices.contains(highlightedIndex) else { return nil }
         return items[highlightedIndex]
-    }
-
-    mutating func replaceSessions(
-        _ sessions: [DocumentSession],
-        activeSessionID: UUID?,
-        primarySessionID: UUID? = nil,
-        secondarySessionID: UUID? = nil,
-        focusedPane: ReaderPane = .primary
-    ) {
-        items = sessions.map {
-            OpenTabsPaletteItem(
-                session: $0,
-                isActive: $0.id == activeSessionID,
-                primarySessionID: primarySessionID,
-                secondarySessionID: secondarySessionID,
-                focusedPane: focusedPane
-            )
-        }
-        highlightedIndex = Self.initialHighlightIndex(in: items)
     }
 
     mutating func replaceItems(_ items: [OpenTabsPaletteItem], activationMode: OpenTabsPaletteActivationMode) {

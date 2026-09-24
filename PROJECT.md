@@ -76,7 +76,7 @@ flowchart LR
 | 决策 | 结论 |
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
-| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗拥有一组具名工作区,各自保存 tab、搜索与阅读布局;关闭窗口保留工作区组,可从最近窗口恢复;支持合并窗口与跨窗移动 PDF |
+| 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗拥有一组具名工作区,各自保存 tab、搜索与阅读布局;关闭窗口保留工作区组,按关闭顺序排列并跨重启保留;最近窗口默认选中最近的其他窗口;支持合并窗口与跨窗移动 PDF |
 | 工作区入口 | 两种 tab 形态共享紧凑选择器,支持创建 / 重命名 / 切换;tab 右键可移动 PDF 到同窗其他工作区;空工作区保留选择器 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 按稳定 pane ID 管理动态 Reader,以 `NSSplitView` + `ReaderSplitHostView` 递归呈现分屏树 |
@@ -98,7 +98,7 @@ flowchart LR
 | 分屏恢复 | 新窗口空白;工作区切换和应用重启恢复布局树、各节点方向 / 比例、焦点及各区阅读状态;临时放大不改变保存的布局 |
 | 分屏方向 | `ReaderLayoutNode` 可递归组合左右 `sideBySide` / 上下 `stacked`,支持四宫格及更多阅读区;新增后每区至少 320 × 160 pt,不设固定屏数上限 |
 | 分屏组 | 普通 tab 激活优先当前组,组外文档切换后保留原组;返回组内文档恢复布局;Option 激活、链接与最近入口始终新增阅读区 |
-| 同 PDF 对比 | 每个 pane 使用独立阅读 session,共享源 PDF、批注与撤销,独立页码 / 缩放;内部阅读 session 随布局持久化,通过所属公开 tab 出现在 MRU 与文档切换中 |
+| 同 PDF 对比 | 每个 pane 使用独立阅读 session,共享源 PDF、批注与撤销,独立页码 / 缩放;内部阅读 session 随布局持久化,通过所属公开 tab 出现在 MRU 与文档切换中;从列表分屏时继承源工作区最近阅读组内该 PDF 的焦点阅读区或首个对应阅读区,显式指定的阅读区与链接位置优先 |
 | 状态持有 | 各阅读 session 保存页码 / 缩放 / Lock,同文件共享文档 owner 的 dirty / undo;搜索结果是窗口级 `SearchSnapshot`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;窗口 chrome 在 `WindowWorkspace`,tab 与分屏组在 `NamedWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步所有 pane |
 | 选区翻译 | `T` 打开 Apple 翻译窗口,自动识别源语言、默认简体中文、可切换目标语言;结果绑定原 PDF / 原选区,点击写入新建粉色高亮与译文评论,同一结果只写一次,保留已有批注并沿用撤销 / 保存 |

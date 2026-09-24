@@ -10,11 +10,8 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         let first = try makeSession(title: "First", path: "/tmp/first.pdf")
         let controller = OpenTabsPaletteController { _, _ in }
         controller.show(
-            with: [first],
-            activeSessionID: first.id,
-            primarySessionID: first.id,
-            secondarySessionID: nil,
-            focusedPane: .primary,
+            items: [OpenTabsPaletteItem(session: first, isActive: true)],
+            activationMode: .explicitSelection,
             relativeTo: nil
         )
         defer { controller.close() }
@@ -30,11 +27,8 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         }
         let controller = OpenTabsPaletteController { _, _ in }
         controller.show(
-            with: sessions,
-            activeSessionID: sessions[0].id,
-            primarySessionID: sessions[0].id,
-            secondarySessionID: nil,
-            focusedPane: .primary,
+            items: sessions.map { OpenTabsPaletteItem(session: $0, isActive: $0.id == sessions[0].id) },
+            activationMode: .explicitSelection,
             relativeTo: nil
         )
         defer { controller.close() }
@@ -63,11 +57,8 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
             activatedAlternatePane = alternatePane
         }
         controller.show(
-            with: [first, second],
-            activeSessionID: first.id,
-            primarySessionID: first.id,
-            secondarySessionID: nil,
-            focusedPane: .primary,
+            items: [first, second].map { OpenTabsPaletteItem(session: $0, isActive: $0.id == first.id) },
+            activationMode: .explicitSelection,
             relativeTo: nil
         )
         defer { controller.close() }
@@ -90,11 +81,8 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
             activatedAlternatePane = alternatePane
         }
         controller.show(
-            with: [first, second],
-            activeSessionID: first.id,
-            primarySessionID: first.id,
-            secondarySessionID: nil,
-            focusedPane: .primary,
+            items: [first, second].map { OpenTabsPaletteItem(session: $0, isActive: $0.id == first.id) },
+            activationMode: .explicitSelection,
             relativeTo: nil
         )
         defer { controller.close() }
@@ -121,11 +109,8 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
             activatedAlternatePane = alternatePane
         }
         controller.show(
-            with: [first, second],
-            activeSessionID: first.id,
-            primarySessionID: first.id,
-            secondarySessionID: nil,
-            focusedPane: .primary,
+            items: [first, second].map { OpenTabsPaletteItem(session: $0, isActive: $0.id == first.id) },
+            activationMode: .explicitSelection,
             relativeTo: nil
         )
         defer { controller.close() }
@@ -144,11 +129,8 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
             activatedSessionID = sessionID
         }
         controller.show(
-            with: [first],
-            activeSessionID: first.id,
-            primarySessionID: first.id,
-            secondarySessionID: nil,
-            focusedPane: .primary,
+            items: [OpenTabsPaletteItem(session: first, isActive: true)],
+            activationMode: .explicitSelection,
             relativeTo: nil
         )
 
@@ -165,7 +147,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
             OpenTabsPaletteItem(session: $0.element, isActive: $0.offset == 0, workspaceName: "Workspace \($0.offset)")
         }
         var activatedIDs: [UUID] = []
-        let controller = OpenTabsPaletteController { sessionID, _ in activatedIDs.append(sessionID) }
+        let controller = OpenTabsPaletteController(modifierFlags: { [.control] }) { sessionID, _ in activatedIDs.append(sessionID) }
         controller.show(items: items, activationMode: .heldControl(reverse: false), relativeTo: nil)
         defer { controller.close() }
         XCTAssertEqual(controller.testingHighlightedIndex, 1)
@@ -200,7 +182,7 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         _ = NSApplication.shared
         let session = try makeSession(title: "PDF", path: "/tmp/cancel.pdf")
         let items = [OpenTabsPaletteItem(session: session, isActive: true)]
-        let controller = OpenTabsPaletteController { _, _ in XCTFail("Must not activate") }
+        let controller = OpenTabsPaletteController(modifierFlags: { [.control] }) { _, _ in XCTFail("Must not activate") }
         defer { controller.close() }
         controller.show(items: items, activationMode: .heldControl(reverse: false), relativeTo: nil)
         XCTAssertTrue(controller.testingHandlePaletteKeyEvent(makeKeyEvent(
@@ -212,6 +194,53 @@ final class OpenTabsPaletteControllerTests: XCTestCase {
         controller.show(items: items, activationMode: .explicitSelection, relativeTo: nil)
         controller.testingHandleFlagsChanged(makeFlagsEvent(modifiers: [], window: controller.window))
         XCTAssertTrue(controller.testingWindowIsVisible)
+    }
+
+    func testHeldControlAlreadyReleasedWhenPanelAppearsActivatesImmediately() throws {
+        _ = NSApplication.shared
+        let first = try makeSession(title: "Current", path: "/tmp/current.pdf")
+        let previous = try makeSession(title: "Previous", path: "/tmp/previous.pdf")
+        let items = [first, previous].map { OpenTabsPaletteItem(session: $0, isActive: $0.id == first.id) }
+        var activatedIDs: [UUID] = []
+        let controller = OpenTabsPaletteController(modifierFlags: { [] }) { sessionID, _ in activatedIDs.append(sessionID) }
+        defer { controller.close() }
+
+        controller.show(items: items, activationMode: .heldControl(reverse: false), relativeTo: nil)
+
+        XCTAssertEqual(activatedIDs, [previous.id])
+        XCTAssertFalse(controller.testingWindowIsVisible)
+        controller.testingHandleFlagsChanged(makeFlagsEvent(modifiers: [], window: controller.window))
+        XCTAssertEqual(activatedIDs, [previous.id])
+    }
+
+    func testConfiguredSplitHintsFitPanelInBothActivationModes() throws {
+        _ = NSApplication.shared
+        let session = try makeSession(title: "Paper", path: "/tmp/footer.pdf")
+        let controller = OpenTabsPaletteController(modifierFlags: { [.control] }) { _, _ in }
+        defer { controller.close() }
+        let right = KeyboardShortcut(key: "return", modifiers: [.command, .control, .option])
+        let down = KeyboardShortcut(key: "return", modifiers: [.command, .control, .option, .shift])
+        let shortcuts: [(KeyboardShortcut?, KeyboardShortcut?)] = [
+            (KeyboardShortcut(key: "return", modifiers: [.option]), KeyboardShortcut(key: "return", modifiers: [.option, .shift])),
+            (right, down),
+            (nil, nil),
+        ]
+        for (right, down) in shortcuts {
+            controller.configureSplitShortcuts(right: right, down: down)
+            for mode: OpenTabsPaletteActivationMode in [.explicitSelection, .heldControl(reverse: false)] {
+                controller.show(items: [OpenTabsPaletteItem(session: session, isActive: true)], activationMode: mode, relativeTo: nil)
+                let content = try XCTUnwrap(controller.window?.contentView)
+                content.layoutSubtreeIfNeeded()
+                let footer = try XCTUnwrap(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue.contains("Esc  Cancel") })
+                XCTAssertEqual(footer.stringValue.contains("Split right"), right != nil)
+                XCTAssertEqual(footer.stringValue.contains("Split below"), down != nil)
+                if let right { XCTAssertTrue(footer.stringValue.contains(right.displayString)) }
+                if let down { XCTAssertTrue(footer.stringValue.contains(down.displayString)) }
+                XCTAssertLessThanOrEqual(footer.fittingSize.width, content.bounds.width - 40)
+                XCTAssertLessThanOrEqual(footer.frame.maxX, content.bounds.maxX - 20)
+                controller.close()
+            }
+        }
     }
 
     private func makeFlagsEvent(modifiers: NSEvent.ModifierFlags, window: NSWindow?) -> NSEvent {

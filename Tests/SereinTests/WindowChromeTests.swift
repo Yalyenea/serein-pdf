@@ -415,12 +415,12 @@ struct WindowChromeTests {
 
         #expect(firstWorkspace.toggleReadingFocusMode())
         #expect(firstWorkspace.primaryReaderViewController.testingReadingFocusModeIsEnabled)
-        #expect(firstWorkspace.secondaryReaderViewController.testingReadingFocusModeIsEnabled)
+        #expect(firstWorkspace.allReaderViewControllers[1].testingReadingFocusModeIsEnabled)
         #expect(secondWorkspace.isReadingFocusModeEnabled == false)
 
         #expect(firstWorkspace.toggleReadingFocusMode() == false)
         #expect(firstWorkspace.primaryReaderViewController.testingReadingFocusModeIsEnabled == false)
-        #expect(firstWorkspace.secondaryReaderViewController.testingReadingFocusModeIsEnabled == false)
+        #expect(firstWorkspace.allReaderViewControllers[1].testingReadingFocusModeIsEnabled == false)
     }
 
     @Test
@@ -451,7 +451,7 @@ struct WindowChromeTests {
 
         #expect(workspace.readingFocusSettings == temporarySettings)
         #expect(workspace.primaryReaderViewController.readingFocusSettings == temporarySettings)
-        #expect(workspace.secondaryReaderViewController.readingFocusSettings == temporarySettings)
+        #expect(workspace.allReaderViewControllers[1].readingFocusSettings == temporarySettings)
 
         configuration.reader.readingFocus = ReadingFocusSettings(
             widthMode: .custom,
@@ -464,7 +464,7 @@ struct WindowChromeTests {
         workspace.resetReadingFocusSettings()
         #expect(workspace.readingFocusSettings == configuration.reader.readingFocus)
         #expect(workspace.primaryReaderViewController.readingFocusSettings == configuration.reader.readingFocus)
-        #expect(workspace.secondaryReaderViewController.readingFocusSettings == configuration.reader.readingFocus)
+        #expect(workspace.allReaderViewControllers[1].readingFocusSettings == configuration.reader.readingFocus)
     }
 
     @Test
@@ -588,7 +588,7 @@ struct WindowChromeTests {
         store.activate(sessionID: first.id, in: controller.windowID, targetPane: .secondary)
         let split = try #require(controller.window?.contentViewController as? SplitViewController)
         let readers = [split.readerWorkspaceViewController.primaryReaderViewController,
-                       split.readerWorkspaceViewController.secondaryReaderViewController]
+                       split.readerWorkspaceViewController.allReaderViewControllers[1]]
         flushLayout(controller.window)
         let zooms = readers.map { $0.pdfView.scaleFactor }
         let pages = readers.map { $0.pdfView.currentPage }
@@ -2030,7 +2030,7 @@ struct WindowChromeTests {
         flushLayout(controller.window)
 
         let primaryReader = splitController.readerWorkspaceViewController.primaryReaderViewController
-        let secondaryReader = splitController.readerWorkspaceViewController.secondaryReaderViewController
+        let secondaryReader = splitController.readerWorkspaceViewController.allReaderViewControllers[1]
         #expect(primaryReader.testingLocalEventMonitoringIsInstalled)
         #expect(secondaryReader.testingLocalEventMonitoringIsInstalled)
         guard let primarySessionID = store.displayedSessionID(for: .primary, in: controller.windowID),

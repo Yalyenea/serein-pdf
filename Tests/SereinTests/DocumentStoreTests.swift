@@ -206,7 +206,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.activeSession?.url, thirdURL)
     }
 
-    func testActivateOpenDocumentFocusesExistingSessionWithoutDuplicating() throws {
+    func testOpeningExistingDocumentReusesCurrentWorkspaceSessionWithoutChangingOtherWindow() throws {
         let store = makeStore()
         let firstURL = try makeTemporaryPDF(named: "reuse-open-first")
         let secondURL = try makeTemporaryPDF(named: "reuse-open-second")
@@ -215,9 +215,9 @@ final class DocumentStoreTests: XCTestCase {
         let secondWindowID = store.createWindow(copyingFrom: defaultWindowID)
         let secondSession = try store.open(documentAt: secondURL, in: secondWindowID)
 
-        let location = store.activateOpenDocument(at: firstURL)
+        let reopened = try store.open(documentAt: firstURL, in: defaultWindowID)
 
-        XCTAssertEqual(location, DocumentOpenLocation(windowID: defaultWindowID, sessionID: firstSession.id))
+        XCTAssertEqual(reopened.id, firstSession.id)
         XCTAssertEqual(store.sessions.map(\.id), [firstSession.id, secondSession.id])
         XCTAssertEqual(store.activeSessionID(in: defaultWindowID), firstSession.id)
         XCTAssertEqual(store.activeSessionID(in: secondWindowID), secondSession.id)
@@ -2232,7 +2232,6 @@ final class DocumentStoreTests: XCTestCase {
         )
         XCTAssertEqual(store.activeSessionID(in: destinationWindowID), moved.id)
         XCTAssertEqual(store.selectedSessionIDs(in: destinationWindowID), [moved.id])
-        XCTAssertEqual(store.openLocation(for: moved.url), DocumentOpenLocation(windowID: destinationWindowID, sessionID: moved.id))
         XCTAssertEqual(store.session(for: moved.id)?.currentPageIndex, 2)
         XCTAssertTrue(store.session(for: moved.id)?.isDirty == true)
         XCTAssertTrue(try store.pdfDocument(for: moved.id) === loadedDocument)

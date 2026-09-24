@@ -5,6 +5,83 @@ import XCTest
 
 @MainActor
 final class WorkspaceLayoutStateTests: XCTestCase {
+    func testClosedWindowsKeepCloseOrderAcrossRestartAndReclosing() throws {
+        let suiteName = "SereinTests.WindowCloseOrder.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = makePersistedStore(defaults: defaults)
+        let keeper = store.defaultWindowID
+        let first = store.createWindow()
+        let second = store.createWindow()
+        store.closeWindow(id: second)
+        store.closeWindow(id: first)
+        store.closeWindow(id: second) // Repeated close notifications must not change recency.
+        XCTAssertEqual(store.closedWindowWorkspaces().map(\.id), [second, first])
+        XCTAssertEqual(store.windowIDs(), [keeper])
+        store.flushPersistence()
+
+        let restored = makePersistedStore(defaults: defaults)
+        try restored.restorePersistedState()
+        XCTAssertEqual(restored.closedWindowWorkspaces().map(\.id), [second, first])
+        restored.reopenWindow(id: second)
+        restored.closeWindow(id: second)
+        XCTAssertEqual(restored.closedWindowWorkspaces().map(\.id), [first, second])
+        restored.flushPersistence()
+    }
+
+    func testPaletteSplitsUseSurvivingComparisonReadingState() throws {
+        for useURL in [false, true] {
+            let store = makeIsolatedDocumentStore()
+            let windowID = store.defaultWindowID
+            let source = try store.open(documentAt: makePDF("palette-source-\(useURL)", pageCount: 8))
+            let clonePane = try XCTUnwrap(store.splitPane(from: .primary, layout: .sideBySide, in: windowID))
+            let cloneID = try XCTUnwrap(store.displayedSessionID(for: clonePane, in: windowID))
+            let position = ReadingPosition(pageIndex: 5, point: CGPoint(x: 19, y: 110))
+            setReadingState(position, scale: 1.7, sessionID: cloneID, in: store)
+            store.setHorizontalPanLocked(true, for: cloneID)
+            XCTAssertTrue(store.closePane(.primary, in: windowID))
+            _ = try store.open(documentAt: makePDF("palette-target-\(useURL)"))
+            let targetPane = store.focusedPane(in: windowID)
+            let added: ReaderPane?
+            if useURL {
+                added = try store.splitPane(from: targetPane, layout: .stacked, documentAt: source.url, in: windowID)
+            } else {
+                added = store.splitPane(from: targetPane, layout: .stacked, sessionID: source.id, in: windowID)
+            }
+            let addedID = try XCTUnwrap(store.displayedSessionID(for: XCTUnwrap(added), in: windowID))
+            let reading = try XCTUnwrap(store.session(for: addedID))
+            XCTAssertEqual(reading.lastReadPosition, position)
+            XCTAssertEqual(reading.zoomScale, 1.7)
+            XCTAssertEqual(reading.scaleMode, .manual)
+            XCTAssertTrue(reading.isHorizontalPanLocked)
+            XCTAssertEqual(store.session(for: cloneID)?.lastReadPosition, position)
+            XCTAssertEqual(store.session(for: source.id)?.currentPageIndex, 0)
+        }
+    }
+
+    func testSplitFromAnotherWorkspaceUsesItsFocusedCopyAndHonorsExplicitDestination() throws {
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let source = try store.open(documentAt: makePDF("palette-workspace-source", pageCount: 8))
+        let clonePane = try XCTUnwrap(store.splitPane(from: .primary, layout: .sideBySide, in: windowID))
+        let cloneID = try XCTUnwrap(store.displayedSessionID(for: clonePane, in: windowID))
+        let position = ReadingPosition(pageIndex: 6, point: CGPoint(x: 30, y: 90))
+        setReadingState(position, scale: 2.1, sessionID: cloneID, in: store)
+        _ = try XCTUnwrap(store.createWorkspace(name: "Target", in: windowID))
+        _ = try store.open(documentAt: makePDF("palette-workspace-target"))
+        let pane = try XCTUnwrap(store.splitPane(from: .primary, layout: .stacked, sessionID: source.id, in: windowID))
+        let targetID = try XCTUnwrap(store.displayedSessionID(for: pane, in: windowID))
+        XCTAssertEqual(store.session(for: targetID)?.lastReadPosition, position)
+        XCTAssertEqual(store.session(for: targetID)?.zoomScale, 2.1)
+
+        let destination = ReadingPosition(pageIndex: 3, point: CGPoint(x: 10, y: 200))
+        let explicitPane = try XCTUnwrap(store.splitPane(from: pane, layout: .sideBySide,
+            sessionID: source.id, readingPosition: destination, in: windowID))
+        let explicitID = try XCTUnwrap(store.displayedSessionID(for: explicitPane, in: windowID))
+        XCTAssertEqual(store.session(for: explicitID)?.lastReadPosition, destination)
+        XCTAssertEqual(store.session(for: explicitID)?.zoomScale, source.zoomScale)
+    }
+
     func testSwitchingNamedWorkspacesPreservesSeparateTabsAndSelection() throws {
         let store = makeIsolatedDocumentStore()
         let windowID = store.defaultWindowID

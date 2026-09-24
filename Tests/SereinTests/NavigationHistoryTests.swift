@@ -424,7 +424,7 @@ final class NavigationHistoryTests: XCTestCase {
         workspace.view.layoutSubtreeIfNeeded()
 
         let primary = workspace.primaryReaderViewController
-        let secondary = workspace.secondaryReaderViewController
+        let secondary = workspace.allReaderViewControllers[1]
         XCTAssertEqual(primary.displayedSessionID, second.id)
         XCTAssertEqual(secondary.displayedSessionID, first.id)
         XCTAssertTrue(primary.goToPage(2))
@@ -788,7 +788,7 @@ final class NavigationHistoryTests: XCTestCase {
         store.setFocusedPane(.secondary, in: store.defaultWindowID)
 
         let workspace = makeWorkspace(store: store)
-        let reader = workspace.secondaryReaderViewController
+        let reader = workspace.allReaderViewControllers[1]
         reader.fitToWidth()
         XCTAssertTrue(reader.goToPage(1))
         XCTAssertTrue(reader.testingHandleContinuousBookScroll(deltaX: -60, timestamp: 1.0))

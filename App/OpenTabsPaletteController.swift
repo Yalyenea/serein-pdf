@@ -66,7 +66,8 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
     private static let panelWidth: CGFloat = 620
     private static let rowHeight: CGFloat = 44
     private let onActivateSession: (UUID, ReaderSplitLayout?) -> Void
-    private var state = OpenTabsPaletteState(sessions: [], activeSessionID: nil)
+    private let modifierFlags: () -> NSEvent.ModifierFlags
+    private var state = OpenTabsPaletteState()
     private var activationMode: OpenTabsPaletteActivationMode = .explicitSelection
     private var isApplyingSelection = false
     private weak var parentWindow: NSWindow?
@@ -78,7 +79,11 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
     private var rightSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option])
     private var downSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option, .shift])
 
-    init(onActivateSession: @escaping (UUID, ReaderSplitLayout?) -> Void) {
+    init(
+        modifierFlags: @escaping () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags },
+        onActivateSession: @escaping (UUID, ReaderSplitLayout?) -> Void
+    ) {
+        self.modifierFlags = modifierFlags
         self.onActivateSession = onActivateSession
         let panel = CompactPalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 160),
@@ -110,28 +115,14 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
     func configureSplitShortcuts(right: KeyboardShortcut?, down: KeyboardShortcut?) {
         rightSplitShortcut = right
         downSplitShortcut = down
-    }
-
-    func show(
-        with sessions: [DocumentSession], activeSessionID: UUID?, primarySessionID: UUID?,
-        secondarySessionID: UUID?, focusedPane: ReaderPane, relativeTo parentWindow: NSWindow?,
-        activationMode: OpenTabsPaletteActivationMode = .explicitSelection
-    ) {
-        show(items: sessions.map {
-            OpenTabsPaletteItem(session: $0, isActive: $0.id == activeSessionID,
-                                primarySessionID: primarySessionID, secondarySessionID: secondarySessionID,
-                                focusedPane: focusedPane)
-        }, activationMode: activationMode, relativeTo: parentWindow)
+        updateFooter()
     }
 
     func show(items: [OpenTabsPaletteItem], activationMode: OpenTabsPaletteActivationMode, relativeTo parentWindow: NSWindow?) {
         self.parentWindow = parentWindow
         self.activationMode = activationMode
         state.replaceItems(items, activationMode: activationMode)
-        footerLabel.stringValue = activationMode == .explicitSelection
-            ? "↑ ↓  Select    ↩  Open    Esc  Cancel"
-            : "Tab / ↑ ↓  Select    Release Control to open    Esc  Cancel"
-        reloadUI()
+        updateFooter()
         refreshChromeColors()
         guard let window else { return }
         let height = CGFloat(max(1, min(items.count, 12))) * Self.rowHeight + 72
@@ -142,6 +133,7 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(tableView)
         NSApp.activate(ignoringOtherApps: true)
+        activateIfControlReleased(modifierFlags())
     }
 
     func advance(reverse: Bool) {
@@ -240,10 +232,23 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
         onActivateSession(sessionID, splitLayout)
     }
 
-    private func handleFlagsChanged(_ event: NSEvent) {
+    private func updateFooter() {
+        let selectionHint = activationMode == .explicitSelection
+            ? "↑ ↓  Select    ↩  Open"
+            : "Tab / ↑ ↓  Select    Release Control to open"
+        let splitHints = [(rightSplitShortcut, "Split right"), (downSplitShortcut, "Split below")]
+            .compactMap { shortcut, title in shortcut.map { "\($0.displayString)  \(title)" } }
+        footerLabel.stringValue = ([selectionHint] + splitHints + ["Esc  Cancel"]).joined(separator: "    ")
+    }
+
+    private func activateIfControlReleased(_ flags: NSEvent.ModifierFlags) {
         guard window?.isVisible == true, case .heldControl = activationMode,
-              !event.modifierFlags.contains(.control) else { return }
+              !flags.contains(.control) else { return }
         activateHighlightedAndClose()
+    }
+
+    private func handleFlagsChanged(_ event: NSEvent) {
+        activateIfControlReleased(event.modifierFlags)
     }
 
     private func handlePaletteKeyEvent(_ event: NSEvent) -> Bool {
