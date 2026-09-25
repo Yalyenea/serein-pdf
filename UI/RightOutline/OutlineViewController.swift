@@ -101,7 +101,29 @@ private final class OutlineScrollView: NSScrollView {
 
 private final class OutlineInteractionView: NSView {
     var onHoverChanged: ((Bool) -> Void)?
+    var onFocusChanged: ((Bool) -> Void)?
+    var onCommand: ((Selector) -> Bool)?
     private var hoverTrackingArea: NSTrackingArea?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func becomeFirstResponder() -> Bool {
+        onFocusChanged?(true)
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        onFocusChanged?(false)
+        return true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        interpretKeyEvents([event])
+    }
+
+    override func doCommand(by selector: Selector) {
+        if onCommand?(selector) != true { super.doCommand(by: selector) }
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -373,7 +395,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
     var onNavigationRequested: ((OutlineNavigationRequest) -> Void)?
     var onQuickNavigationEnded: (() -> Void)?
     var preferredContentHeightDidChange: (() -> Void)?
-    var filterFieldFocusDidChange: ((Bool) -> Void)?
+    var navigationFocusDidChange: ((Bool) -> Void)?
     private let isFloatingPresentation: Bool
     private let expansionToggleButton = NSButton()
     private let filterField = NSSearchField()
@@ -477,6 +499,17 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         let container = OutlineInteractionView()
         container.onHoverChanged = { [weak self] isInside in
             self?.isPointerInside = isInside
+        }
+        container.onFocusChanged = { [weak self] focused in
+            guard let self else { return }
+            if focused {
+                self.beginQuickNavigation()
+            } else {
+                self.refreshNavigationFocusAfterResponderChange()
+            }
+        }
+        container.onCommand = { [weak self] selector in
+            self?.handleNavigationCommand(selector) ?? false
         }
         scrollView.onManualScroll = { [weak self] in
             self?.isFollowingSuspended = true
@@ -604,34 +637,48 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
 
     func controlTextDidBeginEditing(_ obj: Notification) {
         isFilterFieldFocused = true
+        beginQuickNavigation()
+    }
+
+    private func beginQuickNavigation() {
         isQuickNavigationActive = true
         isFollowingSuspended = true
         selectInitialQuickNavigationRow()
-        filterFieldFocusDidChange?(true)
+        navigationFocusDidChange?(true)
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
         isFilterFieldFocused = false
         isQuickNavigationActive = false
-        filterFieldFocusDidChange?(false)
+        navigationFocusDidChange?(false)
+    }
+
+    private func refreshNavigationFocusAfterResponderChange() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let responder = self.view.window?.firstResponder
+            self.isFilterFieldFocused = self.filterField.currentEditor().map { $0 === responder } ?? false
+            let focused = responder === self.view || self.isFilterFieldFocused
+            self.isQuickNavigationActive = focused
+            self.navigationFocusDidChange?(focused)
+        }
     }
 
     @discardableResult
-    func focusSearchForQuickNavigation() -> Bool {
+    func focusOutlineForQuickNavigation() -> Bool {
         loadViewIfNeeded()
         guard nodes.isEmpty == false, let window = view.window else { return false }
-        guard window.makeFirstResponder(filterField) else { return false }
-        filterField.currentEditor()?.selectAll(nil)
-        isQuickNavigationActive = true
-        isFollowingSuspended = true
-        isFilterFieldFocused = true
-        filterFieldFocusDidChange?(true)
-        selectInitialQuickNavigationRow()
+        guard window.makeFirstResponder(view) else { return false }
+        beginQuickNavigation()
         return true
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         guard control === filterField else { return false }
+        return handleNavigationCommand(commandSelector)
+    }
+
+    private func handleNavigationCommand(_ commandSelector: Selector) -> Bool {
         switch commandSelector {
         case #selector(NSResponder.moveDown(_:)):
             moveQuickNavigationSelection(by: 1)
@@ -674,7 +721,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         revealSelectedRow()
     }
 
-    private func finishQuickNavigation() {
+    func finishQuickNavigation() {
         isQuickNavigationActive = false
         isFilterFieldFocused = false
         if filterQuery.isEmpty == false {
@@ -686,7 +733,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         }
         setSelectedPath(activePath)
         view.window?.makeFirstResponder(nil)
-        filterFieldFocusDidChange?(false)
+        navigationFocusDidChange?(false)
         onQuickNavigationEnded?()
     }
 

@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct FloatingOutlineViewControllerTests {
     @Test
-    func quickNavigationExpandsAndKeepsSearchOpenBeforeTyping() throws {
+    func quickNavigationTogglesWithoutSearchFocusAndHandlesArrowKeys() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         _ = try store.open(documentAt: makeFloatingOutlinePDF(named: "quick-floating"))
@@ -25,16 +25,98 @@ struct FloatingOutlineViewControllerTests {
         var finished = false
         controller.onQuickNavigationEnded = { finished = true }
 
-        #expect(controller.showQuickNavigation())
+        #expect(controller.toggleQuickNavigation())
         controller.testingSetHovered(false)
         #expect(controller.testingIsExpanded)
         let field = try #require(floatingOutlineView(identifier: "outlineFilterField", in: controller.view) as? NSSearchField)
-        let editor = try #require(field.currentEditor() as? NSTextView)
-        #expect(controller.testingOutlineViewController.control(
-            field, textView: editor, doCommandBy: #selector(NSResponder.cancelOperation(_:))
+        let outline = controller.testingOutlineViewController
+        #expect(field.currentEditor() == nil)
+        #expect(window.firstResponder === outline.view)
+        let initialPath = outline.testingSelectedPath
+        let down = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil,
+            characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}", isARepeat: false, keyCode: 125
         ))
+        window.firstResponder?.keyDown(with: down)
+        #expect(outline.testingSelectedPath != initialPath)
+        let up = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil,
+            characters: "\u{F700}", charactersIgnoringModifiers: "\u{F700}", isARepeat: false, keyCode: 126
+        ))
+        window.firstResponder?.keyDown(with: up)
+        #expect(outline.testingSelectedPath == initialPath)
+        controller.testingSetHovered(true)
+        #expect(controller.toggleQuickNavigation())
         #expect(finished)
         #expect(controller.testingIsExpanded == false)
+
+        #expect(controller.toggleQuickNavigation())
+        window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+        #expect(controller.testingIsExpanded == false)
+
+        var request: OutlineNavigationRequest?
+        controller.onNavigationRequested = { request = $0 }
+        #expect(controller.toggleQuickNavigation())
+        window.firstResponder?.keyDown(with: down)
+        window.firstResponder?.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        #expect(request?.position == ReadingPosition(pageIndex: 1, point: CGPoint(x: 20, y: 190)))
+        #expect(controller.testingIsExpanded == false)
+    }
+
+    @Test
+    func outlineShortcutClosesSidebarAndRoutesKeysToFloatingOutline() async throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(documentAt: makeFloatingOutlinePDF(named: "outline-toggle-routing"))
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        controller.showWindow(nil)
+        let window = try #require(controller.window)
+        let split = try #require(window.contentViewController as? SplitViewController)
+        let floating = split.readerWorkspaceViewController.floatingOutlineViewController
+        let shortcuts = ReaderShortcutsController(
+            shortcutsProvider: { [.quickOutline: KeyboardShortcut(key: "o", modifiers: [])] },
+            handlerProvider: { [.quickOutline: { split.showQuickOutline() }] }
+        )
+        let toggle = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil,
+            characters: "o", charactersIgnoringModifiers: "o", isARepeat: false, keyCode: 31
+        ))
+        store.setRightSidebarVisible(true)
+        #expect(shortcuts.handleShortcutEvent(for: toggle, in: window))
+        #expect(store.isOutlineSidebarVisible(in: store.defaultWindowID) == false)
+        flushFloatingOutlineLayout(window)
+        #expect(shortcuts.handleShortcutEvent(for: toggle, in: window))
+        #expect(floating.testingIsExpanded)
+        let outline = floating.testingOutlineViewController
+        #expect(window.firstResponder === outline.view)
+        let down = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil,
+            characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}", isARepeat: false, keyCode: 125
+        ))
+        #expect(shortcuts.handleShortcutEvent(for: down, in: window) == false)
+        let initialPath = outline.testingSelectedPath
+        window.firstResponder?.keyDown(with: down)
+        #expect(outline.testingSelectedPath != initialPath)
+        #expect(shortcuts.handleShortcutEvent(for: toggle, in: window))
+        #expect(floating.testingIsExpanded == false)
+
+        #expect(shortcuts.handleShortcutEvent(for: toggle, in: window))
+        let field = try #require(floatingOutlineView(identifier: "outlineFilterField", in: outline.view) as? NSSearchField)
+        #expect(window.makeFirstResponder(field))
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(floating.testingIsExpanded)
+        #expect(field.currentEditor() != nil)
+        outline.finishQuickNavigation()
+        #expect(shortcuts.handleShortcutEvent(for: toggle, in: window))
+        floating.testingSetHovered(false)
+        split.readerWorkspaceViewController.focusActiveReader()
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(floating.testingIsExpanded == false)
     }
 
     @Test

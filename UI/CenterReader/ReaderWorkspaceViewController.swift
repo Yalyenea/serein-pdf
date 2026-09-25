@@ -610,7 +610,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
 
 
     func showQuickOutline() {
-        _ = floatingOutlineViewController.showQuickNavigation()
+        _ = floatingOutlineViewController.toggleQuickNavigation()
     }
 
     @discardableResult

@@ -316,7 +316,7 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .gotoPage:
             "Go to Page…"
         case .quickOutline:
-            "Quick Outline…"
+            "Toggle Outline"
         case .showRecentFilesPalette:
             "Open Recent Quickly…"
         case .showRecentWindows:

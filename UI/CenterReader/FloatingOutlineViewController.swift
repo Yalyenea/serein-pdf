@@ -172,7 +172,7 @@ final class FloatingOutlineViewController: NSViewController {
     private(set) var outlineFlattenCount = 0
     private var isExpanded = false
     private var isHovered = false
-    private var isFilterFieldFocused = false
+    private var isNavigationFocused = false
     private var isOutlineInstalled = false
     private var isSuppressed = false
     private var isResizing = false
@@ -185,10 +185,7 @@ final class FloatingOutlineViewController: NSViewController {
         get { outlineViewController.onNavigationRequested }
         set { outlineViewController.onNavigationRequested = newValue }
     }
-    var onQuickNavigationEnded: (() -> Void)? {
-        get { outlineViewController.onQuickNavigationEnded }
-        set { outlineViewController.onQuickNavigationEnded = newValue }
-    }
+    var onQuickNavigationEnded: (() -> Void)?
 
     var preferredSize: NSSize {
         if isExpanded {
@@ -233,8 +230,14 @@ final class FloatingOutlineViewController: NSViewController {
         outlineViewController.preferredContentHeightDidChange = { [weak self] in
             self?.reportPreferredGeometryIfNeeded()
         }
-        outlineViewController.filterFieldFocusDidChange = { [weak self] isFocused in
-            self?.setFilterFieldFocused(isFocused)
+        outlineViewController.navigationFocusDidChange = { [weak self] isFocused in
+            self?.setNavigationFocused(isFocused)
+        }
+        outlineViewController.onQuickNavigationEnded = { [weak self] in
+            guard let self else { return }
+            self.isHovered = false
+            self.setExpanded(false)
+            self.onQuickNavigationEnded?()
         }
     }
 
@@ -383,13 +386,17 @@ final class FloatingOutlineViewController: NSViewController {
     }
 
     @discardableResult
-    func showQuickNavigation() -> Bool {
+    func toggleQuickNavigation() -> Bool {
         loadViewIfNeeded()
         refreshFromStore()
         guard view.isHidden == false else { return false }
+        if isExpanded {
+            outlineViewController.finishQuickNavigation()
+            return true
+        }
         setExpanded(true)
         view.superview?.layoutSubtreeIfNeeded()
-        let didFocus = outlineViewController.focusSearchForQuickNavigation()
+        let didFocus = outlineViewController.focusOutlineForQuickNavigation()
         if didFocus == false { updateExpansionForInteraction() }
         return didFocus
     }
@@ -460,6 +467,7 @@ final class FloatingOutlineViewController: NSViewController {
     }
 
     private func hideFloatingOutline(clearItems: Bool) {
+        if isNavigationFocused { outlineViewController.finishQuickNavigation() }
         setExpanded(false)
         if clearItems {
             locationResolver = OutlineLocationResolver(nodes: [])
@@ -477,14 +485,14 @@ final class FloatingOutlineViewController: NSViewController {
         updateExpansionForInteraction()
     }
 
-    private func setFilterFieldFocused(_ isFocused: Bool) {
-        isFilterFieldFocused = isFocused
+    private func setNavigationFocused(_ isFocused: Bool) {
+        isNavigationFocused = isFocused
         updateExpansionForInteraction()
     }
 
     private func updateExpansionForInteraction() {
         guard isResizing == false else { return }
-        setExpanded(isHovered || isFilterFieldFocused)
+        setExpanded(isHovered || isNavigationFocused)
     }
 
     private func setExpanded(_ expanded: Bool) {

@@ -672,7 +672,8 @@ final class SplitViewController: NSSplitViewController {
     func showQuickOutline() {
         if documentStore.isOutlineSidebarVisible(in: windowID),
            documentStore.rightSidebarMode(in: windowID) == .outline {
-            rightSidebarViewController.outlineViewController.focusSearchForQuickNavigation()
+            rightSidebarViewController.outlineViewController.finishQuickNavigation()
+            documentStore.setRightSidebarVisible(false, in: windowID)
         } else {
             readerWorkspaceViewController.showQuickOutline()
         }
