@@ -6,7 +6,7 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct ReaderPageCounterIntegrationTests {
-    @Test func themeSwitchRefreshesReaderAndOutlineCountersWhileEditingWithoutChangingPage() throws {
+    @Test func themeSwitchRefreshesReaderCounterWhileEditingWithoutChangingPage() throws {
         let original = ThemeManager.shared.selection
         defer {
             ThemeManager.shared.apply(light: original.light, dark: original.dark,
@@ -15,7 +15,6 @@ struct ReaderPageCounterIntegrationTests {
         let (_, controller, split) = try makeWindow()
         defer { controller.close() }
         let readerCounter = try #require(counters(in: split.readerViewController.view).first)
-        let outlineCounter = try #require(counters(in: split.rightSidebarViewController.outlineViewController.view).first)
         let window = try #require(controller.window)
         readerCounter.beginEditing()
         let field = try #require(readerCounter.subviews.compactMap { $0 as? NSTextField }.first)
@@ -31,8 +30,7 @@ struct ReaderPageCounterIntegrationTests {
             ThemeManager.shared.apply(light: light, dark: dark)
             window.appearance = NSAppearance(named: appearance)
             controller.refreshThemeAppearance()
-            try assertCounterColors(readerCounter, transparent: false)
-            try assertCounterColors(outlineCounter, transparent: true)
+            try assertCounterColors(readerCounter)
             #expect(readerCounter.displayText == text)
             #expect(readerCounter.isEditing)
             #expect(editor.string == "5")
@@ -42,8 +40,7 @@ struct ReaderPageCounterIntegrationTests {
         let background = ThemeBackgroundOverrides(window: ThemeHexColor(hex: "#164333"))
         ThemeManager.shared.apply(light: .normal, dark: .normal, lightBackground: background, darkBackground: background)
         controller.refreshThemeAppearance()
-        try assertCounterColors(readerCounter, transparent: false)
-        try assertCounterColors(outlineCounter, transparent: true)
+        try assertCounterColors(readerCounter)
     }
 
     @Test func appearanceChangeRefreshesBackgroundWithoutExplicitThemeRefresh() throws {
@@ -51,9 +48,9 @@ struct ReaderPageCounterIntegrationTests {
         let counter = ReaderPageCounterView(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
         counter.update(pageIndex: 0, pageCount: 10, displayMode: .singlePage)
         counter.appearance = NSAppearance(named: .aqua)
-        try assertCounterColors(counter, transparent: false)
+        try assertCounterColors(counter)
         counter.appearance = NSAppearance(named: .darkAqua)
-        try assertCounterColors(counter, transparent: false)
+        try assertCounterColors(counter)
     }
 
     @Test func clickingReaderCounterAndPressingReturnNavigatesPDF() throws {
@@ -130,19 +127,19 @@ struct ReaderPageCounterIntegrationTests {
         return view.subviews.flatMap { counters(in: $0) }
     }
 
-    private func assertCounterColors(_ counter: ReaderPageCounterView, transparent: Bool) throws {
+    private func assertCounterColors(_ counter: ReaderPageCounterView) throws {
         let appearance = counter.effectiveAppearance
         let theme = ThemeManager.shared.snapshot.descriptor(for: appearance)
         let button = try #require(counter.subviews.compactMap { $0 as? NSButton }.first)
         let field = try #require(counter.subviews.compactMap { $0 as? NSTextField }.first)
         let background = try #require(counter.layer?.backgroundColor)
-        #expect(abs(background.alpha - (transparent ? 0 : 0.92)) < 0.001)
+        #expect(abs(background.alpha - 0.92) < 0.001)
         func matches(_ actual: NSColor?, _ role: ThemeColorRole) {
             appearance.performAsCurrentDrawingAppearance {
                 #expect(actual.flatMap { ThemeHexColor(color: $0) } == ThemeHexColor(color: theme.color(for: role, appearance: appearance)))
             }
         }
-        if !transparent { matches(NSColor(cgColor: background), .readerBackdrop) }
+        matches(NSColor(cgColor: background), .readerBackdrop)
         matches(button.attributedTitle.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor, .secondaryText)
         matches(field.textColor, .primaryText)
         if let editor = field.currentEditor() as? NSTextView {

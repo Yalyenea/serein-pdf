@@ -24,6 +24,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Show only `L` in the upper-right corner of locked readers, retaining the lock scope in its tooltip.
 - Add Seamless Pages (`Cmd+Option+P`) in View and Settings to remove page gaps while preserving the reading position and zoom.
 - Clamp scrolling to the first and last paper edges while preserving native trackpad momentum in continuous layouts.
+- Let half-page scrolling at the last paper edge continue to the next page or next PDF in a reading group, instead of reporting PDFKit's one-point layout nudge as a scroll.
 - Add Scroll Speed in Settings (0.5×–3.0×, default 1.0×), applying the same multiplier during direct scrolling and momentum for consistent deceleration.
 - Print the focused PDF with `Cmd+P` or File > Print using the native macOS panel. Include unsaved annotations without applying reading themes, and expose the command in the palette and shortcut settings.
 - Keep arrow navigation in focused sidebar lists; route page-turn arrows only from the PDF reader.

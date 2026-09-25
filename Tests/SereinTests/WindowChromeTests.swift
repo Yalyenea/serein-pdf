@@ -783,33 +783,29 @@ struct WindowChromeTests {
         _ = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "theme-refresh-outline"))
         controller.window?.layoutIfNeeded()
 
-        guard let splitController = controller.window?.contentViewController as? SplitViewController,
-              let titleLabel = splitController.rightSidebarViewController.outlineViewController.view.subviews
-                .compactMap({ $0 as? NSTextField })
-                .first(where: { $0.stringValue == "Outline" }) else {
-            Issue.record("Failed to locate outline title label")
-            return
+        let splitController = try #require(controller.window?.contentViewController as? SplitViewController)
+        let outlineView = splitController.rightSidebarViewController.outlineViewController.view
+        let toggle = try #require(findView(identifier: "outlineExpansionToggleButton", in: outlineView) as? NSButton)
+        func rowTextColor() throws -> NSColor {
+            let row = try #require(findView(identifier: "outlineRowsStack", in: outlineView)?
+                .subviews.compactMap { $0 as? OutlineRowView }.first)
+            let color = try #require(row.textField.attributedStringValue
+                .attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor)
+            return resolvedColor(color, in: row.effectiveAppearance)
         }
-
-        guard let originalTextColor = titleLabel.textColor else {
-            Issue.record("Failed to inspect original outline title color")
-            return
-        }
-        let originalColor = resolvedColor(originalTextColor, in: titleLabel.effectiveAppearance)
+        let originalTint = resolvedColor(try #require(toggle.contentTintColor), in: toggle.effectiveAppearance)
+        let originalRowColor = try rowTextColor()
 
         ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
         controller.refreshThemeAppearance()
         flushLayout(controller.window)
 
-        guard let updatedTextColor = titleLabel.textColor else {
-            Issue.record("Failed to inspect updated outline title color")
-            return
+        let updatedTint = resolvedColor(try #require(toggle.contentTintColor), in: toggle.effectiveAppearance)
+        #expect(abs(updatedTint.redComponent - originalTint.redComponent) > 0.01)
+        toggle.effectiveAppearance.performAsCurrentDrawingAppearance {
+            assertColor(updatedTint, matches: NightModeStyle.tertiaryTextColor)
         }
-        let updatedColor = resolvedColor(updatedTextColor, in: titleLabel.effectiveAppearance)
-        #expect(abs(updatedColor.redComponent - originalColor.redComponent) > 0.01)
-        titleLabel.effectiveAppearance.performAsCurrentDrawingAppearance {
-            assertColor(updatedColor, matches: NightModeStyle.primaryTextColor)
-        }
+        #expect(abs(try rowTextColor().redComponent - originalRowColor.redComponent) > 0.01)
     }
 
     @Test
@@ -4057,6 +4053,12 @@ private func makeTemporaryPDFWithInternalLink(named name: String) throws -> Inte
     )
 }
 
+/// Matches the reader's sub-point tolerance: paper-edge clamping can move a zoom anchor by a fraction of a point.
+private func isSameReadingPosition(_ lhs: ReadingPosition?, _ rhs: ReadingPosition) -> Bool {
+    guard let lhs, lhs.pageIndex == rhs.pageIndex else { return false }
+    return abs(lhs.pointX - rhs.pointX) <= 0.5 && abs(lhs.pointY - rhs.pointY) <= 0.5
+}
+
 @MainActor
 private func assertInternalLinkNavigationStaysCentered(in mode: ReaderDisplayMode) throws {
     let store = makeIsolatedDocumentStore()
@@ -4103,12 +4105,12 @@ private func assertInternalLinkNavigationStaysCentered(in mode: ReaderDisplayMod
 
     let target = ReadingPosition(pageIndex: fixture.targetPageIndex, point: fixture.targetPoint)
     #expect(store.session(for: session.id)?.lastReadPosition == target)
-    #expect(reader.testingNavigationBackPositions.last == sourcePosition)
+    #expect(isSameReadingPosition(reader.testingNavigationBackPositions.last, sourcePosition), "\(mode)")
     assertDocumentVisuallyCentered(in: reader.pdfView, axes: .horizontal)
 
     reader.navigateBack()
     flushLayout(window)
-    #expect(store.session(for: session.id)?.lastReadPosition == sourcePosition)
+    #expect(isSameReadingPosition(store.session(for: session.id)?.lastReadPosition, sourcePosition), "\(mode)")
     assertDocumentVisuallyCentered(in: reader.pdfView, axes: .horizontal)
 
     reader.navigateForward()

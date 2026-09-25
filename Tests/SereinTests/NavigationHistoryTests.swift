@@ -912,6 +912,7 @@ final class NavigationHistoryTests: XCTestCase {
         XCTAssertEqual(store.session(for: session.id)?.lastReadPosition.point.y, lastBounds.minY)
         XCTAssertEqual(reader.pdfView.currentPage.map { reader.pdfView.document?.index(for: $0) }, 2)
         XCTAssertFalse(reader.scrollHalfPageDown(), "document end must not have more vertical content")
+        XCTAssertFalse(reader.scrollHalfPageDown(), "repeated presses must stay at the document end")
     }
 
     private func makeReader(

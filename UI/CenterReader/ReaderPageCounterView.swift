@@ -6,9 +6,6 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
     var onEndEditing: (() -> Void)?
     var onGoToPage: ((Int) -> Bool)?
     var onReturnFocus: (() -> Void)?
-    var drawsBackground = true {
-        didSet { refreshThemeAppearance() }
-    }
 
     private let button = NSButton(title: "", target: nil, action: nil)
     private let field = NSTextField(string: "")
@@ -101,9 +98,7 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
 
     func refreshThemeAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = drawsBackground
-                ? NightModeStyle.readerBackdropColor.withAlphaComponent(0.92).cgColor
-                : NSColor.clear.cgColor
+            layer?.backgroundColor = NightModeStyle.readerBackdropColor.withAlphaComponent(0.92).cgColor
             field.textColor = NightModeStyle.primaryTextColor
             if let editor = field.currentEditor() as? NSTextView {
                 editor.textColor = NightModeStyle.primaryTextColor

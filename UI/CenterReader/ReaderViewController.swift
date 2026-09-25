@@ -3486,22 +3486,28 @@ final class ReaderViewController: NSViewController {
         guard isAllPagesOverviewActive == false,
               let clipView = pdfClipView() else { return false }
 
+        // PDFKit layout can nudge the clip by a point at a scroll boundary, so
+        // movement is measured from the viewport the user was looking at.
+        let visibleOriginY = clipView.bounds.origin.y
         pdfView.layoutDocumentView()
         pdfView.layoutSubtreeIfNeeded()
         syncPDFMarginBackgroundAfterPDFKitLayout()
-        return scrollVertically(by: clipView.bounds.height * fraction)
+        return scrollVertically(by: clipView.bounds.height * fraction, fromOriginY: visibleOriginY)
     }
 
-    private func scrollVertically(by delta: CGFloat) -> Bool {
+    private func scrollVertically(by delta: CGFloat, fromOriginY originY: CGFloat? = nil) -> Bool {
         guard let scrollView = pdfScrollView(), let clipView = pdfClipView() else { return false }
+        let originY = originY ?? clipView.bounds.origin.y
         var targetBounds = clipView.bounds
-        targetBounds.origin.y += delta
+        targetBounds.origin.y = originY + delta
         targetBounds = clipView.constrainBoundsRect(targetBounds)
-        guard abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.5 else { return false }
-
-        clipView.scroll(to: targetBounds.origin)
-        scrollView.reflectScrolledClipView(clipView)
-        return true
+        let moved = abs(targetBounds.origin.y - originY) > 0.5
+        if moved == false { targetBounds.origin.y = originY }
+        if abs(targetBounds.origin.y - clipView.bounds.origin.y) > 0.001 {
+            clipView.scroll(to: targetBounds.origin)
+            scrollView.reflectScrolledClipView(clipView)
+        }
+        return moved
     }
 
     private func targetSession() -> DocumentSession? {
