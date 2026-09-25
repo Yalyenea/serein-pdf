@@ -33,7 +33,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Keep horizontal tabs hidden when reopening only the outline after immersive mode, and restore tab visibility correctly after demo mode.
 - Add persistent Global Lock (`Shift+L`) for all windows and newly opened PDFs, preserving individual PDF lock states and excluding Book modes.
 - Make link previews resizable and pinnable, with continuous scrolling that starts from one copied page and retains at most three. Preserve internal links, target-column fitting, and independent viewport history. Option-click a link to split directly; Command-click navigates the source reader. Preview split actions use its current reading position.
-- Follow the chapter at the focused reader's top edge in both outlines, including same-page headings. `O` focuses the available outline search, with arrows, Enter, and Esc for navigation; manual browsing pauses automatic scrolling.
+- Follow the chapter at the focused reader's top edge in both outlines, including same-page headings. `O` closes the right sidebar and toggles the floating outline with focus on its headings, with arrows, Enter, and Esc for navigation; manual browsing pauses automatic scrolling.
 - Fit the new page or spread width when switching display modes after manual zoom, preserving the live reading anchor. Match page-turn arrows to vertical or Book layouts and turn directly even while zoomed.
 - Show a physical page number or spread range in every pane and the outline footer, with an inline page-number field for jumping. Fix Return/Escape handling and add an immediately applied Settings toggle to hide all counters.
 - Refresh page-counter text, backgrounds, and active editors when themes change.
@@ -43,6 +43,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Write the result as a new highlight and translated comment attached to the original selection. Preserve existing annotations, reject stale requests, prevent duplicate writes, and use the shared undo and save workflow.
 - Validate translation state and annotation integration with controlled responses; live Apple translation and language-model download remain to be checked on device.
 - Use a compact translation panel anchored near the selection, detect the source language before starting translation, and dismiss on Escape, outside clicks, or application deactivation while keeping system download sheets usable.
+- Detect single English words and short phrases reliably by favoring English and confirming short Latin-script selections with the system English dictionary, while longer passages in other languages keep their detected source.
 
 ### Website
 - Refresh the bilingual single-page site with reader screenshots, shortcut tables, inline documentation, and light/dark themes.

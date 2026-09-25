@@ -26,13 +26,8 @@ final class SelectionTranslation {
     struct Request: Equatable, Sendable {
         let id = UUID()
         let text: String
+        let sourceLanguage: Locale.Language?
         let targetLanguage: Locale.Language
-
-        var sourceLanguage: Locale.Language? {
-            guard let language = NLLanguageRecognizer.dominantLanguage(for: text),
-                  language != .undetermined else { return nil }
-            return Locale.Language(identifier: language.rawValue)
-        }
     }
 
     enum State: Equatable {
@@ -67,12 +62,51 @@ final class SelectionTranslation {
         self.sessionID = sourceID
         self.document = document
         self.selection = snapshot
-        request = Request(text: text, targetLanguage: Locale.Language(identifier: "zh-Hans"))
+        request = Request(
+            text: text,
+            sourceLanguage: Self.detectSourceLanguage(of: text),
+            targetLanguage: Locale.Language(identifier: "zh-Hans")
+        )
+    }
+
+    /// Word-sized selections carry too little signal for statistical detection, so English,
+    /// the usual source, is favored and confirmed by the system English dictionary.
+    static func detectSourceLanguage(of text: String) -> Locale.Language? {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        let hypotheses = recognizer.languageHypotheses(withMaximum: 10)
+        func weight(_ entry: (key: NLLanguage, value: Double)) -> Double {
+            entry.value * (entry.key == .english ? englishPriorWeight : 1)
+        }
+        guard let language = hypotheses.max(by: { weight($0) < weight($1) })?.key else { return nil }
+        if language != .english, isShortEnglishText(text) { return Locale.Language(identifier: "en") }
+        return Locale.Language(identifier: language.rawValue)
+    }
+
+    private static let englishPriorWeight = 20.0
+    private static let maximumDictionaryWordCount = 3
+
+    private static func isShortEnglishText(_ text: String) -> Bool {
+        guard text.split(whereSeparator: \.isWhitespace).count <= maximumDictionaryWordCount else { return false }
+        let tagger = NLTagger(tagSchemes: [.script])
+        tagger.string = text
+        var isLatin = false
+        tagger.enumerateTags(
+            in: text.startIndex..<text.endIndex, unit: .word, scheme: .script,
+            options: [.omitWhitespace, .omitPunctuation]
+        ) { tag, _ in
+            isLatin = tag?.rawValue == "Latn"
+            return isLatin
+        }
+        guard isLatin else { return false }
+        return NSSpellChecker.shared.checkSpelling(
+            of: text, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil
+        ).location == NSNotFound
     }
 
     @discardableResult
     func selectTargetLanguage(_ language: Locale.Language) -> Request {
-        request = Request(text: request.text, targetLanguage: language)
+        request = Request(text: request.text, sourceLanguage: request.sourceLanguage, targetLanguage: language)
         state = .translating
         addedGroupID = nil
         onChange?()

@@ -19,7 +19,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - `cmd+option+t` creates an untitled blank tab; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
 - Right pane hosts **Outline + Pages + Search + Annotations**; Annotations is a full-height compact comment feed with inline editing and keyboard navigation, while Outline adds heading filtering, wrapped titles, no horizontal panning, and one-click tree expand/collapse
 - When the Outline pane is not active (right sidebar closed, or open on Pages / Search / Annotations), a Notion-style rail of heading marks appears at the reader's right edge; hover expands the full outline as a translucent, theme-tinted overlay sized to its content, long outlines scroll within the configured maximum height, dragging either vertical edge adjusts that limit symmetrically around its center, and PDFs without an outline show no rail
-- Both outlines follow the chapter at the focused reader's top edge, including headings on the same page. They expand ancestors and keep the current heading visible, pausing while you browse or filter. Press `o` to focus the visible outline's search, use arrows to choose a heading, then `enter` to jump or `esc` to cancel.
+- Both outlines follow the chapter at the focused reader's top edge, including headings on the same page. They expand ancestors and keep the current heading visible, pausing while you browse or filter. Press `o` to close the right sidebar and toggle the floating outline with keyboard focus on its headings; use arrows to choose a heading, then `enter` to jump or `esc` to cancel. Click the search field to filter.
 - Right sidebar modes keep a consistent pane footprint, so switching Outline / Pages / Search / Annotations does not visually widen or narrow the sidebar
 - Find bar supports `This Document` / `All Open`, match-case `Aa`, and whole-word `Word`; opening it with selected PDF text searches that text immediately, `All Open` scopes to PDFs in the active workspace, typing alone does not search, first `enter` submits, repeated `enter` / `cmd+g` / `cmd+shift+g` continue match navigation
 - Reader navigation keeps the compact Vim-style layer: `c` toggles continuity within the current Single Page, Two-Up, or Book layout, `j` / `k` and `↓` / `↑` turn pages in vertical modes, `h` / `l` and `←` / `→` turn Book spreads, `ctrl+d` / `ctrl+u` scroll half a page, and `g` / `shift+g` jump to the document edges. Page-turn keys turn directly even when zoomed in. `cmd+[` / `cmd+]` restore exact pane-local positions across same-page and cross-document jumps.
@@ -66,7 +66,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
 - Underline workflow (`u` to underline) shares the compact mode, comment, undo, save, sidebar, and export pipeline
 - Strikethrough uses the same annotation pipeline with the plain `s` shortcut
-- Select text and press `t` for Apple translation in a compact window. The source language is detected automatically; the target defaults to Simplified Chinese and can be changed. Add the result as a new highlight with a translated comment, preserving existing annotations and the original selection even if you switch readers. A result is added only once and uses the normal undo and save workflow. Translation requires macOS 15 or later.
+- Select text and press `t` for Apple translation in a compact window. The source language is detected automatically, favoring English for single words and short phrases; the target defaults to Simplified Chinese and can be changed. Add the result as a new highlight with a translated comment, preserving existing annotations and the original selection even if you switch readers. A result is added only once and uses the normal undo and save workflow. Translation requires macOS 15 or later.
 - Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
 - While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets; `Export All Open Highlights…` groups the current window's annotated PDFs by document and page
@@ -277,7 +277,7 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Strikethrough selection / enter strikethrough mode | `s` |
 | Add or edit comment | `m` |
 | Translate selected text | `t` |
-| Focus outline search | `o` |
+| Toggle outline | `o` |
 | Exit annotation mode | `esc` |
 | Temporarily toggle light / dark mode without changing settings | `i` |
 | Switch current theme | `cmd+k`, then `cmd+t` |

@@ -133,11 +133,18 @@ final class SelectionTranslationTests: XCTestCase {
             ("拉格朗日对偶性是优化的基础，我们可以通过数学推导理解它的几何意义。", "zh"),
             ("La traduction automatique permet de comprendre les textes dans une autre langue.", "fr"),
         ] {
-            let request = SelectionTranslation.Request(text: text, targetLanguage: Locale.Language(identifier: "ja"))
-            XCTAssertEqual(request.sourceLanguage?.languageCode?.identifier, expected)
+            XCTAssertEqual(SelectionTranslation.detectSourceLanguage(of: text)?.languageCode?.identifier, expected)
         }
-        let request = SelectionTranslation.Request(text: "12345 + 67890", targetLanguage: Locale.Language(identifier: "zh-Hans"))
-        XCTAssertNil(request.sourceLanguage)
+        XCTAssertNil(SelectionTranslation.detectSourceLanguage(of: "12345 + 67890"))
+    }
+
+    func testShortEnglishSelectionsAreNotMistakenForOtherLanguages() {
+        for word in ["attention", "kernel", "lemma", "sparse", "prior", "via", "per se", "softmax", "Hessian"] {
+            XCTAssertEqual(SelectionTranslation.detectSourceLanguage(of: word)?.languageCode?.identifier, "en", word)
+        }
+        for (word, expected) in [("Straße", "de"), ("tête", "fr"), ("机器学习", "zh")] {
+            XCTAssertEqual(SelectionTranslation.detectSourceLanguage(of: word)?.languageCode?.identifier, expected, word)
+        }
     }
 
     func testChangingTargetKeepsTheOriginalTextAndDetectedLanguage() throws {
