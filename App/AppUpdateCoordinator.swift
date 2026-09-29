@@ -46,8 +46,8 @@ final class AppUpdateCoordinator {
             case let .upToDate(current, latest):
                 if userInitiated {
                     presentInfo(
-                        title: "You’re up to date",
-                        message: "Serein \(current) is the latest release (GitHub: \(latest))."
+                        title: L10n.text("You’re up to date", "已是最新版本"),
+                        message: L10n.text("Serein \(current) is the latest release (GitHub: \(latest)).", "Serein \(current) 已是最新版本（GitHub：\(latest)）。")
                     )
                 }
             case let .updateAvailable(release):
@@ -75,7 +75,7 @@ final class AppUpdateCoordinator {
     }
 
     private func downloadAndInstall(release: AppUpdateService.ReleaseInfo, service: AppUpdateService) async throws {
-        showProgress(title: "Downloading Serein \(release.version)…")
+        showProgress(title: L10n.text("Downloading Serein \(release.version)…", "正在下载 Serein \(release.version)…"))
         defer { hideProgress() }
 
         let workDir = FileManager.default.temporaryDirectory
@@ -92,12 +92,12 @@ final class AppUpdateCoordinator {
             }
         }
 
-        updateProgressTitle("Installing Serein \(release.version)…")
+        updateProgressTitle(L10n.text("Installing Serein \(release.version)…", "正在安装 Serein \(release.version)…"))
         hideProgress()
 
         presentInfo(
-            title: "Update ready",
-            message: "Serein will quit and relaunch as \(release.version)."
+            title: L10n.text("Update ready", "更新已就绪"),
+            message: L10n.text("Serein will quit and relaunch as \(release.version).", "Serein 将退出并以 \(release.version) 重新启动。")
         )
         pendingInstall = {
             _ = try service.scheduleInstallAndRelaunch(
@@ -118,13 +118,13 @@ final class AppUpdateCoordinator {
 
     private func presentUpdatePrompt(release: AppUpdateService.ReleaseInfo, userInitiated: Bool) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Serein \(release.version) is available"
+        alert.messageText = L10n.text("Serein \(release.version) is available", "Serein \(release.version) 已发布")
         alert.informativeText = userInitiated
-            ? "Download and install this update from GitHub Releases now? Serein will relaunch when finished."
-            : "A new version is available on GitHub. Download and install now? Serein will relaunch when finished."
+            ? L10n.text("Download and install this update from GitHub Releases now? Serein will relaunch when finished.", "现在从 GitHub Releases 下载并安装更新？完成后 Serein 将重新启动。")
+            : L10n.text("A new version is available on GitHub. Download and install now? Serein will relaunch when finished.", "GitHub 上有新版本。现在下载并安装？完成后 Serein 将重新启动。")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Install")
-        alert.addButton(withTitle: "Later")
+        alert.addButton(withTitle: L10n.text("Install", "安装"))
+        alert.addButton(withTitle: L10n.text("Later", "稍后"))
         return alert.runModal() == .alertFirstButtonReturn
     }
 
@@ -133,23 +133,23 @@ final class AppUpdateCoordinator {
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: L10n.text("OK", "好"))
         alert.runModal()
     }
 
     private func presentError(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "Update failed"
+        alert.messageText = L10n.text("Update failed", "更新失败")
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: L10n.text("OK", "好"))
         alert.runModal()
     }
 
     private func showProgress(title: String) {
         let alert = NSAlert()
         alert.messageText = title
-        alert.informativeText = "Please wait…"
+        alert.informativeText = L10n.text("Please wait…", "请稍候…")
         alert.alertStyle = .informational
 
         let indicator = NSProgressIndicator(frame: NSRect(x: 0, y: 0, width: 240, height: 16))

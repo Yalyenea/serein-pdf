@@ -9,7 +9,7 @@ final class ReadingFocusControlsViewController: NSViewController {
     private var isApplyingSettings = false
 
     private let widthModeControl = NSSegmentedControl(
-        labels: ["Page", "Column", "Custom"],
+        labels: [L10n.text("Page", "页面"), L10n.text("Column", "栏宽"), L10n.text("Custom", "自定义")],
         trackingMode: .selectOne,
         target: nil,
         action: nil
@@ -30,7 +30,7 @@ final class ReadingFocusControlsViewController: NSViewController {
         action: nil
     )
     private let heightValueLabel = NSTextField(labelWithString: "96 pt")
-    private let resetButton = NSButton(title: "Use Defaults", target: nil, action: nil)
+    private let resetButton = NSButton(title: L10n.text("Use Defaults", "恢复默认"), target: nil, action: nil)
 
     init(settings: ReadingFocusSettings, defaultSettings: ReadingFocusSettings) {
         self.settings = settings
@@ -47,20 +47,20 @@ final class ReadingFocusControlsViewController: NSViewController {
     override func loadView() {
         let container = NSView()
 
-        let titleLabel = NSTextField(labelWithString: "Reading Focus")
+        let titleLabel = NSTextField(labelWithString: L10n.text("Reading Focus", "专注阅读"))
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         configureControls()
 
-        let widthRow = makeRow(label: "Width", control: widthModeControl)
+        let widthRow = makeRow(label: L10n.text("Width", "宽度"), control: widthModeControl)
         let customWidthRow = makeSliderRow(
-            label: "Custom",
+            label: L10n.text("Custom", "自定义"),
             slider: customWidthSlider,
             valueLabel: customWidthValueLabel
         )
         let heightRow = makeSliderRow(
-            label: "Height",
+            label: L10n.text("Height", "高度"),
             slider: heightSlider,
             valueLabel: heightValueLabel
         )
@@ -70,7 +70,7 @@ final class ReadingFocusControlsViewController: NSViewController {
         controlsStack.spacing = 9
         controlsStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let hintLabel = NSTextField(labelWithString: "Current window only · defaults are in Settings")
+        let hintLabel = NSTextField(labelWithString: L10n.text("Current window only · defaults are in Settings", "仅当前窗口 · 可在设置中修改默认值"))
         hintLabel.font = .systemFont(ofSize: 10.5)
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.translatesAutoresizingMaskIntoConstraints = false

@@ -225,7 +225,7 @@ final class FloatingOutlineViewController: NSViewController {
             isFloatingPresentation: true
         )
         super.init(nibName: nil, bundle: nil)
-        title = "Floating Outline"
+        title = L10n.text("Floating Outline", "悬浮目录")
         addChild(outlineViewController)
         outlineViewController.preferredContentHeightDidChange = { [weak self] in
             self?.reportPreferredGeometryIfNeeded()
@@ -250,8 +250,8 @@ final class FloatingOutlineViewController: NSViewController {
         hoverView.wantsLayer = true
         hoverView.setAccessibilityElement(true)
         hoverView.setAccessibilityRole(.button)
-        hoverView.setAccessibilityLabel("Document outline")
-        hoverView.setAccessibilityHelp("Move the pointer here to expand the document outline.")
+        hoverView.setAccessibilityLabel(L10n.text("Document outline", "文档目录"))
+        hoverView.setAccessibilityHelp(L10n.text("Move the pointer here to expand the document outline.", "将指针移至此处以展开文档目录。"))
         hoverView.onHoverChanged = { [weak self] isHovered in
             self?.setHovered(isHovered)
         }
@@ -265,7 +265,7 @@ final class FloatingOutlineViewController: NSViewController {
 
         markerView.identifier = NSUserInterfaceItemIdentifier("floatingOutlineMarkerRail")
         markerView.translatesAutoresizingMaskIntoConstraints = false
-        markerView.toolTip = "Document outline"
+        markerView.toolTip = L10n.text("Document outline", "文档目录")
         hoverView.addSubview(markerView)
 
         panelView.identifier = NSUserInterfaceItemIdentifier("floatingOutlinePanel")
@@ -510,8 +510,8 @@ final class FloatingOutlineViewController: NSViewController {
         hoverView.setAccessibilityExpanded(expanded)
         hoverView.setAccessibilityHelp(
             expanded
-                ? "Press to collapse the document outline."
-                : "Move the pointer here or press to expand the document outline."
+                ? L10n.text("Press to collapse the document outline.", "点击以收起文档目录。")
+                : L10n.text("Move the pointer here or press to expand the document outline.", "将指针移至此处或点击以展开文档目录。")
         )
         reportPreferredGeometryIfNeeded()
     }

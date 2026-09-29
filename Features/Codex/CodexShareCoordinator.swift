@@ -10,15 +10,15 @@ enum CodexShareError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .applicationNotInstalled:
-            "Codex is not installed."
+            L10n.text("Codex is not installed.", "尚未安装 Codex。")
         case .invalidTextDeepLink:
-            "Unable to create the Codex text link."
+            L10n.text("Unable to create the Codex text link.", "无法创建 Codex 文本链接。")
         case .failedToOpenTextComposer:
-            "Unable to open the text in Codex."
+            L10n.text("Unable to open the text in Codex.", "无法在 Codex 中打开文本。")
         case .failedToEncodePageImage:
-            "Unable to encode the current page as a PNG image."
+            L10n.text("Unable to encode the current page as a PNG image.", "无法将当前页面转换为 PNG 图片。")
         case let .failedToOpenFiles(message):
-            "Unable to open the file in Codex: \(message)"
+            L10n.text("Unable to open the file in Codex: \(message)", "无法在 Codex 中打开文件：\(message)")
         }
     }
 }

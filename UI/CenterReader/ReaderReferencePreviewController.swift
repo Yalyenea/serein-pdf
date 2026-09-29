@@ -209,29 +209,29 @@ final class ReferencePreviewViewController: NSViewController {
         view.wantsLayer = true
         view.layer?.cornerRadius = 6
         view.layer?.masksToBounds = true
-        view.setAccessibilityLabel("Reference · Page \(pageTitle)")
+        view.setAccessibilityLabel(L10n.text("Reference · Page \(pageTitle)", "引用 · 第 \(pageTitle) 页"))
         jump.title = ""
         jump.identifier = NSUserInterfaceItemIdentifier("referencePreviewJump")
-        jump.image = NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: "Jump to reference")
-        jump.setAccessibilityLabel("Jump to reference · Page \(pageTitle)")
+        jump.image = NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: L10n.text("Jump to reference", "跳转到引用"))
+        jump.setAccessibilityLabel(L10n.text("Jump to reference · Page \(pageTitle)", "跳转到引用 · 第 \(pageTitle) 页"))
         jump.imagePosition = .imageOnly
         jump.isBordered = false
         jump.target = self
         jump.action = #selector(jumpToReference)
-        jump.toolTip = "Jump to reference · Page \(pageTitle) (Command-click a link to jump directly)"
+        jump.toolTip = L10n.text("Jump to reference · Page \(pageTitle) (Command-click a link to jump directly)", "跳转到引用 · 第 \(pageTitle) 页（按住 Command 点击链接可直接跳转）")
         jump.wantsLayer = true
         jump.layer?.cornerRadius = 4
         jump.focusRingType = .none
         configureHistoryButton(back, identifier: "referencePreviewBack", symbol: "chevron.left",
-                               label: "Back", action: #selector(goBack))
+                               label: L10n.text("Back", "后退"), action: #selector(goBack))
         configureHistoryButton(forward, identifier: "referencePreviewForward", symbol: "chevron.right",
-                               label: "Forward", action: #selector(goForward))
+                               label: L10n.text("Forward", "前进"), action: #selector(goForward))
         configureHistoryButton(pin, identifier: "referencePreviewPin", symbol: "pin",
-                               label: "Keep preview open", action: #selector(togglePin))
+                               label: L10n.text("Keep preview open", "保持预览打开"), action: #selector(togglePin))
         configureHistoryButton(split, identifier: "referencePreviewSplit", symbol: "rectangle.split.2x1",
-                               label: "Open in new split (B; Shift+B below)", action: #selector(splitReference))
+                               label: L10n.text("Open in new split (B; Shift+B below)", "在新分栏中打开（B；Shift+B 在下方打开）"), action: #selector(splitReference))
         configureHistoryButton(closeButton, identifier: "referencePreviewClose", symbol: "xmark",
-                               label: "Close preview (Esc)", action: #selector(closePreview))
+                               label: L10n.text("Close preview (Esc)", "关闭预览（Esc）"), action: #selector(closePreview))
         preview.displayMode = .singlePageContinuous
         preview.displayBox = .cropBox
         preview.displaysPageBreaks = false
@@ -246,7 +246,7 @@ final class ReferencePreviewViewController: NSViewController {
         preview.onInternalLink = { [weak self] destination in self?.navigate(to: destination) }
         preview.onSplit = { [weak self] layout in self?.openSplit(layout: layout) }
         let drag = ReferencePreviewDragView()
-        drag.toolTip = "Drag to move preview; drag an edge to resize"
+        drag.toolTip = L10n.text("Drag to move preview; drag an edge to resize", "拖动以移动预览；拖动边缘以调整大小")
         for child in [preview, drag, back, forward, pin, split, jump, closeButton] {
             child.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(child)
@@ -363,9 +363,9 @@ final class ReferencePreviewViewController: NSViewController {
     }
 
     private func refreshNavigationControls() {
-        view.setAccessibilityLabel("Reference · Page \(pageTitle)")
-        jump.setAccessibilityLabel("Jump to reference · Page \(pageTitle)")
-        jump.toolTip = "Jump to reference · Page \(pageTitle)"
+        view.setAccessibilityLabel(L10n.text("Reference · Page \(pageTitle)", "引用 · 第 \(pageTitle) 页"))
+        jump.setAccessibilityLabel(L10n.text("Jump to reference · Page \(pageTitle)", "跳转到引用 · 第 \(pageTitle) 页"))
+        jump.toolTip = L10n.text("Jump to reference · Page \(pageTitle)", "跳转到引用 · 第 \(pageTitle) 页")
         back.isEnabled = canGoBack
         forward.isEnabled = canGoForward
     }
@@ -568,9 +568,9 @@ final class ReferencePreviewViewController: NSViewController {
     @objc private func togglePin() {
         isPinned.toggle()
         pin.image = NSImage(systemSymbolName: isPinned ? "pin.fill" : "pin", accessibilityDescription: nil)
-        pin.toolTip = isPinned ? "Unpin preview" : "Keep preview open"
+        pin.toolTip = isPinned ? L10n.text("Unpin preview", "取消固定预览") : L10n.text("Keep preview open", "保持预览打开")
         pin.setAccessibilityLabel(pin.toolTip)
-        pin.setAccessibilityValue(isPinned ? "Pinned" : "Unpinned")
+        pin.setAccessibilityValue(isPinned ? L10n.text("Pinned", "已固定") : L10n.text("Unpinned", "未固定"))
     }
 
     @objc private func closePreview() { onClose?() }

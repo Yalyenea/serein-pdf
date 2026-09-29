@@ -4,6 +4,7 @@ import PDFKit
 
 enum SelectionTranslationError: LocalizedError {
     case missingSelection
+    case requiresMacOS15
     case unrecognizedLanguage
     case sourceDocumentChanged
     case missingTranslation
@@ -11,11 +12,12 @@ enum SelectionTranslationError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingSelection: "Select some text to translate."
-        case .unrecognizedLanguage: "Could not detect the language. Select a longer passage and try again."
-        case .sourceDocumentChanged: "The original PDF was closed or reloaded. Select the text again to add an annotation."
-        case .missingTranslation: "No translation is available to add."
-        case .unableToAnnotate: "The selected text could not be highlighted."
+        case .requiresMacOS15: L10n.text("Translation requires macOS 15 or later.", "翻译需要 macOS 15 或更高版本。")
+        case .missingSelection: L10n.text("Select some text to translate.", "请选择要翻译的文字。")
+        case .unrecognizedLanguage: L10n.text("Only Chinese and English text is supported. Select a word or passage and try again.", "仅支持中文和英文，请选择单词或段落后重试。")
+        case .sourceDocumentChanged: L10n.text("The original PDF was closed or reloaded. Select the text again to add an annotation.", "原 PDF 已关闭或重新加载，请重新选择文字以添加批注。")
+        case .missingTranslation: L10n.text("No translation is available to add.", "暂无可添加的译文。")
+        case .unableToAnnotate: L10n.text("The selected text could not be highlighted.", "无法高亮所选文字。")
         }
     }
 }
@@ -62,51 +64,60 @@ final class SelectionTranslation {
         self.sessionID = sourceID
         self.document = document
         self.selection = snapshot
-        request = Request(
-            text: text,
-            sourceLanguage: Self.detectSourceLanguage(of: text),
-            targetLanguage: Locale.Language(identifier: "zh-Hans")
-        )
+        let source = Self.detectSourceLanguage(of: text)
+        request = Request(text: text, sourceLanguage: source, targetLanguage: Self.targetLanguage(for: source))
     }
 
-    /// Word-sized selections carry too little signal for statistical detection, so English,
-    /// the usual source, is favored and confirmed by the system English dictionary.
+    /// Count words by script so Chinese prose containing English technical terms stays Chinese.
+    /// Within this bilingual tool, Latin-script words are treated as English.
     static func detectSourceLanguage(of text: String) -> Locale.Language? {
-        let recognizer = NLLanguageRecognizer()
-        recognizer.processString(text)
-        let hypotheses = recognizer.languageHypotheses(withMaximum: 10)
-        func weight(_ entry: (key: NLLanguage, value: Double)) -> Double {
-            entry.value * (entry.key == .english ? englishPriorWeight : 1)
-        }
-        guard let language = hypotheses.max(by: { weight($0) < weight($1) })?.key else { return nil }
-        if language != .english, isShortEnglishText(text) { return Locale.Language(identifier: "en") }
-        return Locale.Language(identifier: language.rawValue)
-    }
-
-    private static let englishPriorWeight = 20.0
-    private static let maximumDictionaryWordCount = 3
-
-    private static func isShortEnglishText(_ text: String) -> Bool {
-        guard text.split(whereSeparator: \.isWhitespace).count <= maximumDictionaryWordCount else { return false }
         let tagger = NLTagger(tagSchemes: [.script])
         tagger.string = text
-        var isLatin = false
+        var english = 0
+        var simplified = 0
+        var traditional = 0
+        var unsupported = false
         tagger.enumerateTags(
             in: text.startIndex..<text.endIndex, unit: .word, scheme: .script,
             options: [.omitWhitespace, .omitPunctuation]
-        ) { tag, _ in
-            isLatin = tag?.rawValue == "Latn"
-            return isLatin
+        ) { tag, range in
+            guard text[range].unicodeScalars.contains(where: CharacterSet.letters.contains) else { return true }
+            switch tag?.rawValue {
+            case "Latn": english += 1
+            case "Hans", "Hani": simplified += 1
+            case "Hant": traditional += 1
+            default: unsupported = true
+            }
+            return true
         }
-        guard isLatin else { return false }
-        return NSSpellChecker.shared.checkSpelling(
-            of: text, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil
-        ).location == NSNotFound
+        guard !unsupported, english + simplified + traditional > 0 else { return nil }
+        if simplified + traditional >= english {
+            return Locale.Language(identifier: traditional > simplified ? "zh-Hant" : "zh-Hans")
+        }
+        return Locale.Language(identifier: "en")
+    }
+
+    private static func targetLanguage(for source: Locale.Language?) -> Locale.Language {
+        Locale.Language(identifier: source?.languageCode?.identifier == "zh" ? "en" : "zh-Hans")
+    }
+
+    var englishWord: String? {
+        guard request.sourceLanguage?.languageCode?.identifier == "en" else { return nil }
+        return EnglishDictionary.word(in: request.text)
     }
 
     @discardableResult
-    func selectTargetLanguage(_ language: Locale.Language) -> Request {
-        request = Request(text: request.text, sourceLanguage: request.sourceLanguage, targetLanguage: language)
+    func retry() -> Request {
+        beginRequest(source: request.sourceLanguage, target: request.targetLanguage)
+    }
+
+    @discardableResult
+    func reverseDirection() -> Request {
+        beginRequest(source: request.targetLanguage, target: Self.targetLanguage(for: request.targetLanguage))
+    }
+
+    private func beginRequest(source: Locale.Language?, target: Locale.Language) -> Request {
+        request = Request(text: request.text, sourceLanguage: source, targetLanguage: target)
         state = .translating
         addedGroupID = nil
         onChange?()

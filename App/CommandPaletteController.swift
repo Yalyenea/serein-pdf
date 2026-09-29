@@ -96,7 +96,7 @@ final class CommandPaletteController: NSWindowController, NSWindowDelegate {
         self.onVisibilityChange = onVisibilityChange
         let panel = CommandPalettePanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 400),
                                         styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
-        panel.title = "Commands"
+        panel.title = L10n.text("Commands", "命令")
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
@@ -192,7 +192,7 @@ final class CommandPaletteController: NSWindowController, NSWindowDelegate {
             y += 32
         }
         if state.allItems.isEmpty {
-            let label = NSTextField(labelWithString: "No commands available.")
+            let label = NSTextField(labelWithString: L10n.text("No commands available.", "没有可用命令。"))
             label.font = .systemFont(ofSize: 12)
             label.frame = NSRect(x: 8, y: 8, width: width - 36, height: 18)
             gridView.addSubview(label)

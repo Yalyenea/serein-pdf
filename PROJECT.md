@@ -101,7 +101,7 @@ flowchart LR
 | 同 PDF 对比 | 每个 pane 使用独立阅读 session,共享源 PDF、批注与撤销,独立页码 / 缩放;内部阅读 session 随布局持久化,通过所属公开 tab 出现在 MRU 与文档切换中;从列表分屏时继承源工作区最近阅读组内该 PDF 的焦点阅读区或首个对应阅读区,显式指定的阅读区与链接位置优先 |
 | 状态持有 | 各阅读 session 保存页码 / 缩放 / Lock,同文件共享文档 owner 的 dirty / undo;搜索结果是窗口级 `SearchSnapshot`;live `PDFDocument` 由 `DocumentStore` 小容量 LRU 按需持有;窗口 chrome 在 `WindowWorkspace`,tab 与分屏组在 `NamedWorkspace` |
 | 阅读聚焦 | `ReadingFocusOverlayView` 只绘制一个 even-odd 圆角镂空遮罩与轻量边缘阴影,不接管 PDF hit-test;默认宽高来自 config,`Option+F` 只覆盖当前窗口并同步所有 pane |
-| 选区翻译 | `T` 打开 Apple 翻译窗口,自动识别源语言、默认简体中文、可切换目标语言;结果绑定原 PDF / 原选区,点击写入新建粉色高亮与译文评论,同一结果只写一次,保留已有批注并沿用撤销 / 保存 |
+| 选区翻译 | `T` 打开 Apple 翻译窗口,自动识别中英文并互译，支持反转方向；英文单词显示系统词典摘要、音标与朗读，词性和释义共用基线且不单独滚动，长句译文可滚动;结果绑定原 PDF / 原选区,点击写入新建粉色高亮与译文评论,同一结果只写一次,保留已有批注并沿用撤销 / 保存 |
 | 目录跟随 | 侧栏与浮动目录共用 `OutlineLocationResolver`,按焦点阅读区顶部的页码与页内坐标确定章节;展开祖先并最小滚动保持可见,手动浏览 / 搜索时暂停 |
 | 页码显示 | 每个阅读区显示实际页序或双页范围,点击后就地输入跳页;`reader.show_page_counter` 默认开启,Settings 切换后立即更新全部页码控件,隐藏时结束编辑 |
 | 文本点选 | 单击设置起点，`Shift` + 单击选择到终点，支持反向、跨页和行首尾空白；连续 `Shift` + 单击调整终点。起点按阅读区独立保存，切换文档或移出窗口时清除；通过本地鼠标事件监听处理，保留 PDFKit 原生拖选与双击选词。 |
@@ -153,6 +153,8 @@ flowchart LR
 - 空窗时左栏保留工作区选择器并上移 Recent 快捷入口(无 recents 或关闭时显示共享提示文案);右栏无文档态只保留居中空态文案,不显示 segmented 等"已就绪"chrome
 - 默认高亮色:偏轻、低饱和但清晰的粉色
 
+界面语言：Settings → General → Language 提供 Automatic / English / 中文，`appearance.language` 保存 `automatic` / `en` / `zh`。自动模式按系统首选语言选择中文或英文，重新打开应用后生效。菜单、设置、侧栏、批注与翻译弹窗共用 `L10n` 文案。
+
 ### 4.3 快捷键总表
 
 配置文件:`~/Library/Application Support/Serein/config.toml` — schema 与默认值见 `Core/AppConfiguration.swift`;`access.root_bookmarks` 由 Serein 管理,默认用于跨重装保留 `/Users` 访问授权。`[updates]` 控制 GitHub Releases 自动更新(`auto_check` / 私有仓库所需的 `github_token`)。
@@ -164,7 +166,7 @@ flowchart LR
 - `U`:有选区 → 立即加下划线;无选区 → 进入下划线模式
 - `S`:有选区 → 立即加删除线;无选区 → 进入删除线模式
 - `M`:有选区 → 创建高亮并进入评论编辑;无选区且命中高亮 → 编辑已有评论
-- `T`:翻译选中文字,小窗可切换目标语言并将译文写入新高亮评论;macOS 15+ 可用
+- `T`:翻译选中文字,小窗自动识别中英文并互译，可反转方向、朗读和将译文写入新高亮评论;macOS 15+ 可用
 - 高亮模式内 `1` / `2` / `3`:切换粉 / 黄 / 绿;文本输入框优先接收数字
 - `Esc`:退出批注模式 / 关闭 Find bar / 退出全览;演示时先将笔或激光切回指针,再按退出演示
 - `D`:删除鼠标所在批注(多行整组删除)

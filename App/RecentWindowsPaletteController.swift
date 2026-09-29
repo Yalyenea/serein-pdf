@@ -19,7 +19,7 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
     private let queryField = NSTextField(frame: .zero)
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
-    private let emptyLabel = NSTextField(labelWithString: "No recent windows.")
+    private let emptyLabel = NSTextField(labelWithString: L10n.text("No recent windows.", "没有最近窗口。"))
     private let footerLabel = NSTextField(labelWithString: "")
     private var rightSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option])
     private var downSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option, .shift])
@@ -29,7 +29,7 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
         self.onSplitWindow = onSplitWindow
         let panel = CompactPalettePanel(contentRect: NSRect(x: 0, y: 0, width: 620, height: 160),
                                         styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
-        panel.title = "Recent Windows"
+        panel.title = L10n.text("Recent Windows", "最近窗口")
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
@@ -81,7 +81,7 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
                 editor.insertionPointColor = NightModeStyle.primaryTextColor
             }
             queryField.placeholderAttributedString = NSAttributedString(
-                string: "Filter recent windows", attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
+                string: L10n.text("Filter recent windows", "筛选最近窗口"), attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
             )
             emptyLabel.textColor = NightModeStyle.secondaryTextColor
             footerLabel.textColor = NightModeStyle.tertiaryTextColor
@@ -155,7 +155,7 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
         isApplyingSelection = true
         tableView.reloadData()
         isApplyingSelection = false
-        emptyLabel.stringValue = items.isEmpty ? "No recent windows." : "No windows match the current query."
+        emptyLabel.stringValue = items.isEmpty ? L10n.text("No recent windows.", "没有最近窗口。") : L10n.text("No windows match the current query.", "没有匹配的窗口。")
         emptyLabel.isHidden = !filteredItems.isEmpty
         scrollView.isHidden = filteredItems.isEmpty
         let screenHeight = (parentWindow?.screen ?? NSScreen.main)?.visibleFrame.height ?? 600
@@ -175,8 +175,8 @@ final class RecentWindowsPaletteController: NSWindowController, NSTableViewDataS
 
     private func updateFooter() {
         footerLabel.stringValue = highlightedItem?.canSplit == true
-            ? "↩  Switch window    \(rightSplitShortcut?.displayString ?? "—")  Split right    \(downSplitShortcut?.displayString ?? "—")  Split below"
-            : "↩  Switch window · This window has no PDF to open in a split"
+            ? L10n.text("↩  Switch window    \(rightSplitShortcut?.displayString ?? "—")  Split right    \(downSplitShortcut?.displayString ?? "—")  Split below", "↩  切换窗口    \(rightSplitShortcut?.displayString ?? "—")  向右分屏    \(downSplitShortcut?.displayString ?? "—")  向下分屏")
+            : L10n.text("↩  Switch window · This window has no PDF to open in a split", "↩  切换窗口 · 此窗口没有可分屏打开的 PDF")
     }
 
     private func activate(splitLayout: ReaderSplitLayout? = nil) {

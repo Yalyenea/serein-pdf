@@ -34,9 +34,9 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     weak var delegate: FindBarDelegate?
 
     private let queryField = FindQueryField()
-    private let scopeControl = NSSegmentedControl(labels: ["This Document", "All Open"], trackingMode: .selectOne, target: nil, action: nil)
+    private let scopeControl = NSSegmentedControl(labels: [L10n.text("This Document", "当前文档"), L10n.text("All Open", "所有已打开文档")], trackingMode: .selectOne, target: nil, action: nil)
     private let optionsControl = NSSegmentedControl(
-        labels: ["Aa", "Word"],
+        labels: ["Aa", L10n.text("Word", "全词")],
         trackingMode: .selectAny,
         target: nil,
         action: nil
@@ -97,8 +97,8 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         optionsControl.controlSize = .small
         optionsControl.target = self
         optionsControl.action = #selector(handleOptionsChanged)
-        optionsControl.setToolTip("Match Case", forSegment: 0)
-        optionsControl.setToolTip("Match Whole Word", forSegment: 1)
+        optionsControl.setToolTip(L10n.text("Match Case", "区分大小写"), forSegment: 0)
+        optionsControl.setToolTip(L10n.text("Match Whole Word", "匹配完整单词"), forSegment: 1)
         optionsControl.translatesAutoresizingMaskIntoConstraints = false
 
         statusLabel.font = .systemFont(ofSize: 11, weight: .regular)
@@ -226,11 +226,11 @@ final class FindBarView: NSView, NSTextFieldDelegate {
         if queryField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             statusLabel.stringValue = ""
         } else if totalMatches == 0 {
-            statusLabel.stringValue = "No matches"
+            statusLabel.stringValue = L10n.text("No matches", "没有匹配结果")
         } else if let index = matchIndex {
             statusLabel.stringValue = "\(index + 1) / \(totalMatches)"
         } else {
-            statusLabel.stringValue = "\(totalMatches) matches"
+            statusLabel.stringValue = L10n.text("\(totalMatches) matches", "\(totalMatches) 个匹配结果")
         }
     }
 

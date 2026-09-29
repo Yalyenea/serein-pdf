@@ -1266,7 +1266,7 @@ final class DocumentStore {
             .sorted()
             .map { pageIndex in
                 DocumentHighlightSection(
-                    title: "Page \(pageIndex + 1)",
+                    title: L10n.text("Page \(pageIndex + 1)", "第 \(pageIndex + 1) 页"),
                     highlights: grouped[pageIndex, default: []]
                         .sorted { lhs, rhs in
                             let lhsDate = lhs.createdAt ?? .distantPast
@@ -1665,13 +1665,13 @@ final class DocumentStore {
         var seenIDs = Set<UUID>()
         for reference in state.sessions {
             guard seenIDs.insert(reference.id).inserted else {
-                throw DocumentStoreError.invalidPersistedState("Duplicate reading session ID")
+                throw DocumentStoreError.invalidPersistedState(L10n.text("Duplicate reading session ID", "阅读会话 ID 重复"))
             }
             let reading: PersistedReadingState?
             let restoredScaleMode: ReaderScaleMode
             if state.workspaceWindows != nil {
                 guard let savedReading = reference.readingState else {
-                    throw DocumentStoreError.invalidPersistedState("Missing saved reading position")
+                    throw DocumentStoreError.invalidPersistedState(L10n.text("Missing saved reading position", "缺少已保存的阅读位置"))
                 }
                 reading = savedReading
                 restoredScaleMode = savedReading.scaleMode
@@ -1699,7 +1699,7 @@ final class DocumentStore {
             if let source = reference.documentSourceID {
                 guard seenIDs.contains(source), source != reference.id,
                       state.sessions.first(where: { $0.id == source })?.documentSourceID == nil else {
-                    throw DocumentStoreError.invalidPersistedState("Invalid shared document source")
+                    throw DocumentStoreError.invalidPersistedState(L10n.text("Invalid shared document source", "共享文档来源无效"))
                 }
                 sharedDocumentSources[reference.id] = source
                 sourceByURL[url] = source
@@ -1711,7 +1711,7 @@ final class DocumentStore {
             for window in windows {
                 guard !window.workspaces.isEmpty,
                       window.workspaces.contains(where: { $0.id == window.activeWorkspaceID }) else {
-                    throw DocumentStoreError.invalidPersistedState("Invalid active workspace")
+                    throw DocumentStoreError.invalidPersistedState(L10n.text("Invalid active workspace", "当前工作区无效"))
                 }
             }
             windowWorkspaces = windows
@@ -1753,7 +1753,7 @@ final class DocumentStore {
                     if assignedSessionIDs.insert(sessionID).inserted { continue }
                     guard let independentID = duplicateSessionForSplitComparison(from: sessionID, tabSessionID: sessionID),
                           let index = sessions.firstIndex(where: { $0.id == independentID }) else {
-                        throw DocumentStoreError.invalidPersistedState("Missing migrated document")
+                        throw DocumentStoreError.invalidPersistedState(L10n.text("Missing migrated document", "缺少迁移后的文档"))
                     }
                     sessions[index].tabSessionID = nil
                     replacements[sessionID] = independentID
@@ -2468,7 +2468,7 @@ final class DocumentStore {
     func renameSession(_ title: String, for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard sessions[index].isBlank == false else {
-            sessions[index].title = title.isEmpty ? "Untitled" : title
+            sessions[index].title = title.isEmpty ? L10n.text("Untitled", "未命名") : title
             notifyChange(.tabs, sessionIDs: [sessionID])
             return
         }
@@ -2855,15 +2855,15 @@ enum DocumentStoreError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .invalidPersistedState(reason):
-            "Invalid saved workspace: \(reason)"
+            L10n.text("Invalid saved workspace: \(reason)", "已保存的工作区无效：\(reason)")
         case let .missingSession(id):
-            "Missing PDF session \(id.uuidString)"
+            L10n.text("Missing PDF session \(id.uuidString)", "缺少 PDF 会话：\(id.uuidString)")
         case let .blankSession(id):
-            "Blank tab \(id.uuidString) has no PDF"
+            L10n.text("Blank tab \(id.uuidString) has no PDF", "空白标签页 \(id.uuidString) 没有 PDF")
         case let .unreadableDocument(url):
-            "Unable to open PDF at \(url.path)"
+            L10n.text("Unable to open PDF at \(url.path)", "无法打开 PDF：\(url.path)")
         case let .failedToSaveDocument(url):
-            "Unable to save PDF at \(url.path)"
+            L10n.text("Unable to save PDF at \(url.path)", "无法保存 PDF：\(url.path)")
         }
     }
 }

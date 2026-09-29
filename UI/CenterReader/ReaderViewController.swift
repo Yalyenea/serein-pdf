@@ -554,7 +554,7 @@ final class ReaderViewController: NSViewController {
     private let emptyStateErrorLabel = NSTextField(wrappingLabelWithString: "")
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
-    private let highlightModeLabel = NSTextField(labelWithString: "Highlight · Esc")
+    private let highlightModeLabel = NSTextField(labelWithString: L10n.text("Highlight · Esc", "高亮 · Esc"))
     private let panLockIndicator = NSTextField(labelWithString: "L")
     private let switchTitleToastView = NSView()
     private let switchTitleToastLabel = NSTextField(labelWithString: "")
@@ -652,7 +652,7 @@ final class ReaderViewController: NSViewController {
         self.windowID = windowID
         self.readingFocusSettings = documentStore.appConfiguration.reader.readingFocus
         super.init(nibName: nil, bundle: nil)
-        title = "Reader"
+        title = L10n.text("Reader", "阅读器")
     }
 
     convenience init(documentStore: DocumentStore) {
@@ -717,7 +717,7 @@ final class ReaderViewController: NSViewController {
             guard let self else { return nil }
             guard let menu = self.annotationInteraction.makeContextMenu(for: event) else { return nil }
             if self.selectedText?.isEmpty == false {
-                let item = NSMenuItem(title: "Translate Selection…", action: #selector(self.translateSelection), keyEquivalent: "")
+                let item = NSMenuItem(title: L10n.text("Translate Selection…", "翻译所选文本…"), action: #selector(self.translateSelection), keyEquivalent: "")
                 item.target = self
                 menu.addItem(.separator())
                 menu.addItem(item)
@@ -4176,7 +4176,7 @@ final class ReaderViewController: NSViewController {
         let isEnabled = readerState.isAnnotationModeEnabled
         highlightModeIndicator.isHidden = !isEnabled
         let color = readerState.highlightColor
-        highlightModeLabel.stringValue = "\(readerState.annotationMode?.modeTitle ?? "Highlight") · Esc"
+        highlightModeLabel.stringValue = "\(readerState.annotationMode?.modeTitle ?? L10n.text("Highlight", "高亮")) · Esc"
         highlightModeColorDot.layer?.backgroundColor = NightModeStyle.highlightColor(
             for: color,
             appearance: NSApp.effectiveAppearance
@@ -4186,7 +4186,7 @@ final class ReaderViewController: NSViewController {
     private func updatePanLockIndicator() {
         panLockIndicator.isHidden = !isHorizontalPanLocked
         let global = documentStore.appConfiguration.reader.globalHorizontalPanLock
-        panLockIndicator.toolTip = global ? "Global Lock is enabled for all PDFs" : "Horizontal pan lock for this PDF"
+        panLockIndicator.toolTip = global ? L10n.text("Global Lock is enabled for all PDFs", "已为所有 PDF 启用全局锁定") : L10n.text("Horizontal pan lock for this PDF", "锁定当前 PDF 的横向移动")
         panLockIndicator.setAccessibilityLabel(panLockIndicator.toolTip)
         panLockIndicator.effectiveAppearance.performAsCurrentDrawingAppearance {
             panLockIndicator.textColor = NightModeStyle.secondaryTextColor

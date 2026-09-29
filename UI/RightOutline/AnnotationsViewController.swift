@@ -117,7 +117,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
     private let commentTextView = AnnotationCommentTextView()
     private let editorFooter = NSView()
     private let saveShortcutView = ShortcutSequenceView()
-    private let saveButton = NSButton(title: "Save", target: nil, action: nil)
+    private let saveButton = NSButton(title: L10n.text("Save", "保存"), target: nil, action: nil)
     private var representedGroupID: String?
     private var highlightColor: HighlightColor = .default
     private var isEditingComment = false
@@ -164,7 +164,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
             KeyboardShortcutSequence([KeyboardShortcut(key: "return", modifiers: [.command])])
         ])
         saveShortcutView.translatesAutoresizingMaskIntoConstraints = true
-        saveShortcutView.toolTip = "Save comment (⌘↩); Esc cancels"
+        saveShortcutView.toolTip = L10n.text("Save comment (⌘↩); Esc cancels", "保存批注（⌘↩）；按 Esc 取消")
 
         saveButton.bezelStyle = .recessed
         saveButton.isBordered = false
@@ -172,7 +172,7 @@ final class AnnotationHighlightCellView: NSTableCellView {
         saveButton.font = .systemFont(ofSize: 10.5, weight: .medium)
         saveButton.target = self
         saveButton.action = #selector(handleSave(_:))
-        saveButton.toolTip = "Save comment (⌘↩); Esc cancels"
+        saveButton.toolTip = L10n.text("Save comment (⌘↩); Esc cancels", "保存批注（⌘↩）；按 Esc 取消")
 
         editorFooter.addSubview(saveShortcutView)
         editorFooter.addSubview(saveButton)
@@ -408,7 +408,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     private let scrollView = NSScrollView()
     private let tableView = AnnotationTableView()
     private let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("AnnotationColumn"))
-    private let emptyStateLabel = NSTextField(labelWithString: "No annotations")
+    private let emptyStateLabel = NSTextField(labelWithString: L10n.text("No annotations", "暂无批注"))
     private var rows: [AnnotationRow] = []
     private var currentGroupID: String?
     private var editingGroupID: String?
@@ -424,7 +424,7 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         self.documentStore = documentStore
         self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
-        title = "Annotations"
+        title = L10n.text("Annotations", "批注")
     }
 
     @available(*, unavailable)
@@ -719,15 +719,15 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
 
     private func emptyStateText() -> String {
         let actions: [(String, ShortcutCommand)] = [
-            ("Select text", .highlightSelection),
-            ("Comment", .addComment),
+            (L10n.text("Select text", "选择文本"), .highlightSelection),
+            (L10n.text("Comment", "批注"), .addComment),
         ]
         let hints = actions.compactMap { title, command in
             documentStore.appConfiguration.shortcuts.bindings[command].map {
                 "\(title) · \($0.displayString)"
             }
         }
-        return (["No annotations"] + hints).joined(separator: "\n")
+        return ([L10n.text("No annotations", "暂无批注")] + hints).joined(separator: "\n")
     }
 
     private func moveSelection(by delta: Int) {
@@ -771,18 +771,18 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
 
     private func makeContextMenu() -> NSMenu? {
         guard let group = selectedGroup() else { return nil }
-        let menu = NSMenu(title: "Annotation")
+        let menu = NSMenu(title: L10n.text("Annotation", "批注"))
         menu.autoenablesItems = false
 
-        let editItem = NSMenuItem(title: "Edit Comment", action: #selector(contextEditComment(_:)), keyEquivalent: "")
+        let editItem = NSMenuItem(title: L10n.text("Edit Comment", "编辑批注"), action: #selector(contextEditComment(_:)), keyEquivalent: "")
         editItem.target = self
         menu.addItem(editItem)
 
-        let copyItem = NSMenuItem(title: "Copy Snippet", action: #selector(contextCopySnippet(_:)), keyEquivalent: "")
+        let copyItem = NSMenuItem(title: L10n.text("Copy Snippet", "复制摘录"), action: #selector(contextCopySnippet(_:)), keyEquivalent: "")
         copyItem.target = self
         menu.addItem(copyItem)
 
-        let colorMenu = NSMenu(title: "Color")
+        let colorMenu = NSMenu(title: L10n.text("Color", "颜色"))
         for color in HighlightColor.allCases {
             let item = NSMenuItem(
                 title: color.menuTitle,
@@ -794,13 +794,13 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             item.state = color == group.color ? .on : .off
             colorMenu.addItem(item)
         }
-        let colorItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        let colorItem = NSMenuItem(title: L10n.text("Color", "颜色"), action: nil, keyEquivalent: "")
         colorItem.submenu = colorMenu
         menu.addItem(colorItem)
 
         menu.addItem(.separator())
 
-        let deleteItem = NSMenuItem(title: "Delete", action: #selector(contextDelete(_:)), keyEquivalent: "")
+        let deleteItem = NSMenuItem(title: L10n.text("Delete", "删除"), action: #selector(contextDelete(_:)), keyEquivalent: "")
         deleteItem.target = self
         menu.addItem(deleteItem)
 

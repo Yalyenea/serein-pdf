@@ -39,12 +39,16 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Show a physical page number or spread range in every pane and the outline footer, with an inline page-number field for jumping. Fix Return/Escape handling and add an immediately applied Settings toggle to hide all counters.
 - Refresh page-counter text, backgrounds, and active editors when themes change.
 
+### Language
+- Add Automatic, English, and Chinese interface language options in Settings. Automatic follows the system’s preferred language; changes apply after restarting the app. Localize menus, settings, sidebars, annotations, and translation controls.
+
 ### Translation
-- Add Apple selection translation on `T` for macOS 15 and later, with automatic source detection and a selectable target language defaulting to Simplified Chinese.
+- Limit selection translation to automatic Chinese–English conversion with a direction switch. Show dictionary pronunciation, word class, and a compact definition for English words, with system speech controls for words and sentences.
+- Align word classes and definitions on one baseline, tighten pronunciation spacing, and keep word definitions free of nested scrolling while allowing long sentence translations to scroll.
+- Add Apple selection translation on `T` for macOS 15 and later, with automatic Chinese–English source detection.
 - Write the result as a new highlight and translated comment attached to the original selection. Preserve existing annotations, reject stale requests, prevent duplicate writes, and use the shared undo and save workflow.
 - Validate translation state and annotation integration with controlled responses; live Apple translation and language-model download remain to be checked on device.
 - Use a compact translation panel anchored near the selection, detect the source language before starting translation, and dismiss on Escape, outside clicks, or application deactivation while keeping system download sheets usable.
-- Detect single English words and short phrases reliably by favoring English and confirming short Latin-script selections with the system English dictionary, while longer passages in other languages keep their detected source.
 
 ### Website
 - Refresh the bilingual single-page site with reader screenshots, shortcut tables, inline documentation, and light/dark themes.

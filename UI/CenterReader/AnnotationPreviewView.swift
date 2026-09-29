@@ -97,9 +97,9 @@ final class AnnotationPreviewView: NSView {
     @discardableResult
     func configure(with group: DocumentHighlightGroup) -> Bool {
         let comment = group.normalizedComment
-        let page = "Page \(group.pageIndex + 1)"
+        let page = L10n.text("Page \(group.pageIndex + 1)", "第 \(group.pageIndex + 1) 页")
         if let createdAt = group.createdAt {
-            metadataLabel.stringValue = "\(page) · \(createdAt.formatted(date: .abbreviated, time: .shortened))"
+            metadataLabel.stringValue = "\(page) · \(createdAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Locale(identifier: L10n.text("en", "zh-Hans")))))"
         } else {
             metadataLabel.stringValue = page
         }

@@ -105,7 +105,7 @@ enum HighlightExportFormat: String, CaseIterable {
         case .markdown:
             "Markdown"
         case .plainText:
-            "Plain Text"
+            L10n.text("Plain Text", "纯文本")
         case .json:
             "JSON"
         }

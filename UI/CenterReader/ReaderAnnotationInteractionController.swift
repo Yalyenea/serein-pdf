@@ -125,12 +125,12 @@ final class ReaderAnnotationInteractionController: NSObject {
             .flatMap { $0.isEmpty ? nil : $0 }
         let hasSelection = selectedText != nil
 
-        let menu = NSMenu(title: "Reader")
+        let menu = NSMenu(title: L10n.text("Reader", "阅读器"))
         menu.autoenablesItems = false
 
         if hit != nil {
             let copyItem = NSMenuItem(
-                title: "Copy Annotation Snippet",
+                title: L10n.text("Copy Annotation Snippet", "复制批注摘录"),
                 action: #selector(copyContext(_:)),
                 keyEquivalent: "c"
             )
@@ -144,7 +144,7 @@ final class ReaderAnnotationInteractionController: NSObject {
             guard let type = command.annotationMarkupType else { continue }
             menu.addItem(
                 contextMenuItem(
-                    title: "\(type.modeTitle) Selection",
+                    title: L10n.text("\(type.modeTitle) Selection", "\(type.modeTitle)所选文本"),
                     command: command,
                     action: #selector(markupContext(_:)),
                     isEnabled: hasSelection
@@ -153,7 +153,7 @@ final class ReaderAnnotationInteractionController: NSObject {
         }
         menu.addItem(
             contextMenuItem(
-                title: hit == nil ? "Add Comment" : "Edit Comment",
+                title: hit == nil ? L10n.text("Add Comment", "添加批注") : L10n.text("Edit Comment", "编辑批注"),
                 command: .addComment,
                 action: #selector(editContextComment(_:)),
                 isEnabled: hasSelection || hit != nil
@@ -179,7 +179,7 @@ final class ReaderAnnotationInteractionController: NSObject {
         )
         if documentStore.appConfiguration.integrations.codexEnabled {
             let sendItem = contextMenuItem(
-                title: hasSelection ? "Send Selection to Codex" : "Send Page Image to Codex",
+                title: hasSelection ? L10n.text("Send Selection to Codex", "发送所选文本到 Codex") : L10n.text("Send Page Image to Codex", "发送页面图像到 Codex"),
                 command: .sendContextToCodex,
                 action: #selector(sendContextToCodex(_:)),
                 isEnabled: hasSelection || pdfView.currentPage != nil

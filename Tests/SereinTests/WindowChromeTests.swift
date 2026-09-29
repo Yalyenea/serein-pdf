@@ -2032,7 +2032,7 @@ struct WindowChromeTests {
         controller.showWindow(nil)
 
         let window = try #require(controller.window)
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 732))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 766))
         controller.selectPageForTesting(1)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
@@ -2046,7 +2046,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 732))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 766))
     }
 
     @Test

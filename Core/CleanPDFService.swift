@@ -39,9 +39,9 @@ enum CleanPDFServiceError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .failedToCopyDocument:
-            "Unable to create a clean PDF copy"
+            L10n.text("Unable to create a clean PDF copy", "无法创建无批注 PDF 副本")
         case .failedToExportDocument:
-            "Unable to export the clean PDF copy"
+            L10n.text("Unable to export the clean PDF copy", "无法导出无批注 PDF 副本")
         }
     }
 }

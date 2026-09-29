@@ -6,7 +6,7 @@ private final class ReaderPaneHostView: NSView {
     var onSessionChosen: ((UUID) -> Void)?
     private let candidateBackdrop = NSView()
     private let candidatePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let candidateLabel = NSTextField(labelWithString: "Choose a PDF")
+    private let candidateLabel = NSTextField(labelWithString: L10n.text("Choose a PDF", "选择 PDF"))
 
     override var isFlipped: Bool { true }
 
@@ -57,7 +57,7 @@ private final class ReaderPaneHostView: NSView {
         candidateBackdrop.isHidden = !isVisible || candidates.isEmpty
         guard isVisible else { return }
         candidatePopup.removeAllItems()
-        candidatePopup.addItem(withTitle: "Choose a PDF…")
+        candidatePopup.addItem(withTitle: L10n.text("Choose a PDF…", "选择 PDF…"))
         for candidate in candidates {
             candidatePopup.addItem(withTitle: candidate.title)
             candidatePopup.lastItem?.representedObject = candidate.id
@@ -136,7 +136,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         self.windowID = windowID
         self.floatingOutlineViewController = FloatingOutlineViewController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
-        title = "Reader Workspace"
+        title = L10n.text("Reader Workspace", "阅读工作区")
         addChild(floatingOutlineViewController)
         floatingOutlineViewController.preferredSizeDidChange = { [weak self] _ in self?.applyFloatingOutlineSize() }
     }

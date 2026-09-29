@@ -37,7 +37,6 @@
 - [ ] S2 继续拆 `DocumentStore` 的 tab / annotation / persistence（search snapshot 与 P4 已收口）
 - [ ] C1 根治：config schema 表驱动
 - [ ] S4 palette 共享基类
-- [ ] H1 本地化决策
 
 ### 3.2 产品候选（REVIEW 5.3）
 

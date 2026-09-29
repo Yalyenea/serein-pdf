@@ -16,8 +16,8 @@ enum AnnotationSavePolicy: String, CaseIterable, Equatable, Codable, Sendable {
 
     var menuTitle: String {
         switch self {
-        case .after10Minutes: "Every 10 Minutes"
-        case .never: "Never"
+        case .after10Minutes: L10n.text("Every 10 Minutes", "每 10 分钟")
+        case .never: L10n.text("Never", "从不")
         }
     }
 }
@@ -122,7 +122,7 @@ struct DocumentSession {
 
     static func blank(
         id: UUID = UUID(),
-        title: String = "Untitled",
+        title: String = L10n.text("Untitled", "未命名"),
         displayMode: ReaderDisplayMode,
         scaleMode: ReaderScaleMode,
         annotationSavePolicy: AnnotationSavePolicy

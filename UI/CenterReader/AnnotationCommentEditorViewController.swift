@@ -16,7 +16,7 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
     private let editorScrollView = NSScrollView()
     private let textView = AnnotationCommentEditorTextView()
     private let saveShortcutView = ShortcutSequenceView()
-    private let saveButton = NSButton(title: "Save", target: nil, action: nil)
+    private let saveButton = NSButton(title: L10n.text("Save", "保存"), target: nil, action: nil)
     private var editorHeightConstraint: NSLayoutConstraint!
 
     private let group: DocumentHighlightGroup
@@ -76,7 +76,7 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
         saveShortcutView.configure(sequences: [
             KeyboardShortcutSequence([KeyboardShortcut(key: "return", modifiers: [.command])])
         ])
-        saveShortcutView.toolTip = "Save comment (⌘↩)"
+        saveShortcutView.toolTip = L10n.text("Save comment (⌘↩)", "保存批注（⌘↩）")
 
         saveButton.bezelStyle = .recessed
         saveButton.isBordered = false
@@ -84,7 +84,7 @@ final class AnnotationCommentEditorViewController: NSViewController, NSTextViewD
         saveButton.font = .systemFont(ofSize: 10.5, weight: .medium)
         saveButton.target = self
         saveButton.action = #selector(handleSave(_:))
-        saveButton.toolTip = "Save comment (⌘↩)"
+        saveButton.toolTip = L10n.text("Save comment (⌘↩)", "保存批注（⌘↩）")
         saveButton.translatesAutoresizingMaskIntoConstraints = false
 
         container.addSubview(editorScrollView)

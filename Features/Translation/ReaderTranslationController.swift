@@ -1,30 +1,47 @@
 import AppKit
+import AVFoundation
 import PDFKit
-import Translation
 
 @MainActor
-final class ReaderTranslationController: NSObject, NSWindowDelegate {
+final class ReaderTranslationController: NSObject, NSWindowDelegate, AVSpeechSynthesizerDelegate {
+    typealias HostFactory = @MainActor (NSView, SelectionTranslation) -> (any TranslationTaskHosting)?
+
     private let documentStore: DocumentStore
+    private let makeHost: HostFactory
     private var panel: NSPanel?
     private var translation: SelectionTranslation?
     private var bridge: (any TranslationTaskHosting)?
-    private var languageTask: Task<Void, Never>?
-    private var languages: [Locale.Language] = []
-    private let content = NSView()
-    private let languagePicker = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let output = NSTextView()
-    private let scroll = NSScrollView()
-    private let statusLabel = NSTextField(labelWithString: "")
-    private let addButton = NSButton(title: "", target: nil, action: nil)
-    private let retryButton = NSButton(title: "Retry", target: nil, action: nil)
-    private var textHeight: NSLayoutConstraint!
-    private static let width = AnnotationPreviewView.contentWidth
-    private static let maximumTextHeight: CGFloat = 240
+    private var dictionaryTask: Task<Void, Never>?
+    private let content = TranslationPanelContent(frame: .zero)
+    private let speech = AVSpeechSynthesizer()
+    private var spokenUtteranceID: ObjectIdentifier?
+    private weak var speakingButton: NSButton?
 
-    init(documentStore: DocumentStore) {
+    init(documentStore: DocumentStore, makeHost: @escaping HostFactory = ReaderTranslationController.systemHost) {
         self.documentStore = documentStore
+        self.makeHost = makeHost
         super.init()
-        configureContent()
+        speech.delegate = self
+        for (button, action) in [
+            (content.reverseButton, #selector(reverseDirection(_:))),
+            (content.closeButton, #selector(dismiss(_:))),
+            (content.sourceSpeechButton, #selector(speak(_:))),
+            (content.targetSpeechButton, #selector(speak(_:))),
+            (content.copyButton, #selector(copyResult(_:))),
+            (content.addButton, #selector(addAnnotation(_:))),
+            (content.retryButton, #selector(retry(_:))),
+            (content.dictionaryButton, #selector(showDictionary(_:))),
+        ] {
+            button.target = self
+            button.action = action
+        }
+    }
+
+    static func systemHost(content: NSView, translation: SelectionTranslation) -> (any TranslationTaskHosting)? {
+        if #available(macOS 15.0, *) {
+            return AppleTranslationBridge(content: content, translation: translation)
+        }
+        return nil
     }
 
     @discardableResult
@@ -36,16 +53,11 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
         close()
         self.translation = translation
         translation.onChange = { [weak self] in self?.updateResult() }
-        output.string = ""
-        languages = [translation.request.targetLanguage]
-        updateLanguagePicker()
-
         let panel = TranslationPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 70),
-            styleMask: .borderless,
-            backing: .buffered, defer: false
+            contentRect: NSRect(x: 0, y: 0, width: TranslationPanelContent.width, height: 100),
+            styleMask: .borderless, backing: .buffered, defer: false
         )
-        panel.title = "Translate"
+        panel.title = L10n.text("Translate", "翻译")
         panel.isReleasedWhenClosed = false
         panel.isRestorable = false
         panel.isOpaque = false
@@ -57,28 +69,11 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
         panel.onCancel = { [weak self] in self?.close() }
         panel.collectionBehavior = .fullScreenAuxiliary
         self.panel = panel
-
-        if #available(macOS 15.0, *) {
-            let bridge = AppleTranslationBridge(content: content, translation: translation)
-            self.bridge = bridge
-            panel.contentView = bridge.view
-            updateResult()
-            languagePicker.isEnabled = true
-            bridge.start(translation.request)
-            loadSupportedLanguages(for: translation)
-        } else {
-            panel.contentView = content
-            output.string = "Translation requires macOS 15 or later."
-            languagePicker.isEnabled = false
-            addButton.isEnabled = false
-            retryButton.isHidden = true
-            resizeToContent()
-        }
-
+        bridge = makeHost(content, translation)
+        panel.contentView = bridge?.view ?? content
         panel.contentView?.wantsLayer = true
         panel.contentView?.layer?.cornerRadius = 6
         panel.contentView?.layer?.masksToBounds = true
-
         owner.addChildWindow(panel, ordered: .above)
         NotificationCenter.default.addObserver(
             self, selector: #selector(ownerWillClose(_:)), name: NSWindow.willCloseNotification, object: owner
@@ -87,6 +82,7 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
             self, selector: #selector(applicationDidResignActive(_:)),
             name: NSApplication.didResignActiveNotification, object: NSApp
         )
+        startRequest()
         refreshThemeAppearance()
         position(panel, near: selection, in: source)
         panel.makeKeyAndOrderFront(nil)
@@ -99,8 +95,9 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
         let owner = panel.parent
         let restoreFocus = panel.isKeyWindow && NSApp.isActive
         panel.delegate = nil
-        languageTask?.cancel()
-        languageTask = nil
+        dictionaryTask?.cancel()
+        dictionaryTask = nil
+        stopSpeech()
         translation?.onChange = nil
         translation?.cancel()
         translation = nil
@@ -119,199 +116,145 @@ final class ReaderTranslationController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) { close() }
+    @objc private func dismiss(_ sender: Any?) { close() }
     @objc private func ownerWillClose(_ notification: Notification) { close() }
     @objc private func applicationDidResignActive(_ notification: Notification) { close() }
 
     func refreshThemeAppearance() {
         guard let panel else { return }
         panel.appearance = panel.parent?.effectiveAppearance ?? NSApp.effectiveAppearance
-        panel.effectiveAppearance.performAsCurrentDrawingAppearance {
-            content.layer?.backgroundColor = NightModeStyle.paneBackgroundColor.cgColor
-            content.layer?.borderColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.16).cgColor
-            statusLabel.textColor = NightModeStyle.secondaryTextColor
-            output.textColor = NightModeStyle.primaryTextColor
-            output.insertionPointColor = NightModeStyle.primaryTextColor
-            languagePicker.contentTintColor = NightModeStyle.secondaryTextColor
-            addButton.contentTintColor = NightModeStyle.primaryTextColor
-            retryButton.contentTintColor = NightModeStyle.primaryTextColor
-        }
+        content.refreshThemeAppearance()
     }
 
-    private func configureContent() {
-        content.wantsLayer = true
-        content.layer?.cornerRadius = 6
-        content.layer?.masksToBounds = true
-        content.layer?.borderWidth = 1
-        statusLabel.font = .systemFont(ofSize: 10.5)
-        statusLabel.lineBreakMode = .byTruncatingTail
-        languagePicker.controlSize = .small
-        languagePicker.font = .systemFont(ofSize: 10.5)
-        languagePicker.isBordered = false
-        languagePicker.target = self
-        languagePicker.action = #selector(changeLanguage(_:))
-        languagePicker.setAccessibilityLabel("Translation target language")
-        languagePicker.toolTip = "Translation target language"
-
-        output.isEditable = false
-        output.isSelectable = true
-        output.isRichText = false
-        output.drawsBackground = false
-        output.font = .systemFont(ofSize: 13)
-        output.textContainerInset = .zero
-        output.textContainer?.lineFragmentPadding = 0
-        output.isHorizontallyResizable = false
-        output.isVerticallyResizable = true
-        output.textContainer?.widthTracksTextView = true
-        output.autoresizingMask = [.width]
-        output.setAccessibilityLabel("Translation")
-        scroll.documentView = output
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.scrollerStyle = .overlay
-        scroll.hasHorizontalScroller = false
-        scroll.borderType = .noBorder
-
-        for button in [addButton, retryButton] {
-            button.bezelStyle = .recessed
-            button.isBordered = false
-            button.controlSize = .small
-            button.font = .systemFont(ofSize: 10.5, weight: .medium)
-            button.target = self
+    private func startRequest() {
+        guard let translation else { return }
+        dictionaryTask?.cancel()
+        stopSpeech()
+        content.prepare(for: translation)
+        updateResult()
+        if let word = translation.englishWord {
+            let requestID = translation.request.id
+            dictionaryTask = Task { [weak self] in
+                let entry = await Task.detached(priority: .userInitiated) { EnglishDictionary.lookup(word) }.value
+                guard !Task.isCancelled, let self, self.translation?.request.id == requestID else { return }
+                self.content.display(dictionary: entry)
+                self.resizeToContent()
+            }
         }
-        addButton.action = #selector(addAnnotation(_:))
-        addButton.imagePosition = .imageOnly
-        addButton.image = NSImage(systemSymbolName: "plus.circle", accessibilityDescription: "Add Annotation")
-        addButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-        addButton.toolTip = "Add Annotation"
-        addButton.setAccessibilityLabel("Add Annotation")
-        retryButton.action = #selector(retry(_:))
-        let actions = NSStackView(views: [retryButton, addButton])
-        actions.spacing = 8
-        for view in [scroll, languagePicker, actions, statusLabel] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            content.addSubview(view)
+        if let bridge {
+            bridge.start(translation.request)
+        } else {
+            translation.complete(translation.request, with: .failure(SelectionTranslationError.requiresMacOS15))
         }
-        textHeight = scroll.heightAnchor.constraint(equalToConstant: 20)
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
-            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 14),
-            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -14),
-            textHeight,
-            addButton.widthAnchor.constraint(equalToConstant: 22),
-            addButton.heightAnchor.constraint(equalToConstant: 22),
-            languagePicker.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 8),
-            languagePicker.leadingAnchor.constraint(equalTo: scroll.leadingAnchor, constant: -3),
-            languagePicker.widthAnchor.constraint(lessThanOrEqualToConstant: 150),
-            languagePicker.heightAnchor.constraint(equalToConstant: 22),
-            actions.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-            actions.centerYAnchor.constraint(equalTo: languagePicker.centerYAnchor),
-            actions.leadingAnchor.constraint(greaterThanOrEqualTo: languagePicker.trailingAnchor, constant: 8),
-            statusLabel.topAnchor.constraint(equalTo: languagePicker.bottomAnchor, constant: 3),
-            statusLabel.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
-            statusLabel.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-        ])
     }
 
     private func updateResult() {
         guard let translation else { return }
-        retryButton.isHidden = true
-        addButton.isEnabled = false
-        let added = translation.addedGroupID != nil
-        let label = added ? "Annotation Added" : "Add Annotation"
-        addButton.image = NSImage(systemSymbolName: added ? "checkmark.circle" : "plus.circle", accessibilityDescription: label)
-        addButton.toolTip = label
-        addButton.setAccessibilityLabel(label)
-        statusLabel.stringValue = ""
-        statusLabel.toolTip = nil
-        switch translation.state {
-        case .translating:
-            output.string = "Translating…"
-        case let .translated(text):
-            output.string = text
-            addButton.isEnabled = translation.addedGroupID == nil
-        case let .failed(message):
-            output.string = message
-            retryButton.isHidden = false
-        case .cancelled:
-            break
-        }
-        output.scrollToBeginningOfDocument(nil)
+        content.display(translation)
+        if bridge == nil { content.retryButton.isHidden = true }
         resizeToContent()
     }
 
     private func resizeToContent() {
-        guard let panel, let container = output.textContainer, let layout = output.layoutManager else { return }
-        let width = Self.width - 28
-        output.setFrameSize(NSSize(width: width, height: max(output.frame.height, 20)))
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
-        layout.ensureLayout(for: container)
-        let height = max(20, ceil(layout.usedRect(for: container).height))
-        textHeight.constant = min(height, Self.maximumTextHeight)
-        statusLabel.isHidden = statusLabel.stringValue.isEmpty
-        let statusHeight: CGFloat = statusLabel.isHidden ? 0 : 18
-        let size = NSSize(width: Self.width, height: 12 + textHeight.constant + 8 + 22 + 8 + statusHeight)
-        var frame = NSRect(x: panel.frame.minX, y: panel.frame.maxY - size.height, width: size.width, height: size.height)
+        guard let panel else { return }
+        let height = content.fittedHeight()
+        var frame = NSRect(x: panel.frame.minX, y: panel.frame.maxY - height,
+                           width: TranslationPanelContent.width, height: height)
         if let screen = panel.screen ?? panel.parent?.screen {
             frame.origin.y = max(frame.minY, screen.visibleFrame.minY + 8)
         }
         panel.setFrame(frame, display: true)
         content.layoutSubtreeIfNeeded()
-        output.setFrameSize(NSSize(width: width, height: height))
     }
 
-    @available(macOS 15.0, *)
-    private func loadSupportedLanguages(for translation: SelectionTranslation) {
-        languageTask = Task { [weak self, weak translation] in
-            let supported = await Self.supportedLanguages()
-            guard Task.isCancelled == false, let self, let translation,
-                  self.translation === translation else { return }
-            self.languages = supported.sorted {
-                self.languageTitle($0).localizedStandardCompare(self.languageTitle($1)) == .orderedAscending
-            }
-            self.updateLanguagePicker()
-        }
-    }
-
-    @available(macOS 15.0, *)
-    private nonisolated static func supportedLanguages() async -> [Locale.Language] {
-        await LanguageAvailability().supportedLanguages
-    }
-
-    private func updateLanguagePicker() {
+    @objc private func reverseDirection(_ sender: Any?) {
         guard let translation else { return }
-        let target = translation.request.targetLanguage
-        languagePicker.removeAllItems()
-        for language in languages { languagePicker.addItem(withTitle: languageTitle(language)) }
-        if let index = languages.firstIndex(where: { $0.maximalIdentifier == target.maximalIdentifier }) {
-            languagePicker.selectItem(at: index)
-        } else {
-            languagePicker.select(nil)
-        }
-    }
-
-    private func languageTitle(_ language: Locale.Language) -> String {
-        Locale.current.localizedString(forIdentifier: language.minimalIdentifier) ?? language.minimalIdentifier
-    }
-
-    @objc private func changeLanguage(_ sender: NSPopUpButton) {
-        guard let translation, languages.indices.contains(sender.indexOfSelectedItem) else { return }
-        bridge?.start(translation.selectTargetLanguage(languages[sender.indexOfSelectedItem]))
+        _ = translation.reverseDirection()
+        startRequest()
     }
 
     @objc private func retry(_ sender: Any?) {
         guard let translation else { return }
-        bridge?.start(translation.selectTargetLanguage(translation.request.targetLanguage))
+        _ = translation.retry()
+        startRequest()
+    }
+
+    @objc private func copyResult(_ sender: Any?) {
+        guard case let .translated(text) = translation?.state else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        content.showStatus(L10n.text("Copied", "已复制"))
+        resizeToContent()
     }
 
     @objc private func addAnnotation(_ sender: Any?) {
         do {
             _ = try translation?.addAnnotation()
         } catch {
-            statusLabel.stringValue = error.localizedDescription
-            statusLabel.toolTip = error.localizedDescription
-            addButton.isEnabled = false
+            content.showStatus(error.localizedDescription)
+            content.addButton.isEnabled = false
             resizeToContent()
+        }
+    }
+
+    @objc private func showDictionary(_ sender: Any?) {
+        guard let word = translation?.englishWord else { return }
+        content.showDefinition(for: NSAttributedString(string: word), at: content.dictionaryButton.convert(NSPoint(x: 0, y: content.dictionaryButton.bounds.midY), to: content))
+    }
+
+    @objc private func speak(_ sender: NSButton) {
+        if sender === speakingButton { stopSpeech(); return }
+        guard let translation else { return }
+        let text: String
+        let language: Locale.Language?
+        if sender === content.sourceSpeechButton {
+            text = translation.englishWord ?? translation.request.text
+            language = translation.request.sourceLanguage
+        } else {
+            guard case let .translated(result) = translation.state else { return }
+            text = result
+            language = translation.request.targetLanguage
+        }
+        stopSpeech()
+        guard let language,
+              let voice = AVSpeechSynthesisVoice(language: sender === content.sourceSpeechButton
+                ? content.sourceSpeechLanguageIdentifier
+                : (language.languageCode?.identifier == "en" ? "en-US" : "zh-CN")) else {
+            content.showStatus(L10n.text("No voice is available for this language. Add one in System Settings.", "此语言的系统语音不可用，请在系统设置中添加语音。"))
+            resizeToContent()
+            return
+        }
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = voice
+        spokenUtteranceID = ObjectIdentifier(utterance)
+        speakingButton = sender
+        content.setSpeaking(sender)
+        content.showStatus("")
+        resizeToContent()
+        speech.speak(utterance)
+    }
+
+    private func stopSpeech() {
+        spokenUtteranceID = nil
+        speakingButton = nil
+        speech.stopSpeaking(at: .immediate)
+        content.setSpeaking(nil)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        speechEnded(ObjectIdentifier(utterance))
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        speechEnded(ObjectIdentifier(utterance))
+    }
+
+    private nonisolated func speechEnded(_ id: ObjectIdentifier) {
+        Task { @MainActor [weak self] in
+            guard let self, self.spokenUtteranceID == id else { return }
+            self.spokenUtteranceID = nil
+            self.speakingButton = nil
+            self.content.setSpeaking(nil)
         }
     }
 
@@ -335,7 +278,6 @@ private final class TranslationPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { onCancel?() }
 
     override func sendEvent(_ event: NSEvent) {
-        // Handle Escape before SwiftUI or the selectable text view consumes it.
         if event.type == .keyDown, event.keyCode == 53 {
             cancelOperation(nil)
             return

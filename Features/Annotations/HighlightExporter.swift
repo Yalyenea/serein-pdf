@@ -55,9 +55,9 @@ enum HighlightExporter {
     }
 
     private static func renderMarkdown(_ groups: [DocumentHighlightGroup]) -> String {
-        guard groups.isEmpty == false else { return "# Highlights\n\n_No highlights._\n" }
+        guard groups.isEmpty == false else { return L10n.text("# Highlights\n\n_No highlights._\n", "# 高亮\n\n_暂无高亮。_\n") }
 
-        var lines: [String] = ["# Highlights", ""]
+        var lines: [String] = [L10n.text("# Highlights", "# 高亮"), ""]
         var lastPageIndex: Int?
 
         for group in groups {
@@ -65,7 +65,7 @@ enum HighlightExporter {
                 if lastPageIndex != nil {
                     lines.append("")
                 }
-                lines.append("## Page \(group.pageIndex + 1)")
+                lines.append(L10n.text("## Page \(group.pageIndex + 1)", "## 第 \(group.pageIndex + 1) 页"))
                 lines.append("")
                 lastPageIndex = group.pageIndex
             }
@@ -81,14 +81,14 @@ enum HighlightExporter {
     }
 
     private static func renderPlainText(_ groups: [DocumentHighlightGroup]) -> String {
-        guard groups.isEmpty == false else { return "Highlights\n\nNo highlights.\n" }
+        guard groups.isEmpty == false else { return L10n.text("Highlights\n\nNo highlights.\n", "高亮\n\n暂无高亮。\n") }
 
-        var lines: [String] = ["Highlights", ""]
+        var lines: [String] = [L10n.text("Highlights", "高亮"), ""]
         for (index, group) in groups.enumerated() {
-            lines.append("Page \(group.pageIndex + 1) | \(group.color.menuTitle)")
-            lines.append("Snippet: \(group.snippet)")
+            lines.append(L10n.text("Page \(group.pageIndex + 1) | \(group.color.menuTitle)", "第 \(group.pageIndex + 1) 页 | \(group.color.menuTitle)"))
+            lines.append(L10n.text("Snippet: \(group.snippet)", "摘录：\(group.snippet)"))
             if group.normalizedComment.isEmpty == false {
-                lines.append("Comment: \(group.comment)")
+                lines.append(L10n.text("Comment: \(group.comment)", "批注：\(group.comment)"))
             }
             if index != groups.count - 1 {
                 lines.append("")
@@ -99,9 +99,9 @@ enum HighlightExporter {
     }
 
     private static func renderAggregateMarkdown(_ documents: [DocumentGroups]) -> String {
-        guard documents.isEmpty == false else { return "# Highlights\n\n_No highlights._\n" }
+        guard documents.isEmpty == false else { return L10n.text("# Highlights\n\n_No highlights._\n", "# 高亮\n\n_暂无高亮。_\n") }
 
-        var lines: [String] = ["# Highlights", ""]
+        var lines: [String] = [L10n.text("# Highlights", "# 高亮"), ""]
         for (documentIndex, document) in documents.enumerated() {
             lines.append("## \(document.documentTitle)")
             lines.append("")
@@ -111,7 +111,7 @@ enum HighlightExporter {
                     if lastPageIndex != nil {
                         lines.append("")
                     }
-                    lines.append("### Page \(group.pageIndex + 1)")
+                    lines.append(L10n.text("### Page \(group.pageIndex + 1)", "### 第 \(group.pageIndex + 1) 页"))
                     lines.append("")
                     lastPageIndex = group.pageIndex
                 }
@@ -129,21 +129,21 @@ enum HighlightExporter {
     }
 
     private static func renderAggregatePlainText(_ documents: [DocumentGroups]) -> String {
-        guard documents.isEmpty == false else { return "Highlights\n\nNo highlights.\n" }
+        guard documents.isEmpty == false else { return L10n.text("Highlights\n\nNo highlights.\n", "高亮\n\n暂无高亮。\n") }
 
-        var lines: [String] = ["Highlights", ""]
+        var lines: [String] = [L10n.text("Highlights", "高亮"), ""]
         for (documentIndex, document) in documents.enumerated() {
-            lines.append("Document: \(document.documentTitle)")
+            lines.append(L10n.text("Document: \(document.documentTitle)", "文档：\(document.documentTitle)"))
             var lastPageIndex: Int?
             for group in document.groups {
                 if lastPageIndex != group.pageIndex {
-                    lines.append("Page \(group.pageIndex + 1)")
+                    lines.append(L10n.text("Page \(group.pageIndex + 1)", "第 \(group.pageIndex + 1) 页"))
                     lastPageIndex = group.pageIndex
                 }
-                lines.append("Snippet: \(group.snippet)")
-                lines.append("Color: \(group.color.menuTitle)")
+                lines.append(L10n.text("Snippet: \(group.snippet)", "摘录：\(group.snippet)"))
+                lines.append(L10n.text("Color: \(group.color.menuTitle)", "颜色：\(group.color.menuTitle)"))
                 if group.normalizedComment.isEmpty == false {
-                    lines.append("Comment: \(group.comment)")
+                    lines.append(L10n.text("Comment: \(group.comment)", "批注：\(group.comment)"))
                 }
             }
             if documentIndex != documents.count - 1 {

@@ -22,19 +22,19 @@ struct OpenTabsPaletteItem: Equatable, Sendable {
         self.sessionID = session.id
         self.workspaceName = workspaceName
         self.title = session.title
-        self.subtitle = session.isBlank ? "Blank tab" : session.url.path
+        self.subtitle = session.isBlank ? L10n.text("Blank tab", "空白标签页") : session.url.path
         self.isActive = isActive
         self.isDirty = session.isBlank == false && session.isDirty
         if session.isBlank {
-            self.pageText = "Blank"
+            self.pageText = L10n.text("Blank", "空白")
         } else {
             let pageCount = session.pageCount
             let pageIndex = pageCount.map { $0 > 0 ? min(max(session.currentPageIndex, 0), $0 - 1) : 0 }
                 ?? max(session.currentPageIndex, 0)
             if let pageCount, pageCount > 0 {
-                self.pageText = "Page \(pageIndex + 1) / \(pageCount)"
+                self.pageText = L10n.text("Page \(pageIndex + 1) / \(pageCount)", "第 \(pageIndex + 1) / \(pageCount) 页")
             } else {
-                self.pageText = "Page \(pageIndex + 1)"
+                self.pageText = L10n.text("Page \(pageIndex + 1)", "第 \(pageIndex + 1) 页")
             }
         }
     }

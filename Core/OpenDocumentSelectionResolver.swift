@@ -8,9 +8,9 @@ enum OpenDocumentSelectionResolverError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .noPDFFilesFound:
-            return "No PDF files were found in the selected files or folders."
+            return L10n.text("No PDF files were found in the selected files or folders.", "所选文件或文件夹中未找到 PDF 文件。")
         case let .unreadableFolder(url):
-            return "Unable to read folder at \(url.path)"
+            return L10n.text("Unable to read folder at \(url.path)", "无法读取文件夹：\(url.path)")
         }
     }
 }

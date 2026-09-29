@@ -215,27 +215,27 @@ final class VerticalTabItemView: NSView {
         onContextMenu?(sessionID)
         let menu = NSMenu()
         if let workspaces = onMoveToWorkspaceMenu?(sessionID) {
-            let moveItem = NSMenuItem(title: "Move to Workspace", action: nil, keyEquivalent: "")
+            let moveItem = NSMenuItem(title: L10n.text("Move to Workspace", "移至工作区"), action: nil, keyEquivalent: "")
             moveItem.submenu = workspaces
             menu.addItem(moveItem)
             menu.addItem(.separator())
         }
         if let openWithMenu = onOpenWithMenu?(sessionID) {
             let revealItem = NSMenuItem(
-                title: "Reveal in Finder",
+                title: L10n.text("Reveal in Finder", "在访达中显示"),
                 action: #selector(handleRevealInFinder),
                 keyEquivalent: ""
             )
             revealItem.target = self
             menu.addItem(revealItem)
 
-            let openWithItem = NSMenuItem(title: "Open With", action: nil, keyEquivalent: "")
+            let openWithItem = NSMenuItem(title: L10n.text("Open With", "打开方式"), action: nil, keyEquivalent: "")
             openWithItem.submenu = openWithMenu
             menu.addItem(openWithItem)
             menu.addItem(.separator())
         }
         let startItem = NSMenuItem(
-            title: "Start Continuous Reading",
+            title: L10n.text("Start Continuous Reading", "开始连续阅读"),
             action: #selector(handleStartContinuousReading),
             keyEquivalent: ""
         )
@@ -244,7 +244,7 @@ final class VerticalTabItemView: NSView {
         menu.addItem(startItem)
 
         let exitItem = NSMenuItem(
-            title: "Exit Continuous Reading",
+            title: L10n.text("Exit Continuous Reading", "退出连续阅读"),
             action: #selector(handleExitContinuousReading),
             keyEquivalent: ""
         )

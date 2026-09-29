@@ -9,13 +9,13 @@ enum SereinOpenURLResolverError: Error, LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidDeepLink:
-            "Invalid Serein link. Expected serein://open?file=<encoded file URL>."
+            L10n.text("Invalid Serein link. Expected serein://open?file=<encoded file URL>.", "无效的 Serein 链接。应为 serein://open?file=<编码后的文件 URL>。")
         case .invalidFileURL:
-            "The Serein link must contain a local file URL."
+            L10n.text("The Serein link must contain a local file URL.", "Serein 链接必须包含本地文件 URL。")
         case let .unreadableFile(url):
-            "Unable to read the requested file at \(url.path)."
+            L10n.text("Unable to read the requested file at \(url.path).", "无法读取文件 \(url.path)。")
         case let .notPDF(url):
-            "The requested file is not a PDF: \(url.lastPathComponent)"
+            L10n.text("The requested file is not a PDF: \(url.lastPathComponent)", "该文件不是 PDF：\(url.lastPathComponent)")
         }
     }
 }

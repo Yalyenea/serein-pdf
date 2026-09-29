@@ -17,7 +17,7 @@ enum ExternalApplicationError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case let .failedToOpen(message):
-            "Unable to open the PDF: \(message)"
+            L10n.text("Unable to open the PDF: \(message)", "无法打开 PDF：\(message)")
         }
     }
 }

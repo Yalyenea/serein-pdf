@@ -618,8 +618,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
 
         switch presentUnsavedChangesAlert(
-            title: "Save changes to “\(session.title)” before closing?",
-            detail: "Your highlights are only in memory until you save them."
+            title: L10n.text("Save changes to “\(session.title)” before closing?", "关闭“\(session.title)”前保存更改？"),
+            detail: L10n.text("Your highlights are only in memory until you save them.", "高亮尚未保存到文件。")
         ) {
         case .save:
             do {
@@ -663,15 +663,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
         let detail: String
         if dirtySessions.count == 1, let session = dirtySessions.first {
-            detail = "“\(session.title)” still has unsaved highlights."
+            detail = L10n.text("“\(session.title)” still has unsaved highlights.", "“\(session.title)”仍有未保存的高亮。")
         } else {
             let titles = dirtySessions.prefix(3).map(\.title).joined(separator: "\n")
             let suffix = dirtySessions.count > 3 ? "\n…" : ""
-            detail = "These documents still have unsaved highlights:\n\(titles)\(suffix)"
+            detail = L10n.text("These documents still have unsaved highlights:\n\(titles)\(suffix)", "以下文档仍有未保存的高亮：\n\(titles)\(suffix)")
         }
 
         switch presentUnsavedChangesAlert(
-            title: "Save changes before quitting Serein?",
+            title: L10n.text("Save changes before quitting Serein?", "退出 Serein 前保存更改？"),
             detail: detail
         ) {
         case .save:
@@ -697,15 +697,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
         let detail: String
         if dirtySessions.count == 1, let session = dirtySessions.first {
-            detail = "“\(session.title)” 只在当前窗口打开，关闭窗口会丢失未保存高亮。"
+            detail = L10n.text("“\(session.title)” is only open in this window. Closing it will discard unsaved highlights.", "“\(session.title)” 只在当前窗口打开，关闭窗口会丢失未保存高亮。")
         } else {
             let titles = dirtySessions.prefix(3).map(\.title).joined(separator: "\n")
             let suffix = dirtySessions.count > 3 ? "\n…" : ""
-            detail = "这些文档只在当前窗口打开，关闭窗口会丢失未保存高亮:\n\(titles)\(suffix)"
+            detail = L10n.text("These documents are only open in this window. Closing it will discard unsaved highlights:\n\(titles)\(suffix)", "这些文档只在当前窗口打开，关闭窗口会丢失未保存高亮:\n\(titles)\(suffix)")
         }
 
         switch presentUnsavedChangesAlert(
-            title: "Save changes before closing this window?",
+            title: L10n.text("Save changes before closing this window?", "关闭此窗口前保存更改？"),
             detail: detail
         ) {
         case .save:
@@ -857,9 +857,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         alert.alertStyle = .warning
         alert.messageText = title
         alert.informativeText = detail
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: L10n.text("Save", "保存"))
+        alert.addButton(withTitle: L10n.text("Cancel", "取消"))
+        alert.addButton(withTitle: L10n.text("Discard", "不保存"))
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
@@ -873,7 +873,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
     private func presentSaveError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to save annotations"
+        alert.messageText = L10n.text("Failed to save annotations", "无法保存批注")
         alert.runModal()
     }
 

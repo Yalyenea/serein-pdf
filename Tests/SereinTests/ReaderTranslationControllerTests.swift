@@ -75,7 +75,219 @@ final class ReaderTranslationControllerTests: XCTestCase {
         })
     }
 
-    private func makeFixture() throws -> (
+    func testWordPresentationAndDirectionCorrectionUseTheSharedRequest() throws {
+        var host: TranslationTestHost!
+        let fixture = try makeFixture(text: "inference") { view, translation in
+            host = TranslationTestHost(view: view, translation: translation)
+            return host
+        }
+        defer { fixture.controller.close(); fixture.owner.close() }
+        let content = try XCTUnwrap(fixture.panel.contentView as? TranslationPanelContent)
+        XCTAssertEqual(content.wordLabel.stringValue, "inference")
+        XCTAssertFalse(content.wordLabel.isHidden)
+        XCTAssertEqual(content.reverseButton.title, L10n.text("EN → ZH", "EN → 中文"))
+        XCTAssertEqual(content.output.string, "推理")
+        XCTAssertTrue(content.copyButton.isEnabled)
+        XCTAssertTrue(content.addButton.isEnabled)
+        XCTAssertTrue(content.sourceSpeechButton.isEnabled)
+        XCTAssertFalse(content.sourceText.isEditable)
+        XCTAssertFalse(content.output.isEditable)
+
+        content.reverseButton.performClick(nil)
+        XCTAssertEqual(host.requests.last?.sourceLanguage?.languageCode?.identifier, "zh")
+        XCTAssertEqual(host.requests.last?.targetLanguage.languageCode?.identifier, "en")
+        XCTAssertEqual(host.requests.last?.text, "inference")
+        XCTAssertTrue(content.wordLabel.isHidden)
+        XCTAssertEqual(content.reverseButton.title, L10n.text("ZH → EN", "中文 → EN"))
+        XCTAssertEqual(content.sourceText.string, "inference")
+        XCTAssertEqual(content.output.string, "Inference")
+        content.addButton.performClick(nil)
+        XCTAssertFalse(content.addButton.isEnabled)
+        XCTAssertEqual(content.addButton.title, L10n.text("Annotated", "已加入批注"))
+        fixture.controller.close()
+        XCTAssertTrue(host.cancelled)
+    }
+
+    func testOpenPanelRefreshesAcrossAllThemesAndCustomBackgrounds() throws {
+        let manager = ThemeManager.shared
+        let previous = manager.selection
+        defer {
+            manager.apply(light: previous.light, dark: previous.dark,
+                          lightBackground: previous.lightBackground, darkBackground: previous.darkBackground)
+        }
+        let fixture = try makeFixture(text: "inference") { TranslationTestHost(view: $0, translation: $1) }
+        defer { fixture.controller.close(); fixture.owner.close() }
+        let content = try XCTUnwrap(fixture.panel.contentView as? TranslationPanelContent)
+        content.display(dictionary: EnglishDictionary(
+            text: "inference | BrE ˈɪnf(ə)r(ə)n(t)s, AmE ˈɪnf(ə)rən(t)s | noun ① 推断 ② 推论",
+            word: "inference"
+        ))
+        content.output.setSelectedRange(NSRange(location: 0, length: 1))
+        for theme in LightTheme.allCases {
+            manager.apply(light: theme, dark: .rosePineMoon)
+            fixture.owner.appearance = NSAppearance(named: .aqua)
+            fixture.controller.refreshThemeAppearance()
+            try assertTheme(content)
+            if theme == .rosePineDawn {
+                try assertLayout(content, panel: fixture.panel)
+                try savePreview(content, name: "translation-word-dawn")
+            }
+        }
+        for theme in DarkTheme.allCases {
+            manager.apply(light: .normal, dark: theme)
+            fixture.owner.appearance = NSAppearance(named: .darkAqua)
+            fixture.controller.refreshThemeAppearance()
+            try assertTheme(content)
+            if theme == .rosePineMoon {
+                try assertLayout(content, panel: fixture.panel)
+                try savePreview(content, name: "translation-word-moon")
+            }
+        }
+        for (appearance, color) in [(NSAppearance.Name.aqua, "#282232"), (.darkAqua, "#f3e8db")] {
+            manager.apply(light: .normal, dark: .rosePineMoon,
+                          lightBackground: .init(window: ThemeHexColor(hex: color)),
+                          darkBackground: .init(window: ThemeHexColor(hex: color)))
+            fixture.owner.appearance = NSAppearance(named: appearance)
+            fixture.controller.refreshThemeAppearance()
+            try assertTheme(content)
+        }
+        XCTAssertEqual(content.output.selectedRange(), NSRange(location: 0, length: 1))
+        XCTAssertEqual(content.output.string, "n.\t推理")
+    }
+
+    func testWordPanelUsesChosenInterfaceLanguage() throws {
+        defer { L10n.configure(.english) }
+        for language in [AppLanguage.english, .chinese] {
+            L10n.configure(language)
+            let fixture = try makeFixture(text: "Thus") {
+                TranslationTestHost(view: $0, translation: $1)
+            }
+            defer { fixture.controller.close(); fixture.owner.close() }
+            let content = try XCTUnwrap(fixture.panel.contentView as? TranslationPanelContent)
+            content.display(dictionary: EnglishDictionary.lookup("Thus"))
+            try assertLayout(content, panel: fixture.panel)
+            XCTAssertEqual(content.kindLabel.stringValue, language == .chinese ? "词典" : "Dictionary")
+            XCTAssertEqual(content.addButton.title, language == .chinese ? "加入批注" : "Annotate")
+            XCTAssertNil(content.output.enclosingScrollView)
+            try savePreview(content, name: "translation-Thus-\(language.rawValue)")
+        }
+    }
+
+    func testNativeWordAndLongSentenceLayoutsStayWithinThePanel() throws {
+        var translation: SelectionTranslation!
+        let fixture = try makeFixture(text: "inference") {
+            translation = $1
+            return TranslationTestHost(view: $0, translation: $1)
+        }
+        defer { fixture.controller.close(); fixture.owner.close() }
+        let content = try XCTUnwrap(fixture.panel.contentView as? TranslationPanelContent)
+        let entry = EnglishDictionary.lookup("inference")
+        content.display(dictionary: entry)
+        try assertLayout(content, panel: fixture.panel)
+        if entry?.partOfSpeech != nil { try assertGlossBaseline(content) }
+        XCTAssertNil(content.output.enclosingScrollView)
+        XCTAssertEqual(content.output.frame.origin, .zero)
+        try savePreview(content, name: "translation-word")
+
+        translation.complete(translation.request, with: .success(String(repeating: "推断；推论；推理；", count: 20)))
+        try assertLayout(content, panel: fixture.panel)
+        if entry?.partOfSpeech != nil { try assertGlossBaseline(content) }
+        XCTAssertNil(content.output.enclosingScrollView)
+        XCTAssertGreaterThan(content.output.frame.height, 160)
+        XCTAssertEqual(content.output.frame.origin, .zero)
+        XCTAssertEqual(content.output.frame.height, try XCTUnwrap(content.output.superview).bounds.height, accuracy: 1)
+        try savePreview(content, name: "translation-word-wrapped")
+
+        content.reverseButton.performClick(nil)
+        content.sourceText.string = "学习与推理密切相关。"
+        content.output.string = "Learning and inference are closely related."
+        try assertLayout(content, panel: fixture.panel)
+        try savePreview(content, name: "translation-sentence-compact")
+        content.sourceText.string = String(repeating: "我们使用 attention mechanism 完成推理。", count: 20)
+        content.output.string = String(repeating: "We use an attention mechanism for inference. ", count: 20)
+        try assertLayout(content, panel: fixture.panel)
+        XCTAssertLessThan(fixture.panel.frame.height, 500)
+        XCTAssertGreaterThan(content.sourceText.frame.height, content.sourceText.enclosingScrollView!.frame.height)
+        XCTAssertGreaterThan(content.output.frame.height, content.output.enclosingScrollView!.frame.height)
+        try savePreview(content, name: "translation-sentence")
+        fixture.controller.perform(NSSelectorFromString("retry:"), with: nil)
+        XCTAssertNotNil(content.output.enclosingScrollView)
+        XCTAssertTrue(content.output.isDescendant(of: content))
+        content.reverseButton.performClick(nil)
+        XCTAssertNil(content.output.enclosingScrollView)
+        XCTAssertTrue(content.output.isDescendant(of: content))
+    }
+
+    private func assertGlossBaseline(_ content: TranslationPanelContent) throws {
+        let text = content.output
+        let layout = try XCTUnwrap(text.layoutManager)
+        layout.ensureLayout(for: try XCTUnwrap(text.textContainer))
+        let chinese = (text.string as NSString).range(of: "推")
+        XCTAssertNotEqual(chinese.location, NSNotFound)
+        let nounGlyph = layout.glyphIndexForCharacter(at: 0)
+        let chineseGlyph = layout.glyphIndexForCharacter(at: chinese.location)
+        func baseline(_ glyph: Int) -> CGFloat {
+            layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY + layout.location(forGlyphAt: glyph).y
+        }
+        XCTAssertEqual(baseline(nounGlyph), baseline(chineseGlyph), accuracy: 0.1)
+        let secondLine = layout.lineFragmentRect(forGlyphAt: layout.numberOfGlyphs - 1, effectiveRange: nil)
+        if secondLine.minY > 0 {
+            var range = NSRange()
+            _ = layout.lineFragmentRect(forGlyphAt: layout.numberOfGlyphs - 1, effectiveRange: &range)
+            XCTAssertEqual(layout.location(forGlyphAt: range.location).x + secondLine.minX,
+                           layout.location(forGlyphAt: chineseGlyph).x, accuracy: 1)
+        }
+    }
+
+    private func assertLayout(_ content: TranslationPanelContent, panel: NSWindow) throws {
+        let height = content.fittedHeight()
+        panel.setContentSize(NSSize(width: TranslationPanelContent.width, height: height))
+        content.layoutSubtreeIfNeeded()
+        for view in [content.reverseButton, content.closeButton,
+                     content.copyButton, content.addButton] {
+            let frame = view.convert(view.bounds, to: content)
+            XCTAssertGreaterThan(frame.width, 0)
+            XCTAssertGreaterThan(frame.height, 0)
+            XCTAssertGreaterThanOrEqual(frame.minX, 0)
+            XCTAssertGreaterThanOrEqual(frame.minY, 0)
+            XCTAssertLessThanOrEqual(frame.maxX, content.bounds.maxX)
+            XCTAssertLessThanOrEqual(frame.maxY, content.bounds.maxY)
+        }
+    }
+
+    private func assertTheme(_ content: TranslationPanelContent) throws {
+        let background = try XCTUnwrap(NSColor(cgColor: XCTUnwrap(content.layer?.backgroundColor)))
+        let storage = try XCTUnwrap(content.output.textStorage)
+        let primary = try XCTUnwrap(storage.attribute(.foregroundColor, at: storage.length - 1, effectiveRange: nil) as? NSColor)
+        let wordClass = try XCTUnwrap(storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor)
+        let secondary = try XCTUnwrap(content.dictionaryText.textColor)
+        let selection = try XCTUnwrap(content.output.selectedTextAttributes[.backgroundColor] as? NSColor)
+        content.effectiveAppearance.performAsCurrentDrawingAppearance {
+            XCTAssertEqual(ThemeHexColor(color: background), ThemeHexColor(color: NightModeStyle.paneBackgroundColor))
+            XCTAssertEqual(ThemeHexColor(color: primary), ThemeHexColor(color: NightModeStyle.primaryTextColor))
+            XCTAssertEqual(ThemeHexColor(color: secondary), ThemeHexColor(color: NightModeStyle.secondaryTextColor))
+            XCTAssertEqual(ThemeHexColor(color: wordClass), ThemeHexColor(color: NightModeStyle.secondaryTextColor))
+            XCTAssertEqual(ThemeHexColor(color: selection), ThemeHexColor(color: NightModeStyle.selectedChromeBackgroundColor))
+        }
+    }
+
+    private func savePreview(_ view: NSView, name: String) throws {
+        guard let directory = ProcessInfo.processInfo.environment["SEREIN_TRANSLATION_PREVIEW"] else { return }
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width), pixelsHigh: Int(view.bounds.height),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        bitmap.size = view.bounds.size
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("\(name).png"))
+    }
+
+    private func makeFixture(
+        text: String = "12345 + 67890",
+        makeHost: @escaping ReaderTranslationController.HostFactory = ReaderTranslationController.systemHost
+    ) throws -> (
         controller: ReaderTranslationController, owner: NSWindow, panel: NSWindow,
         pdf: PDFView, selection: PDFSelection, sessionID: UUID
     ) {
@@ -83,10 +295,10 @@ final class ReaderTranslationControllerTests: XCTestCase {
         let store = makeIsolatedDocumentStore()
         // No language can be inferred from numbers, so lifecycle tests never start a system download.
         let session = try store.open(documentAt: TestPDFFixtures.makeSearchablePDF(
-            named: "translation-panel", pages: ["12345 + 67890"]
+            named: "translation-panel", pages: [text]
         ))
         let document = try store.pdfDocument(for: session.id)
-        let selection = try XCTUnwrap(document.findString("12345 + 67890", withOptions: []).first)
+        let selection = try XCTUnwrap(document.findString(text, withOptions: []).first)
         let owner = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 600, height: 500),
                              styleMask: .titled, backing: .buffered, defer: false)
         owner.isReleasedWhenClosed = false
@@ -94,7 +306,7 @@ final class ReaderTranslationControllerTests: XCTestCase {
         pdf.document = document
         owner.contentView = pdf
         owner.makeKeyAndOrderFront(nil)
-        let controller = ReaderTranslationController(documentStore: store)
+        let controller = ReaderTranslationController(documentStore: store, makeHost: makeHost)
         XCTAssertTrue(controller.show(selection: selection, sessionID: session.id, in: pdf))
         let panel = try XCTUnwrap(owner.childWindows?.first)
         XCTAssertTrue(panel.isVisible)
@@ -105,4 +317,24 @@ final class ReaderTranslationControllerTests: XCTestCase {
 private final class EscapeConsumingTextView: NSTextView {
     var receivedKeyDown = false
     override func keyDown(with event: NSEvent) { receivedKeyDown = true }
+}
+
+@MainActor
+private final class TranslationTestHost: TranslationTaskHosting {
+    let view: NSView
+    let translation: SelectionTranslation
+    var requests: [SelectionTranslation.Request] = []
+    var cancelled = false
+
+    init(view: NSView, translation: SelectionTranslation) {
+        self.view = view
+        self.translation = translation
+    }
+
+    func start(_ request: SelectionTranslation.Request) {
+        requests.append(request)
+        translation.complete(request, with: .success(request.targetLanguage.languageCode?.identifier == "en" ? "Inference" : "推理"))
+    }
+
+    func cancel() { cancelled = true }
 }

@@ -9,11 +9,11 @@ enum AppearanceMode: String, CaseIterable, Codable, Sendable {
     var menuTitle: String {
         switch self {
         case .system:
-            "Follow System"
+            L10n.text("Follow System", "跟随系统")
         case .light:
-            "Light"
+            L10n.text("Light", "浅色")
         case .dark:
-            "Dark"
+            L10n.text("Dark", "深色")
         }
     }
 
@@ -157,11 +157,11 @@ enum ReadingFocusWidthMode: String, CaseIterable, Codable, Sendable {
     var menuTitle: String {
         switch self {
         case .page:
-            "Page Width"
+            L10n.text("Page Width", "页面宽度")
         case .column:
-            "Column (½ Page)"
+            L10n.text("Column (½ Page)", "单栏（半页）")
         case .custom:
-            "Custom"
+            L10n.text("Custom", "自定义")
         }
     }
 }
@@ -377,6 +377,7 @@ struct AppConfiguration: Equatable, Sendable {
         ])
     }
 
+    var language: AppLanguage
     var appearance: Appearance
     var reader: Reader
     var annotations: Annotations
@@ -388,6 +389,7 @@ struct AppConfiguration: Equatable, Sendable {
     var integrations: Integrations
 
     init(
+        language: AppLanguage = .automatic,
         appearance: Appearance = .default,
         reader: Reader = .default,
         annotations: Annotations = .default,
@@ -398,6 +400,7 @@ struct AppConfiguration: Equatable, Sendable {
         updates: Updates = .default,
         integrations: Integrations = .default
     ) {
+        self.language = language
         self.appearance = appearance
         self.reader = reader
         self.annotations = annotations
@@ -533,7 +536,7 @@ struct KeyboardShortcut: Equatable, Sendable {
         case "escape":
             keyDisplay = "Esc"
         case "space":
-            keyDisplay = "Space"
+            keyDisplay = L10n.text("Space", "空格")
         case "tab":
             keyDisplay = "Tab"
         case "return":
@@ -592,6 +595,7 @@ struct KeyboardShortcutSequence: Equatable, Sendable {
 enum AppConfigurationError: LocalizedError {
     case invalidLine(Int, String)
     case invalidBoolean(String)
+    case invalidLanguage(String)
     case invalidAppearanceMode(String)
     case invalidLightTheme(String)
     case invalidDarkTheme(String)
@@ -611,39 +615,41 @@ enum AppConfigurationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .invalidLine(lineNumber, line):
-            "Invalid config line \(lineNumber): \(line)"
+            L10n.text("Invalid config line \(lineNumber): \(line)", "配置第 \(lineNumber) 行无效：\(line)")
         case let .invalidBoolean(value):
-            "Invalid boolean value in config: \(value)"
+            L10n.text("Invalid boolean value in config: \(value)", "配置中的布尔值无效：\(value)")
+        case let .invalidLanguage(value):
+            L10n.text("Invalid interface language: \(value)", "无效的界面语言：\(value)")
         case let .invalidAppearanceMode(value):
-            "Invalid appearance mode in config: \(value)"
+            L10n.text("Invalid appearance mode in config: \(value)", "配置中的外观模式无效：\(value)")
         case let .invalidLightTheme(value):
-            "Invalid light theme in config: \(value)"
+            L10n.text("Invalid light theme in config: \(value)", "配置中的浅色主题无效：\(value)")
         case let .invalidDarkTheme(value):
-            "Invalid dark theme in config: \(value)"
+            L10n.text("Invalid dark theme in config: \(value)", "配置中的深色主题无效：\(value)")
         case let .invalidBackgroundColor(value):
-            "Invalid background color in config: \(value). Use #RRGGBB or an empty string for the theme default."
+            L10n.text("Invalid background color in config: \(value). Use #RRGGBB or an empty string for the theme default.", "配置中的背景色无效：\(value)。请使用 #RRGGBB，或留空使用主题默认值。")
         case let .invalidDisplayMode(value):
-            "Invalid reader display mode in config: \(value)"
+            L10n.text("Invalid reader display mode in config: \(value)", "配置中的阅读模式无效：\(value)")
         case let .invalidReadingFocusWidthMode(value):
-            "Invalid reading focus width mode in config: \(value)"
+            L10n.text("Invalid reading focus width mode in config: \(value)", "配置中的阅读聚焦宽度模式无效：\(value)")
         case let .invalidReadingFocusWidthRatio(value):
-            "Invalid reading focus width ratio in config: \(value)"
+            L10n.text("Invalid reading focus width ratio in config: \(value)", "配置中的阅读聚焦宽度比例无效：\(value)")
         case let .invalidReadingFocusHeight(value):
-            "Invalid reading focus height in config: \(value)"
+            L10n.text("Invalid reading focus height in config: \(value)", "配置中的阅读聚焦高度无效：\(value)")
         case let .invalidShortcut(value):
-            "Invalid keyboard shortcut in config: \(value)"
+            L10n.text("Invalid keyboard shortcut in config: \(value)", "配置中的快捷键无效：\(value)")
         case let .invalidStringArray(value):
-            "Invalid string array in config: \(value)"
+            L10n.text("Invalid string array in config: \(value)", "配置中的字符串数组无效：\(value)")
         case let .invalidAnnotationSavePolicy(value):
-            "Invalid annotation auto-save policy in config: \(value)"
+            L10n.text("Invalid annotation auto-save policy in config: \(value)", "配置中的批注自动保存策略无效：\(value)")
         case let .invalidScrollSpeed(value):
-            "Invalid scroll speed '\(value)'. Expected a number from 0.5 to 3."
+            L10n.text("Invalid scroll speed '\(value)'. Expected a number from 0.5 to 3.", "滚动速度 \(value) 无效，应在 0.5 到 3 之间。")
         case let .invalidWidth(value):
-            "Invalid sidebar width in config: \(value)"
+            L10n.text("Invalid sidebar width in config: \(value)", "配置中的侧栏宽度无效：\(value)")
         case let .invalidOpacity(value):
-            "Invalid sidebar opacity in config: \(value)"
+            L10n.text("Invalid sidebar opacity in config: \(value)", "配置中的侧栏不透明度无效：\(value)")
         case let .invalidFloatingOutlineHeight(value):
-            "Invalid floating outline height in config: \(value)"
+            L10n.text("Invalid floating outline height in config: \(value)", "配置中的浮动目录高度无效：\(value)")
         }
     }
 }
@@ -654,6 +660,7 @@ struct AppConfigurationFile {
 # Location: ~/Library/Application Support/Serein/config.toml
 
 [appearance]
+language = "automatic"
 mode = "system"
 light_theme = "normal"
 dark_theme = "rose_pine_moon"
@@ -810,6 +817,7 @@ redo_last_highlight = "command+shift+z"
 # Location: ~/Library/Application Support/Serein/config.toml
 
 [appearance]
+language = "\(configuration.language.rawValue)"
 mode = "\(configuration.appearance.mode.rawValue)"
 light_theme = "\(configuration.appearance.lightTheme.rawValue)"
 dark_theme = "\(configuration.appearance.darkTheme.rawValue)"
@@ -963,6 +971,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
     /// Keep in sync with `defaultContents` and `render` — covered by AppConfigurationTests.
     static let requiredKeys: [String] = [
         "[appearance]",
+        "language",
         "mode",
         "light_theme",
         "dark_theme",
@@ -1163,6 +1172,12 @@ struct AppConfigurationParser {
         to configuration: inout AppConfiguration
     ) throws {
         switch (section, key) {
+        case ("appearance", "language"):
+            let value = parseString(rawValue)
+            guard let language = AppLanguage(rawValue: value) else {
+                throw AppConfigurationError.invalidLanguage(value)
+            }
+            configuration.language = language
         case ("appearance", "mode"):
             let value = parseString(rawValue)
             guard let mode = AppearanceMode(rawValue: value) else {

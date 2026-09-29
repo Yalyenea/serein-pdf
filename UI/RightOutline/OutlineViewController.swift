@@ -367,7 +367,7 @@ final class OutlineRowView: NSControl {
             return
         }
 
-        let accessibilityDescription = isRowExpanded ? "Collapse section" : "Expand section"
+        let accessibilityDescription = isRowExpanded ? L10n.text("Collapse section", "收起章节") : L10n.text("Expand section", "展开章节")
         disclosureButton.image = NSImage(
             systemSymbolName: isRowExpanded ? "chevron.down" : "chevron.right",
             accessibilityDescription: accessibilityDescription
@@ -433,7 +433,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         self.windowID = windowID
         self.isFloatingPresentation = isFloatingPresentation
         super.init(nibName: nil, bundle: nil)
-        title = "Outline"
+        title = L10n.text("Outline", "目录")
     }
 
     @available(*, unavailable)
@@ -534,7 +534,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         expansionToggleButton.setButtonType(.momentaryChange)
 
         filterField.identifier = NSUserInterfaceItemIdentifier("outlineFilterField")
-        filterField.placeholderString = "Filter headings"
+        filterField.placeholderString = L10n.text("Filter headings", "筛选标题")
         filterField.controlSize = .small
         filterField.focusRingType = .none
         filterField.font = .systemFont(ofSize: 11.5)
@@ -617,7 +617,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
             emptyStateLabel.textColor = NightModeStyle.secondaryTextColor
             if isFloatingPresentation {
                 let filterCell = filterField.cell as! ThemedSearchFieldCell
-                filterCell.applyTheme(to: filterField, placeholder: "Filter headings")
+                filterCell.applyTheme(to: filterField, placeholder: L10n.text("Filter headings", "筛选标题"))
             }
         }
         renderOutlineRows()
@@ -852,7 +852,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         let showsNoMatches = filterQuery.isEmpty == false
             && nodes.isEmpty == false
             && renderedRows.isEmpty
-        emptyStateLabel.stringValue = showsNoMatches ? "No matching headings." : ""
+        emptyStateLabel.stringValue = showsNoMatches ? L10n.text("No matching headings.", "没有匹配的标题。") : ""
         emptyStateLabel.isHidden = !showsNoMatches
         scrollView.isHidden = nodes.isEmpty || showsNoMatches
 
@@ -1030,7 +1030,7 @@ final class OutlineViewController: NSViewController, NSSearchFieldDelegate {
         expansionToggleButton.isEnabled = filterQuery.isEmpty && expandablePaths.isEmpty == false
         let hasCollapsedRows = collapsedPaths.isEmpty == false
         let symbolName = hasCollapsedRows ? "chevron.right" : "chevron.down"
-        let accessibilityDescription = hasCollapsedRows ? "Expand outline" : "Collapse outline"
+        let accessibilityDescription = hasCollapsedRows ? L10n.text("Expand outline", "展开目录") : L10n.text("Collapse outline", "收起目录")
         expansionToggleButton.image = NSImage(
             systemSymbolName: symbolName,
             accessibilityDescription: accessibilityDescription

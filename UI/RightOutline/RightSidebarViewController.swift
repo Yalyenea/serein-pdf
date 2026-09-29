@@ -48,8 +48,8 @@ final class RightSidebarViewController: NSViewController {
     private weak var configuredPDFView: PDFView?
     private let modeSegmented = NSSegmentedControl()
     private let emptyStateView = EmptyStateView(
-        title: "No Document Open",
-        detail: "Open a PDF to see its outline and notes."
+        title: L10n.text("No Document Open", "尚未打开文档"),
+        detail: L10n.text("Open a PDF to see its outline and notes.", "打开 PDF 以查看目录和批注。")
     )
     private var lastAppliedDocumentPresence: Bool?
     private var lastAppliedThumbnailWidth: CGFloat = 0
@@ -69,7 +69,7 @@ final class RightSidebarViewController: NSViewController {
         self.searchResultsViewController = SearchResultsViewController(documentStore: documentStore, windowID: windowID)
         self.annotationsViewController = AnnotationsViewController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
-        title = "Outline"
+        title = L10n.text("Outline", "目录")
         addChild(outlineViewController)
         addChild(searchResultsViewController)
         addChild(annotationsViewController)
@@ -131,25 +131,25 @@ final class RightSidebarViewController: NSViewController {
 
         modeSegmented.segmentCount = 4
         modeSegmented.setImage(
-            NSImage(systemSymbolName: "list.bullet.indent", accessibilityDescription: "Outline"),
+            NSImage(systemSymbolName: "list.bullet.indent", accessibilityDescription: L10n.text("Outline", "目录")),
             forSegment: 0)
         modeSegmented.setImage(
-            NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: "Pages"),
+            NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: L10n.text("Pages", "页面")),
             forSegment: 1)
         modeSegmented.setImage(
-            NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search"),
+            NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: L10n.text("Search", "搜索")),
             forSegment: 2)
         modeSegmented.setImage(
-            NSImage(systemSymbolName: "text.bubble", accessibilityDescription: "Annotations"),
+            NSImage(systemSymbolName: "text.bubble", accessibilityDescription: L10n.text("Annotations", "批注")),
             forSegment: 3)
         modeSegmented.setWidth(26, forSegment: 0)
         modeSegmented.setWidth(26, forSegment: 1)
         modeSegmented.setWidth(26, forSegment: 2)
         modeSegmented.setWidth(26, forSegment: 3)
-        modeSegmented.setToolTip("Outline", forSegment: 0)
-        modeSegmented.setToolTip("Pages", forSegment: 1)
-        modeSegmented.setToolTip("Search", forSegment: 2)
-        modeSegmented.setToolTip("Annotations", forSegment: 3)
+        modeSegmented.setToolTip(L10n.text("Outline", "目录"), forSegment: 0)
+        modeSegmented.setToolTip(L10n.text("Pages", "页面"), forSegment: 1)
+        modeSegmented.setToolTip(L10n.text("Search", "搜索"), forSegment: 2)
+        modeSegmented.setToolTip(L10n.text("Annotations", "批注"), forSegment: 3)
         modeSegmented.selectedSegment = 0
         modeSegmented.controlSize = .mini
         modeSegmented.segmentStyle = .rounded

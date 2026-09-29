@@ -103,7 +103,7 @@ struct SearchSnapshot {
             )
             sections = grouped.keys.sorted().map { pageIndex in
                 SearchSidebarSection(
-                    title: "Page \(pageIndex + 1)",
+                    title: L10n.text("Page \(pageIndex + 1)", "第 \(pageIndex + 1) 页"),
                     matches: grouped[pageIndex, default: []].map { sidebarMatch($0, target) }
                 )
             }

@@ -25,8 +25,8 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         button.alignment = .center
         button.target = self
         button.action = #selector(beginEditing)
-        button.toolTip = "Go to page"
-        button.setAccessibilityLabel("Current page. Click to go to a page.")
+        button.toolTip = L10n.text("Go to page", "跳转到页面")
+        button.setAccessibilityLabel(L10n.text("Current page. Click to go to a page.", "当前页。点击可跳转到指定页面。"))
         field.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         field.alignment = .center
         field.isBordered = false
@@ -34,7 +34,7 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         field.focusRingType = .none
         field.delegate = self
         field.isHidden = true
-        field.setAccessibilityLabel("Page number")
+        field.setAccessibilityLabel(L10n.text("Page number", "页码"))
 
         for control in [button, field] as [NSView] {
             control.translatesAutoresizingMaskIntoConstraints = false
@@ -83,7 +83,7 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         displayText = text
         button.setAccessibilityValue(displayText)
         field.placeholderString = "1–\(pageCount)"
-        field.toolTip = "Enter a page from 1 to \(pageCount). Return to go, Escape to cancel."
+        field.toolTip = L10n.text("Enter a page from 1 to \(pageCount). Return to go, Escape to cancel.", "输入 1 至 \(pageCount) 之间的页码。按回车跳转，按 Esc 取消。")
         invalidateIntrinsicContentSize()
         refreshThemeAppearance()
     }

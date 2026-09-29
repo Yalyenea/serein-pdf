@@ -27,17 +27,17 @@ enum ReaderDisplayMode: String, CaseIterable, Codable, Sendable {
     var menuTitle: String {
         switch self {
         case .singlePage:
-            "Single Page"
+            L10n.text("Single Page", "单页")
         case .singlePageContinuous:
-            "Single Page Continuous"
+            L10n.text("Single Page Continuous", "单页连续")
         case .twoUp:
-            "Two-Up"
+            L10n.text("Two-Up", "双页")
         case .twoUpContinuous:
-            "Two-Up Continuous"
+            L10n.text("Two-Up Continuous", "双页连续")
         case .book:
-            "Book"
+            L10n.text("Book", "书籍")
         case .bookContinuous:
-            "Book · Continuous Turn"
+            L10n.text("Book · Continuous Turn", "书籍 · 连续翻页")
         }
     }
 
@@ -188,95 +188,95 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     var menuTitle: String {
         switch self {
         case .highlightSelection:
-            "Highlight Selection or Enter Highlight Mode"
+            L10n.text("Highlight Selection or Enter Highlight Mode", "高亮选区或进入高亮模式")
         case .underlineSelection:
-            "Underline Selection or Enter Underline Mode"
+            L10n.text("Underline Selection or Enter Underline Mode", "为选区加下划线或进入下划线模式")
         case .strikethroughSelection:
-            "Strikethrough Selection or Enter Strikethrough Mode"
+            L10n.text("Strikethrough Selection or Enter Strikethrough Mode", "为选区加删除线或进入删除线模式")
         case .addComment:
-            "Add or Edit Comment"
+            L10n.text("Add or Edit Comment", "添加或编辑评论")
         case .translateSelection:
-            "Translate Selection…"
+            L10n.text("Translate Selection…", "翻译选区…")
         case .exitHighlightMode:
-            "Exit Annotation Mode"
+            L10n.text("Exit Annotation Mode", "退出批注模式")
         case .toggleNightMode:
-            "Toggle Night Mode"
+            L10n.text("Toggle Night Mode", "切换夜间模式")
         case .toggleReadingFocus:
-            "Toggle Reading Focus"
+            L10n.text("Toggle Reading Focus", "切换阅读聚焦")
         case .adjustReadingFocus:
-            "Adjust Reading Focus…"
+            L10n.text("Adjust Reading Focus…", "调整阅读聚焦…")
         case .toggleGlobalHorizontalPanLock:
-            "Global Lock"
+            L10n.text("Global Lock", "全局锁定")
         case .toggleSeamlessPages:
-            "Seamless Pages"
+            L10n.text("Seamless Pages", "无缝页面")
         case .toggleHorizontalPanLock:
-            "Toggle Horizontal Pan Lock"
+            L10n.text("Toggle Horizontal Pan Lock", "切换横向移动锁定")
         case .switchCurrentTheme:
-            "Switch Current Theme"
+            L10n.text("Switch Current Theme", "切换当前主题")
         case .openLibraryPDF:
-            "Open from PDF Library…"
+            L10n.text("Open from PDF Library…", "从 PDF 库打开…")
         case .refreshLibraryIndex:
-            "Refresh PDF Library Index"
+            L10n.text("Refresh PDF Library Index", "刷新 PDF 库索引")
         case .openLibrarySettings:
-            "Open Library Settings"
+            L10n.text("Open Library Settings", "打开 PDF 库设置")
         case .openShortcutSettings:
-            "Open Shortcuts Settings"
+            L10n.text("Open Shortcuts Settings", "打开快捷键设置")
         case .saveAnnotations:
-            "Save Annotations"
+            L10n.text("Save Annotations", "保存批注")
         case .shareDocument:
-            "Share…"
+            L10n.text("Share…", "共享…")
         case .printDocument:
-            "Print…"
+            L10n.text("Print…", "打印…")
         case .exportCleanCopy:
-            "Export Clean Copy…"
+            L10n.text("Export Clean Copy…", "导出无批注副本…")
         case .copyHighlightsMarkdown:
-            "Copy Highlights as Markdown"
+            L10n.text("Copy Highlights as Markdown", "将高亮复制为 Markdown")
         case .copyCurrentPDFPath:
-            "Copy Current PDF Path"
+            L10n.text("Copy Current PDF Path", "复制当前 PDF 路径")
         case .copyCurrentPageAsImage:
-            "Copy Page as Image"
+            L10n.text("Copy Page as Image", "将当前页复制为图片")
         case .sendContextToCodex:
-            "Send Context to Codex"
+            L10n.text("Send Context to Codex", "发送当前内容到 Codex")
         case .sendCurrentPDFToCodex:
-            "Send Current PDF to Codex"
+            L10n.text("Send Current PDF to Codex", "发送当前 PDF 到 Codex")
         case .removeHighlight:
-            "Remove Annotation"
+            L10n.text("Remove Annotation", "删除批注")
         case .highlightColorPink:
-            "Highlight Color: \(HighlightColor.pink.menuTitle)"
+            L10n.text("Highlight Color: \(HighlightColor.pink.menuTitle)", "高亮颜色：\(HighlightColor.pink.menuTitle)")
         case .highlightColorYellow:
-            "Highlight Color: \(HighlightColor.yellow.menuTitle)"
+            L10n.text("Highlight Color: \(HighlightColor.yellow.menuTitle)", "高亮颜色：\(HighlightColor.yellow.menuTitle)")
         case .highlightColorGreen:
-            "Highlight Color: \(HighlightColor.green.menuTitle)"
+            L10n.text("Highlight Color: \(HighlightColor.green.menuTitle)", "高亮颜色：\(HighlightColor.green.menuTitle)")
         case .toggleLeftSidebar:
-            "Toggle Left Sidebar"
+            L10n.text("Toggle Left Sidebar", "切换左侧栏")
         case .toggleRightSidebar:
-            "Toggle Right Sidebar"
+            L10n.text("Toggle Right Sidebar", "切换右侧栏")
         case .useSidebarTabs:
-            "Use Sidebar Tabs"
+            L10n.text("Use Sidebar Tabs", "使用侧栏标签页")
         case .useTitlebarTabs:
-            "Use Titlebar Tabs"
+            L10n.text("Use Titlebar Tabs", "使用标题栏标签页")
         case .closeCurrentTab:
-            "Close Current Tab"
+            L10n.text("Close Current Tab", "关闭当前标签页")
         case .closeCurrentWindow:
-            "Close Current Window"
+            L10n.text("Close Current Window", "关闭当前窗口")
         case .previousTab:
-            "Previous Tab"
+            L10n.text("Previous Tab", "上一个标签页")
         case .nextTab:
-            "Next Tab"
+            L10n.text("Next Tab", "下一个标签页")
         case .showAllTabs:
-            "Show All Tabs"
+            L10n.text("Show All Tabs", "显示所有标签页")
         case .toggleContinuousReading:
-            "Toggle Continuous Reading"
+            L10n.text("Toggle Continuous Reading", "切换连续阅读")
         case .fitHeight:
-            "Fit Height"
+            L10n.text("Fit Height", "适应高度")
         case .fitWidth:
-            "Fit Width"
+            L10n.text("Fit Width", "适应宽度")
         case .fitTextWidth:
-            "Fit Text Width"
+            L10n.text("Fit Text Width", "适应文本宽度")
         case .zoomIn:
-            "Zoom In"
+            L10n.text("Zoom In", "放大")
         case .zoomOut:
-            "Zoom Out"
+            L10n.text("Zoom Out", "缩小")
         case .singlePage:
             ReaderDisplayMode.singlePage.menuTitle
         case .singlePageContinuous:
@@ -290,83 +290,83 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .bookContinuous:
             ReaderDisplayMode.bookContinuous.menuTitle
         case .toggleDisplayModeContinuity:
-            "Toggle Current Layout Continuity"
+            L10n.text("Toggle Current Layout Continuity", "切换当前布局的连续模式")
         case .pageDown:
-            "Next Page"
+            L10n.text("Next Page", "下一页")
         case .pageUp:
-            "Previous Page"
+            L10n.text("Previous Page", "上一页")
         case .halfPageDown:
-            "Half Page Down"
+            L10n.text("Half Page Down", "向下半页")
         case .halfPageUp:
-            "Half Page Up"
+            L10n.text("Half Page Up", "向上半页")
         case .goToFirstPage:
-            "Go to First Page"
+            L10n.text("Go to First Page", "跳转到首页")
         case .goToLastPage:
-            "Go to Last Page"
+            L10n.text("Go to Last Page", "跳转到末页")
         case .navigateBack:
-            "Back"
+            L10n.text("Back", "后退")
         case .navigateForward:
-            "Forward"
+            L10n.text("Forward", "前进")
         case .findAllOpen:
-            "Find in All Open PDFs…"
+            L10n.text("Find in All Open PDFs…", "在所有打开的 PDF 中查找…")
         case .findNextMatch:
-            "Find Next Match"
+            L10n.text("Find Next Match", "查找下一处")
         case .findPreviousMatch:
-            "Find Previous Match"
+            L10n.text("Find Previous Match", "查找上一处")
         case .gotoPage:
-            "Go to Page…"
+            L10n.text("Go to Page…", "跳转到页面…")
         case .quickOutline:
-            "Toggle Outline"
+            L10n.text("Toggle Outline", "切换目录")
         case .showRecentFilesPalette:
-            "Open Recent Quickly…"
+            L10n.text("Open Recent Quickly…", "快速打开最近文件…")
         case .showRecentWindows:
-            "Recent Windows…"
+            L10n.text("Recent Windows…", "最近窗口…")
         case .paletteSplitRight:
-            "Open List Selection in Right Split"
+            L10n.text("Open List Selection in Right Split", "在右侧分屏打开列表选中项")
         case .paletteSplitDown:
-            "Open List Selection in Split Below"
+            L10n.text("Open List Selection in Split Below", "在下方分屏打开列表选中项")
         case .openContainingFolder:
-            "Reveal in Finder"
+            L10n.text("Reveal in Finder", "在访达中显示")
         case .reopenLastClosed:
-            "Reopen Closed Tab"
+            L10n.text("Reopen Closed Tab", "重新打开已关闭的标签页")
         case .newBlankTab:
-            "New Blank Tab"
+            L10n.text("New Blank Tab", "新建空白标签页")
         case .newWindow:
-            "New Window"
+            L10n.text("New Window", "新建窗口")
         case .mergeAllWindows:
-            "Merge All Windows"
+            L10n.text("Merge All Windows", "合并所有窗口")
         case .moveCurrentPDFToNewWindow:
-            "Move Current PDF to New Window"
+            L10n.text("Move Current PDF to New Window", "将当前 PDF 移至新窗口")
         case .toggleAllPagesOverview:
-            "All Pages Overview"
+            L10n.text("All Pages Overview", "全部页面概览")
         case .toggleDemoMode:
-            "Toggle Demo Mode"
+            L10n.text("Toggle Demo Mode", "切换演示模式")
         case .toggleImmersiveMode:
-            "Toggle Immersive Mode"
+            L10n.text("Toggle Immersive Mode", "切换沉浸模式")
         case .toggleReaderSplit:
-            "Toggle Compare Split"
+            L10n.text("Toggle Compare Split", "切换对比分屏")
         case .splitCurrentPDFRight:
-            "Split Current PDF Right"
+            L10n.text("Split Current PDF Right", "在右侧分屏打开当前 PDF")
         case .splitCurrentPDFDown:
-            "Split Current PDF Down"
+            L10n.text("Split Current PDF Down", "在下方分屏打开当前 PDF")
         case .focusPaneLeft:
-            "Focus Pane Left"
+            L10n.text("Focus Pane Left", "聚焦左侧阅读区")
         case .focusPaneDown:
-            "Focus Pane Below"
+            L10n.text("Focus Pane Below", "聚焦下方阅读区")
         case .focusPaneUp:
-            "Focus Pane Above"
+            L10n.text("Focus Pane Above", "聚焦上方阅读区")
         case .focusPaneRight:
-            "Focus Pane Right"
+            L10n.text("Focus Pane Right", "聚焦右侧阅读区")
         case .togglePaneZoom:
-            "Toggle Pane Zoom"
+            L10n.text("Toggle Pane Zoom", "切换阅读区放大")
         case .toggleRightSidebarMode:
-            "Toggle Outline / Pages"
+            L10n.text("Toggle Outline / Pages", "切换目录／页面")
         case .swapSidebars:
-            "Swap Left and Right Sidebars"
+            L10n.text("Swap Left and Right Sidebars", "交换左右侧栏")
         case .undoLastHighlight:
-            "Undo Highlight"
+            L10n.text("Undo Highlight", "撤销高亮")
         case .redoLastHighlight:
-            "Redo Highlight"
+            L10n.text("Redo Highlight", "重做高亮")
         }
     }
 
@@ -504,11 +504,11 @@ enum ShortcutSection: Int, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .annotations: "Annotations"
-        case .reading: "Reading"
-        case .navigation: "Navigation & Search"
-        case .documents: "Documents & Library"
-        case .windows: "Tabs & Windows"
+        case .annotations: L10n.text("Annotations", "批注")
+        case .reading: L10n.text("Reading", "阅读")
+        case .navigation: L10n.text("Navigation & Search", "导航与搜索")
+        case .documents: L10n.text("Documents & Library", "文档与 PDF 库")
+        case .windows: L10n.text("Tabs & Windows", "标签页与窗口")
         }
     }
 }

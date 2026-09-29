@@ -63,7 +63,7 @@ private final class RecentFilesPaletteRowView: NSTableCellView {
     }
 
     func configure(item: RecentFilesPaletteItem, isMarked: Bool, showsFolder: Bool) {
-        iconView.image = NSImage(systemSymbolName: isMarked ? "checkmark.circle.fill" : "doc", accessibilityDescription: isMarked ? "Selected PDF" : "PDF")
+        iconView.image = NSImage(systemSymbolName: isMarked ? "checkmark.circle.fill" : "doc", accessibilityDescription: isMarked ? L10n.text("Selected PDF", "已选 PDF") : "PDF")
         iconView.contentTintColor = isMarked
             ? NightModeStyle.highlightColor(for: .pink, appearance: effectiveAppearance)
             : NightModeStyle.tertiaryTextColor
@@ -102,10 +102,10 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
     private let tableView = RecentFilesPaletteResultsTableView()
 
     init(
-        title: String = "Recent Files",
-        queryPlaceholder: String = "Filter recent files",
-        emptyItemsMessage: String = "No recent files yet.",
-        emptyQueryMessage: String = "No recent files match the current query.",
+        title: String = L10n.text("Recent Files", "最近文件"),
+        queryPlaceholder: String = L10n.text("Filter recent files", "筛选最近文件"),
+        emptyItemsMessage: String = L10n.text("No recent files yet.", "尚无最近文件。"),
+        emptyQueryMessage: String = L10n.text("No recent files match the current query.", "没有匹配的最近文件。"),
         onSplitURL: ((URL, ReaderSplitLayout) -> Void)? = nil,
         onOpenURLs: @escaping ([URL]) -> Void
     ) {
@@ -380,16 +380,16 @@ final class RecentFilesPaletteController: NSWindowController, NSWindowDelegate, 
 
     private func updateFooter() {
         guard onSplitURL != nil else {
-            footerLabel.stringValue = "↩  Open    Space  Select files    Esc  Cancel"
+            footerLabel.stringValue = L10n.text("↩  Open    Space  Select files    Esc  Cancel", "↩  打开    空格  选择文件    Esc  取消")
             return
         }
         guard state.openTargets().count == 1 else {
             footerLabel.stringValue = state.openTargets().count > 1
-                ? "\(state.openTargets().count) files selected · Select one file to open in a split"
-                : "Select one file to open in a split"
+                ? L10n.text("\(state.openTargets().count) files selected · Select one file to open in a split", "已选择 \(state.openTargets().count) 个文件 · 选择单个文件以分屏打开")
+                : L10n.text("Select one file to open in a split", "选择单个文件以分屏打开")
             return
         }
-        footerLabel.stringValue = "↩  Open    \(rightSplitShortcut?.displayString ?? "—")  Split right    \(downSplitShortcut?.displayString ?? "—")  Split below"
+        footerLabel.stringValue = L10n.text("↩  Open    \(rightSplitShortcut?.displayString ?? "—")  Split right    \(downSplitShortcut?.displayString ?? "—")  Split below", "↩  打开    \(rightSplitShortcut?.displayString ?? "—")  向右分屏    \(downSplitShortcut?.displayString ?? "—")  向下分屏")
     }
 
     private func handleSplitShortcut(_ event: NSEvent) -> Bool {

@@ -111,7 +111,7 @@ struct NamedWorkspace: Equatable, Codable, Sendable {
     var searchQuery = ""
     var searchScope: SearchScope = .currentDocument
 
-    init(id: UUID = UUID(), name: String = "Workspace") {
+    init(id: UUID = UUID(), name: String = L10n.text("Workspace", "工作区")) {
         self.id = id
         self.name = name
     }

@@ -9,11 +9,11 @@ private enum SharePayloadKind: Int, CaseIterable {
     var title: String {
         switch self {
         case .originalPDF:
-            "Original PDF"
+            L10n.text("Original PDF", "原始 PDF")
         case .cleanPDFCopy:
-            "Clean PDF Copy"
+            L10n.text("Clean PDF Copy", "纯净 PDF 副本")
         case .highlightsMarkdown:
-            "Highlights Markdown"
+            L10n.text("Highlights Markdown", "高亮 Markdown")
         }
     }
 }
@@ -25,9 +25,9 @@ private enum ShareDocumentError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noHighlights:
-            "The current PDF has no highlights to share."
+            L10n.text("The current PDF has no highlights to share.", "当前 PDF 没有可分享的高亮。")
         case .missingShareAnchor:
-            "Unable to find a window for the share picker."
+            L10n.text("Unable to find a window for the share picker.", "无法找到用于分享的窗口。")
         }
     }
 }
@@ -55,19 +55,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var openTabsPaletteEntries: [WorkspaceDocumentEntry] = []
     private var sharingServicePicker: NSSharingServicePicker?
     private var temporaryShareDirectories: [URL] = []
-    private let recentFilesMenu = NSMenu(title: "Open Recent")
+    private lazy var recentFilesMenu = NSMenu(title: L10n.text("Open Recent", "最近打开"))
     private var displayedRecentDocumentURLs: [URL]?
-    private let windowMenu = NSMenu(title: "Window")
-    private let moveCurrentPDFToWindowMenu = NSMenu(title: "Move Current PDF to Window")
-    private let moveCurrentPDFToWindowItem = NSMenuItem(
-        title: "Move Current PDF to Window",
+    private lazy var windowMenu = NSMenu(title: L10n.text("Window", "窗口"))
+    private lazy var moveCurrentPDFToWindowMenu = NSMenu(title: L10n.text("Move Current PDF to Window", "将当前 PDF 移至窗口"))
+    private lazy var moveCurrentPDFToWindowItem = NSMenuItem(
+        title: L10n.text("Move Current PDF to Window", "将当前 PDF 移至窗口"),
         action: nil,
         keyEquivalent: ""
     )
-    private let sendToCodexMenu = NSMenu(title: "Send to Codex")
-    private let sendToCodexItem = NSMenuItem(title: "Send to Codex", action: nil, keyEquivalent: "")
-    private let openWithMenu = NSMenu(title: "Open With")
-    private let openWithItem = NSMenuItem(title: "Open With", action: nil, keyEquivalent: "")
+    private lazy var sendToCodexMenu = NSMenu(title: L10n.text("Send to Codex", "发送到 Codex"))
+    private lazy var sendToCodexItem = NSMenuItem(title: L10n.text("Send to Codex", "发送到 Codex"), action: nil, keyEquivalent: "")
+    private lazy var openWithMenu = NSMenu(title: L10n.text("Open With", "打开方式"))
+    private lazy var openWithItem = NSMenuItem(title: L10n.text("Open With", "打开方式"), action: nil, keyEquivalent: "")
     private var autoSaveTimer: Timer?
     private var isAutoSaveRunning = false
     private var lastRecentFilesCleanupDate: Date?
@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             let configStore = try AppConfigurationStore()
             self.configStore = configStore
             appConfiguration = try configStore.load()
+            L10n.configure(appConfiguration.language)
             let access = securityScopedAccessController.sync(access: appConfiguration.access)
             if access != appConfiguration.access {
                 appConfiguration.access = access
@@ -337,8 +338,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
         panel.directoryURL = usersURL
-        panel.message = "/Users is already selected. Allow access once so Serein can keep reading PDFs under user folders after reinstalling."
-        panel.prompt = "Allow /Users"
+        panel.message = L10n.text("/Users is already selected. Allow access once so Serein can keep reading PDFs under user folders after reinstalling.", "已选择 /Users。允许访问后，Serein 可在重新安装后继续读取用户文件夹中的 PDF。")
+        panel.prompt = L10n.text("Allow /Users", "允许访问 /Users")
 
         guard panel.runModal() == .OK,
               let selectedURL = panel.urls.first?.standardizedFileURL else { return }
@@ -367,18 +368,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func presentUsersAccessSelectionError(expectedURL: URL, selectedURL: URL) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Choose /Users to keep broad file access"
-        alert.informativeText = "Selected \(selectedURL.path), but Serein needs \(expectedURL.path)."
-        alert.addButton(withTitle: "OK")
+        alert.messageText = L10n.text("Choose /Users to keep broad file access", "选择 /Users 以保留文件访问权限")
+        alert.informativeText = L10n.text("Selected \(selectedURL.path), but Serein needs \(expectedURL.path).", "已选择 \(selectedURL.path)，请改选 \(expectedURL.path)。")
+        alert.addButton(withTitle: L10n.text("OK", "好"))
         alert.runModal()
     }
 
     private func presentUsersAccessBookmarkError(for url: URL) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Unable to keep access to /Users"
-        alert.informativeText = "Serein could not create persistent access for \(url.path)."
-        alert.addButton(withTitle: "OK")
+        alert.messageText = L10n.text("Unable to keep access to /Users", "无法保留 /Users 的访问权限")
+        alert.informativeText = L10n.text("Serein could not create persistent access for \(url.path).", "Serein 无法保留 \(url.path) 的访问权限。")
+        alert.addButton(withTitle: L10n.text("OK", "好"))
         alert.runModal()
     }
 
@@ -629,7 +630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
         panel.canCreateDirectories = false
-        panel.message = "Open one or more PDF files or folders."
+        panel.message = L10n.text("Open one or more PDF files or folders.", "打开一个或多个 PDF 文件或文件夹。")
 
         guard panel.runModal() == .OK else { return }
 
@@ -659,14 +660,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let appMenuItem = NSMenuItem(title: "Serein", action: nil, keyEquivalent: "")
         let appMenu = NSMenu()
         let settingsItem = NSMenuItem(
-            title: "Settings…",
+            title: L10n.text("Settings…", "设置…"),
             action: #selector(openSettingsWindow(_:)),
             keyEquivalent: ","
         )
         settingsItem.keyEquivalentModifierMask = [.command]
         settingsItem.target = self
         let commandPaletteItem = NSMenuItem(
-            title: "Command Palette…",
+            title: L10n.text("Command Palette…", "命令面板…"),
             action: #selector(showCommandPalette(_:)),
             keyEquivalent: ShortcutCommand.commandPaletteShortcut.menuKeyEquivalent
         )
@@ -688,7 +689,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         appMenu.addItem(shortcutSettingsItem)
         appMenu.addItem(.separator())
         let checkUpdatesItem = NSMenuItem(
-            title: "Check for Updates…",
+            title: L10n.text("Check for Updates…", "检查更新…"),
             action: #selector(checkForUpdates(_:)),
             keyEquivalent: ""
         )
@@ -696,21 +697,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         appMenu.addItem(checkUpdatesItem)
         appMenu.addItem(.separator())
         let hideItem = NSMenuItem(
-            title: "Hide Serein",
+            title: L10n.text("Hide Serein", "隐藏 Serein"),
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
         hideItem.keyEquivalentModifierMask = [.command]
         hideItem.target = NSApp
         let hideOthersItem = NSMenuItem(
-            title: "Hide Others",
+            title: L10n.text("Hide Others", "隐藏其他应用"),
             action: #selector(NSApplication.hideOtherApplications(_:)),
             keyEquivalent: "h"
         )
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
         hideOthersItem.target = NSApp
         let showAllItem = NSMenuItem(
-            title: "Show All",
+            title: L10n.text("Show All", "全部显示"),
             action: #selector(NSApplication.unhideAllApplications(_:)),
             keyEquivalent: ""
         )
@@ -720,7 +721,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         appMenu.addItem(showAllItem)
         appMenu.addItem(.separator())
         let quitItem = appMenu.addItem(
-            withTitle: "Quit Serein",
+            withTitle: L10n.text("Quit Serein", "退出 Serein"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -730,10 +731,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func buildFileMenuItem() -> NSMenuItem {
-        let fileMenuItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
-        let fileMenu = managedMenu(title: "File")
+        let fileMenuItem = NSMenuItem(title: L10n.text("File", "文件"), action: nil, keyEquivalent: "")
+        let fileMenu = managedMenu(title: L10n.text("File", "文件"))
         let settingsItem = NSMenuItem(
-            title: "Settings…",
+            title: L10n.text("Settings…", "设置…"),
             action: #selector(openSettingsWindow(_:)),
             keyEquivalent: ","
         )
@@ -750,7 +751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             action: #selector(newBlankTab(_:))
         )
         let openItem = NSMenuItem(
-            title: "Open…",
+            title: L10n.text("Open…", "打开…"),
             action: #selector(openDocument(_:)),
             keyEquivalent: "o"
         )
@@ -806,7 +807,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         sendToCodexItem.submenu = sendToCodexMenu
         sendToCodexItem.isHidden = appConfiguration.integrations.codexEnabled == false
         let findItem = NSMenuItem(
-            title: "Find…",
+            title: L10n.text("Find…", "查找…"),
             action: #selector(findInCurrentDocument(_:)),
             keyEquivalent: "f"
         )
@@ -826,7 +827,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             action: #selector(findPreviousMatchAction(_:))
         )
         let closeItem = makeConfiguredMenuItem(
-            title: "Close Current Tab",
+            title: L10n.text("Close Current Tab", "关闭当前标签页"),
             command: .closeCurrentTab,
             action: #selector(closeCurrentTab(_:))
         )
@@ -836,7 +837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             action: #selector(closeCurrentWindow(_:))
         )
         let saveAnnotationsItem = makeConfiguredMenuItem(
-            title: "Save Annotations",
+            title: L10n.text("Save Annotations", "保存批注"),
             command: .saveAnnotations,
             action: #selector(saveAnnotations(_:))
         )
@@ -856,13 +857,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             action: #selector(printDocument(_:))
         )
         let exportHighlightsItem = NSMenuItem(
-            title: "Export Highlights…",
+            title: L10n.text("Export Highlights…", "导出高亮…"),
             action: #selector(exportHighlights(_:)),
             keyEquivalent: ""
         )
         exportHighlightsItem.target = self
         let exportAllOpenHighlightsItem = NSMenuItem(
-            title: "Export All Open Highlights…",
+            title: L10n.text("Export All Open Highlights…", "导出所有已打开文档的高亮…"),
             action: #selector(exportAllOpenHighlights(_:)),
             keyEquivalent: ""
         )
@@ -872,10 +873,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .copyHighlightsMarkdown,
             action: #selector(copyHighlightsMarkdown(_:))
         )
-        let recentItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
+        let recentItem = NSMenuItem(title: L10n.text("Open Recent", "最近打开"), action: nil, keyEquivalent: "")
         recentItem.submenu = recentFilesMenu
         let reopenClosedItem = makeConfiguredMenuItem(
-            title: "Reopen Closed Tab",
+            title: L10n.text("Reopen Closed Tab", "重新打开已关闭标签页"),
             command: .reopenLastClosed,
             action: #selector(reopenLastClosed(_:))
         )
@@ -923,16 +924,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func buildEditMenuItem() -> NSMenuItem {
-        let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
-        let editMenu = NSMenu(title: "Edit")
+        let editMenuItem = NSMenuItem(title: L10n.text("Edit", "编辑"), action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: L10n.text("Edit", "编辑"))
         editMenu.autoenablesItems = true
 
-        let undoItem = NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "")
-        let redoItem = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "")
-        let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        let copyItem = NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        let pasteItem = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
+        let undoItem = NSMenuItem(title: L10n.text("Undo", "撤销"), action: Selector(("undo:")), keyEquivalent: "")
+        let redoItem = NSMenuItem(title: L10n.text("Redo", "重做"), action: Selector(("redo:")), keyEquivalent: "")
+        let cutItem = NSMenuItem(title: L10n.text("Cut", "剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        let copyItem = NSMenuItem(title: L10n.text("Copy", "复制"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        let pasteItem = NSMenuItem(title: L10n.text("Paste", "粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        let selectAllItem = NSMenuItem(title: L10n.text("Select All", "全选"), action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
 
         for item in [cutItem, copyItem, pasteItem, selectAllItem] {
             item.keyEquivalentModifierMask = [.command]
@@ -954,17 +955,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func buildTabsMenuItem() -> NSMenuItem {
-        let tabsMenuItem = NSMenuItem(title: "Tabs", action: nil, keyEquivalent: "")
-        let tabsMenu = managedMenu(title: "Tabs")
+        let tabsMenuItem = NSMenuItem(title: L10n.text("Tabs", "标签页"), action: nil, keyEquivalent: "")
+        let tabsMenu = managedMenu(title: L10n.text("Tabs", "标签页"))
 
         tabsMenu.items = [
             makeConfiguredMenuItem(
-                title: "Previous Tab",
+                title: L10n.text("Previous Tab", "上一个标签页"),
                 command: .previousTab,
                 action: #selector(activatePreviousTab(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Next Tab",
+                title: L10n.text("Next Tab", "下一个标签页"),
                 command: .nextTab,
                 action: #selector(activateNextTab(_:))
             ),
@@ -982,12 +983,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             ),
             .separator(),
             makeConfiguredMenuItem(
-                title: "Use Sidebar Tabs",
+                title: L10n.text("Use Sidebar Tabs", "使用侧栏标签页"),
                 command: .useSidebarTabs,
                 action: #selector(useSidebarTabs(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Use Titlebar Tabs",
+                title: L10n.text("Use Titlebar Tabs", "使用标题栏标签页"),
                 command: .useTitlebarTabs,
                 action: #selector(useTitlebarTabs(_:))
             ),
@@ -997,8 +998,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func buildAnnotateMenuItem() -> NSMenuItem {
-        let annotateMenuItem = NSMenuItem(title: "Annotate", action: nil, keyEquivalent: "")
-        let annotateMenu = managedMenu(title: "Annotate")
+        let annotateMenuItem = NSMenuItem(title: L10n.text("Annotate", "批注"), action: nil, keyEquivalent: "")
+        let annotateMenu = managedMenu(title: L10n.text("Annotate", "批注"))
         let markupItems = ShortcutCommand.allCases.compactMap { command in
             command.annotationMarkupType.map { _ in
                 makeConfiguredMenuItem(
@@ -1061,8 +1062,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func buildViewMenuItem() -> NSMenuItem {
-        let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
-        let viewMenu = managedMenu(title: "View")
+        let viewMenuItem = NSMenuItem(title: L10n.text("View", "显示"), action: nil, keyEquivalent: "")
+        let viewMenu = managedMenu(title: L10n.text("View", "显示"))
         let sideBySideSplitItem = makeConfiguredMenuItem(
             title: ShortcutCommand.splitCurrentPDFRight.menuTitle,
             command: .splitCurrentPDFRight,
@@ -1081,17 +1082,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 action: #selector(toggleSeamlessPagesAction(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Toggle Left Sidebar",
+                title: L10n.text("Toggle Left Sidebar", "切换左侧栏"),
                 command: .toggleLeftSidebar,
                 action: #selector(toggleLeftSidebar(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Toggle Right Sidebar",
+                title: L10n.text("Toggle Right Sidebar", "切换右侧栏"),
                 command: .toggleRightSidebar,
                 action: #selector(toggleRightSidebar(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Toggle Night Mode",
+                title: L10n.text("Toggle Night Mode", "切换夜间模式"),
                 command: .toggleNightMode,
                 action: #selector(toggleNightMode(_:))
             ),
@@ -1122,7 +1123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             ),
             .separator(),
             makeConfiguredMenuItem(
-                title: "Fit Width",
+                title: L10n.text("Fit Width", "适应宽度"),
                 command: .fitWidth,
                 action: #selector(fitReaderToWidth(_:))
             ),
@@ -1137,12 +1138,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 action: #selector(fitReaderToHeight(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Zoom In",
+                title: L10n.text("Zoom In", "放大"),
                 command: .zoomIn,
                 action: #selector(zoomInReader(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Zoom Out",
+                title: L10n.text("Zoom Out", "缩小"),
                 command: .zoomOut,
                 action: #selector(zoomOutReader(_:))
             ),
@@ -1186,7 +1187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             ),
             .separator(),
             makeConfiguredMenuItem(
-                title: "All Pages Overview",
+                title: L10n.text("All Pages Overview", "所有页面概览"),
                 command: .toggleAllPagesOverview,
                 action: #selector(toggleAllPagesOverview(_:))
             ),
@@ -1233,19 +1234,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func buildNavigateMenuItem() -> NSMenuItem {
-        let navigateMenuItem = NSMenuItem(title: "Navigate", action: nil, keyEquivalent: "")
-        let navigateMenu = managedMenu(title: "Navigate")
+        let navigateMenuItem = NSMenuItem(title: L10n.text("Navigate", "导航"), action: nil, keyEquivalent: "")
+        let navigateMenu = managedMenu(title: L10n.text("Navigate", "导航"))
 
         navigateMenu.items = [
             makeConfiguredMenuItem(title: ShortcutCommand.quickOutline.menuTitle,
                                    command: .quickOutline, action: #selector(showQuickOutline(_:))),
             makeConfiguredMenuItem(
-                title: "Next Page",
+                title: L10n.text("Next Page", "下一页"),
                 command: .pageDown,
                 action: #selector(goToNextPageAction(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Previous Page",
+                title: L10n.text("Previous Page", "上一页"),
                 command: .pageUp,
                 action: #selector(goToPreviousPageAction(_:))
             ),
@@ -1271,18 +1272,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 action: #selector(goToLastPageAction(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Go to Page…",
+                title: L10n.text("Go to Page…", "跳转页面…"),
                 command: .gotoPage,
                 action: #selector(showGotoPageDialog(_:))
             ),
             .separator(),
             makeConfiguredMenuItem(
-                title: "Back",
+                title: L10n.text("Back", "后退"),
                 command: .navigateBack,
                 action: #selector(navigateBackAction(_:))
             ),
             makeConfiguredMenuItem(
-                title: "Forward",
+                title: L10n.text("Forward", "前进"),
                 command: .navigateForward,
                 action: #selector(navigateForwardAction(_:))
             ),
@@ -1293,13 +1294,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     private func buildWindowMenuItem() -> NSMenuItem {
-        let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
+        let windowMenuItem = NSMenuItem(title: L10n.text("Window", "窗口"), action: nil, keyEquivalent: "")
         windowMenu.delegate = self
         moveCurrentPDFToWindowMenu.autoenablesItems = false
         moveCurrentPDFToWindowMenu.delegate = self
         moveCurrentPDFToWindowItem.submenu = moveCurrentPDFToWindowMenu
         let minimizeItem = NSMenuItem(
-            title: "Minimize",
+            title: L10n.text("Minimize", "最小化"),
             action: #selector(NSWindow.performMiniaturize(_:)),
             keyEquivalent: "m"
         )
@@ -1307,14 +1308,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         minimizeItem.target = nil
 
         let zoomItem = NSMenuItem(
-            title: "Zoom",
+            title: L10n.text("Zoom", "缩放"),
             action: #selector(NSWindow.performZoom(_:)),
             keyEquivalent: ""
         )
         zoomItem.target = nil
 
         let bringAllToFrontItem = NSMenuItem(
-            title: "Bring All to Front",
+            title: L10n.text("Bring All to Front", "前置所有窗口"),
             action: #selector(NSApplication.arrangeInFront(_:)),
             keyEquivalent: ""
         )
@@ -1499,7 +1500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
               let activeSession = documentStore.activeSession(in: sourceController.windowID),
               activeSession.isBlank == false else {
             moveCurrentPDFToWindowItem.isEnabled = false
-            addUnavailableWindowMoveItem(title: "No PDF to Move")
+            addUnavailableWindowMoveItem(title: L10n.text("No PDF to Move", "没有可移动的 PDF"))
             return
         }
 
@@ -1507,7 +1508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let destinations = windowIDs.filter { $0 != sourceController.windowID }
         moveCurrentPDFToWindowItem.isEnabled = destinations.isEmpty == false
         guard destinations.isEmpty == false else {
-            addUnavailableWindowMoveItem(title: "No Other Windows")
+            addUnavailableWindowMoveItem(title: L10n.text("No Other Windows", "没有其他窗口"))
             return
         }
 
@@ -1515,9 +1516,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             let windowNumber = (windowIDs.firstIndex(of: destinationWindowID) ?? 0) + 1
             let destinationTitle = documentStore.activeSession(in: destinationWindowID)
                 .flatMap { $0.isBlank ? nil : $0.title }
-                ?? "Empty Window"
+                ?? L10n.text("Empty Window", "空窗口")
             let item = NSMenuItem(
-                title: "Window \(windowNumber): \(destinationTitle)",
+                title: L10n.text("Window \(windowNumber): \(destinationTitle)", "窗口 \(windowNumber)：\(destinationTitle)"),
                 action: #selector(moveCurrentPDFToExistingWindow(_:)),
                 keyEquivalent: ""
             )
@@ -1646,8 +1647,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         commandPaletteController?.dismiss(restoreParent: false)
         guard appConfiguration.library.folderURLs.isEmpty == false else {
             presentLibraryMessage(
-                title: "No PDF library folders",
-                message: "Add folders in Settings > Library, then use Cmd+K, Cmd+O again."
+                title: L10n.text("No PDF library folders", "未设置 PDF 库文件夹"),
+                message: L10n.text("Add folders in Settings > Library, then use Cmd+K, Cmd+O again.", "在“设置 > 文档库”中添加文件夹，再按 ⌘K、⌘O。")
             )
             return
         }
@@ -1748,12 +1749,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             guard let window = documentStore.windowWorkspace(for: windowID) else { return nil }
             let session = documentStore.activeSession(in: windowID)
             let workspaceName = documentStore.workspaces(in: windowID)
-                .first { $0.id == documentStore.activeWorkspaceID(in: windowID) }?.name ?? "Workspace"
+                .first { $0.id == documentStore.activeWorkspaceID(in: windowID) }?.name ?? L10n.text("Workspace", "工作区")
             let isClosed = !documentStore.windowIDs().contains(windowID)
             return RecentWindowsPaletteItem(
                 windowID: windowID,
                 title: session?.title ?? workspaceName,
-                documentSummary: "\(workspaceName) · \(window.sessionIDs.count) \(window.sessionIDs.count == 1 ? "tab" : "tabs")\(isClosed ? " · Closed" : "")",
+                documentSummary: "\(workspaceName) · " + L10n.text("\(window.sessionIDs.count) \(window.sessionIDs.count == 1 ? "tab" : "tabs")", "\(window.sessionIDs.count) 个标签页") + (isClosed ? L10n.text(" · Closed", " · 已关闭") : ""),
                 canSplit: session?.isBlank == false && recentWindowsPaletteWindowID != nil
             )
         }
@@ -2020,11 +2021,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         field.placeholderString = "1–\(pageCount)"
 
         let alert = NSAlert()
-        alert.messageText = "Go to Page"
-        alert.informativeText = "Enter a page number between 1 and \(pageCount)."
+        alert.messageText = L10n.text("Go to Page", "跳转页面")
+        alert.informativeText = L10n.text("Enter a page number between 1 and \(pageCount).", "请输入 1 至 \(pageCount) 之间的页码。")
         alert.accessoryView = field
-        alert.addButton(withTitle: "Go")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("Go", "前往"))
+        alert.addButton(withTitle: L10n.text("Cancel", "取消"))
         alert.window.initialFirstResponder = field
         field.target = alert.buttons.first
         field.action = #selector(NSButton.performClick(_:))
@@ -2037,8 +2038,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         guard mainWindowController.goToPage(index) else {
             let warn = NSAlert()
             warn.alertStyle = .warning
-            warn.messageText = "Page Out of Range"
-            warn.informativeText = "Enter a page number between 1 and \(pageCount)."
+            warn.messageText = L10n.text("Page Out of Range", "页码超出范围")
+            warn.informativeText = L10n.text("Enter a page number between 1 and \(pageCount).", "请输入 1 至 \(pageCount) 之间的页码。")
             warn.runModal()
             return
         }
@@ -2114,7 +2115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
         } catch {
             let alert = NSAlert(error: error)
-            alert.messageText = "Unable to print PDF"
+            alert.messageText = L10n.text("Unable to print PDF", "无法打印 PDF")
             alert.beginSheetModal(for: window)
         }
     }
@@ -2342,7 +2343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let session = documentStore.session(for: publicSessionID),
         session.isBlank == false else { return nil }
 
-        let menu = NSMenu(title: "Open With")
+        let menu = NSMenu(title: L10n.text("Open With", "打开方式"))
         menu.autoenablesItems = false
         populateOpenWithMenu(menu, session: session)
         return menu
@@ -2361,7 +2362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func rebuildOpenWithMenu() {
         openWithMenu.removeAllItems()
         guard let session = currentPublicPDFSession() else {
-            addUnavailableOpenWithItem(to: openWithMenu, title: "No PDF Open")
+            addUnavailableOpenWithItem(to: openWithMenu, title: L10n.text("No PDF Open", "未打开 PDF"))
             return
         }
         populateOpenWithMenu(openWithMenu, session: session)
@@ -2370,7 +2371,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func populateOpenWithMenu(_ menu: NSMenu, session: DocumentSession) {
         let applications = externalApplicationService.applications(for: session.url)
         guard applications.isEmpty == false else {
-            addUnavailableOpenWithItem(to: menu, title: "No Compatible Applications")
+            addUnavailableOpenWithItem(to: menu, title: L10n.text("No Compatible Applications", "没有兼容的应用"))
             return
         }
 
@@ -2421,16 +2422,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func saveBeforeSharingIfNeeded(_ session: DocumentSession) -> Bool {
         saveAnnotationsIfNeeded(
             session,
-            title: "Save Before Sharing",
-            message: "This PDF has unsaved annotations. Save them before sharing or exporting a clean copy."
+            title: L10n.text("Save Before Sharing", "分享前保存"),
+            message: L10n.text("This PDF has unsaved annotations. Save them before sharing or exporting a clean copy.", "此 PDF 有未保存的批注，请先保存再分享或导出纯净副本。")
         )
     }
 
     private func saveBeforeOpeningExternallyIfNeeded(_ session: DocumentSession) -> Bool {
         saveAnnotationsIfNeeded(
             session,
-            title: "Save Before Opening",
-            message: "This PDF has unsaved annotations. Save them before opening it in another application."
+            title: L10n.text("Save Before Opening", "打开前保存"),
+            message: L10n.text("This PDF has unsaved annotations. Save them before opening it in another application.", "此 PDF 有未保存的批注，请先保存再用其他应用打开。")
         )
     }
 
@@ -2445,8 +2446,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         alert.alertStyle = .warning
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("Save", "保存"))
+        alert.addButton(withTitle: L10n.text("Cancel", "取消"))
 
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
 
@@ -2461,10 +2462,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func promptForSharePayload(hasHighlights: Bool) -> SharePayloadKind? {
         let alert = NSAlert()
-        alert.messageText = "Share"
-        alert.informativeText = "Choose what to share."
-        alert.addButton(withTitle: "Share")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = L10n.text("Share", "分享")
+        alert.informativeText = L10n.text("Choose what to share.", "选择分享内容。")
+        alert.addButton(withTitle: L10n.text("Share", "分享"))
+        alert.addButton(withTitle: L10n.text("Cancel", "取消"))
 
         let popUp = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 240, height: 26), pullsDown: false)
         for payload in SharePayloadKind.allCases {
@@ -2515,7 +2516,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let sanitized = baseName.map { character in
             character == "/" || character == ":" ? "-" : character
         }
-        let cleanBaseName = String(sanitized).isEmpty ? "Clean Copy" : String(sanitized)
+        let cleanBaseName = String(sanitized).isEmpty ? L10n.text("Clean Copy", "纯净副本") : String(sanitized)
         return "\(cleanBaseName)-clean.pdf"
     }
 
@@ -2553,7 +2554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         recentFilesMenu.removeAllItems()
 
         if recentDocumentURLs.isEmpty {
-            let emptyItem = NSMenuItem(title: "No Recent Files", action: nil, keyEquivalent: "")
+            let emptyItem = NSMenuItem(title: L10n.text("No Recent Files", "没有最近文件"), action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
             recentFilesMenu.addItem(emptyItem)
             return
@@ -2840,7 +2841,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func presentOpenError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to open documents"
+        alert.messageText = L10n.text("Failed to open documents", "无法打开文档")
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2850,7 +2851,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func presentCodexShareError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to send to Codex"
+        alert.messageText = L10n.text("Failed to send to Codex", "无法发送到 Codex")
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2860,7 +2861,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func presentExternalApplicationError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to open PDF"
+        alert.messageText = L10n.text("Failed to open PDF", "无法打开 PDF")
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2871,14 +2872,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func presentConfigurationError(_ error: Error) {
         let alert = NSAlert()
         alert.alertStyle = .critical
-        alert.messageText = "Failed to load Serein config"
+        alert.messageText = L10n.text("Failed to load Serein config", "无法载入 Serein 配置")
         alert.informativeText = error.localizedDescription
         alert.runModal()
     }
 
     private func presentConfigurationSaveError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to save Serein settings"
+        alert.messageText = L10n.text("Failed to save Serein settings", "无法保存 Serein 设置")
         if let window = settingsWindowController?.window ?? mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2888,7 +2889,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func presentSaveError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to save annotations"
+        alert.messageText = L10n.text("Failed to save annotations", "无法保存批注")
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2898,7 +2899,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func presentExportError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to export highlights"
+        alert.messageText = L10n.text("Failed to export highlights", "无法导出高亮")
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2908,7 +2909,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func presentShareError(_ error: Error) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Failed to share or export document"
+        alert.messageText = L10n.text("Failed to share or export document", "无法分享或导出文档")
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
         } else {
@@ -2946,15 +2947,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func promptForHighlightExportFormat() -> HighlightExportFormat? {
         let alert = NSAlert()
-        alert.messageText = "Export Highlights"
-        alert.informativeText = "Choose the output format."
+        alert.messageText = L10n.text("Export Highlights", "导出高亮")
+        alert.informativeText = L10n.text("Choose the output format.", "选择输出格式。")
         let buttons: [(String, HighlightExportFormat)] = [
             ("Markdown", .markdown),
-            ("Plain Text", .plainText),
+            (L10n.text("Plain Text", "纯文本"), .plainText),
             ("JSON", .json),
         ]
         buttons.forEach { alert.addButton(withTitle: $0.0) }
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.text("Cancel", "取消"))
 
         let response = alert.runModal()
         let index = Int(response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue)
@@ -2979,9 +2980,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Auto-save failed"
-        alert.informativeText = "These PDFs still have unsaved highlights:\n\(fileList)"
-        alert.addButton(withTitle: "OK")
+        alert.messageText = L10n.text("Auto-save failed", "自动保存失败")
+        alert.informativeText = L10n.text("These PDFs still have unsaved highlights:\n\(fileList)", "以下 PDF 仍有未保存的高亮：\n\(fileList)")
+        alert.addButton(withTitle: L10n.text("OK", "好"))
 
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
@@ -2995,7 +2996,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         alert.alertStyle = .informational
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: L10n.text("OK", "好"))
 
         if let window = mainWindowController?.window ?? NSApp.mainWindow {
             alert.beginSheetModal(for: window)
@@ -3058,7 +3059,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return true
         case #selector(toggleHorizontalPanLockAction(_:)):
             let global = appConfiguration.reader.globalHorizontalPanLock
-            menuItem.title = global ? "Horizontal Pan Lock (Global Lock On)" : ShortcutCommand.toggleHorizontalPanLock.menuTitle
+            menuItem.title = global ? L10n.text("Horizontal Pan Lock (Global Lock On)", "横向平移锁定（全局已锁定）") : ShortcutCommand.toggleHorizontalPanLock.menuTitle
             if global {
                 menuItem.state = controller?.isHorizontalPanLocked == true ? .on : .off
                 return false
@@ -3129,8 +3130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return currentPageImageSession() != nil
         case #selector(sendContextToCodex(_:)):
             let dynamicTitle = controller?.selectedReaderText == nil
-                ? "Send Page Image to Codex"
-                : "Send Selection to Codex"
+                ? L10n.text("Send Page Image to Codex", "发送页面图片到 Codex")
+                : L10n.text("Send Selection to Codex", "发送选中文字到 Codex")
             menuItem.title = menuTitle(dynamicTitle, for: .sendContextToCodex)
             return appConfiguration.integrations.codexEnabled && currentPageImageSession() != nil
         case #selector(sendCurrentPDFToCodex(_:)):
@@ -3151,12 +3152,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return controller != nil
         case #selector(closeCurrentTab(_:)):
             if controller?.isReaderSplitEnabled == true {
-                menuItem.title = menuTitle("Close Focused Pane", for: .closeCurrentTab)
+                menuItem.title = menuTitle(L10n.text("Close Focused Pane", "关闭当前阅读区"), for: .closeCurrentTab)
             } else if let windowID,
                documentStore.selectedSessionIDs(in: windowID).count > 1 {
-                menuItem.title = menuTitle("Close Selected Tabs", for: .closeCurrentTab)
+                menuItem.title = menuTitle(L10n.text("Close Selected Tabs", "关闭选中标签页"), for: .closeCurrentTab)
             } else {
-                menuItem.title = menuTitle("Close Current Tab", for: .closeCurrentTab)
+                menuItem.title = menuTitle(L10n.text("Close Current Tab", "关闭当前标签页"), for: .closeCurrentTab)
             }
             return controller != nil
         case #selector(closeCurrentWindow(_:)):

@@ -43,9 +43,9 @@ private final class SearchResultCellView: NSTableCellView {
 
     func configure(pageIndex: Int, previewText: String, sessionTitle: String?, showsSessionTitle: Bool) {
         if showsSessionTitle, let sessionTitle {
-            titleLabel.stringValue = "\(sessionTitle) · Page \(pageIndex + 1)"
+            titleLabel.stringValue = L10n.text("\(sessionTitle) · Page \(pageIndex + 1)", "\(sessionTitle) · 第 \(pageIndex + 1) 页")
         } else {
-            titleLabel.stringValue = "Page \(pageIndex + 1)"
+            titleLabel.stringValue = L10n.text("Page \(pageIndex + 1)", "第 \(pageIndex + 1) 页")
         }
         subtitleLabel.stringValue = previewText
     }
@@ -71,7 +71,7 @@ final class SearchResultsViewController: NSViewController, NSTableViewDataSource
         self.documentStore = documentStore
         self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
-        title = "Search"
+        title = L10n.text("Search", "搜索")
     }
 
     @available(*, unavailable)

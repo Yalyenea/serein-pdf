@@ -66,7 +66,8 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
 - Underline workflow (`u` to underline) shares the compact mode, comment, undo, save, sidebar, and export pipeline
 - Strikethrough uses the same annotation pipeline with the plain `s` shortcut
-- Select text and press `t` for Apple translation in a compact window. The source language is detected automatically, favoring English for single words and short phrases; the target defaults to Simplified Chinese and can be changed. Add the result as a new highlight with a translated comment, preserving existing annotations and the original selection even if you switch readers. A result is added only once and uses the normal undo and save workflow. Translation requires macOS 15 or later.
+- Select Chinese or English text and press `t` to translate into the other language. English words show a compact dictionary entry with pronunciation and speech controls; long sentence translations scroll. Copy the result or add it as a new highlight with a translated comment attached to the original selection. A result is added only once and uses the normal undo and save workflow. Apple translation requires macOS 15 or later.
+- Choose Automatic, English, or 中文 in Settings → General → Language. Automatic follows the system’s first preferred language (Chinese or English); changes apply after restarting Serein.
 - Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
 - While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input
 - `File > Share…` can share the original PDF, a clean copy, or highlights as Markdown text; `File > Export Clean Copy…` writes a PDF with user-visible annotations removed while preserving links and form widgets; `Export All Open Highlights…` groups the current window's annotated PDFs by document and page
@@ -143,6 +144,7 @@ and is created on first launch. Edit, then restart Serein.
 
 ```toml
 [appearance]
+language = "automatic"         # automatic / en / zh; applies after restart
 mode = "system"               # or "light" / "dark"
 light_theme = "normal"        # e.g. "rose_pine_dawn", "catppuccin", "everforest"
 dark_theme = "rose_pine_moon" # e.g. "normal", "nord", "tokyo-night"

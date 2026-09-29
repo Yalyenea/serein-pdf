@@ -52,14 +52,14 @@ final class VerticalTabsViewController: NSViewController {
     var onRevealInFinderRequested: ((UUID) -> Void)?
     var onOpenWithMenuRequested: ((UUID) -> NSMenu?)?
     private lazy var workspaceSelector = WorkspaceSelectorView(documentStore: documentStore, windowID: windowID)
-    private let countLabel = NSTextField(labelWithString: "0 open")
+    private let countLabel = NSTextField(labelWithString: L10n.text("0 open", "已打开 0 个"))
     private let emptyStateView = EmptyStateView(
-        title: "No Documents Open",
-        detail: "Press ⌘O to open a PDF"
+        title: L10n.text("No Documents Open", "尚未打开文档"),
+        detail: L10n.text("Press ⌘O to open a PDF", "按 ⌘O 打开 PDF")
     )
     private let listStackView = NSStackView()
     private let recentSectionContainer = NSStackView()
-    private let recentTitleLabel = NSTextField(labelWithString: "Recent PDFs")
+    private let recentTitleLabel = NSTextField(labelWithString: L10n.text("Recent PDFs", "最近打开的 PDF"))
     private let recentListStackView = NSStackView()
     private var recentBottomConstraints: [NSLayoutConstraint] = []
     private var recentTopConstraints: [NSLayoutConstraint] = []
@@ -72,7 +72,7 @@ final class VerticalTabsViewController: NSViewController {
         self.documentStore = documentStore
         self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
-        title = "Documents"
+        title = L10n.text("Documents", "文档")
     }
 
     @available(*, unavailable)
@@ -265,7 +265,7 @@ final class VerticalTabsViewController: NSViewController {
         let continuousSessionSet = Set(continuousSessionIDs)
         let continuousLeaderID = continuousSessionIDs.first
         let activeSessionID = documentStore.activeSessionID(in: windowID)
-        countLabel.stringValue = "\(sessions.count) open"
+        countLabel.stringValue = L10n.text("\(sessions.count) open", "已打开 \(sessions.count) 个")
 
         for session in sessions {
             let itemView = VerticalTabItemView(

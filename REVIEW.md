@@ -40,7 +40,6 @@
 | # | 状态 | 问题 | 位置 | 影响 |
 |---|---|---|---|---|
 | C1 | ◐ | config 多清单曾漂移；一致性测 + self-heal 已做，**根治**仍需表驱动 | `AppConfiguration` | 新快捷键仍可能漏 key |
-| H1 | [ ] | UI 字符串中英混杂、硬编码 | 多处 | 本地化需全量翻找 |
 | H2 | [ ] | `controller(for:)` / 菜单状态每次 store 变更线性扫描 | `AppDelegate` | 规模小时可接受 |
 
 ## 3. 改进路线（开放项）
@@ -52,7 +51,6 @@
 - [ ] **S2** 继续拆 `DocumentStore` 的 tab / annotation / persistence；搜索已是显式窗口快照
 - [ ] **C1 根治** config schema 表驱动：单一 spec 生成 parser / render / defaults / requiredKeys
 - [ ] **S4** `PaletteWindowController` 共享 panel 与键处理
-- [ ] **H1** 统一英文或引入 String Catalog
 - [ ] **P1 余量** 一般 content 的 workspace 写合并 / 节流
 
 ### 3.2 产品候选（增量小、复用现有管线）

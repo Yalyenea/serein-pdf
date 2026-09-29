@@ -147,9 +147,9 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private var catalogBuildTask: Task<Void, Never>?
     private var libraryFolderURLs: [URL] = []
 
-    private let titleLabel = NSTextField(labelWithString: "PDF Library")
+    private let titleLabel = NSTextField(labelWithString: L10n.text("PDF Library", "PDF 文档库"))
     private let secondaryLabel = NSTextField(labelWithString: "")
-    private let segmentControl = NSSegmentedControl(labels: ["All"], trackingMode: .selectOne, target: nil, action: nil)
+    private let segmentControl = NSSegmentedControl(labels: [L10n.text("All", "全部")], trackingMode: .selectOne, target: nil, action: nil)
     private let queryField = NSTextField(frame: .zero)
     private let foldersScrollView = NSScrollView()
     private let pdfsScrollView = NSScrollView()
@@ -167,7 +167,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             backing: .buffered,
             defer: false
         )
-        panel.title = "PDF Library"
+        panel.title = L10n.text("PDF Library", "PDF 文档库")
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
@@ -307,7 +307,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         queryField.drawsBackground = false
         queryField.focusRingType = .none
         queryField.font = .systemFont(ofSize: 22, weight: .semibold)
-        queryField.placeholderString = "Search library PDFs"
+        queryField.placeholderString = L10n.text("Search library PDFs", "搜索文档库 PDF")
         queryField.maximumNumberOfLines = 1
 
         configure(tableView: foldersTableView, identifier: PDFLibraryPaletteTable.folders.rawValue)
@@ -391,9 +391,9 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         footerView.alignment = .centerY
         footerView.spacing = 14
         let hints: [([KeyboardShortcut], String)] = [
-            (["up", "down"].map { KeyboardShortcut(key: $0, modifiers: []) }, "选中"),
-            ([KeyboardShortcut(key: "return", modifiers: [])], "打开"),
-            ([KeyboardShortcut(key: "escape", modifiers: [])], "关闭"),
+            (["up", "down"].map { KeyboardShortcut(key: $0, modifiers: []) }, L10n.text("Select", "选中")),
+            ([KeyboardShortcut(key: "return", modifiers: [])], L10n.text("Open", "打开")),
+            ([KeyboardShortcut(key: "escape", modifiers: [])], L10n.text("Close", "关闭")),
         ]
         for (shortcuts, title) in hints {
             let group = NSStackView()
@@ -423,7 +423,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             segmentControl.selectedSegmentBezelColor = NightModeStyle.selectedChromeBackgroundColor
             queryField.textColor = NightModeStyle.primaryTextColor
             queryField.placeholderAttributedString = NSAttributedString(
-                string: "Search library PDFs",
+                string: L10n.text("Search library PDFs", "搜索文档库 PDF"),
                 attributes: [.foregroundColor: NightModeStyle.tertiaryTextColor]
             )
             if let editor = queryField.currentEditor() as? NSTextView {
@@ -476,7 +476,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
         selectedSegmentIndex = 0
         selectedFolderScope = .all
         segmentControl.segmentCount = max(1, catalog.roots.count + 1)
-        segmentControl.setLabel("All", forSegment: 0)
+        segmentControl.setLabel(L10n.text("All", "全部"), forSegment: 0)
         segmentControl.setWidth(64, forSegment: 0)
         for (index, root) in catalog.roots.enumerated() {
             let segment = index + 1
@@ -505,7 +505,7 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
             }
         }
         filteredItems = makeFilteredItems()
-        secondaryLabel.stringValue = isLoadingCatalog ? "Scanning…" : "\(filteredItems.count) PDFs"
+        secondaryLabel.stringValue = isLoadingCatalog ? L10n.text("Scanning…", "正在扫描…") : L10n.text("\(filteredItems.count) PDFs", "\(filteredItems.count) 个 PDF")
         emptyLabel.stringValue = emptyMessage()
         emptyLabel.isHidden = filteredItems.isEmpty == false
         pdfsScrollView.isHidden = filteredItems.isEmpty
@@ -523,19 +523,19 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
     private func makeFolderRows() -> [PDFLibraryFolderRow] {
         let rootItems = itemsForSelectedSegment()
         var rows: [PDFLibraryFolderRow] = [
-            PDFLibraryFolderRow(scope: .all, title: selectedSegmentIndex == 0 ? "All libraries" : "All PDFs", subtitle: "\(rootItems.count) PDFs"),
+            PDFLibraryFolderRow(scope: .all, title: selectedSegmentIndex == 0 ? L10n.text("All libraries", "所有文档库") : L10n.text("All PDFs", "所有 PDF"), subtitle: L10n.text("\(rootItems.count) PDFs", "\(rootItems.count) 个 PDF")),
         ]
 
         if selectedSegmentIndex == 0 {
             for root in catalog.roots {
                 let count = catalog.rootItemCounts[root.url, default: 0]
-                rows.append(PDFLibraryFolderRow(scope: .root(root.url), title: root.title, subtitle: "\(count) PDFs"))
+                rows.append(PDFLibraryFolderRow(scope: .root(root.url), title: root.title, subtitle: L10n.text("\(count) PDFs", "\(count) 个 PDF")))
             }
         }
 
         let folders = Dictionary(grouping: rootItems, by: \.folderURL).map { folderURL, items in
             let relativeFolderPath = folderTitle(for: folderURL, items: items)
-            return PDFLibraryFolderRow(scope: .folder(folderURL), title: relativeFolderPath, subtitle: "\(items.count) PDFs")
+            return PDFLibraryFolderRow(scope: .folder(folderURL), title: relativeFolderPath, subtitle: L10n.text("\(items.count) PDFs", "\(items.count) 个 PDF"))
         }
         rows.append(
             contentsOf: folders.sorted {
@@ -587,15 +587,15 @@ final class PDFLibraryPaletteController: NSWindowController, NSTableViewDataSour
 
     private func emptyMessage() -> String {
         if isLoadingCatalog {
-            return "Scanning PDF library…"
+            return L10n.text("Scanning PDF library…", "正在扫描 PDF 文档库…")
         }
         if catalog.roots.isEmpty {
-            return "No library folders configured."
+            return L10n.text("No library folders configured.", "尚未设置文档库文件夹。")
         }
         if catalog.items.isEmpty {
-            return "No PDFs found in library folders."
+            return L10n.text("No PDFs found in library folders.", "文档库文件夹中没有 PDF。")
         }
-        return "No PDFs match the current filter."
+        return L10n.text("No PDFs match the current filter.", "没有匹配的 PDF。")
     }
 
     private func selectCurrentFolder() {

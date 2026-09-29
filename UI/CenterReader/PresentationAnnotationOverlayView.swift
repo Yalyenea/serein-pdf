@@ -449,9 +449,9 @@ final class PresentationAnnotationOverlayView: NSView {
         toolbar.layer?.cornerRadius = 7
         toolbar.layer?.borderWidth = 0.5
         addSubview(toolbar)
-        let items = [("cursorarrow", "Pointer (V)", "V"), ("pencil.tip", "Temporary Pen (P)", "P"),
-                     ("scope", "Laser Pointer (R)", "R"), ("arrow.uturn.backward", "Undo Stroke (⌘Z)", "⌘Z"),
-                     ("trash", "Clear Page (E)", "E")]
+        let items = [("cursorarrow", L10n.text("Pointer (V)", "指针（V）"), "V"), ("pencil.tip", L10n.text("Temporary Pen (P)", "临时画笔（P）"), "P"),
+                     ("scope", L10n.text("Laser Pointer (R)", "激光笔（R）"), "R"), ("arrow.uturn.backward", L10n.text("Undo Stroke (⌘Z)", "撤销笔画（⌘Z）"), "⌘Z"),
+                     ("trash", L10n.text("Clear Page (E)", "清空当前页（E）"), "E")]
         for (index, item) in items.enumerated() {
             let button = PresentationToolButton(frame: NSRect(x: 6 + index * 48, y: 4, width: 46, height: 46))
             button.title = ""
@@ -495,15 +495,15 @@ final class PresentationAnnotationOverlayView: NSView {
         toolbarPinButton.action = #selector(toggleToolbarPin(_:))
         toolbar.addSubview(toolbarPinButton)
 
-        toolbarRevealButton.image = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Show presentation tools")?
+        toolbarRevealButton.image = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: L10n.text("Show presentation tools", "显示演示工具"))?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .medium))
         toolbarRevealButton.imagePosition = .imageOnly
         toolbarRevealButton.isBordered = false
         toolbarRevealButton.contentTintColor = NightModeStyle.tertiaryTextColor
         toolbarRevealButton.wantsLayer = true
         toolbarRevealButton.layer?.cornerRadius = 4
-        toolbarRevealButton.toolTip = "Show presentation tools"
-        toolbarRevealButton.setAccessibilityLabel("Show presentation tools")
+        toolbarRevealButton.toolTip = L10n.text("Show presentation tools", "显示演示工具")
+        toolbarRevealButton.setAccessibilityLabel(L10n.text("Show presentation tools", "显示演示工具"))
         toolbarRevealButton.identifier = NSUserInterfaceItemIdentifier("presentation-toolbar-reveal")
         toolbarRevealButton.target = self
         toolbarRevealButton.action = #selector(revealToolbar(_:))
@@ -531,7 +531,7 @@ final class PresentationAnnotationOverlayView: NSView {
                     : NSColor.clear.cgColor
             }
         }
-        let pinLabel = isToolbarPinned ? "Auto-hide toolbar" : "Keep toolbar visible"
+        let pinLabel = isToolbarPinned ? L10n.text("Auto-hide toolbar", "自动隐藏工具栏") : L10n.text("Keep toolbar visible", "保持工具栏可见")
         toolbarPinButton.image = NSImage(systemSymbolName: isToolbarPinned ? "pin.fill" : "pin", accessibilityDescription: pinLabel)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .regular))
         toolbarPinButton.contentTintColor = NightModeStyle.secondaryTextColor

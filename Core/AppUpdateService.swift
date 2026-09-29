@@ -34,21 +34,21 @@ struct AppUpdateService: Sendable {
         var errorDescription: String? {
             switch self {
             case .invalidResponse:
-                "GitHub returned an invalid response."
+                L10n.text("GitHub returned an invalid response.", "GitHub 返回的响应无效。")
             case let .httpStatus(code):
                 if code == 404 {
-                    "Release not found. For a private repo, set [updates] github_token in config.toml."
+                    L10n.text("Release not found. For a private repo, set [updates] github_token in config.toml.", "未找到发布版本。私有仓库请在 config.toml 的 [updates] 下设置 github_token。")
                 } else {
-                    "GitHub request failed (HTTP \(code))."
+                    L10n.text("GitHub request failed (HTTP \(code)).", "GitHub 请求失败（HTTP \(code)）。")
                 }
             case .noReleaseAsset:
-                "Latest release has no Serein-*.dmg asset."
+                L10n.text("Latest release has no Serein-*.dmg asset.", "最新版本中没有 Serein-*.dmg 安装文件。")
             case let .invalidVersion(value):
-                "Invalid version string: \(value)"
+                L10n.text("Invalid version string: \(value)", "版本号无效：\(value)")
             case let .downloadFailed(detail):
-                "Download failed: \(detail)"
+                L10n.text("Download failed: \(detail)", "下载失败：\(detail)")
             case .missingGitHubToken:
-                "This repository is private. Add a GitHub token under [updates] github_token."
+                L10n.text("This repository is private. Add a GitHub token under [updates] github_token.", "此仓库为私有仓库。请在 [updates] github_token 中添加 GitHub 令牌。")
             }
         }
     }
@@ -170,7 +170,7 @@ struct AppUpdateService: Sendable {
         guard release.assetName.hasPrefix(Self.dmgNamePrefix),
               release.assetName.hasSuffix(Self.dmgNameSuffix),
               release.assetName.contains("/") == false else {
-            throw ServiceError.downloadFailed("invalid asset name")
+            throw ServiceError.downloadFailed(L10n.text("invalid asset name", "安装文件名称无效"))
         }
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let destination = directory.appendingPathComponent(release.assetName, isDirectory: false)
@@ -205,14 +205,14 @@ struct AppUpdateService: Sendable {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let byteCount = (attributes[.size] as? NSNumber)?.int64Value ?? 0
         guard byteCount > 0 else {
-            throw ServiceError.downloadFailed("empty body")
+            throw ServiceError.downloadFailed(L10n.text("empty body", "下载内容为空"))
         }
         if let expectedSize = release.size, byteCount != expectedSize {
-            throw ServiceError.downloadFailed("asset size does not match the release")
+            throw ServiceError.downloadFailed(L10n.text("asset size does not match the release", "安装文件大小与发布版本不符"))
         }
         guard let digest = release.digest else { return }
         guard digest.hasPrefix("sha256:"), digest.count == 71 else {
-            throw ServiceError.downloadFailed("unsupported asset digest")
+            throw ServiceError.downloadFailed(L10n.text("unsupported asset digest", "不支持的安装文件摘要格式"))
         }
 
         let handle = try FileHandle(forReadingFrom: url)
@@ -224,7 +224,7 @@ struct AppUpdateService: Sendable {
         }
         let actualDigest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         guard actualDigest == digest.dropFirst(7).lowercased() else {
-            throw ServiceError.downloadFailed("asset checksum does not match the release")
+            throw ServiceError.downloadFailed(L10n.text("asset checksum does not match the release", "安装文件校验值与发布版本不符"))
         }
     }
 

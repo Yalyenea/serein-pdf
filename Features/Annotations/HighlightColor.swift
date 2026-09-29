@@ -47,11 +47,11 @@ enum HighlightColor: String, CaseIterable, Codable, Sendable {
     var menuTitle: String {
         switch self {
         case .pink:
-            "Pink"
+            L10n.text("Pink", "粉色")
         case .yellow:
-            "Yellow"
+            L10n.text("Yellow", "黄色")
         case .green:
-            "Green"
+            L10n.text("Green", "绿色")
         }
     }
 

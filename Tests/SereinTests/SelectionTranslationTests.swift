@@ -63,10 +63,10 @@ final class SelectionTranslationTests: XCTestCase {
     func testLateResultDoesNotReplaceNewLanguageOrSurviveCancellation() async throws {
         let fixture = try makeFixture(named: "translation-late-result")
         let originalRequest = fixture.translation.request
-        let currentRequest = fixture.translation.selectTargetLanguage(Locale.Language(identifier: "ja"))
+        let currentRequest = fixture.translation.reverseDirection()
         fixture.translation.complete(originalRequest, with: .success("Stale result"))
         XCTAssertEqual(fixture.translation.state, .translating)
-        XCTAssertEqual(fixture.translation.request.targetLanguage.languageCode?.identifier, "ja")
+        XCTAssertEqual(fixture.translation.request.targetLanguage.languageCode?.identifier, "en")
         XCTAssertThrowsError(try fixture.translation.addAnnotation())
 
         fixture.translation.cancel()
@@ -117,7 +117,7 @@ final class SelectionTranslationTests: XCTestCase {
         guard case .failed = fixture.translation.state else { return XCTFail("Expected an empty-result error") }
         XCTAssertThrowsError(try fixture.translation.addAnnotation())
 
-        let request = fixture.translation.selectTargetLanguage(Locale.Language(identifier: "zh-Hans"))
+        let request = fixture.translation.retry()
         fixture.translation.complete(request, with: .success("保存后的译文"))
         _ = try fixture.translation.addAnnotation()
         XCTAssertEqual(PDFDocument(url: fixture.session.url)?.page(at: 0)?.annotations.count, 0)
@@ -131,7 +131,6 @@ final class SelectionTranslationTests: XCTestCase {
         for (text, expected) in [
             ("Lagrangian duality is fundamental to optimization.", "en"),
             ("拉格朗日对偶性是优化的基础，我们可以通过数学推导理解它的几何意义。", "zh"),
-            ("La traduction automatique permet de comprendre les textes dans une autre langue.", "fr"),
         ] {
             XCTAssertEqual(SelectionTranslation.detectSourceLanguage(of: text)?.languageCode?.identifier, expected)
         }
@@ -142,31 +141,83 @@ final class SelectionTranslationTests: XCTestCase {
         for word in ["attention", "kernel", "lemma", "sparse", "prior", "via", "per se", "softmax", "Hessian"] {
             XCTAssertEqual(SelectionTranslation.detectSourceLanguage(of: word)?.languageCode?.identifier, "en", word)
         }
-        for (word, expected) in [("Straße", "de"), ("tête", "fr"), ("机器学习", "zh")] {
+        for (word, expected) in [("机器学习", "zh"), ("學習與推理密切相關。", "zh")] {
             XCTAssertEqual(SelectionTranslation.detectSourceLanguage(of: word)?.languageCode?.identifier, expected, word)
         }
     }
 
-    func testChangingTargetKeepsTheOriginalTextAndDetectedLanguage() throws {
+    func testReversingDirectionKeepsOriginalTextAndChangesBothLanguages() throws {
         let fixture = try makeFixture(named: "translation-language")
         let original = fixture.translation.request
-        let changed = fixture.translation.selectTargetLanguage(Locale.Language(identifier: "ja"))
+        let changed = fixture.translation.reverseDirection()
         XCTAssertNotEqual(changed.id, original.id)
         XCTAssertEqual(changed.text, original.text)
-        XCTAssertEqual(changed.sourceLanguage, original.sourceLanguage)
-        XCTAssertEqual(changed.sourceLanguage?.languageCode?.identifier, "en")
+        XCTAssertEqual(changed.sourceLanguage?.languageCode?.identifier, "zh")
+        XCTAssertEqual(changed.targetLanguage.languageCode?.identifier, "en")
     }
 
-    private func makeFixture(named name: String) throws -> (
+    func testChineseAndMixedSelectionsAutomaticallyTargetTheOtherLanguage() throws {
+        for (text, source, target) in [
+            ("学习与推理密切相关。", "zh", "en"),
+            ("學習與推理密切相關。", "zh", "en"),
+            ("我们使用 attention mechanism 完成推理。", "zh", "en"),
+            ("This model uses 注意力 to improve inference.", "en", "zh"),
+            ("这是一个 PDF 文档。", "zh", "en"),
+        ] {
+            let fixture = try makeFixture(named: UUID().uuidString, text: text)
+            XCTAssertEqual(fixture.translation.request.sourceLanguage?.languageCode?.identifier, source, text)
+            XCTAssertEqual(fixture.translation.request.targetLanguage.languageCode?.identifier, target, text)
+        }
+        for text in ["12345", "🫧", "日本語を読む", "안녕하세요", "Привет мир"] {
+            XCTAssertNil(SelectionTranslation.detectSourceLanguage(of: text), text)
+        }
+    }
+
+    func testSingleWordModeAndDirectionCorrectionPreserveTheSelection() throws {
+        let fixture = try makeFixture(named: "translation-word", text: "inference")
+        XCTAssertEqual(fixture.translation.englishWord, "inference")
+        let original = fixture.translation.request
+        let reversed = fixture.translation.reverseDirection()
+        XCTAssertNil(fixture.translation.englishWord)
+        XCTAssertEqual(reversed.sourceLanguage?.languageCode?.identifier, "zh")
+        XCTAssertEqual(reversed.targetLanguage.languageCode?.identifier, "en")
+        fixture.translation.complete(original, with: .success("旧译文"))
+        XCTAssertEqual(fixture.translation.state, .translating)
+        let restored = fixture.translation.reverseDirection()
+        fixture.translation.complete(reversed, with: .success("Old result"))
+        XCTAssertEqual(fixture.translation.state, .translating)
+        XCTAssertEqual(fixture.translation.englishWord, "inference")
+        fixture.translation.complete(restored, with: .success("推理"))
+        let groupID = try fixture.translation.addAnnotation()
+        let group = try XCTUnwrap(fixture.store.annotationGroups(for: fixture.session.id).first { $0.groupID == groupID })
+        XCTAssertEqual(group.snippet, "inference")
+        XCTAssertEqual(group.comment, "推理")
+    }
+
+    func testRetryPreservesCorrectedDirectionAndIgnoresThePreviousResponse() throws {
+        let fixture = try makeFixture(named: "translation-retry")
+        let previous = fixture.translation.reverseDirection()
+        let retry = fixture.translation.retry()
+        XCTAssertNotEqual(previous.id, retry.id)
+        XCTAssertEqual(previous.sourceLanguage, retry.sourceLanguage)
+        XCTAssertEqual(previous.targetLanguage, retry.targetLanguage)
+        XCTAssertEqual(previous.text, retry.text)
+        fixture.translation.complete(previous, with: .success("Stale"))
+        XCTAssertEqual(fixture.translation.state, .translating)
+        fixture.translation.complete(retry, with: .success("Current"))
+        XCTAssertEqual(fixture.translation.state, .translated("Current"))
+    }
+
+    private func makeFixture(named name: String, text: String = "Translate this passage") throws -> (
         store: DocumentStore, session: DocumentSession, document: PDFDocument,
         selection: PDFSelection, translation: SelectionTranslation
     ) {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(documentAt: TestPDFFixtures.makeSearchablePDF(
-            named: name, pages: ["Translate this passage"]
+            named: name, pages: [text]
         ))
         let document = try store.pdfDocument(for: session.id)
-        let selection = try XCTUnwrap(document.findString("Translate this passage", withOptions: []).first)
+        let selection = try XCTUnwrap(document.findString(text, withOptions: []).first)
         let translation = try SelectionTranslation(selection: selection, sessionID: session.id, documentStore: store)
         return (store, session, document, selection, translation)
     }

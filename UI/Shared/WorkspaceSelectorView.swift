@@ -29,7 +29,7 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate {
         popUpButton.target = self
         popUpButton.action = #selector(handleSelection)
         popUpButton.identifier = NSUserInterfaceItemIdentifier("workspaceSelector")
-        popUpButton.setAccessibilityLabel("Workspace")
+        popUpButton.setAccessibilityLabel(L10n.text("Workspace", "工作区"))
         popUpButton.translatesAutoresizingMaskIntoConstraints = false
         popUpButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addSubview(popUpButton)
@@ -68,10 +68,10 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate {
             }
         }
         menu.addItem(.separator())
-        let createItem = NSMenuItem(title: "New Workspace…", action: nil, keyEquivalent: "")
+        let createItem = NSMenuItem(title: L10n.text("New Workspace…", "新建工作区…"), action: nil, keyEquivalent: "")
         createItem.representedObject = Choice.create
         menu.addItem(createItem)
-        let renameItem = NSMenuItem(title: "Rename Workspace…", action: nil, keyEquivalent: "")
+        let renameItem = NSMenuItem(title: L10n.text("Rename Workspace…", "重命名工作区…"), action: nil, keyEquivalent: "")
         renameItem.representedObject = Choice.rename
         renameItem.isEnabled = activeID != nil
         menu.addItem(renameItem)
@@ -107,17 +107,17 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate {
         let workspaces = documentStore.workspaces(in: windowID)
         let currentName = workspaces.first { $0.id == workspaceID }?.name
         var nextNumber = workspaces.count + 1
-        while workspaces.contains(where: { $0.name == "Workspace \(nextNumber)" }) {
+        while workspaces.contains(where: { $0.name == L10n.text("Workspace \(nextNumber)", "工作区 \(nextNumber)") }) {
             nextNumber += 1
         }
 
         let alert = NSAlert()
-        alert.messageText = workspaceID == nil ? "New Workspace" : "Rename Workspace"
-        alert.addButton(withTitle: workspaceID == nil ? "Create" : "Rename")
-        alert.addButton(withTitle: "Cancel")
-        let field = NSTextField(string: currentName ?? "Workspace \(nextNumber)")
+        alert.messageText = workspaceID == nil ? L10n.text("New Workspace", "新建工作区") : L10n.text("Rename Workspace", "重命名工作区")
+        alert.addButton(withTitle: workspaceID == nil ? L10n.text("Create", "创建") : L10n.text("Rename", "重命名"))
+        alert.addButton(withTitle: L10n.text("Cancel", "取消"))
+        let field = NSTextField(string: currentName ?? L10n.text("Workspace \(nextNumber)", "工作区 \(nextNumber)"))
         field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        field.setAccessibilityLabel("Workspace name")
+        field.setAccessibilityLabel(L10n.text("Workspace name", "工作区名称"))
         field.delegate = self
         alert.accessoryView = field
         alert.window.initialFirstResponder = field

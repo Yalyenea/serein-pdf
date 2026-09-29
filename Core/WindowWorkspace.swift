@@ -27,9 +27,9 @@ enum SearchScope: String, CaseIterable, Codable, Sendable {
     var placeholder: String {
         switch self {
         case .currentDocument:
-            "Find in document"
+            L10n.text("Find in document", "在当前文档中查找")
         case .allOpen:
-            "Find in all open PDFs"
+            L10n.text("Find in all open PDFs", "在所有打开的 PDF 中查找")
         }
     }
 }

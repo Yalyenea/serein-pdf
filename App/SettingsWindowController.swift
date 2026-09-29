@@ -2,7 +2,7 @@ import AppKit
 
 private enum SettingsWindowMetrics {
     static let contentWidth: CGFloat = 680
-    static let generalContentSize = NSSize(width: contentWidth, height: 732)
+    static let generalContentSize = NSSize(width: contentWidth, height: 766)
     static let libraryContentSize = NSSize(width: contentWidth, height: 484)
     static let shortcutsContentSize = NSSize(width: contentWidth, height: 620)
     static let pageSegmentWidth: CGFloat = 88
@@ -30,7 +30,7 @@ final class SettingsWindowController: NSWindowController {
             defer: false
         )
         window.contentViewController = settingsViewController
-        window.title = "Settings"
+        window.title = L10n.text("Settings", "设置")
         window.toolbarStyle = .unifiedCompact
         window.isReleasedWhenClosed = false
         window.isRestorable = false
@@ -201,13 +201,13 @@ private final class ShortcutCaptureButton: NSButton {
         shortcutView.configure(sequences: shortcut.map { [KeyboardShortcutSequence([$0])] } ?? [])
         shortcutView.isHidden = isCapturing || shortcut == nil
         if isCapturing {
-            title = "Type Shortcut"
+            title = L10n.text("Type Shortcut", "输入快捷键")
             setAccessibilityLabel(title)
             return
         }
-        title = shortcut == nil ? "None" : ""
-        setAccessibilityLabel(shortcut?.displayString ?? "None")
-        toolTip = "Click to change shortcut"
+        title = shortcut == nil ? L10n.text("None", "无") : ""
+        setAccessibilityLabel(shortcut?.displayString ?? L10n.text("None", "无"))
+        toolTip = L10n.text("Click to change shortcut", "点击修改快捷键")
     }
 }
 
@@ -218,27 +218,28 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     private var configuration: AppConfiguration
     private var isApplyingConfiguration = false
 
-    private let pageControl = NSSegmentedControl(labels: ["General", "Library", "Shortcuts"], trackingMode: .selectOne, target: nil, action: nil)
+    private let pageControl = NSSegmentedControl(labels: [L10n.text("General", "通用"), L10n.text("Library", "资料库"), L10n.text("Shortcuts", "快捷键")], trackingMode: .selectOne, target: nil, action: nil)
     private let generalContainer = NSView()
     private let libraryContainer = NSView()
     private let libraryScrollView = NSScrollView()
     private let libraryContentView = FlippedContentView()
     private let libraryFoldersStackView = NSStackView()
     private let libraryHintLabel = NSTextField(
-        wrappingLabelWithString: "Library folders are scanned for PDFs when opening from the library."
+        wrappingLabelWithString: L10n.text("Library folders are scanned for PDFs when opening from the library.", "打开资料库时会扫描这些文件夹中的 PDF。")
     )
-    private let libraryEmptyLabel = NSTextField(labelWithString: "No library folders configured.")
-    private let addLibraryFolderButton = NSButton(title: "Add Folder…", target: nil, action: nil)
+    private let libraryEmptyLabel = NSTextField(labelWithString: L10n.text("No library folders configured.", "尚未添加资料库文件夹。"))
+    private let addLibraryFolderButton = NSButton(title: L10n.text("Add Folder…", "添加文件夹…"), target: nil, action: nil)
     private let shortcutsScrollView = NSScrollView()
     private let shortcutsContentView = FlippedContentView()
     private let shortcutsStackView = NSStackView()
     private let shortcutsHintLabel = NSTextField(
-        wrappingLabelWithString: "Select a shortcut and type a new combination. Built-in ⌘K sequences remain available and changes apply immediately."
+        wrappingLabelWithString: L10n.text("Select a shortcut and type a new combination. Built-in ⌘K sequences remain available and changes apply immediately.", "点击快捷键后输入新组合，修改立即生效。内置 ⌘K 连续快捷键仍然可用。")
     )
     private let shortcutSearchField = NSSearchField(frame: .zero)
-    private let resetAllShortcutsButton = NSButton(title: "Reset All", target: nil, action: nil)
+    private let resetAllShortcutsButton = NSButton(title: L10n.text("Reset All", "全部重置"), target: nil, action: nil)
     private let shortcutsErrorLabel = NSTextField(labelWithString: "")
 
+    private let languagePopUp = NSPopUpButton()
     private let modePopUp = NSPopUpButton()
     private let lightThemePopUp = NSPopUpButton()
     private let darkThemePopUp = NSPopUpButton()
@@ -267,12 +268,12 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     )
     private let readingFocusHeightValueLabel = NSTextField(labelWithString: "96 pt")
     private let fitWidthCheckbox = NSButton(
-        checkboxWithTitle: "Fit width when opening a document",
+        checkboxWithTitle: L10n.text("Fit width when opening a document", "打开文档时适应宽度"),
         target: nil,
         action: nil
     )
     private let showPageCounterCheckbox = NSButton(
-        checkboxWithTitle: "Show at bottom right",
+        checkboxWithTitle: L10n.text("Show at bottom right", "在右下角显示"),
         target: nil,
         action: nil
     )
@@ -280,10 +281,10 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     private let scrollSpeedSlider = NSSlider(value: 1, minValue: 0.5, maxValue: 3, target: nil, action: nil)
     private let scrollSpeedValueLabel = NSTextField(labelWithString: "1.0×")
     private let seamlessPagesCheckbox = NSButton(
-        checkboxWithTitle: "Remove gaps between pages", target: nil, action: nil
+        checkboxWithTitle: L10n.text("Remove gaps between pages", "移除页面间距"), target: nil, action: nil
     )
     private let swapSidebarsCheckbox = NSButton(
-        checkboxWithTitle: "Swap left and right sidebars",
+        checkboxWithTitle: L10n.text("Swap left and right sidebars", "交换左右侧栏"),
         target: nil,
         action: nil
     )
@@ -300,22 +301,22 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     )
     private let floatingOutlineHeightValueLabel = NSTextField(labelWithString: "360 pt")
     private let showRecentInSidebarCheckbox = NSButton(
-        checkboxWithTitle: "Show recent PDFs in left sidebar footer",
+        checkboxWithTitle: L10n.text("Show recent PDFs in left sidebar footer", "在左侧栏底部显示最近的 PDF"),
         target: nil,
         action: nil
     )
     private let autoCheckUpdatesCheckbox = NSButton(
-        checkboxWithTitle: "Check for updates on launch (GitHub Releases)",
+        checkboxWithTitle: L10n.text("Check for updates on launch (GitHub Releases)", "启动时检查更新（GitHub Releases）"),
         target: nil,
         action: nil
     )
     private let codexIntegrationCheckbox = NSButton(
-        checkboxWithTitle: "Enable Codex integration",
+        checkboxWithTitle: L10n.text("Enable Codex integration", "启用 Codex 集成"),
         target: nil,
         action: nil
     )
     private let footnoteLabel = NSTextField(
-        wrappingLabelWithString: "Reading focus defaults apply immediately unless a window has a temporary ⌥F adjustment. Other reader defaults apply to newly opened PDFs. Private GitHub repos need [updates] github_token in config.toml."
+        wrappingLabelWithString: L10n.text("Reading focus defaults apply immediately unless a window has a temporary ⌥F adjustment. Other reader defaults apply to newly opened PDFs. Private GitHub repos need [updates] github_token in config.toml.", "阅读聚焦设置立即生效，使用 ⌥F 临时调整的窗口除外。其他阅读默认设置应用于新打开的 PDF。私有 GitHub 仓库需在 config.toml 的 [updates] 中配置 github_token。")
     )
 
     private var shortcutButtons: [ShortcutCommand: ShortcutCaptureButton] = [:]
@@ -327,7 +328,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     init(configuration: AppConfiguration) {
         self.configuration = configuration
         super.init(nibName: nil, bundle: nil)
-        title = "Settings"
+        title = L10n.text("Settings", "设置")
     }
 
     @available(*, unavailable)
@@ -387,6 +388,17 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        for language in AppLanguage.allCases {
+            let title: String
+            switch language {
+            case .automatic: title = L10n.text("Automatic", "自动")
+            case .english: title = "English"
+            case .chinese: title = "中文"
+            }
+            languagePopUp.addItem(withTitle: title)
+            languagePopUp.lastItem?.representedObject = language.rawValue
+        }
+
         for mode in ReaderDisplayMode.allCases {
             displayModePopUp.addItem(withTitle: mode.menuTitle)
             displayModePopUp.lastItem?.representedObject = mode.rawValue
@@ -436,6 +448,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         isApplyingConfiguration = true
         defer { isApplyingConfiguration = false }
 
+        selectItem(in: languagePopUp, matching: configuration.language.rawValue)
         selectItem(in: modePopUp, matching: configuration.appearance.mode.rawValue)
         selectItem(in: lightThemePopUp, matching: configuration.appearance.lightTheme.rawValue)
         selectItem(in: darkThemePopUp, matching: configuration.appearance.darkTheme.rawValue)
@@ -468,12 +481,12 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         for command in ShortcutCommand.allCases {
             shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
             if let defaultShortcut = AppConfiguration.default.shortcuts.bindings[command] {
-                shortcutDefaultLabels[command]?.stringValue = "Default"
+                shortcutDefaultLabels[command]?.stringValue = L10n.text("Default", "默认")
                 shortcutDefaultViews[command]?.configure(sequences: [KeyboardShortcutSequence([defaultShortcut])])
             } else if command.builtInShortcutSequence != nil {
-                shortcutDefaultLabels[command]?.stringValue = "Direct shortcut optional"
+                shortcutDefaultLabels[command]?.stringValue = L10n.text("Direct shortcut optional", "可选直接快捷键")
             } else {
-                shortcutDefaultLabels[command]?.stringValue = "No default shortcut"
+                shortcutDefaultLabels[command]?.stringValue = L10n.text("No default shortcut", "无默认快捷键")
             }
             shortcutClearButtons[command]?.isEnabled = configuration.shortcuts.bindings[command] != nil
             shortcutRestoreButtons[command]?.isEnabled =
@@ -494,7 +507,9 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     @objc
     private func handleGeneralControlChanged(_ sender: Any?) {
         guard isApplyingConfiguration == false else { return }
-        guard let modeRawValue = modePopUp.selectedItem?.representedObject as? String,
+        guard let languageRawValue = languagePopUp.selectedItem?.representedObject as? String,
+              let language = AppLanguage(rawValue: languageRawValue),
+              let modeRawValue = modePopUp.selectedItem?.representedObject as? String,
               let mode = AppearanceMode(rawValue: modeRawValue),
               let lightThemeRawValue = lightThemePopUp.selectedItem?.representedObject as? String,
               let lightTheme = LightTheme(rawValue: lightThemeRawValue),
@@ -510,6 +525,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         }
 
         var updatedConfiguration = configuration
+        updatedConfiguration.language = language
         updatedConfiguration.appearance.mode = mode
         updatedConfiguration.appearance.lightTheme = lightTheme
         updatedConfiguration.appearance.darkTheme = darkTheme
@@ -588,6 +604,20 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
     }
 
     private func buildGeneralPage() {
+        languagePopUp.translatesAutoresizingMaskIntoConstraints = false
+        languagePopUp.identifier = NSUserInterfaceItemIdentifier("languagePopUp")
+        languagePopUp.controlSize = .small
+        languagePopUp.target = self
+        languagePopUp.action = #selector(handleGeneralControlChanged(_:))
+        let languageHint = NSTextField(labelWithString: L10n.text(
+            "Restart Serein to apply", "重新打开 Serein 后生效"
+        ))
+        languageHint.font = .systemFont(ofSize: 11)
+        languageHint.textColor = .secondaryLabelColor
+        let languageControls = NSStackView(views: [languagePopUp, languageHint])
+        languageControls.spacing = 8
+        languageControls.alignment = .centerY
+
         modePopUp.translatesAutoresizingMaskIntoConstraints = false
         modePopUp.controlSize = .small
         modePopUp.target = self
@@ -659,7 +689,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         scrollSpeedSlider.isContinuous = true
         scrollSpeedSlider.target = self
         scrollSpeedSlider.action = #selector(handleGeneralControlChanged(_:))
-        scrollSpeedSlider.toolTip = "Base scrolling speed in continuous page layouts. Default: 1.0×."
+        scrollSpeedSlider.toolTip = L10n.text("Base scrolling speed in continuous page layouts. Default: 1.0×.", "连续页面布局中的滚动速度，默认为 1.0×。")
         scrollSpeedValueLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         scrollSpeedValueLabel.textColor = .secondaryLabelColor
         scrollSpeedValueLabel.identifier = NSUserInterfaceItemIdentifier("scrollSpeedValueLabel")
@@ -753,35 +783,36 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         )
 
         let appearanceGrid = makeSettingsGrid([
-            [makeRowLabel("Mode"), modePopUp],
-            [makeRowLabel("Light Theme"), makeThemeControls(isDark: false)],
-            [makeRowLabel("Dark Theme"), makeThemeControls(isDark: true)],
+            [makeRowLabel(L10n.text("Language", "语言")), languageControls],
+            [makeRowLabel(L10n.text("Mode", "模式")), modePopUp],
+            [makeRowLabel(L10n.text("Light Theme", "浅色主题")), makeThemeControls(isDark: false)],
+            [makeRowLabel(L10n.text("Dark Theme", "深色主题")), makeThemeControls(isDark: true)],
         ])
         let readingGrid = makeSettingsGrid([
-            [makeRowLabel("Default Display"), displayModePopUp],
-            [makeRowLabel("Open Behavior"), fitWidthCheckbox],
-            [makeRowLabel("Page Counter"), showPageCounterCheckbox],
-            [makeRowLabel("Seamless Pages"), seamlessPagesCheckbox],
-            [makeRowLabel("Scroll Speed"), makeReadingFocusSliderStack(
+            [makeRowLabel(L10n.text("Default Display", "默认显示")), displayModePopUp],
+            [makeRowLabel(L10n.text("Open Behavior", "打开文档")), fitWidthCheckbox],
+            [makeRowLabel(L10n.text("Page Counter", "页码")), showPageCounterCheckbox],
+            [makeRowLabel(L10n.text("Seamless Pages", "无缝页面")), seamlessPagesCheckbox],
+            [makeRowLabel(L10n.text("Scroll Speed", "滚动速度")), makeReadingFocusSliderStack(
                 leadingControl: nil, slider: scrollSpeedSlider, valueLabel: scrollSpeedValueLabel
             )],
-            [makeRowLabel("Focus Width"), readingFocusWidthStack],
-            [makeRowLabel("Focus Height"), readingFocusHeightStack],
-            [makeRowLabel("Annotation Auto-Save"), autoSavePopUp],
+            [makeRowLabel(L10n.text("Focus Width", "聚焦宽度")), readingFocusWidthStack],
+            [makeRowLabel(L10n.text("Focus Height", "聚焦高度")), readingFocusHeightStack],
+            [makeRowLabel(L10n.text("Annotation Auto-Save", "自动保存批注")), autoSavePopUp],
         ])
         let layoutGrid = makeSettingsGrid([
-            [makeRowLabel("Sidebar Widths"), sidebarDefaultsStack],
-            [makeRowLabel("Floating Outline Max Height"), floatingOutlineHeightStack],
-            [makeRowLabel("Layout"), layoutOptionsStack],
+            [makeRowLabel(L10n.text("Sidebar Widths", "侧栏宽度")), sidebarDefaultsStack],
+            [makeRowLabel(L10n.text("Floating Outline Height", "浮动目录最大高度")), floatingOutlineHeightStack],
+            [makeRowLabel(L10n.text("Layout", "布局")), layoutOptionsStack],
         ])
         let integrationsGrid = makeSettingsGrid([
             [makeRowLabel("Codex"), codexIntegrationCheckbox],
         ])
         let sectionsStack = NSStackView(views: [
-            makeSettingsSection(title: "Appearance", content: appearanceGrid),
-            makeSettingsSection(title: "Reading", content: readingGrid),
-            makeSettingsSection(title: "Layout", content: layoutGrid),
-            makeSettingsSection(title: "Integrations", content: integrationsGrid),
+            makeSettingsSection(title: L10n.text("Appearance", "外观"), content: appearanceGrid),
+            makeSettingsSection(title: L10n.text("Reading", "阅读"), content: readingGrid),
+            makeSettingsSection(title: L10n.text("Layout", "布局"), content: layoutGrid),
+            makeSettingsSection(title: L10n.text("Integrations", "集成"), content: integrationsGrid),
         ])
         sectionsStack.orientation = .vertical
         sectionsStack.alignment = .leading
@@ -801,6 +832,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             sectionsStack.leadingAnchor.constraint(equalTo: generalContainer.leadingAnchor, constant: 32),
             sectionsStack.trailingAnchor.constraint(lessThanOrEqualTo: generalContainer.trailingAnchor, constant: -32),
             sectionsStack.topAnchor.constraint(equalTo: generalContainer.topAnchor, constant: 16),
+            languagePopUp.widthAnchor.constraint(equalToConstant: 140),
             modePopUp.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
             lightThemePopUp.widthAnchor.constraint(equalToConstant: 156),
             darkThemePopUp.widthAnchor.constraint(equalToConstant: 156),
@@ -819,13 +851,19 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         let page = isDark ? darkPageBackground : lightPageBackground
         let window = isDark ? darkWindowBackground : lightWindowBackground
         let reset = isDark ? resetDarkBackground : resetLightBackground
-        for (well, name, label) in [(page, "Page", "PDF page"), (window, "Window", "Window and sidebars")] {
+        for (well, name, label) in [
+            (page, "Page", L10n.text("PDF page", "PDF 页面")),
+            (window, "Window", L10n.text("Window and sidebars", "窗口与侧栏")),
+        ] {
             well.identifier = NSUserInterfaceItemIdentifier("\(prefix)\(name)Background")
             well.colorWellStyle = .minimal
             well.supportsAlpha = false
             well.target = self
             well.action = #selector(handleBackgroundChanged(_:))
-            well.setAccessibilityLabel("\(isDark ? "Dark" : "Light") \(label) background")
+            well.setAccessibilityLabel(L10n.text(
+                "\(isDark ? "Dark" : "Light") \(label) background",
+                "\(isDark ? "深色" : "浅色")\(label)背景"
+            ))
             well.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
                 well.widthAnchor.constraint(equalToConstant: 28),
@@ -833,12 +871,12 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             ])
         }
         reset.identifier = NSUserInterfaceItemIdentifier(isDark ? "resetDarkBackground" : "resetLightBackground")
-        reset.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Reset backgrounds")
+        reset.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: L10n.text("Reset backgrounds", "重置背景"))
         reset.isBordered = false
         reset.controlSize = .small
         reset.target = self
         reset.action = #selector(handleResetBackground(_:))
-        reset.toolTip = "Use the theme’s page and window backgrounds"
+        reset.toolTip = L10n.text("Use the theme’s page and window backgrounds", "使用主题默认的页面与窗口背景")
         reset.widthAnchor.constraint(equalToConstant: 22).isActive = true
 
         func label(_ title: String) -> NSTextField {
@@ -849,7 +887,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         }
         let stack = NSStackView(views: [
             isDark ? darkThemePopUp : lightThemePopUp,
-            label("Page"), page, label("Window"), window, reset,
+            label(L10n.text("Page", "页面")), page, label(L10n.text("Window", "窗口")), window, reset,
         ])
         stack.spacing = 6
         stack.alignment = .centerY
@@ -869,8 +907,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
             let resolved = NSAppearance(named: name)!
             page.color = descriptor.color(for: .pageBackground, appearance: resolved)
             window.color = descriptor.color(for: .readerBackdrop, appearance: resolved)
-            page.toolTip = "PDF page · \(ThemeHexColor(color: page.color)!.hexString)"
-            window.toolTip = "Window and sidebars · \(ThemeHexColor(color: window.color)!.hexString)"
+            page.toolTip = L10n.text("PDF page", "PDF 页面") + " · \(ThemeHexColor(color: page.color)!.hexString)"
+            window.toolTip = L10n.text("Window and sidebars", "窗口与侧栏") + " · \(ThemeHexColor(color: window.color)!.hexString)"
         }
         resetLightBackground.isEnabled = appearance.lightBackground != ThemeBackgroundOverrides()
         resetDarkBackground.isEnabled = appearance.darkBackground != ThemeBackgroundOverrides()
@@ -945,8 +983,8 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
     private func makeSidebarDefaultsStack() -> NSStackView {
         let stack = NSStackView(views: [
-            makeSidebarWidthRow(title: "Left", field: leftSidebarWidthField, stepper: leftSidebarWidthStepper),
-            makeSidebarWidthRow(title: "Right", field: rightSidebarWidthField, stepper: rightSidebarWidthStepper),
+            makeSidebarWidthRow(title: L10n.text("Left", "左侧"), field: leftSidebarWidthField, stepper: leftSidebarWidthStepper),
+            makeSidebarWidthRow(title: L10n.text("Right", "右侧"), field: rightSidebarWidthField, stepper: rightSidebarWidthStepper),
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -1185,7 +1223,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
         shortcutSearchField.translatesAutoresizingMaskIntoConstraints = false
         shortcutSearchField.identifier = NSUserInterfaceItemIdentifier("shortcutSearchField")
-        shortcutSearchField.placeholderString = "Filter actions"
+        shortcutSearchField.placeholderString = L10n.text("Filter actions", "搜索操作")
         shortcutSearchField.controlSize = .small
         shortcutSearchField.delegate = self
 
@@ -1325,7 +1363,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         pathLabel.lineBreakMode = .byTruncatingMiddle
         pathLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let removeButton = NSButton(title: "Remove", target: self, action: #selector(removeLibraryFolder(_:)))
+        let removeButton = NSButton(title: L10n.text("Remove", "移除"), target: self, action: #selector(removeLibraryFolder(_:)))
         removeButton.controlSize = .small
         removeButton.bezelStyle = .rounded
         removeButton.identifier = NSUserInterfaceItemIdentifier(folderURL.path)
@@ -1355,7 +1393,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
-        panel.message = "Choose folders whose PDFs should appear in the library."
+        panel.message = L10n.text("Choose folders whose PDFs should appear in the library.", "选择需要在资料库中显示 PDF 的文件夹。")
 
         guard panel.runModal() == .OK else { return }
 
@@ -1413,7 +1451,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
         let metadataViews: [NSView]
         if let builtInSequence = command.builtInShortcutSequence {
-            let builtInLabel = NSTextField(labelWithString: "Built-in")
+            let builtInLabel = NSTextField(labelWithString: L10n.text("Built-in", "内置"))
             builtInLabel.font = .systemFont(ofSize: 10.5)
             builtInLabel.textColor = .secondaryLabelColor
             let builtInView = ShortcutSequenceView()
@@ -1431,24 +1469,24 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         metadataStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let clearButton = NSButton(
-            image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Clear Shortcut")!,
+            image: NSImage(systemSymbolName: "xmark", accessibilityDescription: L10n.text("Clear Shortcut", "清除快捷键"))!,
             target: self,
             action: #selector(clearShortcut(_:))
         )
         clearButton.controlSize = .small
         clearButton.bezelStyle = .inline
-        clearButton.toolTip = "Clear Shortcut"
+        clearButton.toolTip = L10n.text("Clear Shortcut", "清除快捷键")
         clearButton.translatesAutoresizingMaskIntoConstraints = false
         clearButton.identifier = NSUserInterfaceItemIdentifier(command.rawValue)
 
         let restoreButton = NSButton(
-            image: NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Restore Default")!,
+            image: NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: L10n.text("Restore Default", "恢复默认"))!,
             target: self,
             action: #selector(restoreShortcutDefault(_:))
         )
         restoreButton.controlSize = .small
         restoreButton.bezelStyle = .inline
-        restoreButton.toolTip = "Restore Default"
+        restoreButton.toolTip = L10n.text("Restore Default", "恢复默认")
         restoreButton.translatesAutoresizingMaskIntoConstraints = false
         restoreButton.identifier = NSUserInterfaceItemIdentifier(command.rawValue)
 
@@ -1523,7 +1561,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         guard isApplyingConfiguration == false else { return }
 
         if shortcut == ShortcutCommand.commandPaletteShortcut {
-            shortcutsErrorLabel.stringValue = "⌘K is reserved for Command Palette."
+            shortcutsErrorLabel.stringValue = L10n.text("⌘K is reserved for Command Palette.", "⌘K 已保留用于命令面板。")
             NSSound.beep()
             shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
             return
@@ -1531,7 +1569,10 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
 
         if let shortcut,
            let conflict = configuration.shortcuts.bindings.first(where: { $0.key != command && $0.value == shortcut }) {
-            shortcutsErrorLabel.stringValue = "“\(shortcut.displayString)” is already used by “\(conflict.key.menuTitle)”."
+            shortcutsErrorLabel.stringValue = L10n.text(
+                "“\(shortcut.displayString)” is already used by “\(conflict.key.menuTitle)”.",
+                "“\(shortcut.displayString)” 已用于“\(conflict.key.menuTitle)”。"
+            )
             NSSound.beep()
             shortcutButtons[command]?.shortcut = configuration.shortcuts.bindings[command]
             return

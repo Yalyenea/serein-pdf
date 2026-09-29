@@ -14,7 +14,13 @@ enum AnnotationMarkupType: String, CaseIterable, Sendable {
         }
     }
 
-    var modeTitle: String { rawValue }
+    var modeTitle: String {
+        switch self {
+        case .highlight: L10n.text("Highlight", "高亮")
+        case .underline: L10n.text("Underline", "下划线")
+        case .strikethrough: L10n.text("Strikethrough", "删除线")
+        }
+    }
 
     func matches(_ annotation: PDFAnnotation) -> Bool {
         annotation.type == (self == .strikethrough ? "StrikeOut" : rawValue)
@@ -317,7 +323,7 @@ enum HighlightService {
         return DocumentHighlightGroup(
             groupID: groupID,
             pageIndex: firstRecord.pageIndex,
-            snippet: snippet.isEmpty ? "Untitled Highlight" : snippet,
+            snippet: snippet.isEmpty ? L10n.text("Untitled Highlight", "无标题高亮") : snippet,
             color: HighlightColor.closest(to: firstRecord.annotation.color),
             createdAt: records.compactMap(\.annotation.modificationDate).min(),
             comment: comment,

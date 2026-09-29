@@ -73,9 +73,9 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
     private weak var parentWindow: NSWindow?
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
-    private let titleLabel = NSTextField(labelWithString: "Open Tabs")
+    private let titleLabel = NSTextField(labelWithString: L10n.text("Open Tabs", "已打开标签页"))
     private let footerLabel = NSTextField(labelWithString: "")
-    private let emptyLabel = NSTextField(labelWithString: "No open PDFs.")
+    private let emptyLabel = NSTextField(labelWithString: L10n.text("No open PDFs.", "没有已打开的 PDF。"))
     private var rightSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option])
     private var downSplitShortcut: KeyboardShortcut? = KeyboardShortcut(key: "return", modifiers: [.option, .shift])
 
@@ -89,7 +89,7 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: 160),
             styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false
         )
-        panel.title = "Open Tabs"
+        panel.title = L10n.text("Open Tabs", "已打开标签页")
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
@@ -234,11 +234,11 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
 
     private func updateFooter() {
         let selectionHint = activationMode == .explicitSelection
-            ? "↑ ↓  Select    ↩  Open"
-            : "Tab / ↑ ↓  Select    Release Control to open"
-        let splitHints = [(rightSplitShortcut, "Split right"), (downSplitShortcut, "Split below")]
+            ? L10n.text("↑ ↓  Select    ↩  Open", "↑ ↓  选择    ↩  打开")
+            : L10n.text("Tab / ↑ ↓  Select    Release Control to open", "Tab / ↑ ↓  选择    松开 Control 打开")
+        let splitHints = [(rightSplitShortcut, L10n.text("Split right", "向右分屏")), (downSplitShortcut, L10n.text("Split below", "向下分屏"))]
             .compactMap { shortcut, title in shortcut.map { "\($0.displayString)  \(title)" } }
-        footerLabel.stringValue = ([selectionHint] + splitHints + ["Esc  Cancel"]).joined(separator: "    ")
+        footerLabel.stringValue = ([selectionHint] + splitHints + [L10n.text("Esc  Cancel", "Esc  取消")]).joined(separator: "    ")
     }
 
     private func activateIfControlReleased(_ flags: NSEvent.ModifierFlags) {
