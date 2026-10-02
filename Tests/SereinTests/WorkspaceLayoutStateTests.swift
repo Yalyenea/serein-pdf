@@ -5,6 +5,59 @@ import XCTest
 
 @MainActor
 final class WorkspaceLayoutStateTests: XCTestCase {
+    func testWorkspaceNavigationIncludesEmptyWorkspacesAndPreservesSavedOrderAndReadingState() throws {
+        let suiteName = "SereinTests.WorkspaceNavigation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = makePersistedStore(defaults: defaults)
+        let windowID = store.defaultWindowID
+        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        XCTAssertFalse(store.activateAdjacentWorkspace(direction: 1, in: windowID))
+        XCTAssertFalse(store.activateWorkspace(at: 0, in: windowID))
+        _ = try store.open(documentAt: makePDF("workspace-navigation", pageCount: 8))
+        let clonePane = try XCTUnwrap(store.splitPane(from: .primary, layout: .sideBySide, in: windowID))
+        let cloneID = try XCTUnwrap(store.displayedSessionID(for: clonePane, in: windowID))
+        let position = ReadingPosition(pageIndex: 5, point: CGPoint(x: 17, y: 103))
+        setReadingState(position, scale: 1.8, sessionID: cloneID, in: store)
+        let layout = try XCTUnwrap(store.readerLayout(in: windowID))
+        var orderedIDs = [firstID]
+        for index in 2...9 {
+            orderedIDs.append(try XCTUnwrap(store.createWorkspace(name: "Space \(index)", in: windowID)))
+        }
+        let otherWindowID = store.createWindow()
+        let otherActiveID = store.activeWorkspaceID(in: otherWindowID)
+
+        XCTAssertTrue(store.activateAdjacentWorkspace(direction: 1, in: windowID))
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), firstID)
+        XCTAssertEqual(store.readerLayout(in: windowID), layout)
+        XCTAssertEqual(store.focusedPane(in: windowID), clonePane)
+        XCTAssertEqual(store.activeSession(in: windowID)?.lastReadPosition, position)
+        XCTAssertEqual(store.activeSession(in: windowID)?.zoomScale, 1.8)
+        XCTAssertTrue(store.activateAdjacentWorkspace(direction: -1, in: windowID))
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), orderedIDs[8])
+        XCTAssertTrue(store.sessions(in: windowID).isEmpty)
+        XCTAssertFalse(store.activateAdjacentWorkspace(direction: 0, in: windowID))
+        XCTAssertFalse(store.activateAdjacentWorkspace(direction: 2, in: windowID))
+        XCTAssertFalse(store.activateWorkspace(at: 10, in: windowID))
+        for index in 1...8 {
+            XCTAssertTrue(store.activateWorkspace(at: index, in: windowID))
+            XCTAssertEqual(store.activeWorkspaceID(in: windowID), orderedIDs[index - 1])
+        }
+        XCTAssertFalse(store.activateWorkspace(at: 8, in: windowID))
+        XCTAssertEqual(store.activeWorkspaceID(in: otherWindowID), otherActiveID)
+        store.flushPersistence()
+
+        let restored = makePersistedStore(defaults: defaults)
+        try restored.restorePersistedState()
+        XCTAssertEqual(restored.workspaces(in: windowID).map(\.id), orderedIDs)
+        XCTAssertEqual(restored.activeWorkspaceID(in: windowID), orderedIDs[7])
+        XCTAssertTrue(restored.activateWorkspace(at: 1, in: windowID))
+        XCTAssertEqual(restored.readerLayout(in: windowID), layout)
+        XCTAssertEqual(restored.focusedPane(in: windowID), clonePane)
+        XCTAssertEqual(restored.activeSession(in: windowID)?.lastReadPosition, position)
+        XCTAssertEqual(restored.activeSession(in: windowID)?.zoomScale, 1.8)
+    }
+
     func testClosedWindowsKeepCloseOrderAcrossRestartAndReclosing() throws {
         let suiteName = "SereinTests.WindowCloseOrder.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -106,6 +159,58 @@ final class WorkspaceLayoutStateTests: XCTestCase {
         XCTAssertEqual(store.activeSessionID(in: windowID), third.id)
         XCTAssertEqual(store.workspaces(in: windowID).first { $0.id == researchID }?.name, "References")
         XCTAssertEqual(store.workspaces(in: windowID).count, 2)
+    }
+
+    func testRangeSelectionAnchorRemainsIndependentAcrossWorkspaces() throws {
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let originalID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let first = try (0..<4).map { try store.open(documentAt: makePDF("workspace-anchor-first-\($0)")) }
+        store.activateTab(sessionID: first[0].id, in: windowID)
+        store.selectSessionRange(through: first[1].id, in: windowID)
+        let otherID = try XCTUnwrap(store.createWorkspace(name: "Other", in: windowID))
+        let second = try (0..<4).map { try store.open(documentAt: makePDF("workspace-anchor-second-\($0)")) }
+        store.activateTab(sessionID: second[3].id, in: windowID)
+        store.selectSessionRange(through: second[2].id, in: windowID)
+
+        store.activateWorkspace(originalID, in: windowID)
+        store.selectSessionRange(through: first[3].id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), first.map(\.id))
+        store.activateWorkspace(otherID, in: windowID)
+        store.selectSessionRange(through: second[0].id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), second.map(\.id))
+    }
+
+    func testMovingComparisonToWorkspacePreservesItsReadingState() throws {
+        for moveExplicitClone in [false, true] {
+            let store = makeIsolatedDocumentStore()
+            let windowID = store.defaultWindowID
+            let originalID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+            let source = try store.open(documentAt: makePDF("move-workspace-comparison-\(moveExplicitClone)", pageCount: 8))
+            let clonePane = try XCTUnwrap(store.splitPane(from: .primary, layout: .sideBySide, in: windowID))
+            let cloneID = try XCTUnwrap(store.displayedSessionID(for: clonePane, in: windowID))
+            let position = ReadingPosition(pageIndex: 5, point: CGPoint(x: 17, y: 81))
+            setReadingState(position, scale: 2.2, sessionID: cloneID, in: store)
+            store.setHorizontalPanLocked(true, for: cloneID)
+            let destinationID = try XCTUnwrap(store.createWorkspace(name: "Destination", in: windowID))
+            let destinationPDF = try store.open(documentAt: makePDF("move-workspace-existing-\(moveExplicitClone)"))
+            let destinationLayout = try XCTUnwrap(store.readerLayout(in: windowID))
+            store.activateWorkspace(originalID, in: windowID)
+
+            XCTAssertTrue(store.moveSession(moveExplicitClone ? cloneID : source.id, toWorkspace: destinationID, in: windowID))
+            XCTAssertTrue(store.sessions(in: windowID).isEmpty)
+            XCTAssertNil(store.session(for: cloneID))
+            store.activateWorkspace(destinationID, in: windowID)
+            XCTAssertEqual(store.sessions(in: windowID).map(\.id), [destinationPDF.id, source.id])
+            XCTAssertEqual(store.readerLayout(in: windowID), destinationLayout)
+            store.activateTab(sessionID: source.id, in: windowID)
+            let moved = try XCTUnwrap(store.activeSession(in: windowID))
+            XCTAssertEqual(moved.lastReadPosition, position)
+            XCTAssertEqual(moved.currentPageIndex, 5)
+            XCTAssertEqual(moved.zoomScale, 2.2)
+            XCTAssertEqual(moved.scaleMode, .manual)
+            XCTAssertTrue(moved.isHorizontalPanLocked)
+        }
     }
 
     func testSamePDFAcrossWorkspacesHasIndependentReadingStateAndSharedAnnotations() throws {

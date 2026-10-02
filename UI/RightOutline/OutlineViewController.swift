@@ -320,9 +320,9 @@ final class OutlineRowView: NSControl {
     func updateAppearance(attributedTitle: NSAttributedString, isExpanded: Bool, isSelected: Bool) {
         textField.attributedStringValue = attributedTitle
         isRowExpanded = isExpanded
-        disclosureButton.contentTintColor = NightModeStyle.tertiaryTextColor
         updateDisclosureAppearance()
-        setSelected(isSelected)
+        isRowSelected = isSelected
+        refreshChromeColors()
     }
 
     func applyManualFrame(_ frame: NSRect) {
@@ -345,6 +345,11 @@ final class OutlineRowView: NSControl {
         textField.preferredMaxLayoutWidth = Self.textWidth(for: bounds.width, level: level)
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshChromeColors()
+    }
+
     private func activate() {
         onActivate(node)
     }
@@ -355,9 +360,18 @@ final class OutlineRowView: NSControl {
     }
 
     private func updateSelectionAppearance() {
-        layer?.backgroundColor = isRowSelected
-            ? NightModeStyle.selectedChromeBackgroundColor.cgColor
-            : NSColor.clear.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = isRowSelected
+                ? NightModeStyle.selectedChromeBackgroundColor.cgColor
+                : NSColor.clear.cgColor
+        }
+    }
+
+    private func refreshChromeColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            disclosureButton.contentTintColor = NightModeStyle.tertiaryTextColor
+        }
+        updateSelectionAppearance()
     }
 
     private func updateDisclosureAppearance() {

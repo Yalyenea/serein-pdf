@@ -139,11 +139,27 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     private func configureTitlebarTabsItemIfNeeded() {
+        updateTitlebarTabsAvailableWidth()
         let tabsView = splitViewController.titlebarTabsController.view
         titlebarTabsItem.label = ""
         titlebarTabsItem.paletteLabel = ""
         titlebarTabsItem.view = tabsView
+        titlebarTabsItem.isBordered = false
         titlebarTabsItem.visibilityPriority = .high
+    }
+
+    private func updateTitlebarTabsAvailableWidth() {
+        guard let window else { return }
+        let buttonEdge = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]
+            .compactMap { window.standardWindowButton($0) }
+            .filter { !$0.isHidden }
+            .map { $0.convert($0.bounds, to: nil).maxX }
+            .max() ?? 0
+        let leadingInset = max(buttonEdge + 16, 16)
+        let trailingInset: CGFloat = 20
+        splitViewController.titlebarTabsController.setAvailableWidth(
+            max(window.frame.width - leadingInset - trailingInset, 1)
+        )
     }
 
     private func applyWindowChromeState() {
@@ -205,7 +221,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             if itemIndex == nil {
                 toolbar.insertItem(withItemIdentifier: .titlebarTabs, at: 0)
             }
-            toolbar.centeredItemIdentifier = .titlebarTabs
+            toolbar.centeredItemIdentifier = nil
             return
         }
 
@@ -500,14 +516,20 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
+        updateTitlebarTabsAvailableWidth()
         guard let snapshot = demoModeSnapshot else { return }
         demoModeSnapshot = nil
         restoreDemoMode(from: snapshot)
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
+        updateTitlebarTabsAvailableWidth()
         guard demoModeSnapshot != nil else { return }
         scheduleDemoFitToPage()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        updateTitlebarTabsAvailableWidth()
     }
 
     func installPlainShortcutHandler(_ handler: @escaping (NSEvent, NSWindow) -> Bool) {

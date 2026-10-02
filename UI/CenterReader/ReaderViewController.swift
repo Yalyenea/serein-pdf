@@ -1659,6 +1659,7 @@ final class ReaderViewController: NSViewController {
         point: NSPoint,
         storePosition: ReadingPosition
     ) {
+        chromeResizeState = nil
         flushPendingReadingPositionWriteback()
         let destination = PDFDestination(page: page, at: point)
         // Suppress PDFViewPageChanged during jump: at go(to:) time the clipView
@@ -3063,17 +3064,16 @@ final class ReaderViewController: NSViewController {
     }
 
     func go(to selection: PDFSelection, recordHistory: Bool = true, setSelection: Bool = true) {
-        let targetPosition: ReadingPosition?
-        if let page = selection.pages.first, let document = pdfView.document {
-            let bounds = selection.bounds(for: page)
-            targetPosition = ReadingPosition(
-                pageIndex: document.index(for: page),
-                point: NSPoint(x: bounds.minX, y: bounds.maxY)
-            )
-        } else {
-            targetPosition = nil
-        }
-        if let targetPosition, displayedReadingPosition == targetPosition {
+        guard let page = selection.pages.first,
+              let document = pdfView.document else { return }
+        let pageIndex = document.index(for: page)
+        guard pageIndex >= 0, pageIndex < document.pageCount else { return }
+        let bounds = selection.bounds(for: page)
+        let targetPosition = ReadingPosition(
+            pageIndex: pageIndex,
+            point: NSPoint(x: bounds.minX, y: bounds.maxY)
+        )
+        if displayedReadingPosition == targetPosition {
             if setSelection {
                 pdfView.setCurrentSelection(selection, animate: false)
             } else {
@@ -3084,31 +3084,14 @@ final class ReaderViewController: NSViewController {
         if recordHistory {
             recordNavigationHistoryBeforeJump()
         }
-        isApplyingStoreState = true
         if setSelection {
-            pdfView.setCurrentSelection(selection, animate: true)
+            pdfView.setCurrentSelection(selection, animate: false)
         } else {
             pdfView.currentSelection = nil
         }
-        pdfView.go(to: selection)
+        applyProgrammaticDestination(page: page, point: targetPosition.point, storePosition: targetPosition)
         if setSelection == false {
             pdfView.currentSelection = nil
-        }
-        isApplyingStoreState = false
-        if let position = targetPosition {
-            displayedReadingPosition = position
-            if let session = targetSession(), session.id == displayedSessionID {
-                documentStore.updateReadingPosition(
-                    position,
-                    scaleFactor: pdfView.scaleFactor,
-                    for: session.id
-                )
-            }
-        } else if let session = targetSession(),
-                  session.id == displayedSessionID,
-                  let position = currentReadingPosition() {
-            documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
-            displayedReadingPosition = position
         }
     }
 

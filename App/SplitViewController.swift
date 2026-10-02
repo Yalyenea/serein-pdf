@@ -673,7 +673,7 @@ final class SplitViewController: NSSplitViewController {
         if documentStore.isOutlineSidebarVisible(in: windowID),
            documentStore.rightSidebarMode(in: windowID) == .outline {
             rightSidebarViewController.outlineViewController.finishQuickNavigation()
-            documentStore.setRightSidebarVisible(false, in: windowID)
+            documentStore.setOutlinePaneVisible(false, in: windowID)
         } else {
             readerWorkspaceViewController.showQuickOutline()
         }
@@ -741,7 +741,7 @@ final class SplitViewController: NSSplitViewController {
     }
 
     private func shouldSuppressAnnotationPreview(for groupID: String) -> Bool {
-        guard documentStore.isRightSidebarVisible(in: windowID),
+        guard documentStore.isOutlinePaneVisible(in: windowID),
               documentStore.rightSidebarMode(in: windowID) == .annotations else { return false }
         return rightSidebarViewController.selectedAnnotationGroupID == groupID
     }

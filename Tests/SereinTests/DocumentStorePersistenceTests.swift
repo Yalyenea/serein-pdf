@@ -3,6 +3,21 @@ import XCTest
 @testable import Serein
 
 final class DocumentStorePersistenceTests: XCTestCase {
+    func testEmptyOutlineVisibilityChoiceRoundTripsAndOldWindowsDecodeWithoutIt() throws {
+        var window = WindowWorkspace()
+        window.outlineVisibilityWhileEmpty = true
+        let encoded = try JSONEncoder().encode(window)
+        XCTAssertEqual(try JSONDecoder().decode(WindowWorkspace.self, from: encoded), window)
+
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "outlineVisibilityWhileEmpty")
+        let priorFormat = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(WindowWorkspace.self, from: priorFormat)
+        XCTAssertNil(decoded.outlineVisibilityWhileEmpty)
+        XCTAssertEqual(decoded.workspaces, window.workspaces)
+        XCTAssertEqual(decoded.isRightSidebarVisible, window.isRightSidebarVisible)
+    }
+
     func testExplicitEmptyWindowsRoundTripsWithoutCreatingLegacyWindow() throws {
         let state = PersistedDocumentStoreState(sessions: [], windows: [])
         let decoded = try JSONDecoder().decode(

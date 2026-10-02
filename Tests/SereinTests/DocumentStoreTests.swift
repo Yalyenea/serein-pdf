@@ -295,6 +295,79 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.continuousReadingSessionIDs(in: store.defaultWindowID), [sessions[0].id, sessions[2].id])
     }
 
+    func testRangeSelectionKeepsInitialAnchorWhileExtendingAndReversing() throws {
+        let store = makeStore()
+        let windowID = store.defaultWindowID
+        let urls = try (0..<6).map { try makeTemporaryPDF(named: "selection-anchor-\($0)") }
+        let tabs = try store.open(documentsAt: urls, in: windowID)
+
+        store.activateTab(sessionID: tabs[0].id, in: windowID)
+        store.selectSessionRange(through: tabs[3].id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), tabs[0...3].map(\.id))
+        store.selectSessionRange(through: tabs[5].id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), tabs.map(\.id))
+        store.selectSessionRange(through: tabs[1].id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), tabs[0...1].map(\.id))
+
+        store.activateTab(sessionID: tabs[3].id, in: windowID)
+        store.selectSessionRange(through: tabs[1].id, in: windowID)
+        store.selectSessionRange(through: tabs[5].id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), tabs[3...5].map(\.id))
+        store.close(sessionID: tabs[3].id, from: windowID)
+        store.selectSessionRange(through: tabs[4].id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), [tabs[4].id])
+    }
+
+    func testContinuousReadingSkipsBlankTabsAndRequiresTwoPDFs() throws {
+        let store = makeStore()
+        let windowID = store.defaultWindowID
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "continuous-blank-first"))
+        let blank = store.newBlankTab(in: windowID)
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "continuous-blank-second"))
+
+        store.selectSessions([first.id, blank.id], in: windowID)
+        XCTAssertFalse(store.canStartContinuousReadingFromSelection(in: windowID))
+        XCTAssertFalse(store.startContinuousReadingFromSelectedSessions(in: windowID))
+        store.selectSessions([second.id, blank.id, first.id], in: windowID)
+        XCTAssertTrue(store.canStartContinuousReadingFromSelection(in: windowID))
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: windowID))
+        XCTAssertEqual(store.continuousReadingSessionIDs(in: windowID), [first.id, second.id])
+        XCTAssertEqual(store.selectedSessionIDs(in: windowID), [first.id, second.id])
+        XCTAssertEqual(store.continuousReadingTarget(from: first.id, direction: 1, in: windowID)?.sessionID, second.id)
+    }
+
+    func testStartingContinuousReadingPreservesFocusedComparisonPane() throws {
+        let store = makeStore()
+        let windowID = store.defaultWindowID
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "continuous-clone-first"))
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "continuous-clone-second"))
+        store.activateTab(sessionID: first.id, in: windowID)
+        let comparisonPane = try XCTUnwrap(store.splitPane(from: .primary, layout: .sideBySide, in: windowID))
+        let comparisonID = try XCTUnwrap(store.activeSessionID(in: windowID))
+        store.selectSessions([first.id, second.id], in: windowID)
+
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: windowID))
+        XCTAssertEqual(store.activeSessionID(in: windowID), comparisonID)
+        XCTAssertEqual(store.focusedPane(in: windowID), comparisonPane)
+    }
+
+    func testContinuousReadingReplacesBlankSelectionAnchorWithSelectedPDF() throws {
+        let store = makeStore()
+        let windowID = store.defaultWindowID
+        let first = try store.open(documentAt: makeTemporaryPDF(named: "continuous-anchor-first"))
+        let blank = store.newBlankTab(in: windowID)
+        let second = try store.open(documentAt: makeTemporaryPDF(named: "continuous-anchor-second"))
+        let third = try store.open(documentAt: makeTemporaryPDF(named: "continuous-anchor-third"))
+        store.activateTab(sessionID: first.id, in: windowID)
+        store.toggleSessionSelection(second.id, in: windowID)
+        store.toggleSessionSelection(blank.id, in: windowID)
+
+        XCTAssertTrue(store.startContinuousReadingFromSelectedSessions(in: windowID))
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), [first.id, second.id])
+        store.selectSessionRange(through: third.id, in: windowID)
+        XCTAssertEqual(store.selectedSessionIDsInWindowOrder(in: windowID), [first.id, blank.id, second.id, third.id])
+    }
+
     func testSelectedSessionIDsExposeWindowOrderForBatchTabCommands() throws {
         let store = makeStore()
         let sessions = try store.open(
@@ -772,6 +845,35 @@ final class DocumentStoreTests: XCTestCase {
 
         _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-policy-user"))
         XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
+    }
+
+    func testExplicitEmptyOutlineVisibilitySurvivesWorkspaceChangesAndRestore() throws {
+        for swapped in [false, true] {
+            for visible in [false, true] {
+                let persistence = InMemoryDocumentStorePersistence()
+                var configuration = AppConfiguration.default
+                configuration.layout.sidebarsSwapped = swapped
+                let store = makeStore(persistence: persistence, appConfiguration: configuration)
+                let windowID = store.defaultWindowID
+                let originalWorkspaceID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+                store.setOutlinePaneVisible(visible, in: windowID)
+                _ = try XCTUnwrap(store.createWorkspace(name: "Empty", in: windowID))
+                XCTAssertEqual(store.isOutlinePaneVisible(in: windowID), visible)
+                store.activateWorkspace(originalWorkspaceID, in: windowID)
+                XCTAssertEqual(store.isOutlinePaneVisible(in: windowID), visible)
+                store.flushPersistence()
+
+                let restored = makeStore(persistence: persistence, appConfiguration: configuration)
+                try restored.restorePersistedState()
+                XCTAssertEqual(restored.isOutlinePaneVisible(in: windowID), visible)
+                _ = try XCTUnwrap(restored.createWorkspace(name: "Another Empty", in: windowID))
+                XCTAssertEqual(restored.isOutlinePaneVisible(in: windowID), visible)
+                _ = try restored.open(documentAt: makeTemporaryPDF(named: "empty-intent-\(swapped)-\(visible)"), in: windowID)
+                XCTAssertEqual(restored.isOutlinePaneVisible(in: windowID), visible)
+                restored.closeActiveSession(in: windowID)
+                XCTAssertFalse(restored.isOutlinePaneVisible(in: windowID))
+            }
+        }
     }
 
     func testSwappedEmptyWindowCollapsesAndRestoresOutlinePane() throws {
@@ -1724,6 +1826,42 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertFalse(store.isOutlineSidebarVisible(in: store.defaultWindowID))
     }
 
+    func testSwappingConfigurationDefaultsPreservesDraggedWindowWidths() throws {
+        let persistence = InMemoryDocumentStorePersistence()
+        let store = makeStore(persistence: persistence)
+        let firstWindowID = store.defaultWindowID
+        let secondWindowID = store.createWindow()
+        store.updateSidebarWidths(left: 250, right: 350, in: firstWindowID)
+        store.updateSidebarWidths(left: 180, right: 420, in: secondWindowID)
+        var swapped = store.appConfiguration
+        swapped.layout.sidebarsSwapped = true
+        swap(&swapped.layout.leftSidebarWidth, &swapped.layout.rightSidebarWidth)
+        swap(&swapped.layout.leftSidebarMinWidth, &swapped.layout.rightSidebarMinWidth)
+        swap(&swapped.layout.leftSidebarMaxWidth, &swapped.layout.rightSidebarMaxWidth)
+        store.updateAppConfiguration(swapped)
+
+        XCTAssertEqual(store.sidebarWidths(in: firstWindowID).left, 350)
+        XCTAssertEqual(store.sidebarWidths(in: firstWindowID).right, 250)
+        XCTAssertEqual(store.sidebarWidths(in: secondWindowID).left, 420)
+        XCTAssertEqual(store.sidebarWidths(in: secondWindowID).right, 180)
+        store.flushPersistence()
+        let restored = makeStore(persistence: persistence, appConfiguration: swapped)
+        try restored.restorePersistedState()
+        XCTAssertEqual(restored.sidebarWidths(in: firstWindowID).left, 350)
+        XCTAssertEqual(restored.sidebarWidths(in: secondWindowID).right, 180)
+
+        var original = swapped
+        original.layout.sidebarsSwapped = false
+        swap(&original.layout.leftSidebarWidth, &original.layout.rightSidebarWidth)
+        swap(&original.layout.leftSidebarMinWidth, &original.layout.rightSidebarMinWidth)
+        swap(&original.layout.leftSidebarMaxWidth, &original.layout.rightSidebarMaxWidth)
+        restored.updateAppConfiguration(original)
+        XCTAssertEqual(restored.sidebarWidths(in: firstWindowID).left, 250)
+        XCTAssertEqual(restored.sidebarWidths(in: firstWindowID).right, 350)
+        XCTAssertEqual(restored.sidebarWidths(in: secondWindowID).left, 180)
+        XCTAssertEqual(restored.sidebarWidths(in: secondWindowID).right, 420)
+    }
+
     func testSplitWorkspaceRoutesActiveSessionByFocusedPane() throws {
         let store = makeStore()
         let first = try store.open(documentAt: makeTemporaryPDF(named: "split-first"))
@@ -2059,8 +2197,10 @@ final class DocumentStoreTests: XCTestCase {
     }
 
     func testMoveActiveComparisonSessionToNewWindowMovesPublicPDF() throws {
-        let store = makeStore()
-        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-new-window"))
+        let readingStates = InMemoryReadingStateStore()
+        let persistence = InMemoryDocumentStorePersistence()
+        let store = makeStore(persistence: persistence, readingStateStore: readingStates)
+        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-new-window", pageCount: 8))
         let sourceWindowID = store.defaultWindowID
         store.activate(sessionID: pdf.id, in: sourceWindowID, targetPane: .secondary)
         let comparisonSessionID = try XCTUnwrap(
@@ -2068,6 +2208,11 @@ final class DocumentStoreTests: XCTestCase {
         )
         XCTAssertNotEqual(comparisonSessionID, pdf.id)
         XCTAssertEqual(store.activeSessionID(in: sourceWindowID), comparisonSessionID)
+        let position = ReadingPosition(pageIndex: 5, point: CGPoint(x: 23, y: 101))
+        store.setDisplayMode(.twoUpContinuous, for: comparisonSessionID)
+        store.setScaleMode(.manual, scaleFactor: 2, for: comparisonSessionID)
+        store.setHorizontalPanLocked(true, for: comparisonSessionID)
+        store.updateReadingPosition(position, scaleFactor: 2, for: comparisonSessionID)
 
         let destinationWindowID = try XCTUnwrap(
             store.moveActiveSessionToNewWindow(from: sourceWindowID)
@@ -2076,17 +2221,33 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(store.sessions(in: sourceWindowID).isEmpty)
         XCTAssertEqual(store.sessions(in: destinationWindowID).map(\.id), [pdf.id])
         XCTAssertNil(store.session(for: comparisonSessionID))
+        let moved = try XCTUnwrap(store.activeSession(in: destinationWindowID))
+        XCTAssertEqual(moved.lastReadPosition, position)
+        XCTAssertEqual(moved.currentPageIndex, 5)
+        XCTAssertEqual(moved.zoomScale, 2)
+        XCTAssertEqual(moved.scaleMode, .manual)
+        XCTAssertEqual(moved.displayMode, .twoUpContinuous)
+        XCTAssertTrue(moved.isHorizontalPanLocked)
+        XCTAssertEqual(readingStates.states[pdf.url]?.readingPosition, position)
+        store.flushPersistence()
+        let restored = makeStore(persistence: persistence, readingStateStore: readingStates)
+        try restored.restorePersistedState()
+        XCTAssertEqual(restored.activeSession(in: destinationWindowID)?.lastReadPosition, position)
+        XCTAssertEqual(restored.activeSession(in: destinationWindowID)?.zoomScale, 2)
     }
 
     func testMoveComparisonSessionToExistingWindowMovesPublicPDF() throws {
         let store = makeStore()
-        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-existing-window"))
+        let pdf = try store.open(documentAt: makeTemporaryPDF(named: "move-comparison-existing-window", pageCount: 8))
         let sourceWindowID = store.defaultWindowID
         let destinationWindowID = store.createWindow(copyingFrom: sourceWindowID)
         store.activate(sessionID: pdf.id, in: sourceWindowID, targetPane: .secondary)
         let comparisonSessionID = try XCTUnwrap(
             store.displayedSessionID(for: .secondary, in: sourceWindowID)
         )
+        let position = ReadingPosition(pageIndex: 6, point: CGPoint(x: 29, y: 94))
+        store.setScaleMode(.manual, scaleFactor: 1.8, for: comparisonSessionID)
+        store.updateReadingPosition(position, scaleFactor: 1.8, for: comparisonSessionID)
 
         XCTAssertTrue(
             store.moveSession(
@@ -2099,6 +2260,8 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(store.sessions(in: sourceWindowID).isEmpty)
         XCTAssertEqual(store.sessions(in: destinationWindowID).map(\.id), [pdf.id])
         XCTAssertNil(store.session(for: comparisonSessionID))
+        XCTAssertEqual(store.activeSession(in: destinationWindowID)?.lastReadPosition, position)
+        XCTAssertEqual(store.activeSession(in: destinationWindowID)?.zoomScale, 1.8)
     }
 
     func testMoveSessionToExistingWindowPreservesDocumentStateAndAppendsIt() throws {

@@ -138,21 +138,21 @@ struct WindowChromeTests {
         let controller = TitlebarTabsController(documentStore: store)
         controller.loadViewIfNeeded()
 
-        #expect(controller.preferredContentSize.width < TitlebarTabsController.maximumVisibleStripSize.width)
-        #expect(controller.preferredContentSize.height == TitlebarTabsController.maximumVisibleStripSize.height)
+        #expect(controller.preferredContentSize.width < TitlebarTabsController.defaultStripSize.width)
+        #expect(controller.preferredContentSize.height == TitlebarTabsController.defaultStripSize.height)
         #expect(controller.view.frame.size == controller.preferredContentSize)
-        #expect(controller.view.layer?.cornerRadius == 3)
-        #expect(controller.view.layer?.backgroundColor != NSColor.clear.cgColor)
+        #expect(controller.view.layer?.backgroundColor == NSColor.clear.cgColor)
 
         let selectedTab = try #require(findDescendant(of: TitlebarTabItemView.self, in: controller.view))
-        #expect(selectedTab.layer?.cornerRadius == controller.view.layer?.cornerRadius)
-        #expect(selectedTab.intrinsicContentSize.height == controller.view.frame.height)
+        #expect(selectedTab.layer?.cornerRadius == 4)
+        #expect(selectedTab.intrinsicContentSize.height == 24)
+        #expect(selectedTab.intrinsicContentSize.height < controller.view.frame.height)
 
         controller.setTabsStripVisible(false)
         #expect(controller.preferredContentSize == NSSize(width: 1, height: 1))
 
         controller.setTabsStripVisible(true)
-        #expect(controller.preferredContentSize.width < TitlebarTabsController.maximumVisibleStripSize.width)
+        #expect(controller.preferredContentSize.width < TitlebarTabsController.defaultStripSize.width)
         #expect(controller.view.frame.size == controller.preferredContentSize)
     }
 
@@ -1645,11 +1645,12 @@ struct WindowChromeTests {
         let window = try #require(controller.window)
         let splitController = try #require(window.contentViewController as? SplitViewController)
         let tabsView = splitController.titlebarTabsController.view
-        let selector = try #require(findView(identifier: "workspaceSelector", in: tabsView) as? NSPopUpButton)
+        let selector = try #require(findView(identifier: "workspaceSelector", in: tabsView) as? WorkspaceSelectorView)
         #expect(window.toolbar != nil)
         #expect(selector.window === window)
+        #expect(window.toolbar?.items.first?.isBordered == false)
         #expect(!selector.isHiddenOrHasHiddenAncestor)
-        #expect(selector.itemTitles.contains("New Workspace…"))
+        #expect(selector.testingMenu.items.contains { $0.title == "New Workspace" })
         #expect(findAllDescendants(of: TitlebarTabItemView.self, in: tabsView).isEmpty)
 
         let session = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-open"))

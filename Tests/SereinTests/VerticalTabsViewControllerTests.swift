@@ -83,15 +83,14 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         )
 
         let selector = try XCTUnwrap(
-            findView(identifier: "workspaceSelector", in: controller.view) as? NSPopUpButton
+            findView(identifier: "workspaceFooter", in: controller.view) as? WorkspaceSelectorView
         )
         let activeWorkspaceID = try XCTUnwrap(store.activeWorkspaceID(in: store.defaultWindowID))
         let activeWorkspace = try XCTUnwrap(
             store.workspaces(in: store.defaultWindowID).first { $0.id == activeWorkspaceID }
         )
-        XCTAssertEqual(selector.titleOfSelectedItem, activeWorkspace.name)
+        XCTAssertEqual(selector.testingCurrentWorkspaceName, activeWorkspace.name)
         XCTAssertTrue(controller.testingEmptyStateVisible)
-        XCTAssertFalse(controller.testingCountLabelVisible)
         XCTAssertFalse(controller.testingRecentSectionVisible)
         XCTAssertEqual(emptyState.frame.width, 216, accuracy: 0.5)
         XCTAssertGreaterThan(emptyState.frame.height, 0)
@@ -136,7 +135,7 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         XCTAssertFalse(controller.testingRecentSectionVisible)
     }
 
-    func testNonEmptyWindowShowsCountAndBottomPinnedRecents() throws {
+    func testNonEmptyWindowKeepsWorkspaceFooterAndBottomPinnedRecents() throws {
         _ = NSApplication.shared
         let store = makeStore()
         _ = try store.open(documentAt: makeTemporaryPDF(named: "empty-count-first"))
@@ -146,7 +145,8 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         controller.loadViewIfNeeded()
 
         XCTAssertFalse(controller.testingEmptyStateVisible)
-        XCTAssertTrue(controller.testingCountLabelVisible)
+        let footer = try XCTUnwrap(findView(identifier: "workspaceFooter", in: controller.view) as? WorkspaceSelectorView)
+        XCTAssertFalse(footer.isHiddenOrHasHiddenAncestor)
         XCTAssertTrue(controller.testingRecentSectionVisible)
         XCTAssertFalse(controller.testingRecentSectionTopPinned)
     }
@@ -160,6 +160,8 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         let window = makeWindow(for: controller.view)
         defer { window.close() }
 
+        let selectedTab = try XCTUnwrap(findDescendant(of: VerticalTabItemView.self, in: controller.view))
+        XCTAssertTrue(window.makeFirstResponder(selectedTab))
         XCTAssertNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: window)))
         XCTAssertTrue(controller.testingIsSelectedTabEditing)
     }
@@ -275,6 +277,8 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         let window = makeWindow(for: controller.view)
         defer { window.close() }
 
+        let selectedTab = try XCTUnwrap(findDescendant(of: TitlebarTabItemView.self, in: controller.view))
+        XCTAssertTrue(window.makeFirstResponder(selectedTab))
         XCTAssertNil(controller.testingHandleRenameKeyEvent(returnKeyEvent(in: window)))
         XCTAssertTrue(controller.testingIsSelectedTabEditing)
     }

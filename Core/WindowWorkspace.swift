@@ -82,6 +82,8 @@ struct WindowWorkspace: Equatable, Codable, Sendable {
     var rightSidebarMode: RightSidebarMode
     var leftSidebarWidth: CGFloat?
     var rightSidebarWidth: CGFloat?
+    /// An explicit outline visibility choice stays in effect across empty workspaces.
+    var outlineVisibilityWhileEmpty: Bool?
 
     init(
         id: UUID = UUID(),

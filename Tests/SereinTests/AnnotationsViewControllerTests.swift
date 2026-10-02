@@ -208,6 +208,235 @@ final class AnnotationsViewControllerTests: XCTestCase {
         )
     }
 
+    func testRepeatedInlineEditingPreservesDraftAndSelection() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-repeat-edit")
+        defer { fixture.window.close() }
+        let group = try XCTUnwrap(fixture.groups.first)
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "Unsaved draft"
+        editor.didChangeText()
+        editor.setSelectedRange(NSRange(location: 4, length: 3))
+
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+
+        XCTAssertTrue(try inlineEditor(in: fixture.controller) === editor)
+        XCTAssertEqual(editor.string, "Unsaved draft")
+        XCTAssertEqual(editor.selectedRange(), NSRange(location: 4, length: 3))
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "Original comment")
+    }
+
+    func testAnnotationRefreshAndCellRecyclingPreserveUnsavedDraft() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-refresh-draft")
+        defer { fixture.window.close() }
+        let group = try XCTUnwrap(fixture.groups.first)
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "Unsaved draft"
+        editor.didChangeText()
+
+        XCTAssertTrue(fixture.store.updateHighlightColor(.yellow, forHighlightGroup: group.groupID, in: fixture.session.id))
+        let table = try XCTUnwrap(findDescendant(of: NSTableView.self, in: fixture.controller.view))
+        table.reloadData()
+
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "Unsaved draft")
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "Original comment")
+        let rebuiltEditor = try inlineEditor(in: fixture.controller)
+        rebuiltEditor.keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "Unsaved draft")
+    }
+
+    func testInlineDraftAndEditorColorsFollowEveryThemeAndCustomBackground() throws {
+        let selection = ThemeManager.shared.selection
+        defer {
+            ThemeManager.shared.apply(
+                light: selection.light, dark: selection.dark,
+                lightBackground: selection.lightBackground, darkBackground: selection.darkBackground
+            )
+        }
+        let fixture = try makeInlineEditorFixture(named: "sidebar-editor-theme")
+        defer { fixture.window.close() }
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "Unsaved draft"
+        editor.didChangeText()
+
+        func checkEditor() {
+            fixture.controller.refreshChromeColors()
+            XCTAssertEqual(editor.string, "Unsaved draft")
+            editor.effectiveAppearance.performAsCurrentDrawingAppearance {
+                XCTAssertEqual(editor.textColor?.cgColor, NightModeStyle.primaryTextColor.cgColor)
+                XCTAssertEqual(editor.insertionPointColor.cgColor, NightModeStyle.primaryTextColor.cgColor)
+            }
+        }
+        fixture.controller.view.appearance = NSAppearance(named: .aqua)
+        for theme in LightTheme.allCases {
+            ThemeManager.shared.apply(light: theme, dark: .normal)
+            checkEditor()
+        }
+        fixture.controller.view.appearance = NSAppearance(named: .darkAqua)
+        for theme in DarkTheme.allCases {
+            ThemeManager.shared.apply(light: .normal, dark: theme)
+            checkEditor()
+        }
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            let overrides = ThemeBackgroundOverrides(window: ThemeHexColor(hex: "#754263"))
+            ThemeManager.shared.apply(
+                light: .normal, dark: .normal, lightBackground: overrides, darkBackground: overrides
+            )
+            fixture.controller.view.appearance = NSAppearance(named: name)
+            checkEditor()
+        }
+    }
+
+    func testCleanInlineEditorFollowsExternalCommentWithoutWritingItBack() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-external-clean")
+        defer { fixture.window.close() }
+        let group = try XCTUnwrap(fixture.groups.first)
+
+        XCTAssertTrue(fixture.store.updateComment("Saved elsewhere", forHighlightGroup: group.groupID, in: fixture.session.id))
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "Saved elsewhere")
+        let generation = fixture.store.session(for: fixture.session.id)?.annotationGeneration
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "Saved elsewhere")
+        XCTAssertEqual(fixture.store.session(for: fixture.session.id)?.annotationGeneration, generation)
+    }
+
+    func testExternalCommentConflictRetainsDraftAcrossRowChanges() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-conflicted-draft", count: 2)
+        defer { fixture.window.close() }
+        let group = fixture.groups[0]
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "My draft"
+        editor.didChangeText()
+
+        XCTAssertTrue(fixture.store.updateComment("Saved elsewhere", forHighlightGroup: group.groupID, in: fixture.session.id))
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "My draft")
+        fixture.controller.reveal(groupID: fixture.groups[1].groupID, focusEditor: true)
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first { $0.groupID == group.groupID }?.comment, "Saved elsewhere")
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "My draft")
+        let cancelEvent = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: fixture.window.windowNumber, context: nil,
+            characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53
+        ))
+        try inlineEditor(in: fixture.controller).keyDown(with: cancelEvent)
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "Saved elsewhere")
+    }
+
+    func testExternalConflictSurvivesDocumentSwitchWithoutOverwritingEitherDocument() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-conflict-document")
+        defer { fixture.window.close() }
+        let group = try XCTUnwrap(fixture.groups.first)
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "My draft"
+        editor.didChangeText()
+        XCTAssertTrue(fixture.store.updateComment("Saved elsewhere", forHighlightGroup: group.groupID, in: fixture.session.id))
+
+        let other = try fixture.store.open(documentAt: makeTemporaryPDF(named: "sidebar-conflict-other"))
+        fixture.store.activate(sessionID: fixture.session.id, in: fixture.store.defaultWindowID)
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "Saved elsewhere")
+        XCTAssertTrue(fixture.store.annotationGroups(for: other.id).isEmpty)
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "My draft")
+    }
+
+    func testComparisonDraftCommitsWhenPublicTabMovesToNewWindow() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-comparison-move-window")
+        defer { fixture.window.close() }
+        let group = try XCTUnwrap(fixture.groups.first)
+        try inlineEditor(in: fixture.controller).keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+        let comparisonID = try activateComparison(of: fixture.session.id, in: fixture.store)
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "Comparison draft"
+        editor.didChangeText()
+
+        let destinationID = try XCTUnwrap(fixture.store.moveActiveSessionToNewWindow(from: fixture.store.defaultWindowID))
+
+        XCTAssertNil(fixture.store.session(for: comparisonID))
+        XCTAssertEqual(fixture.store.activeSessionID(in: destinationID), fixture.session.id)
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "Comparison draft")
+    }
+
+    func testComparisonDraftCommitsWhenSharedPublicTabMergesIntoExistingWorkspacePDF() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-comparison-merge-workspace")
+        defer { fixture.window.close() }
+        let store = fixture.store
+        let group = try XCTUnwrap(fixture.groups.first)
+        let windowID = store.defaultWindowID
+        let destinationID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        try inlineEditor(in: fixture.controller).keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+        _ = try XCTUnwrap(store.createWorkspace(name: "Source", in: windowID))
+        let sharedTab = try store.open(documentAt: fixture.session.url, in: windowID)
+        XCTAssertNotEqual(sharedTab.id, fixture.session.id)
+        let comparisonID = try activateComparison(of: sharedTab.id, in: store)
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "Shared comparison draft"
+        editor.didChangeText()
+
+        XCTAssertTrue(store.moveSession(comparisonID, toWorkspace: destinationID, in: windowID))
+
+        XCTAssertNil(store.session(for: comparisonID))
+        XCTAssertNil(store.session(for: sharedTab.id))
+        XCTAssertEqual(store.annotationGroups(for: fixture.session.id).first?.comment, "Shared comparison draft")
+        store.activateWorkspace(destinationID, in: windowID)
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "Shared comparison draft")
+    }
+
+    func testSamePDFPaneFocusAndAnnotationNotificationsKeepComparisonDraftUncommitted() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-comparison-draft-focus")
+        defer { fixture.window.close() }
+        let store = fixture.store
+        let group = try XCTUnwrap(fixture.groups.first)
+        try inlineEditor(in: fixture.controller).keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+        let comparisonID = try activateComparison(of: fixture.session.id, in: store)
+        fixture.controller.reveal(groupID: group.groupID, focusEditor: true)
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "Comparison draft"
+        editor.didChangeText()
+
+        store.setFocusedPane(.primary, in: store.defaultWindowID)
+        XCTAssertTrue(store.updateHighlightColor(.yellow, forHighlightGroup: group.groupID, in: comparisonID))
+        XCTAssertEqual(store.annotationGroups(for: fixture.session.id).first?.comment, "Original comment")
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "Comparison draft")
+        store.setFocusedPane(.secondary, in: store.defaultWindowID)
+        XCTAssertTrue(store.updateHighlightColor(.green, forHighlightGroup: group.groupID, in: comparisonID))
+        XCTAssertEqual(store.annotationGroups(for: fixture.session.id).first?.comment, "Original comment")
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "Comparison draft")
+
+        try inlineEditor(in: fixture.controller).keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+        XCTAssertEqual(store.annotationGroups(for: fixture.session.id).first?.comment, "Comparison draft")
+    }
+
+    func testConflictedExplicitSaveRequiresConfirmationAndCanKeepDraft() throws {
+        let fixture = try makeInlineEditorFixture(named: "sidebar-conflict-confirm")
+        defer { fixture.window.close() }
+        let group = try XCTUnwrap(fixture.groups.first)
+        let editor = try inlineEditor(in: fixture.controller)
+        editor.string = "My draft"
+        editor.didChangeText()
+        XCTAssertTrue(fixture.store.updateComment("Saved elsewhere", forHighlightGroup: group.groupID, in: fixture.session.id))
+
+        try inlineEditor(in: fixture.controller).keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+        let firstSheet = try XCTUnwrap(fixture.window.attachedSheet)
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "Saved elsewhere")
+        fixture.window.endSheet(firstSheet, returnCode: .alertSecondButtonReturn)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        XCTAssertEqual(try inlineEditor(in: fixture.controller).string, "My draft")
+
+        try inlineEditor(in: fixture.controller).keyDown(with: makeReturnKeyEvent(in: fixture.window, modifiers: [.command]))
+        let secondSheet = try XCTUnwrap(fixture.window.attachedSheet)
+        fixture.window.endSheet(secondSheet, returnCode: .alertFirstButtonReturn)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        XCTAssertEqual(fixture.store.annotationGroups(for: fixture.session.id).first?.comment, "My draft")
+    }
+
     func testSwitchingRowsCommitsInlineComment() throws {
         let store = makeStore()
         let session = try store.open(documentAt: makeTemporaryPDF(named: "sidebar-switch-save"))
@@ -779,6 +1008,50 @@ final class AnnotationsViewControllerTests: XCTestCase {
 
     private func makeStore() -> DocumentStore {
         makeIsolatedDocumentStore()
+    }
+
+    private func makeInlineEditorFixture(named name: String, count: Int = 1) throws -> (
+        store: DocumentStore,
+        session: DocumentSession,
+        groups: [DocumentHighlightGroup],
+        controller: AnnotationsViewController,
+        window: NSWindow
+    ) {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: name))
+        let document = try store.pdfDocument(for: session.id)
+        let records = try (0..<count).map { index in
+            try makeHighlightRecord(in: document, bounds: NSRect(x: 24, y: 80 + CGFloat(index * 30), width: 120, height: 18))
+        }
+        store.noteHighlightsAdded(records, for: session.id)
+        let groups = store.annotationSections(in: store.defaultWindowID).flatMap(\.highlights)
+        let group = try XCTUnwrap(groups.first)
+        XCTAssertTrue(store.updateComment("Original comment", forHighlightGroup: group.groupID, in: session.id))
+        let controller = AnnotationsViewController(documentStore: store, windowID: store.defaultWindowID)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 300),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentViewController = controller
+        controller.reveal(groupID: group.groupID, focusEditor: true)
+        return (store, session, groups, controller, window)
+    }
+
+    private func inlineEditor(in controller: AnnotationsViewController) throws -> NSTextView {
+        let table = try XCTUnwrap(findDescendant(of: NSTableView.self, in: controller.view))
+        let editor = (0..<table.numberOfRows).compactMap { row in
+            (table.view(atColumn: 0, row: row, makeIfNecessary: true) as? AnnotationHighlightCellView)?.editor
+        }.first
+        return try XCTUnwrap(editor)
+    }
+
+    private func activateComparison(of sessionID: UUID, in store: DocumentStore) throws -> UUID {
+        store.setSplitEnabled(true, in: store.defaultWindowID)
+        store.activate(sessionID: sessionID, in: store.defaultWindowID, targetPane: .secondary)
+        let comparisonID = try XCTUnwrap(store.activeSessionID(in: store.defaultWindowID))
+        XCTAssertNotEqual(comparisonID, sessionID)
+        return comparisonID
     }
 }
 

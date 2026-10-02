@@ -1,5 +1,14 @@
 import AppKit
 
+private final class TitlebarTabsScrollView: NSScrollView {
+    var onLayout: (() -> Void)?
+
+    override func layout() {
+        super.layout()
+        onLayout?()
+    }
+}
+
 private final class TitlebarTabsContainerView: NSView {
     var destinationWindowID: UUID?
     var onMoveTab: ((TabDragPayload) -> Bool)?
@@ -40,10 +49,9 @@ private final class TitlebarTabsContainerView: NSView {
 }
 
 final class TitlebarTabsController: NSViewController {
-    static let maximumVisibleStripSize = NSSize(width: 760, height: 28)
+    static let defaultStripSize = NSSize(width: 760, height: 28)
     private static let hiddenStripSize = NSSize(width: 1, height: 1)
     private static let contentHorizontalPadding: CGFloat = 16
-    private static let stripCornerRadius: CGFloat = 3
     let documentStore: DocumentStore
     let windowID: UUID
     var onCloseSessionRequested: ((UUID) -> Void)?
@@ -51,11 +59,14 @@ final class TitlebarTabsController: NSViewController {
     var onRevealInFinderRequested: ((UUID) -> Void)?
     var onOpenWithMenuRequested: ((UUID) -> NSMenu?)?
     private lazy var workspaceSelector = WorkspaceSelectorView(documentStore: documentStore, windowID: windowID)
-    private let scrollView = NSScrollView()
+    private let scrollView = TitlebarTabsScrollView()
     private let stackView = NSStackView()
     private let documentContainerView = NSView()
     private var isTabsStripVisible = true
+    private var availableWidth = TitlebarTabsController.defaultStripSize.width
+    private var needsRevealActiveTab = false
     private var stripWidthConstraint: NSLayoutConstraint?
+    private var stripHeightConstraint: NSLayoutConstraint?
     private var displayedTabsFingerprint: TabsFingerprint?
     nonisolated(unsafe) private var eventMonitors: [Any] = []
 
@@ -63,7 +74,7 @@ final class TitlebarTabsController: NSViewController {
         self.documentStore = documentStore
         self.windowID = windowID
         super.init(nibName: nil, bundle: nil)
-        preferredContentSize = Self.maximumVisibleStripSize
+        preferredContentSize = Self.defaultStripSize
     }
 
     convenience init(documentStore: DocumentStore) {
@@ -95,18 +106,17 @@ final class TitlebarTabsController: NSViewController {
 
     override func loadView() {
         let container = TitlebarTabsContainerView()
-        container.frame = NSRect(origin: .zero, size: Self.maximumVisibleStripSize)
+        container.frame = NSRect(origin: .zero, size: Self.defaultStripSize)
         container.destinationWindowID = windowID
         container.onMoveTab = { [weak self] payload in
             self?.handleDroppedTab(payload) == true
         }
         container.wantsLayer = true
-        container.layer?.cornerRadius = Self.stripCornerRadius
         container.layer?.masksToBounds = true
 
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
-        stackView.spacing = 0
+        stackView.spacing = 3
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         documentContainerView.wantsLayer = true
@@ -119,19 +129,22 @@ final class TitlebarTabsController: NSViewController {
         scrollView.hasVerticalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.documentView = documentContainerView
+        scrollView.onLayout = { [weak self] in self?.revealActiveTabAfterViewportLayout() }
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         workspaceSelector.translatesAutoresizingMaskIntoConstraints = false
         workspaceSelector.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         let stripStack = NSStackView(views: [workspaceSelector, scrollView])
         stripStack.orientation = .horizontal
-        stripStack.spacing = 4
+        stripStack.spacing = 8
         stripStack.alignment = .centerY
         stripStack.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(stripStack)
 
-        let stripWidthConstraint = container.widthAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.width)
+        let stripWidthConstraint = container.widthAnchor.constraint(equalToConstant: Self.defaultStripSize.width)
         self.stripWidthConstraint = stripWidthConstraint
+        let stripHeightConstraint = container.heightAnchor.constraint(equalToConstant: Self.defaultStripSize.height)
+        self.stripHeightConstraint = stripHeightConstraint
 
         NSLayoutConstraint.activate([
             stripStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -141,7 +154,7 @@ final class TitlebarTabsController: NSViewController {
             workspaceSelector.widthAnchor.constraint(lessThanOrEqualToConstant: 160),
             scrollView.heightAnchor.constraint(equalTo: container.heightAnchor),
             stripWidthConstraint,
-            container.heightAnchor.constraint(equalToConstant: Self.maximumVisibleStripSize.height),
+            stripHeightConstraint,
             stackView.leadingAnchor.constraint(equalTo: documentContainerView.leadingAnchor, constant: 6),
             stackView.trailingAnchor.constraint(equalTo: documentContainerView.trailingAnchor, constant: -6),
             stackView.topAnchor.constraint(equalTo: documentContainerView.topAnchor),
@@ -164,11 +177,7 @@ final class TitlebarTabsController: NSViewController {
     }
 
     private func applyChromeColors() {
-        view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
-                .withAlphaComponent(0.18)
-                .cgColor
-        }
+        view.layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     override func viewDidLayout() {
@@ -176,12 +185,22 @@ final class TitlebarTabsController: NSViewController {
         updateDocumentContainerFrame()
     }
 
+    private func revealActiveTabAfterViewportLayout() {
+        updateDocumentContainerFrame()
+        documentContainerView.layoutSubtreeIfNeeded()
+        if needsRevealActiveTab, isTabsStripVisible, let selectedView = selectedTabItemView() {
+            selectedView.scrollToVisible(selectedView.bounds)
+            needsRevealActiveTab = false
+        }
+    }
+
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.affects(windowID: windowID) else { return }
         let change = notification.documentStoreChange
-        guard change.intersection([.content, .tabs, .annotations]).isEmpty == false else { return }
+        guard change.intersection([.content, .tabs, .annotations, .appearance]).isEmpty == false else { return }
         rebuildTabs()
+        if change.contains(.appearance) { refreshChromeColors() }
     }
 
     private func rebuildTabs() {
@@ -193,22 +212,33 @@ final class TitlebarTabsController: NSViewController {
             refreshPreferredStripSize()
             return
         }
+        let restoreTabFocus = stackView.arrangedSubviews.contains {
+            view.window?.firstResponder === $0
+        }
+        needsRevealActiveTab = fingerprint.activeSessionID != displayedTabsFingerprint?.activeSessionID
+            || fingerprint.items.map(\.id) != displayedTabsFingerprint?.items.map(\.id)
         displayedTabsFingerprint = fingerprint
 
+        let editingItem = stackView.arrangedSubviews
+            .compactMap { $0 as? TitlebarTabItemView }
+            .first(where: \.isEditing)
+        let sessions = documentStore.sessions(in: windowID)
+        if let editingItem, !sessions.contains(where: { $0.id == editingItem.sessionID }) {
+            editingItem.finishEditing()
+        }
         stackView.arrangedSubviews.forEach { subview in
             stackView.removeArrangedSubview(subview)
-            subview.removeFromSuperview()
+            if subview !== editingItem { subview.removeFromSuperview() }
         }
 
-        let sessions = documentStore.sessions(in: windowID)
         let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
         let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
         let continuousSessionSet = Set(continuousSessionIDs)
         let continuousLeaderID = continuousSessionIDs.first
-        let activeSessionID = documentStore.activeSessionID(in: windowID)
+        let activeSessionID = fingerprint.activeSessionID
 
         for session in sessions {
-            let itemView = TitlebarTabItemView(
+            let itemView = editingItem.flatMap { $0.sessionID == session.id ? $0 : nil } ?? TitlebarTabItemView(
                 sessionID: session.id,
                 title: session.title,
                 filename: session.isBlank ? nil : session.url.lastPathComponent,
@@ -217,7 +247,7 @@ final class TitlebarTabsController: NSViewController {
                 isDirty: session.isDirty,
                 isContinuousReadingMember: continuousSessionSet.contains(session.id),
                 isContinuousReadingLeader: continuousLeaderID == session.id,
-                canStartContinuousReading: selectedSessionIDs.count > 1,
+                canStartContinuousReading: documentStore.canStartContinuousReadingFromSelection(in: windowID),
                 dragPayload: session.isBlank
                     ? nil
                     : TabDragPayload(sourceWindowID: windowID, sessionID: session.id),
@@ -254,12 +284,28 @@ final class TitlebarTabsController: NSViewController {
                     self?.workspaceSelector.moveMenu(for: sessionID)
                 }
             )
+            if itemView === editingItem {
+                itemView.updateState(
+                    isSelected: activeSessionID == session.id,
+                    isTabSelected: selectedSessionIDs.contains(session.id),
+                    isDirty: session.isDirty,
+                    isContinuousReadingMember: continuousSessionSet.contains(session.id),
+                    isContinuousReadingLeader: continuousLeaderID == session.id,
+                    canStartContinuousReading: documentStore.canStartContinuousReadingFromSelection(in: windowID)
+                )
+            }
             itemView.translatesAutoresizingMaskIntoConstraints = false
             stackView.addArrangedSubview(itemView)
+        }
+        if let editingItem, !sessions.contains(where: { $0.id == editingItem.sessionID }) {
+            editingItem.removeFromSuperview()
         }
 
         updateDocumentContainerFrame()
         refreshPreferredStripSize()
+        if restoreTabFocus { view.window?.makeFirstResponder(selectedTabItemView()) }
+        scrollView.needsLayout = true
+        view.needsLayout = true
     }
 
     private func handleSessionSelection(_ sessionID: UUID, modifierFlags: NSEvent.ModifierFlags) {
@@ -292,31 +338,45 @@ final class TitlebarTabsController: NSViewController {
     private func updateDocumentContainerFrame() {
         let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
         let contentWidth = max(scrollView.contentSize.width, fittingWidth)
-        documentContainerView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: Self.maximumVisibleStripSize.height)
+        documentContainerView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: Self.defaultStripSize.height)
     }
 
     private func refreshPreferredStripSize() {
-        guard isTabsStripVisible else {
-            preferredContentSize = Self.hiddenStripSize
-            stripWidthConstraint?.constant = Self.hiddenStripSize.width
-            view.frame.size = preferredContentSize
-            return
+        let size: NSSize
+        if isTabsStripVisible {
+            let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
+                + workspaceSelector.intrinsicContentSize.width + 8
+            let width = min(max(fittingWidth, Self.hiddenStripSize.width), availableWidth)
+            size = NSSize(width: width, height: Self.defaultStripSize.height)
+        } else {
+            size = Self.hiddenStripSize
         }
-
-        let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
-            + workspaceSelector.intrinsicContentSize.width + 8
-        let width = min(max(fittingWidth, Self.hiddenStripSize.width), Self.maximumVisibleStripSize.width)
-        preferredContentSize = NSSize(width: width, height: Self.maximumVisibleStripSize.height)
-        stripWidthConstraint?.constant = width
+        let sizeChanged = preferredContentSize != size
+        preferredContentSize = size
+        stripWidthConstraint?.constant = size.width
+        stripHeightConstraint?.constant = size.height
         view.frame.size = preferredContentSize
+        if sizeChanged { view.invalidateIntrinsicContentSize() }
+    }
+
+    func setAvailableWidth(_ width: CGFloat) {
+        let width = max(width, Self.hiddenStripSize.width)
+        guard availableWidth != width else { return }
+        availableWidth = width
+        guard isViewLoaded else { return }
+        needsRevealActiveTab = true
+        refreshPreferredStripSize()
+        scrollView.needsLayout = true
+        view.needsLayout = true
     }
 
     func setTabsStripVisible(_ isVisible: Bool) {
         isTabsStripVisible = isVisible
-        preferredContentSize = isVisible ? preferredContentSize : Self.hiddenStripSize
         guard isViewLoaded else { return }
+        needsRevealActiveTab = isVisible
         refreshPreferredStripSize()
         applyVisibilityState()
+        scrollView.needsLayout = true
     }
 
     private func applyVisibilityState() {
@@ -330,9 +390,12 @@ final class TitlebarTabsController: NSViewController {
         // Double-click on a tab → rename
         let mouse = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self, event.clickCount == 2 else { return event }
+            guard isTabsStripVisible, !view.isHiddenOrHasHiddenAncestor else { return event }
+            guard documentStore.tabPresentationMode(in: windowID) == .horizontalTitlebar else { return event }
             guard eventBelongsToOwnWindow(event) else { return event }
             let locationInView = view.convert(event.locationInWindow, from: nil)
             guard view.bounds.contains(locationInView) else { return event }
+            guard scrollView.bounds.contains(scrollView.convert(event.locationInWindow, from: nil)) else { return event }
             guard let itemView = stackView.arrangedSubviews.compactMap({ $0 as? TitlebarTabItemView }).first(where: {
                 $0.bounds.contains($0.convert(event.locationInWindow, from: nil))
             }) else { return event }
@@ -343,18 +406,22 @@ final class TitlebarTabsController: NSViewController {
 
         // Enter on selected tab → rename (macOS Finder convention)
         let key = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleRenameKeyEvent(event) ?? event
+            guard let self else { return event }
+            return self.handleRenameKeyEvent(event)
         }
         eventMonitors.append(key as Any)
     }
 
     private func handleRenameKeyEvent(_ event: NSEvent) -> NSEvent? {
         guard isPlainReturnKeyEvent(event) else { return event }
-        guard isTabsStripVisible else { return event }
+        guard isTabsStripVisible, !view.isHiddenOrHasHiddenAncestor else { return event }
         guard documentStore.tabPresentationMode(in: windowID) == .horizontalTitlebar else { return event }
         guard eventBelongsToOwnWindow(event), let window = view.window else { return event }
         guard window.firstResponder is NSTextView == false else { return event }
-        guard let selectedView = selectedTabItemView() else { return event }
+        guard let selectedView = selectedTabItemView(),
+              let responder = window.firstResponder as? NSView,
+              responder === selectedView || responder.isDescendant(of: selectedView) else { return event }
+        selectedView.scrollToVisible(selectedView.bounds)
         selectedView.beginEditing()
         return nil
     }

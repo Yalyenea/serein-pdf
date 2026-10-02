@@ -4,6 +4,15 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Tabs and sidebars
+- Keep vertical workspace controls in a bottom icon strip: click to switch, right-click an icon to rename, and use `+` to create. Remove the duplicate workspace header.
+- Use an icon-only titlebar workspace chooser with a compact themed menu, regular text, and a light background for the current workspace. Remove the checkmark gutter and ellipses from New Workspace and Rename; retain keyboard navigation and confirmation.
+- Align horizontal tabs beside the window buttons, adapt the strip to the window width, and use 24-point tabs with lighter selection colors. Remove the toolbar's outer border and reveal inactive close buttons on hover.
+- Preserve tab rename drafts, focus, and caret positions during updates and theme changes. Keep Shift-selection anchored consistently, preserve multi-selection in context menus, and exclude blank tabs from continuous reading groups.
+- Keep the correct document tab selected while focusing comparison panes, and retain the focused pane's reading position when moving its PDF between workspaces or windows.
+- Preserve each window's sidebar widths when swapping panes and remember explicit outline visibility choices made in an empty window across relaunch.
+- Preserve annotation comment drafts and editing focus while the sidebar refreshes or the same PDF is viewed in another pane. Ask before overwriting a comment changed elsewhere, and refresh outline selection colors against each row's appearance.
+
 ### Appearance
 - Add Rosewash's curated presets for a total of 17 light and 28 dark themes, with independent selections and cycling through the current appearance's themes.
 - Customize PDF page and window/sidebar backgrounds separately for light and dark appearances in Settings. Save colors immediately, preserve them across theme changes, and reset each appearance to its selected theme's defaults.
@@ -13,6 +22,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Default the recent-windows list to another window and retain closing order across relaunch. Keep saved window groups available for reopening.
 - Copy the current comparison pane's position and zoom when splitting from document lists, even after the original pane has closed. Show configured split shortcuts in the open-tabs footer and complete quick Control-Tab taps when Control is already released.
 - Add named workspaces within each window, with create, rename, switch, and move-document actions in both tab layouts. Keep independent reading positions for the same PDF across workspaces while sharing annotations, saving, and undo.
+- Switch adjacent workspaces with `Cmd+Option+←/→` or a horizontal trackpad gesture over the workspace controls; wrap at either end. Select workspaces 1–9 with `Cmd+Option+1…9`, saving pending reading positions before switching.
 - Restore nested reader layouts, divider proportions, focused panes, and reading positions across workspace switches and relaunch. Keep closed window groups available in the recent-windows list.
 - Split the focused PDF right with `B` or below with `Shift+B`, supporting four panes and further splits when space permits. Use `Ctrl+H/J/K/L` for directional focus, `Cmd+W` to close only the focused pane, and `Cmd+T` to fill the reader with that pane or restore the layout. Move New Blank Tab to `Cmd+Option+T`.
 - Preserve split groups during ordinary tab switching. Option-clicking tabs and splitting from links or recent lists adds an independent pane without replacing existing content; cross-window comparison leaves the source view intact.

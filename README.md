@@ -13,7 +13,8 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or adaptive titlebar tabs, with the full PDF filename available on hover
-- Named workspaces within each window, with a compact selector for creating, renaming, and switching workspaces; move PDFs between them from either tab context menu. Each workspace retains its documents and reading layouts, including after its window closes.
+- Named workspaces within each window. Vertical tabs use a bottom icon strip: click to switch, right-click an icon to rename, and use `+` to create. Horizontal tabs use an icon-only workspace menu. Move PDFs between workspaces from either tab context menu; each workspace retains its documents and reading layouts, including after its window closes.
+- Switch adjacent workspaces with `cmd+option+←/→` or swipe horizontally over the workspace controls; navigation wraps at either end. Use `cmd+option+1…9` to select a workspace by its saved order within the window.
 - Click a starting point, then Shift-click an endpoint to select text, including across pages and from line-boundary whitespace. Further Shift-clicks adjust the endpoint; an ordinary click starts a new selection.
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically
 - `cmd+option+t` creates an untitled blank tab; blank tabs are not PDF-backed, recent history entries, or relaunch-restored sessions
@@ -322,6 +323,8 @@ Common shortcuts are listed below. Presentation tool keys apply only in demo mod
 | Close current window | `cmd+shift+w` |
 | Reopen closed tab | `cmd+shift+t` |
 | Cycle MRU tabs across workspaces | Hold `ctrl`, then `tab` / `shift+tab`; release to open |
+| Previous / next workspace | `cmd+option+←` / `cmd+option+→` |
+| Select workspaces 1–9 | `cmd+option+1…9` |
 | Toggle continuous reading for selected tabs | Tab context menu |
 | New window | `cmd+shift+n` |
 | Merge all windows | `cmd+k`, then `cmd+m` |

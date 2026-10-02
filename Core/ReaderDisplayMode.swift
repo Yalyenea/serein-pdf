@@ -130,6 +130,17 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case closeCurrentWindow = "close_current_window"
     case previousTab = "previous_tab"
     case nextTab = "next_tab"
+    case previousWorkspace = "previous_workspace"
+    case nextWorkspace = "next_workspace"
+    case workspace1 = "workspace_1"
+    case workspace2 = "workspace_2"
+    case workspace3 = "workspace_3"
+    case workspace4 = "workspace_4"
+    case workspace5 = "workspace_5"
+    case workspace6 = "workspace_6"
+    case workspace7 = "workspace_7"
+    case workspace8 = "workspace_8"
+    case workspace9 = "workspace_9"
     case showAllTabs = "show_all_tabs"
     case toggleContinuousReading = "toggle_continuous_reading"
     case fitHeight = "fit_height"
@@ -184,6 +195,14 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
     case redoLastHighlight = "redo_last_highlight"
 
     static let commandPaletteShortcut = KeyboardShortcut(key: "k", modifiers: [.command])
+    static let workspaceIndexCommands: [ShortcutCommand] = [
+        .workspace1, .workspace2, .workspace3, .workspace4, .workspace5,
+        .workspace6, .workspace7, .workspace8, .workspace9,
+    ]
+
+    var workspaceIndex: Int? {
+        Self.workspaceIndexCommands.firstIndex(of: self).map { $0 + 1 }
+    }
 
     var menuTitle: String {
         switch self {
@@ -263,6 +282,13 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
             L10n.text("Previous Tab", "上一个标签页")
         case .nextTab:
             L10n.text("Next Tab", "下一个标签页")
+        case .previousWorkspace:
+            L10n.text("Previous Workspace", "上一个工作区")
+        case .nextWorkspace:
+            L10n.text("Next Workspace", "下一个工作区")
+        case .workspace1, .workspace2, .workspace3, .workspace4, .workspace5,
+             .workspace6, .workspace7, .workspace8, .workspace9:
+            L10n.text("Go to Workspace \(workspaceIndex!)", "切换至工作区 \(workspaceIndex!)")
         case .showAllTabs:
             L10n.text("Show All Tabs", "显示所有标签页")
         case .toggleContinuousReading:
@@ -462,6 +488,8 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .toggleLeftSidebar, .toggleRightSidebar, .useSidebarTabs,
              .useTitlebarTabs, .closeCurrentTab, .closeCurrentWindow, .previousTab,
              .nextTab, .showAllTabs, .showRecentWindows, .paletteSplitRight, .paletteSplitDown,
+             .previousWorkspace, .nextWorkspace, .workspace1, .workspace2,
+             .workspace3, .workspace4, .workspace5, .workspace6, .workspace7, .workspace8, .workspace9,
              .newWindow, .mergeAllWindows,
              .moveCurrentPDFToNewWindow, .toggleImmersiveMode, .toggleReaderSplit,
              .splitCurrentPDFRight, .splitCurrentPDFDown, .focusPaneLeft,

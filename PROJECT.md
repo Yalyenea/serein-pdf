@@ -77,7 +77,7 @@ flowchart LR
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
 | 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗拥有一组具名工作区,各自保存 tab、搜索与阅读布局;关闭窗口保留工作区组,按关闭顺序排列并跨重启保留;最近窗口默认选中最近的其他窗口;支持合并窗口与跨窗移动 PDF |
-| 工作区入口 | 两种 tab 形态共享紧凑选择器,支持创建 / 重命名 / 切换;tab 右键可移动 PDF 到同窗其他工作区;空工作区保留选择器 |
+| 工作区入口 | 两种 tab 形态共用 `DocumentStore` 工作区模型；垂直模式仅在底部显示图标条，单击切换、右键图标重命名、`+` 新建；水平模式使用标题栏图标菜单；tab 右键可移动 PDF 到同窗其他工作区；空工作区保留入口 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 按稳定 pane ID 管理动态 Reader,以 `NSSplitView` + `ReaderSplitHostView` 递归呈现分屏树 |
 | 目录来源 | 右栏或浮动目录需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
@@ -138,7 +138,8 @@ flowchart LR
 - 阅读区锁定时仅在右上角显示 `L`,悬停说明当前文档或全局锁定范围。
 - 常规侧栏平铺嵌入,最多保留一条淡分割线;右栏隐藏态的浮动目录使用当前主题 pane 色与轻透明背景,保持轻描边、紧凑、无厚重阴影
 - 按钮 / tab 视觉重量轻,突出选中态
-- 水平 tab 与系统标题栏融为一体,宽度随标题内容自适应
+- 水平 tab 在窗口按钮旁靠左排列，标签高 24pt、常规字重、轻选中底色，宽度随标题内容自适应，整条标签随窗口宽度调整并支持滚动，不添加外层边框。
+- 垂直模式不重复显示工作区顶部标题；底部工作区图标支持横向滚动并显示当前工作区。标题栏工作区入口只显示图标，完整名称放在悬停提示；菜单统一左对齐、13pt 常规字体，用轻底色标记当前工作区，新建与重命名文案不加省略号。
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
 - 亮色 17 套、暗色 28 套，包含 Normal 与 Rosewash 对应变体；保留 `rose_pine_dawn` / `rose_pine_moon` 既有 ID，其余采用主题家族 ID
 - Settings 在明暗主题旁分别提供 Page / Window 色井与重置按钮；纸面和窗口 / 侧栏背景独立覆盖、即时保存，切换主题保留覆盖。配置使用 `light_page_background` / `light_window_background` / `dark_page_background` / `dark_window_background`，值为 `#RRGGBB` 或空字符串（主题默认）；非法色值报错。自定义纸面按亮度选择黑字或深色映射，窗口文字按背景对比度调整，不修改 PDF 文件
@@ -227,6 +228,8 @@ flowchart LR
 - `W`:最近窗口列表,可激活打开的窗口或恢复已关闭窗口组
 - 最近文件 / 最近窗口 / 打开标签列表中,`Option+Enter` 向右新增分屏,`Option+Shift+Enter` 向下新增分屏;通过 `palette_split_right` / `palette_split_down` 自定义;跨窗分屏保留来源阅读位置
 - `Ctrl+Tab`:当前窗口全部工作区的 MRU 紧凑列表;按住 Ctrl 连按 Tab / Shift+Tab 循环,也可方向键选择,松 Ctrl 确认并切换到所属工作区,Esc 取消;手势期间冻结列表顺序
+- `Cmd+Option+←` / `Cmd+Option+→`:切换同窗上一 / 下一工作区，首尾循环；工作区入口上的水平触控板手势也可切换，每次手势仅切换一次，惯性不触发切换。
+- `Cmd+Option+1…9`:按同窗保存顺序切换第 1–9 个工作区；切换前保存各阅读区尚未写回的阅读位置。这些工作区快捷键可在 Settings 中修改。
 - 多 PDF 连续阅读:批量打开会预选本批 PDF,也可 `Cmd` / `Shift` 点击多选后通过 tab 右键菜单开启 / 退出
 - `Cmd+Shift+[` / `Cmd+Shift+]`:上一 / 下一 tab
 - 物理左 `Cmd+1` / `Cmd+2` / `Cmd+3`:激活当前窗口第 1 / 2 / 3 个 tab

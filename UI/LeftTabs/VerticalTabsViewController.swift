@@ -1,5 +1,29 @@
 import AppKit
 
+private final class TabsListDocumentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+private final class TabsListScrollView: NSScrollView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === documentView || hit === contentView ? self : hit
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.clickCount == 1,
+              let window,
+              window.isMovable,
+              !window.styleMask.contains(.fullScreen) else {
+            super.mouseDown(with: event)
+            return
+        }
+        window.performDrag(with: event)
+    }
+}
+
 private final class CollapsibleContainerView: SidebarMaterialView {
     var destinationWindowID: UUID?
     var onMoveTab: ((TabDragPayload) -> Bool)?
@@ -51,13 +75,17 @@ final class VerticalTabsViewController: NSViewController {
     var onOpenRecentURLRequested: ((URL) -> Void)?
     var onRevealInFinderRequested: ((UUID) -> Void)?
     var onOpenWithMenuRequested: ((UUID) -> NSMenu?)?
-    private lazy var workspaceSelector = WorkspaceSelectorView(documentStore: documentStore, windowID: windowID)
-    private let countLabel = NSTextField(labelWithString: L10n.text("0 open", "已打开 0 个"))
+    private lazy var workspaceFooter = WorkspaceSelectorView(documentStore: documentStore, windowID: windowID, style: .sidebarFooter)
     private let emptyStateView = EmptyStateView(
         title: L10n.text("No Documents Open", "尚未打开文档"),
         detail: L10n.text("Press ⌘O to open a PDF", "按 ⌘O 打开 PDF")
     )
     private let listStackView = NSStackView()
+    private let listScrollView = TabsListScrollView()
+    private let listDocumentView = TabsListDocumentView()
+    private var listBottomToRecentConstraint: NSLayoutConstraint?
+    private var listBottomToFooterConstraint: NSLayoutConstraint?
+    private var needsRevealActiveTab = false
     private let recentSectionContainer = NSStackView()
     private let recentTitleLabel = NSTextField(labelWithString: L10n.text("Recent PDFs", "最近打开的 PDF"))
     private let recentListStackView = NSStackView()
@@ -109,17 +137,6 @@ final class VerticalTabsViewController: NSViewController {
         container.allowsWindowDragFromBackground = true
         container.layer?.masksToBounds = true
 
-        workspaceSelector.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        countLabel.font = .systemFont(ofSize: 11, weight: .medium)
-        countLabel.textColor = NightModeStyle.secondaryTextColor
-        countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let headerStack = NSStackView(views: [workspaceSelector, NSView(), countLabel])
-        headerStack.orientation = .horizontal
-        headerStack.alignment = .centerY
-        headerStack.spacing = 8
-
         emptyStateView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         listStackView.orientation = .vertical
@@ -127,6 +144,21 @@ final class VerticalTabsViewController: NSViewController {
         listStackView.spacing = 5
         listStackView.translatesAutoresizingMaskIntoConstraints = false
         listStackView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        listDocumentView.addSubview(listStackView)
+        listScrollView.drawsBackground = false
+        listScrollView.borderType = .noBorder
+        listScrollView.hasVerticalScroller = true
+        listScrollView.hasHorizontalScroller = false
+        listScrollView.scrollerStyle = .overlay
+        listScrollView.autohidesScrollers = true
+        listScrollView.documentView = listDocumentView
+        NSLayoutConstraint.activate([
+            listStackView.leadingAnchor.constraint(equalTo: listDocumentView.leadingAnchor),
+            listStackView.trailingAnchor.constraint(equalTo: listDocumentView.trailingAnchor),
+            listStackView.topAnchor.constraint(equalTo: listDocumentView.topAnchor),
+            listStackView.bottomAnchor.constraint(equalTo: listDocumentView.bottomAnchor),
+        ])
 
         recentSectionContainer.orientation = .vertical
         recentSectionContainer.alignment = .leading
@@ -150,41 +182,43 @@ final class VerticalTabsViewController: NSViewController {
         recentListWidthMatch.priority = .required
         recentListWidthMatch.isActive = true
 
-        for view in [headerStack, emptyStateView, listStackView, recentSectionContainer] {
+        for view in [emptyStateView, listScrollView, recentSectionContainer, workspaceFooter] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
 
         let pinned: [NSLayoutConstraint] = [
-            headerStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            headerStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
-            headerStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            workspaceFooter.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
+            workspaceFooter.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
+            workspaceFooter.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
 
             emptyStateView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             emptyStateView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            emptyStateView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 12),
+            emptyStateView.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
 
-            listStackView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
-            listStackView.trailingAnchor.constraint(
+            listScrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            listScrollView.trailingAnchor.constraint(
                 equalTo: container.trailingAnchor, constant: -8),
-            listStackView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 10),
+            listScrollView.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
         ]
         pinned.forEach { $0.priority = .defaultHigh }
         NSLayoutConstraint.activate(pinned)
 
         // Recent section: pinned to the bottom while documents are open, moved up
-        // under the Documents header when the window is empty (M12-012).
+        // to the top when the window is empty.
         recentBottomConstraints = [
             recentSectionContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             recentSectionContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            recentSectionContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
-            listStackView.bottomAnchor.constraint(
-                lessThanOrEqualTo: recentSectionContainer.topAnchor, constant: -10),
+            recentSectionContainer.bottomAnchor.constraint(equalTo: workspaceFooter.topAnchor, constant: -12),
         ]
+        listBottomToRecentConstraint = listScrollView.bottomAnchor.constraint(
+            equalTo: recentSectionContainer.topAnchor, constant: -10)
+        listBottomToFooterConstraint = listScrollView.bottomAnchor.constraint(
+            equalTo: workspaceFooter.topAnchor, constant: -10)
         recentTopConstraints = [
             recentSectionContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             recentSectionContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            recentSectionContainer.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 12),
+            recentSectionContainer.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
         ]
         recentBottomConstraints.forEach { $0.priority = .defaultHigh }
         recentTopConstraints.forEach { $0.priority = .defaultHigh }
@@ -193,11 +227,23 @@ final class VerticalTabsViewController: NSViewController {
         view = container
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        listDocumentView.frame.size = NSSize(
+            width: listScrollView.contentSize.width,
+            height: listStackView.fittingSize.height
+        )
+        listDocumentView.layoutSubtreeIfNeeded()
+        if needsRevealActiveTab, !listScrollView.isHidden, let selectedView = selectedTabItemView() {
+            selectedView.scrollToVisible(selectedView.bounds)
+            needsRevealActiveTab = false
+        }
+    }
+
     func refreshChromeColors() {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             (view as? SidebarMaterialView)?.applySurface()
-            workspaceSelector.refreshChromeColors()
-            countLabel.textColor = NightModeStyle.secondaryTextColor
+            workspaceFooter.refreshChromeColors()
             emptyStateView.refreshChromeColors()
             recentTitleLabel.textColor = NightModeStyle.tertiaryTextColor
             recentButtons.forEach {
@@ -211,64 +257,80 @@ final class VerticalTabsViewController: NSViewController {
 
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
-        guard notification.affects(windowID: windowID) else { return }
         let change = notification.documentStoreChange
+        guard notification.affects(windowID: windowID) || change.contains(.recentFiles) else { return }
         guard change.intersection([.content, .tabs, .annotations, .recentFiles, .appearance]).isEmpty == false else {
             return
         }
         rebuildList()
         applyEmptyState()
+        if change.contains(.appearance) { refreshChromeColors() }
     }
 
     /// M12-012: with documents open, the recent footer stays pinned to the
-    /// bottom; in an empty window the recents move up under the Documents header
+    /// bottom; in an empty window the recents move up to the top
     /// as the primary quick-entry content, falling back to the shared hint.
     private func applyEmptyState() {
         let noSessions = documentStore.sessions(in: windowID).isEmpty
-        listStackView.isHidden = noSessions
-        countLabel.isHidden = noSessions
+        listScrollView.isHidden = noSessions
+        listBottomToRecentConstraint?.isActive = false
+        listBottomToFooterConstraint?.isActive = false
+        NSLayoutConstraint.deactivate(recentTopConstraints + recentBottomConstraints)
 
         if noSessions {
             let recentsVisible = recentSectionContainer.isHidden == false
             emptyStateView.isHidden = recentsVisible
-            recentTopConstraints.forEach { $0.isActive = recentsVisible }
-            recentBottomConstraints.forEach { $0.isActive = false }
+            if recentsVisible { NSLayoutConstraint.activate(recentTopConstraints) }
         } else {
             emptyStateView.isHidden = true
-            recentTopConstraints.forEach { $0.isActive = false }
-            recentBottomConstraints.forEach { $0.isActive = true }
+            NSLayoutConstraint.activate(recentBottomConstraints)
+            if recentSectionContainer.isHidden {
+                listBottomToFooterConstraint?.isActive = true
+            } else {
+                listBottomToRecentConstraint?.isActive = true
+            }
         }
         view.needsLayout = true
     }
 
     private func rebuildList() {
         guard isViewLoaded else { return }
-        workspaceSelector.refresh()
+        workspaceFooter.refresh()
 
         let fingerprint = TabsFingerprint.capture(
             from: documentStore,
             windowID: windowID,
-            recentURLs: recentFingerprintURLs(),
+            recentURLs: displayedRecentURLs(),
             showRecentSection: documentStore.appConfiguration.layout.showRecentFilesInSidebar
         )
         guard fingerprint != displayedTabsFingerprint else { return }
+        let restoreTabFocus = listStackView.arrangedSubviews.contains {
+            view.window?.firstResponder === $0
+        }
+        needsRevealActiveTab = fingerprint.activeSessionID != displayedTabsFingerprint?.activeSessionID
+            || fingerprint.items.map(\.id) != displayedTabsFingerprint?.items.map(\.id)
         displayedTabsFingerprint = fingerprint
 
+        let sessions = documentStore.sessions(in: windowID)
+        let editingItem = listStackView.arrangedSubviews
+            .compactMap { $0 as? VerticalTabItemView }
+            .first(where: \.isEditing)
+        if let editingItem, !sessions.contains(where: { $0.id == editingItem.sessionID }) {
+            editingItem.finishEditing()
+        }
         listStackView.arrangedSubviews.forEach { subview in
             listStackView.removeArrangedSubview(subview)
-            subview.removeFromSuperview()
+            if subview !== editingItem { subview.removeFromSuperview() }
         }
 
-        let sessions = documentStore.sessions(in: windowID)
         let selectedSessionIDs = documentStore.selectedSessionIDs(in: windowID)
         let continuousSessionIDs = documentStore.continuousReadingSessionIDs(in: windowID)
         let continuousSessionSet = Set(continuousSessionIDs)
         let continuousLeaderID = continuousSessionIDs.first
-        let activeSessionID = documentStore.activeSessionID(in: windowID)
-        countLabel.stringValue = L10n.text("\(sessions.count) open", "已打开 \(sessions.count) 个")
+        let activeSessionID = fingerprint.activeSessionID
 
         for session in sessions {
-            let itemView = VerticalTabItemView(
+            let itemView = editingItem.flatMap { $0.sessionID == session.id ? $0 : nil } ?? VerticalTabItemView(
                 sessionID: session.id,
                 title: session.title,
                 filename: session.isBlank ? nil : session.url.lastPathComponent,
@@ -277,7 +339,7 @@ final class VerticalTabsViewController: NSViewController {
                 isDirty: session.isDirty,
                 isContinuousReadingMember: continuousSessionSet.contains(session.id),
                 isContinuousReadingLeader: continuousLeaderID == session.id,
-                canStartContinuousReading: selectedSessionIDs.count > 1,
+                canStartContinuousReading: documentStore.canStartContinuousReadingFromSelection(in: windowID),
                 dragPayload: session.isBlank
                     ? nil
                     : TabDragPayload(sourceWindowID: windowID, sessionID: session.id),
@@ -311,26 +373,39 @@ final class VerticalTabsViewController: NSViewController {
                     self.documentStore.stopContinuousReading(in: self.windowID)
                 },
                 onMoveToWorkspaceMenu: { [weak self] sessionID in
-                    self?.workspaceSelector.moveMenu(for: sessionID)
+                    self?.workspaceFooter.moveMenu(for: sessionID)
                 }
             )
+            if itemView === editingItem {
+                itemView.updateState(
+                    isSelected: activeSessionID == session.id,
+                    isTabSelected: selectedSessionIDs.contains(session.id),
+                    isDirty: session.isDirty,
+                    isContinuousReadingMember: continuousSessionSet.contains(session.id),
+                    isContinuousReadingLeader: continuousLeaderID == session.id,
+                    canStartContinuousReading: documentStore.canStartContinuousReadingFromSelection(in: windowID)
+                )
+            }
             itemView.translatesAutoresizingMaskIntoConstraints = false
             listStackView.addArrangedSubview(itemView)
-            let widthMatch = itemView.widthAnchor.constraint(equalTo: listStackView.widthAnchor)
-            widthMatch.priority = .defaultHigh
-            widthMatch.isActive = true
+            if itemView !== editingItem {
+                let widthMatch = itemView.widthAnchor.constraint(equalTo: listStackView.widthAnchor)
+                widthMatch.priority = .defaultHigh
+                widthMatch.isActive = true
+            }
+        }
+        if let editingItem, !sessions.contains(where: { $0.id == editingItem.sessionID }) {
+            editingItem.removeFromSuperview()
         }
 
         rebuildRecentList()
+        if restoreTabFocus { view.window?.makeFirstResponder(selectedTabItemView()) }
+        view.needsLayout = true
     }
 
-    private func recentFingerprintURLs() -> [URL] {
+    private func displayedRecentURLs() -> [URL] {
         guard documentStore.appConfiguration.layout.showRecentFilesInSidebar else { return [] }
-        let openURLs = Set(documentStore.sessions(in: windowID).map(\.url.standardizedFileURL))
-        return documentStore.recentDocumentURLs
-            .filter { openURLs.contains($0.standardizedFileURL) == false }
-            .prefix(Self.recentDisplayLimit)
-            .map(\.self)
+        return Array(documentStore.recentDocumentURLs.prefix(Self.recentDisplayLimit))
     }
 
     private func handleSessionSelection(_ sessionID: UUID, modifierFlags: NSEvent.ModifierFlags) {
@@ -369,7 +444,7 @@ final class VerticalTabsViewController: NSViewController {
         }
 
         let shouldShowRecents = documentStore.appConfiguration.layout.showRecentFilesInSidebar
-        let recentURLs = Array(documentStore.recentDocumentURLs.prefix(Self.recentDisplayLimit))
+        let recentURLs = displayedRecentURLs()
         guard shouldShowRecents, recentURLs.isEmpty == false else {
             recentSectionContainer.isHidden = true
             return
@@ -411,20 +486,24 @@ final class VerticalTabsViewController: NSViewController {
     private func setupEventMonitors() {
         // Double-click on a tab → rename
         let mouse = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            self?.handleRenameMouseEvent(event) ?? event
+            guard let self else { return event }
+            return self.handleRenameMouseEvent(event)
         }
         eventMonitors.append(mouse as Any)
 
         // Enter on selected tab → rename (macOS Finder convention)
         let key = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleRenameKeyEvent(event) ?? event
+            guard let self else { return event }
+            return self.handleRenameKeyEvent(event)
         }
         eventMonitors.append(key as Any)
     }
 
     private func handleRenameMouseEvent(_ event: NSEvent) -> NSEvent? {
-        guard event.clickCount == 2,
+        guard isSidebarVisible, !view.isHiddenOrHasHiddenAncestor,
+              event.clickCount == 2,
               eventBelongsToOwnWindow(event),
+              listScrollView.bounds.contains(listScrollView.convert(event.locationInWindow, from: nil)),
               let itemView = tabItemView(at: event.locationInWindow) else { return event }
         itemView.beginEditing()
         return nil
@@ -440,10 +519,13 @@ final class VerticalTabsViewController: NSViewController {
 
     private func handleRenameKeyEvent(_ event: NSEvent) -> NSEvent? {
         guard isPlainReturnKeyEvent(event) else { return event }
-        guard documentStore.tabPresentationMode(in: windowID) == .verticalSidebar else { return event }
+        guard isSidebarVisible, !view.isHiddenOrHasHiddenAncestor else { return event }
         guard eventBelongsToOwnWindow(event), let window = view.window else { return event }
         guard window.firstResponder is NSTextView == false else { return event }
-        guard let selectedView = selectedTabItemView() else { return event }
+        guard let selectedView = selectedTabItemView(),
+              let responder = window.firstResponder as? NSView,
+              responder === selectedView || responder.isDescendant(of: selectedView) else { return event }
+        selectedView.scrollToVisible(selectedView.bounds)
         selectedView.beginEditing()
         return nil
     }
@@ -451,6 +533,12 @@ final class VerticalTabsViewController: NSViewController {
     private func isPlainReturnKeyEvent(_ event: NSEvent) -> Bool {
         guard event.characters == "\r" || event.characters == "\n" else { return false }
         return event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+    }
+
+    private var isSidebarVisible: Bool {
+        documentStore.appConfiguration.layout.sidebarsSwapped
+            ? documentStore.isRightSidebarVisible(in: windowID)
+            : documentStore.isLeftSidebarVisible(in: windowID)
     }
 
     private func selectedTabItemView() -> VerticalTabItemView? {
@@ -484,10 +572,6 @@ extension VerticalTabsViewController {
 
     var testingEmptyStateVisible: Bool {
         emptyStateView.isHidden == false
-    }
-
-    var testingCountLabelVisible: Bool {
-        countLabel.isHidden == false
     }
 
     var testingRecentListWidth: CGFloat {

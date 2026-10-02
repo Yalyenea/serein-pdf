@@ -1,17 +1,19 @@
 import AppKit
 
 final class VerticalTabItemView: NSView {
-    private let sessionID: UUID
+    override var acceptsFirstResponder: Bool { true }
+    let sessionID: UUID
     private let selectButton = TabDragSourceButton(title: "", target: nil, action: nil)
     private let dirtyIndicator = NSView()
     private let groupIndicator = NSView()
     private let titleLabel = NSTextField()
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let separator = NSBox()
-    private let isDirty: Bool
-    private let isContinuousReadingMember: Bool
-    private let isContinuousReadingLeader: Bool
-    private let canStartContinuousReading: Bool
+    private let contentStackView = NSStackView()
+    private var isDirty: Bool
+    private var isContinuousReadingMember: Bool
+    private var isContinuousReadingLeader: Bool
+    private var canStartContinuousReading: Bool
     private var onSelect: ((UUID, NSEvent.ModifierFlags) -> Void)?
     private var onAlternateSelect: ((UUID) -> Void)?
     private var onClose: ((UUID) -> Void)?
@@ -31,6 +33,8 @@ final class VerticalTabItemView: NSView {
     var isTabSelected: Bool = false {
         didSet { updateAppearance() }
     }
+
+    var isEditing: Bool { titleLabel.isEditable }
 
     init(
         sessionID: UUID,
@@ -129,7 +133,8 @@ final class VerticalTabItemView: NSView {
         separator.isTransparent = false
         separator.fillColor = SplitViewController.dividerBackgroundColor
 
-        let row = NSStackView(views: [dirtyIndicator, titleLabel, closeButton])
+        let row = contentStackView
+        [dirtyIndicator, titleLabel, closeButton].forEach(row.addArrangedSubview)
         row.orientation = .horizontal
         row.alignment = .centerY
         row.distribution = .fill
@@ -188,6 +193,7 @@ final class VerticalTabItemView: NSView {
         if isAlternate {
             onAlternateSelect?(sessionID)
         } else {
+            window?.makeFirstResponder(self)
             onSelect?(sessionID, modifierFlags)
         }
     }
@@ -276,12 +282,21 @@ final class VerticalTabItemView: NSView {
         titleLabel.isSelectable = true
         titleLabel.isBezeled = true
         titleLabel.drawsBackground = true
-        titleLabel.backgroundColor = .controlBackgroundColor
+        updateAppearance()
         window?.makeFirstResponder(titleLabel)
+        updateAppearance()
         titleLabel.currentEditor()?.selectAll(nil)
     }
 
+    func finishEditing() {
+        guard isEditing else { return }
+        if let editor = titleLabel.currentEditor() { titleLabel.stringValue = editor.string }
+        commitEditing()
+        window?.makeFirstResponder(nil)
+    }
+
     private func commitEditing() {
+        guard titleLabel.isEditable else { return }
         titleLabel.isEditable = false
         titleLabel.isSelectable = false
         titleLabel.isBezeled = false
@@ -294,9 +309,10 @@ final class VerticalTabItemView: NSView {
             return
         }
         titleLabel.stringValue = newTitle
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.onRename?(self.sessionID, newTitle)
+        let onRename = self.onRename
+        let sessionID = self.sessionID
+        DispatchQueue.main.async {
+            onRename?(sessionID, newTitle)
         }
     }
 
@@ -318,6 +334,23 @@ final class VerticalTabItemView: NSView {
         updateAppearance()
     }
 
+    func updateState(
+        isSelected: Bool, isTabSelected: Bool, isDirty: Bool,
+        isContinuousReadingMember: Bool, isContinuousReadingLeader: Bool,
+        canStartContinuousReading: Bool
+    ) {
+        self.isSelected = isSelected
+        self.isTabSelected = isTabSelected
+        self.isDirty = isDirty
+        self.isContinuousReadingMember = isContinuousReadingMember
+        self.isContinuousReadingLeader = isContinuousReadingLeader
+        self.canStartContinuousReading = canStartContinuousReading
+        dirtyIndicator.isHidden = !isDirty
+        groupIndicator.isHidden = !(isContinuousReadingMember || isContinuousReadingLeader)
+        contentStackView.edgeInsets.left = isContinuousReadingMember ? 24 : 10
+        updateAppearance()
+    }
+
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if isSelected {
@@ -335,13 +368,24 @@ final class VerticalTabItemView: NSView {
             groupIndicator.layer?.backgroundColor = isContinuousReadingLeader
                 ? HighlightColor.pink.nsColor.cgColor
                 : SplitViewController.chromeStrokeColor.withAlphaComponent(0.75).cgColor
+            separator.fillColor = SplitViewController.dividerBackgroundColor
+            titleLabel.textColor = isSelected || isTabSelected || titleLabel.isEditable
+                ? NightModeStyle.primaryTextColor
+                : NightModeStyle.secondaryTextColor
+            titleLabel.backgroundColor = titleLabel.isEditable ? NightModeStyle.readerBackdropColor : .clear
+            closeButton.contentTintColor = isSelected
+                ? NightModeStyle.primaryTextColor
+                : NightModeStyle.tertiaryTextColor
+            if let editor = titleLabel.currentEditor() as? NSTextView {
+                editor.textColor = NightModeStyle.primaryTextColor
+                editor.backgroundColor = NightModeStyle.readerBackdropColor
+                editor.insertionPointColor = NightModeStyle.primaryTextColor
+                editor.selectedTextAttributes = [
+                    .backgroundColor: SplitViewController.selectedChromeBackgroundColor,
+                    .foregroundColor: NightModeStyle.primaryTextColor,
+                ]
+            }
         }
-        titleLabel.textColor = isSelected || isTabSelected
-            ? NightModeStyle.primaryTextColor
-            : NightModeStyle.secondaryTextColor
-        closeButton.contentTintColor = isSelected
-            ? NightModeStyle.primaryTextColor
-            : NightModeStyle.tertiaryTextColor
         separator.isHidden = isSelected
     }
 }
@@ -354,7 +398,13 @@ extension VerticalTabItemView: NSTextFieldDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             cancelEditing()
-            window?.makeFirstResponder(nil)
+            window?.makeFirstResponder(self)
+            return true
+        }
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            titleLabel.stringValue = textView.string
+            commitEditing()
+            window?.makeFirstResponder(self)
             return true
         }
         return false

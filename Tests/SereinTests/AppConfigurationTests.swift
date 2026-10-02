@@ -3,6 +3,31 @@ import XCTest
 @testable import Serein
 
 final class AppConfigurationTests: XCTestCase {
+    func testWorkspaceNavigationShortcutsPersistOverridesAndClearedBindings() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let store = try AppConfigurationStore(fileURL: rootURL.appendingPathComponent("config.toml"))
+            var configuration = try store.load()
+            XCTAssertEqual(configuration.shortcuts.bindings[.previousWorkspace],
+                           KeyboardShortcut(key: "left", modifiers: [.command, .option]))
+            XCTAssertEqual(configuration.shortcuts.bindings[.nextWorkspace],
+                           KeyboardShortcut(key: "right", modifiers: [.command, .option]))
+            for (offset, command) in ShortcutCommand.workspaceIndexCommands.enumerated() {
+                XCTAssertEqual(configuration.shortcuts.bindings[command],
+                               KeyboardShortcut(key: String(offset + 1), modifiers: [.command, .option]))
+            }
+            let defaults = configuration.shortcuts.bindings.values.map(\.serializedValue)
+            XCTAssertEqual(Set(defaults).count, defaults.count)
+
+            configuration.shortcuts.bindings[.previousWorkspace] = try KeyboardShortcut.parse("command+shift+left")
+            configuration.shortcuts.bindings[.nextWorkspace] = nil
+            configuration.shortcuts.bindings[.workspace3] = KeyboardShortcut(key: "3", modifiers: [.control, .option])
+            configuration.shortcuts.bindings[.workspace9] = nil
+            try store.save(configuration)
+            let restoredStore = try AppConfigurationStore(fileURL: store.fileURL)
+            XCTAssertEqual(try restoredStore.load(), configuration)
+        }
+    }
+
     func testScrollSpeedPersistenceAndValidation() throws {
         try withTemporaryConfigRoot(self) { rootURL in
             let store = try AppConfigurationStore(fileURL: rootURL.appendingPathComponent("config.toml"))

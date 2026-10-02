@@ -24,7 +24,9 @@ struct TabsFingerprint: Equatable {
     ) -> TabsFingerprint {
         let sessions = store.sessions(in: windowID)
         return TabsFingerprint(
-            activeSessionID: store.activeSessionID(in: windowID),
+            activeSessionID: store.activeSessionID(in: windowID).flatMap {
+                store.publicSessionID(forDisplayedSessionID: $0, in: windowID)
+            },
             selectedSessionIDs: store.selectedSessionIDs(in: windowID),
             continuousSessionIDs: store.continuousReadingSessionIDs(in: windowID),
             items: sessions.map { Item(id: $0.id, title: $0.title, isDirty: $0.isDirty) },

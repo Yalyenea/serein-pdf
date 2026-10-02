@@ -463,6 +463,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             .closeCurrentWindow: { [weak self] in self?.closeCurrentWindow(nil) },
             .previousTab: { [weak self] in self?.activatePreviousTab(nil) },
             .nextTab: { [weak self] in self?.activateNextTab(nil) },
+            .previousWorkspace: { [weak self] in self?.activatePreviousWorkspace(nil) },
+            .nextWorkspace: { [weak self] in self?.activateNextWorkspace(nil) },
             .showAllTabs: { [weak self] in self?.showAllTabs(nil) },
             .toggleContinuousReading: { [weak self] in self?.toggleContinuousReading(nil) },
             .fitHeight: { [weak self] in self?.fitReaderToHeight(nil) },
@@ -517,6 +519,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         ]
         for command in ShortcutCommand.allCases where command.annotationMarkupType != nil {
             map[command] = { [weak self] in self?.applyAnnotationCommand(command) }
+        }
+        for command in ShortcutCommand.workspaceIndexCommands {
+            guard let index = command.workspaceIndex else { continue }
+            map[command] = { [weak self] in self?.activateWorkspace(at: index) }
         }
         cachedShortcutHandlerMap = map
         return map
@@ -957,8 +963,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func buildTabsMenuItem() -> NSMenuItem {
         let tabsMenuItem = NSMenuItem(title: L10n.text("Tabs", "标签页"), action: nil, keyEquivalent: "")
         let tabsMenu = managedMenu(title: L10n.text("Tabs", "标签页"))
+        let workspaceItem = NSMenuItem(title: L10n.text("Workspaces", "工作区"), action: nil, keyEquivalent: "")
+        let workspaceMenu = managedMenu(title: workspaceItem.title)
+        workspaceMenu.items = [
+            makeConfiguredMenuItem(title: ShortcutCommand.previousWorkspace.menuTitle,
+                                   command: .previousWorkspace, action: #selector(activatePreviousWorkspace(_:))),
+            makeConfiguredMenuItem(title: ShortcutCommand.nextWorkspace.menuTitle,
+                                   command: .nextWorkspace, action: #selector(activateNextWorkspace(_:))),
+            .separator(),
+        ] + ShortcutCommand.workspaceIndexCommands.map { command in
+            makeConfiguredMenuItem(title: command.menuTitle, command: command,
+                                   action: #selector(activateNumberedWorkspace(_:)))
+        }
+        workspaceItem.submenu = workspaceMenu
 
         tabsMenu.items = [
+            workspaceItem,
+            .separator(),
             makeConfiguredMenuItem(
                 title: L10n.text("Previous Tab", "上一个标签页"),
                 command: .previousTab,
@@ -1421,6 +1442,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     @objc
+    private func activatePreviousWorkspace(_ sender: Any?) {
+        guard let controller = mainWindowController else { return }
+        controller.flushPendingReadingPositions()
+        documentStore.activateAdjacentWorkspace(direction: -1, in: controller.windowID)
+    }
+
+    @objc
+    private func activateNextWorkspace(_ sender: Any?) {
+        guard let controller = mainWindowController else { return }
+        controller.flushPendingReadingPositions()
+        documentStore.activateAdjacentWorkspace(direction: 1, in: controller.windowID)
+    }
+
+    @objc
+    private func activateNumberedWorkspace(_ sender: NSMenuItem) {
+        guard let command = sender.representedObject as? ShortcutCommand,
+              let index = command.workspaceIndex else { return }
+        activateWorkspace(at: index)
+    }
+
+    private func activateWorkspace(at index: Int) {
+        guard let controller = mainWindowController else { return }
+        controller.flushPendingReadingPositions()
+        documentStore.activateWorkspace(at: index, in: controller.windowID)
+    }
+
+    @objc
     private func useSidebarTabs(_ sender: Any?) {
         guard let controller = mainWindowController else { return }
         documentStore.setTabPresentationMode(.verticalSidebar, in: controller.windowID)
@@ -1596,7 +1644,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                 default:
                     command.menuTitle
                 }
-                return (command, title)
+                return (command, command.workspaceIndex != nil ? item.title : title)
             }
         }
     }
@@ -3164,6 +3212,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             return NSApp.keyWindow != nil || controller != nil
         case #selector(activatePreviousTab(_:)), #selector(activateNextTab(_:)):
             return windowID.map { documentStore.sessionCount(in: $0) > 1 } == true
+        case #selector(activatePreviousWorkspace(_:)), #selector(activateNextWorkspace(_:)):
+            return windowID.map { documentStore.workspaces(in: $0).count > 1 } == true
+        case #selector(activateNumberedWorkspace(_:)):
+            menuItem.state = .off
+            guard let windowID, let command = menuItem.representedObject as? ShortcutCommand,
+                  let index = command.workspaceIndex else { return false }
+            let workspaces = documentStore.workspaces(in: windowID)
+            guard workspaces.indices.contains(index - 1) else {
+                menuItem.title = command.menuTitle
+                return false
+            }
+            let workspace = workspaces[index - 1]
+            menuItem.title = "\(index). \(workspace.name)"
+            menuItem.state = documentStore.activeWorkspaceID(in: windowID) == workspace.id ? .on : .off
+            return true
         case #selector(fitReaderToWidth(_:)):
             menuItem.state = activePDFSession?.scaleMode == .fitWidth ? .on : .off
             return activePDFSession != nil
@@ -3205,7 +3268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menuItem.state = controller?.isReaderSplitEnabled == true ? .on : .off
             return activePDFSession != nil
         case #selector(toggleRightSidebarModeAction(_:)):
-            return windowID.map { documentStore.isRightSidebarVisible(in: $0) } == true
+            return windowID.map { documentStore.isOutlinePaneVisible(in: $0) } == true
         case #selector(swapSidebarsAction(_:)):
             return true
         case #selector(useSinglePage(_:)):
@@ -3236,6 +3299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 extension AppDelegate {
     func installMenuForTesting(documentStore: DocumentStore, controllers: [MainWindowController]) {
         self.documentStore = documentStore
+        appConfiguration = documentStore.appConfiguration
         mainWindowControllers = Dictionary(uniqueKeysWithValues: controllers.map { ($0.windowID, $0) })
         installMainMenu()
         observeMenuStateChanges()

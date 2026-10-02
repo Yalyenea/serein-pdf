@@ -327,6 +327,17 @@ struct AppConfiguration: Equatable, Sendable {
             .closeCurrentWindow: KeyboardShortcut(key: "w", modifiers: [.command, .shift]),
             .previousTab: KeyboardShortcut(key: "[", modifiers: [.command, .shift]),
             .nextTab: KeyboardShortcut(key: "]", modifiers: [.command, .shift]),
+            .previousWorkspace: KeyboardShortcut(key: "left", modifiers: [.command, .option]),
+            .nextWorkspace: KeyboardShortcut(key: "right", modifiers: [.command, .option]),
+            .workspace1: KeyboardShortcut(key: "1", modifiers: [.command, .option]),
+            .workspace2: KeyboardShortcut(key: "2", modifiers: [.command, .option]),
+            .workspace3: KeyboardShortcut(key: "3", modifiers: [.command, .option]),
+            .workspace4: KeyboardShortcut(key: "4", modifiers: [.command, .option]),
+            .workspace5: KeyboardShortcut(key: "5", modifiers: [.command, .option]),
+            .workspace6: KeyboardShortcut(key: "6", modifiers: [.command, .option]),
+            .workspace7: KeyboardShortcut(key: "7", modifiers: [.command, .option]),
+            .workspace8: KeyboardShortcut(key: "8", modifiers: [.command, .option]),
+            .workspace9: KeyboardShortcut(key: "9", modifiers: [.command, .option]),
             .fitHeight: KeyboardShortcut(key: "9", modifiers: [.command]),
             .fitWidth: KeyboardShortcut(key: "0", modifiers: [.command]),
             .fitTextWidth: KeyboardShortcut(key: "0", modifiers: [.command, .option]),
@@ -475,6 +486,10 @@ struct KeyboardShortcut: Equatable, Sendable {
             "\t"
         case "return":
             "\r"
+        case "left":
+            "\u{F702}"
+        case "right":
+            "\u{F703}"
         default:
             key
         }
@@ -489,6 +504,8 @@ struct KeyboardShortcut: Equatable, Sendable {
 
     static func keyToken(for event: NSEvent) -> String? {
         if event.keyCode == 36 || event.keyCode == 76 { return "return" }
+        if event.keyCode == 123 { return "left" }
+        if event.keyCode == 124 { return "right" }
         guard let characters = event.charactersIgnoringModifiers?.lowercased() else { return nil }
         return switch characters {
         case "\u{1b}":
@@ -541,6 +558,10 @@ struct KeyboardShortcut: Equatable, Sendable {
             keyDisplay = "Tab"
         case "return":
             keyDisplay = "↩"
+        case "left":
+            keyDisplay = "←"
+        case "right":
+            keyDisplay = "→"
         default:
             keyDisplay = key.uppercased()
         }
@@ -570,7 +591,7 @@ struct KeyboardShortcut: Equatable, Sendable {
     }
 
     static func isSupportedKeyToken(_ token: String) -> Bool {
-        if ["escape", "space", "tab", "plus", "return", "enter"].contains(token) {
+        if ["escape", "space", "tab", "plus", "return", "enter", "left", "right"].contains(token) {
             return true
         }
         return token.count == 1 && token.unicodeScalars.allSatisfy {
@@ -755,6 +776,17 @@ close_current_tab = "command+w"
 close_current_window = "command+shift+w"
 previous_tab = "command+shift+["
 next_tab = "command+shift+]"
+previous_workspace = "command+option+left"
+next_workspace = "command+option+right"
+workspace_1 = "command+option+1"
+workspace_2 = "command+option+2"
+workspace_3 = "command+option+3"
+workspace_4 = "command+option+4"
+workspace_5 = "command+option+5"
+workspace_6 = "command+option+6"
+workspace_7 = "command+option+7"
+workspace_8 = "command+option+8"
+workspace_9 = "command+option+9"
 show_all_tabs = "control+tab"
 toggle_continuous_reading = "none"
 fit_height = "command+9"
@@ -905,6 +937,17 @@ close_current_tab = "\(serializedShortcut(.closeCurrentTab, configuration: confi
 close_current_window = "\(serializedShortcut(.closeCurrentWindow, configuration: configuration))"
 previous_tab = "\(serializedShortcut(.previousTab, configuration: configuration))"
 next_tab = "\(serializedShortcut(.nextTab, configuration: configuration))"
+previous_workspace = "\(serializedShortcut(.previousWorkspace, configuration: configuration))"
+next_workspace = "\(serializedShortcut(.nextWorkspace, configuration: configuration))"
+workspace_1 = "\(serializedShortcut(.workspace1, configuration: configuration))"
+workspace_2 = "\(serializedShortcut(.workspace2, configuration: configuration))"
+workspace_3 = "\(serializedShortcut(.workspace3, configuration: configuration))"
+workspace_4 = "\(serializedShortcut(.workspace4, configuration: configuration))"
+workspace_5 = "\(serializedShortcut(.workspace5, configuration: configuration))"
+workspace_6 = "\(serializedShortcut(.workspace6, configuration: configuration))"
+workspace_7 = "\(serializedShortcut(.workspace7, configuration: configuration))"
+workspace_8 = "\(serializedShortcut(.workspace8, configuration: configuration))"
+workspace_9 = "\(serializedShortcut(.workspace9, configuration: configuration))"
 show_all_tabs = "\(serializedShortcut(.showAllTabs, configuration: configuration))"
 toggle_continuous_reading = "\(serializedShortcut(.toggleContinuousReading, configuration: configuration))"
 fit_height = "\(serializedShortcut(.fitHeight, configuration: configuration))"
@@ -1050,6 +1093,17 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "close_current_window",
         "previous_tab",
         "next_tab",
+        "previous_workspace",
+        "next_workspace",
+        "workspace_1",
+        "workspace_2",
+        "workspace_3",
+        "workspace_4",
+        "workspace_5",
+        "workspace_6",
+        "workspace_7",
+        "workspace_8",
+        "workspace_9",
         "show_all_tabs",
         "toggle_continuous_reading",
         "fit_height",
@@ -1363,6 +1417,28 @@ struct AppConfigurationParser {
             try applyShortcut(rawValue, command: .previousTab, to: &configuration)
         case ("shortcuts", "next_tab"):
             try applyShortcut(rawValue, command: .nextTab, to: &configuration)
+        case ("shortcuts", "previous_workspace"):
+            try applyShortcut(rawValue, command: .previousWorkspace, to: &configuration)
+        case ("shortcuts", "next_workspace"):
+            try applyShortcut(rawValue, command: .nextWorkspace, to: &configuration)
+        case ("shortcuts", "workspace_1"):
+            try applyShortcut(rawValue, command: .workspace1, to: &configuration)
+        case ("shortcuts", "workspace_2"):
+            try applyShortcut(rawValue, command: .workspace2, to: &configuration)
+        case ("shortcuts", "workspace_3"):
+            try applyShortcut(rawValue, command: .workspace3, to: &configuration)
+        case ("shortcuts", "workspace_4"):
+            try applyShortcut(rawValue, command: .workspace4, to: &configuration)
+        case ("shortcuts", "workspace_5"):
+            try applyShortcut(rawValue, command: .workspace5, to: &configuration)
+        case ("shortcuts", "workspace_6"):
+            try applyShortcut(rawValue, command: .workspace6, to: &configuration)
+        case ("shortcuts", "workspace_7"):
+            try applyShortcut(rawValue, command: .workspace7, to: &configuration)
+        case ("shortcuts", "workspace_8"):
+            try applyShortcut(rawValue, command: .workspace8, to: &configuration)
+        case ("shortcuts", "workspace_9"):
+            try applyShortcut(rawValue, command: .workspace9, to: &configuration)
         case ("shortcuts", "show_all_tabs"):
             try applyShortcut(rawValue, command: .showAllTabs, to: &configuration)
         case ("shortcuts", "toggle_continuous_reading"):

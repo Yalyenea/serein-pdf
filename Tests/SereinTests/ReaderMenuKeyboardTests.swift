@@ -62,12 +62,35 @@ final class ReaderMenuKeyboardTests: XCTestCase {
         if let failure { throw failure }
     }
 
-    private func runInIsolatedApplication() throws {
+    func testWorkspaceMenuShortcutsSwitchEmptyWorkspacesInBothTabModes() throws {
+        guard ProcessInfo.processInfo.environment["SEREIN_KEYBOARD_TEST_CHILD"] == "1" else {
+            try runInIsolatedApplication(testName: "testWorkspaceMenuShortcutsSwitchEmptyWorkspacesInBothTabModes")
+            return
+        }
+        _ = NSApplication.shared
+        let previousPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.accessory)
+        NSApp.activate(ignoringOtherApps: true)
+        defer { NSApp.setActivationPolicy(previousPolicy) }
+        var failure: Error?
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            do { try self.exerciseWorkspaceKeyboardNavigation() }
+            catch { failure = error }
+            NSApp.stop(nil)
+            NSApp.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero,
+                modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                subtype: 0, data1: 0, data2: 0)!, atStart: false)
+        }
+        NSApp.run()
+        if let failure { throw failure }
+    }
+
+    private func runInIsolatedApplication(testName: String = "testAuxiliaryEditorsKeepControlBindingsWithSplitReaderOpen") throws {
         // NSApplication's launch and activation lifecycle cannot be reset between tests.
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         process.arguments = ["xctest", "-XCTest",
-            "SereinTests.ReaderMenuKeyboardTests/testAuxiliaryEditorsKeepControlBindingsWithSplitReaderOpen",
+            "SereinTests.ReaderMenuKeyboardTests/\(testName)",
             Bundle(for: Self.self).bundleURL.path]
         let environmentKeys: Set<String> = ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "DEVELOPER_DIR", "SDKROOT"]
         process.environment = ProcessInfo.processInfo.environment.filter { environmentKeys.contains($0.key) }
@@ -80,6 +103,88 @@ final class ReaderMenuKeyboardTests: XCTestCase {
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0, result)
         XCTAssertTrue(result.contains("Executed 1 test"), result)
+    }
+
+    private func exerciseWorkspaceKeyboardNavigation() throws {
+        let previousMenu = NSApp.mainMenu
+        let previousWindowsMenu = NSApp.windowsMenu
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        let window = try XCTUnwrap(controller.window)
+        let delegate = AppDelegate()
+        defer {
+            NotificationCenter.default.removeObserver(delegate)
+            controller.close()
+            NSApp.mainMenu = previousMenu
+            NSApp.windowsMenu = previousWindowsMenu
+        }
+        window.setContentSize(NSSize(width: 1300, height: 800))
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        settle(window)
+        delegate.installMenuForTesting(documentStore: store, controllers: [controller])
+        let menu = try XCTUnwrap(NSApp.mainMenu)
+        let previousItem = try XCTUnwrap(find(.previousWorkspace, in: menu))
+        let nextItem = try XCTUnwrap(find(.nextWorkspace, in: menu))
+        let ninthItem = try XCTUnwrap(find(.workspace9, in: menu))
+        XCTAssertFalse(delegate.validateMenuItem(previousItem))
+        XCTAssertFalse(delegate.validateMenuItem(nextItem))
+        XCTAssertFalse(delegate.validateMenuItem(ninthItem))
+
+        let url = try TestPDFFixtures.makeLabeledPDF(named: "workspace-menu-keys",
+            pageSizes: Array(repeating: NSSize(width: 612, height: 792), count: 8))
+        _ = try store.open(documentAt: url, in: controller.windowID)
+        XCTAssertTrue(controller.splitCurrentPDF(layout: .sideBySide))
+        settle(window)
+        let originalID = try XCTUnwrap(store.activeWorkspaceID(in: controller.windowID))
+        let cloneID = try XCTUnwrap(store.activeSessionID(in: controller.windowID))
+        let clonePane = store.focusedPane(in: controller.windowID)
+        let layout = try XCTUnwrap(store.readerLayout(in: controller.windowID))
+        var workspaceIDs = [originalID]
+        for number in 2...9 {
+            workspaceIDs.append(try XCTUnwrap(store.createWorkspace(name: "Space \(number)", in: controller.windowID)))
+        }
+
+        for presentation in [TabPresentationMode.verticalSidebar, .horizontalTitlebar] {
+            store.setTabPresentationMode(presentation, in: controller.windowID)
+            store.activateWorkspace(originalID, in: controller.windowID)
+            settle(window)
+            XCTAssertTrue(delegate.validateMenuItem(previousItem))
+            XCTAssertTrue(delegate.validateMenuItem(nextItem))
+            XCTAssertTrue(delegate.validateMenuItem(ninthItem))
+            XCTAssertEqual(ninthItem.title, "9. Space 9")
+            XCTAssertEqual(nextItem.keyEquivalent, "\u{F703}")
+            XCTAssertEqual(nextItem.keyEquivalentModifierMask, [.command, .option])
+            XCTAssertEqual(ninthItem.keyEquivalent, "9")
+            let split = try XCTUnwrap(window.contentViewController as? SplitViewController)
+            let reader = try XCTUnwrap(split.readerWorkspaceViewController.readerViewController(for: clonePane))
+            let pendingPosition = ReadingPosition(pageIndex: 5, point: NSPoint(x: 29, y: 105))
+            reader.testingScheduleReadingPositionWriteback(pendingPosition, for: cloneID)
+            XCTAssertTrue(reader.testingHasPendingReadingPositionWriteback)
+
+            NSApp.sendEvent(makeKeyEvent(characters: "\u{F703}", keyCode: 124,
+                                        modifierFlags: [.command, .option], window: window))
+            XCTAssertEqual(store.activeWorkspaceID(in: controller.windowID), workspaceIDs[1])
+            XCTAssertTrue(store.sessions(in: controller.windowID).isEmpty)
+            XCTAssertEqual(store.session(for: cloneID)?.lastReadPosition, pendingPosition)
+            NSApp.sendEvent(makeKeyEvent(characters: "9", keyCode: 25,
+                                        modifierFlags: [.command, .option], window: window))
+            XCTAssertEqual(store.activeWorkspaceID(in: controller.windowID), workspaceIDs[8])
+            XCTAssertTrue(delegate.validateMenuItem(ninthItem))
+            XCTAssertEqual(ninthItem.state, .on)
+            NSApp.sendEvent(makeKeyEvent(characters: "\u{F703}", keyCode: 124,
+                                        modifierFlags: [.command, .option], window: window))
+            XCTAssertEqual(store.activeWorkspaceID(in: controller.windowID), originalID)
+            XCTAssertEqual(store.readerLayout(in: controller.windowID), layout)
+            XCTAssertEqual(store.focusedPane(in: controller.windowID), clonePane)
+            NSApp.sendEvent(makeKeyEvent(characters: "\u{F702}", keyCode: 123,
+                                        modifierFlags: [.command, .option], window: window))
+            XCTAssertEqual(store.activeWorkspaceID(in: controller.windowID), workspaceIDs[8])
+            NSApp.sendEvent(makeKeyEvent(characters: "1", keyCode: 18,
+                                        modifierFlags: [.command, .option], window: window))
+            XCTAssertEqual(store.activeWorkspaceID(in: controller.windowID), originalID)
+        }
     }
 
     private func exerciseAuxiliaryEditors() throws {

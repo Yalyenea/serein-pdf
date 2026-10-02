@@ -104,6 +104,7 @@ final class DocumentStore {
     private(set) var recentDocumentURLs: [URL] = []
     private(set) var windowWorkspaces: [WindowWorkspace]
     private var sharedDocumentSources: [UUID: UUID] = [:]
+    private var selectionAnchorIDsByWorkspace: [UUID: UUID] = [:]
     /// Windows whose outline pane the empty-window policy auto-collapsed.
     /// Cleared when the user explicitly touches visibility while empty, or when
     /// the first session opens (which restores the pane).
@@ -199,6 +200,19 @@ final class DocumentStore {
         guard let workspace = windowWorkspace(for: windowID),
               isOutlinePaneVisible(in: workspace) else { return false }
         return rightSidebarMode(in: windowID) == .outline
+    }
+
+    func isOutlinePaneVisible(in windowID: UUID) -> Bool {
+        guard let workspace = windowWorkspace(for: windowID) else { return false }
+        return isOutlinePaneVisible(in: workspace)
+    }
+
+    func setOutlinePaneVisible(_ isVisible: Bool, in windowID: UUID) {
+        if appConfiguration.layout.sidebarsSwapped {
+            setLeftSidebarVisible(isVisible, in: windowID)
+        } else {
+            setRightSidebarVisible(isVisible, in: windowID)
+        }
     }
 
     func sidebarWidths(in windowID: UUID) -> (left: CGFloat, right: CGFloat) {
@@ -354,7 +368,8 @@ final class DocumentStore {
         guard transferSession(
             sessionID,
             fromWorkspaceAt: sourceIndex,
-            toWorkspaceAt: destinationIndex
+            toWorkspaceAt: destinationIndex,
+            readingSessionID: source.activeSessionID
         ) else {
             windowWorkspaces.remove(at: destinationIndex)
             return nil
@@ -376,7 +391,8 @@ final class DocumentStore {
               transferSession(
                 resolvedSessionID,
                 fromWorkspaceAt: sourceIndex,
-                toWorkspaceAt: destinationIndex
+                toWorkspaceAt: destinationIndex,
+                readingSessionID: sessionID == resolvedSessionID ? nil : sessionID
               ) else { return false }
 
         notifyChange(.content, windowIDs: [sourceWindowID, destinationWindowID])
@@ -590,6 +606,7 @@ final class DocumentStore {
 
         var workspace = windowWorkspaces[workspaceIndex]
         workspace.selectedSessionIDs = [sessionID]
+        selectionAnchorIDsByWorkspace[workspace.activeWorkspaceID] = sessionID
         workspace.searchQuery = ""
         if workspace.rightSidebarMode == .search {
             workspace.rightSidebarMode = .outline
@@ -683,6 +700,8 @@ final class DocumentStore {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         let validIDs = Set(windowWorkspaces[index].sessionIDs)
         let selected = Set(sessionIDs.filter { validIDs.contains($0) })
+        selectionAnchorIDsByWorkspace[windowWorkspaces[index].activeWorkspaceID] =
+            sessionIDs.first { validIDs.contains($0) }
         guard windowWorkspaces[index].selectedSessionIDs != selected else { return }
         windowWorkspaces[index].selectedSessionIDs = selected
         if notify {
@@ -700,6 +719,8 @@ final class DocumentStore {
             selected.insert(sessionID)
         }
         windowWorkspaces[index].selectedSessionIDs = selected
+        selectionAnchorIDsByWorkspace[windowWorkspaces[index].activeWorkspaceID] =
+            selected.contains(sessionID) ? sessionID : windowWorkspaces[index].sessionIDs.first { selected.contains($0) }
         notifyChange(.tabs, windowIDs: [windowID], persistState: false)
     }
 
@@ -707,17 +728,16 @@ final class DocumentStore {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
               let targetIndex = windowWorkspaces[index].sessionIDs.firstIndex(of: sessionID) else { return }
         let workspace = windowWorkspaces[index]
-        let anchorID = workspace.selectedSessionIDs
-            .compactMap { selectedID in
-                workspace.sessionIDs.firstIndex(of: selectedID).map { (selectedID, $0) }
-            }
-            .min { abs($0.1 - targetIndex) < abs($1.1 - targetIndex) }?
-            .0
-            ?? workspace.activeSessionID
+        let activeTabID = publicSessionID(for: workspace.activeSessionID, in: workspace)
+        let anchorID = selectionAnchorIDsByWorkspace[workspace.activeWorkspaceID]
+            ?? activeTabID.flatMap { workspace.selectedSessionIDs.contains($0) ? $0 : nil }
+            ?? workspace.sessionIDs.first { workspace.selectedSessionIDs.contains($0) }
+            ?? activeTabID
             ?? workspace.sessionIDs.first
         guard let anchorID,
               let anchorIndex = workspace.sessionIDs.firstIndex(of: anchorID) else { return }
         let bounds = min(anchorIndex, targetIndex)...max(anchorIndex, targetIndex)
+        selectionAnchorIDsByWorkspace[workspace.activeWorkspaceID] = anchorID
         windowWorkspaces[index].selectedSessionIDs = Set(workspace.sessionIDs[bounds])
         notifyChange(.tabs, windowIDs: [windowID], persistState: false)
     }
@@ -730,15 +750,28 @@ final class DocumentStore {
         windowWorkspace(for: windowID)?.continuousReadingState.orderedSessionIDs ?? []
     }
 
+    func canStartContinuousReadingFromSelection(in windowID: UUID) -> Bool {
+        continuousReadingSelection(in: windowID).count > 1
+    }
+
+    private func continuousReadingSelection(in windowID: UUID) -> [UUID] {
+        selectedSessionIDsInWindowOrder(in: windowID).filter { session(for: $0)?.isBlank == false }
+    }
+
     @discardableResult
     func startContinuousReadingFromSelectedSessions(in windowID: UUID) -> Bool {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return false }
         let workspace = windowWorkspaces[index]
-        let orderedSelection = workspace.sessionIDs.filter { workspace.selectedSessionIDs.contains($0) }
+        let orderedSelection = continuousReadingSelection(in: windowID)
         guard orderedSelection.count > 1 else { return false }
         windowWorkspaces[index].continuousReadingState = ContinuousReadingState(orderedSessionIDs: orderedSelection)
         windowWorkspaces[index].selectedSessionIDs = Set(orderedSelection)
-        if workspace.activeSessionID.map({ orderedSelection.contains($0) }) != true,
+        let activeTabID = publicSessionID(for: workspace.activeSessionID, in: workspace)
+        if selectionAnchorIDsByWorkspace[workspace.activeWorkspaceID].map({ orderedSelection.contains($0) }) != true {
+            selectionAnchorIDsByWorkspace[workspace.activeWorkspaceID] =
+                activeTabID.flatMap { orderedSelection.contains($0) ? $0 : nil } ?? orderedSelection.first
+        }
+        if activeTabID.map({ orderedSelection.contains($0) }) != true,
            let firstSessionID = orderedSelection.first {
             activateSession(sessionID: firstSessionID, in: windowID, targetPane: nil, notify: false)
         }
@@ -900,7 +933,7 @@ final class DocumentStore {
         return session
     }
 
-    private func documentSessionID(for sessionID: UUID) -> UUID {
+    func documentSessionID(for sessionID: UUID) -> UUID {
         sharedDocumentSources[sessionID] ?? sessionID
     }
 
@@ -1137,10 +1170,14 @@ final class DocumentStore {
             windowWorkspaces[index].sessionIDs.isEmpty
         let clearsAutoHiddenState = explicitlyControlsOutline &&
             outlineAutoHiddenWindowIDs.contains(windowID)
-        guard windowWorkspaces[index].isLeftSidebarVisible != isVisible || clearsAutoHiddenState else { return }
+        let recordsEmptyWindowIntent = explicitlyControlsOutline &&
+            windowWorkspaces[index].outlineVisibilityWhileEmpty != isVisible
+        guard windowWorkspaces[index].isLeftSidebarVisible != isVisible ||
+              clearsAutoHiddenState || recordsEmptyWindowIntent else { return }
         windowWorkspaces[index].isLeftSidebarVisible = isVisible
         if explicitlyControlsOutline {
             outlineAutoHiddenWindowIDs.remove(windowID)
+            windowWorkspaces[index].outlineVisibilityWhileEmpty = isVisible
         }
         notifyChange(.sidebarVisibility, windowIDs: [windowID])
     }
@@ -1155,12 +1192,16 @@ final class DocumentStore {
             windowWorkspaces[index].sessionIDs.isEmpty
         let clearsAutoHiddenState = explicitlyControlsOutline &&
             outlineAutoHiddenWindowIDs.contains(windowID)
-        guard windowWorkspaces[index].isRightSidebarVisible != isVisible || clearsAutoHiddenState else { return }
+        let recordsEmptyWindowIntent = explicitlyControlsOutline &&
+            windowWorkspaces[index].outlineVisibilityWhileEmpty != isVisible
+        guard windowWorkspaces[index].isRightSidebarVisible != isVisible ||
+              clearsAutoHiddenState || recordsEmptyWindowIntent else { return }
         windowWorkspaces[index].isRightSidebarVisible = isVisible
         // An explicit toggle while the window is empty hands visibility back to
         // the user; the auto-collapse must not restore the pane on first open.
         if explicitlyControlsOutline {
             outlineAutoHiddenWindowIDs.remove(windowID)
+            windowWorkspaces[index].outlineVisibilityWhileEmpty = isVisible
         }
         notifyChange(.sidebarVisibility, windowIDs: [windowID])
     }
@@ -1480,9 +1521,13 @@ final class DocumentStore {
         let previousFitWidthOnOpen = appConfiguration.reader.fitWidthOnOpen
         let previousSwapped = appConfiguration.layout.sidebarsSwapped
         let newSwapped = configuration.layout.sidebarsSwapped
-        let layoutWidthsChanged =
+        let widthChangesOnlySwapDefaults = previousSwapped != newSwapped &&
+            appConfiguration.layout.leftSidebarWidth == configuration.layout.rightSidebarWidth &&
+            appConfiguration.layout.rightSidebarWidth == configuration.layout.leftSidebarWidth
+        let layoutWidthsChanged = !widthChangesOnlySwapDefaults && (
             appConfiguration.layout.leftSidebarWidth != configuration.layout.leftSidebarWidth ||
             appConfiguration.layout.rightSidebarWidth != configuration.layout.rightSidebarWidth
+        )
         appConfiguration = configuration
 
         let fitWidthChanged = previousFitWidthOnOpen != configuration.reader.fitWidthOnOpen
@@ -1783,6 +1828,7 @@ final class DocumentStore {
             }
         }
         outlineAutoHiddenWindowIDs.removeAll()
+        selectionAnchorIDsByWorkspace.removeAll()
         normalizeAllWorkspaces()
         syncPDFFileMonitor()
         notifyChange()
@@ -1873,7 +1919,8 @@ final class DocumentStore {
     private func transferSession(
         _ sessionID: UUID,
         fromWorkspaceAt sourceIndex: Int,
-        toWorkspaceAt destinationIndex: Int
+        toWorkspaceAt destinationIndex: Int,
+        readingSessionID: UUID? = nil
     ) -> Bool {
         guard sourceIndex != destinationIndex,
               windowWorkspaces.indices.contains(sourceIndex),
@@ -1886,6 +1933,11 @@ final class DocumentStore {
         guard let sessionIndex = source.sessionIDs.firstIndex(of: sessionID),
               destination.sessionIDs.contains(sessionID) == false else { return false }
 
+        let readingSourceID = readingSessionID ?? self.readingSessionID(forTab: sessionID)
+        if readingSourceID != sessionID, let readingSource = self.session(for: readingSourceID) {
+            copyReadingState(from: readingSource, to: sessionID)
+        }
+
         source.sessionIDs.remove(at: sessionIndex)
         source.selectedSessionIDs.remove(sessionID)
         source.continuousReadingState.orderedSessionIDs.removeAll { $0 == sessionID }
@@ -1897,6 +1949,7 @@ final class DocumentStore {
 
         destination.sessionIDs.append(sessionID)
         destination.selectedSessionIDs = [sessionID]
+        selectionAnchorIDsByWorkspace[destination.activeWorkspaceID] = sessionID
         activateSessionForTabNavigation(sessionID: sessionID, in: &destination)
 
         normalizeWorkspace(&source, preferredSessionID: preferredSourceSessionID)
@@ -1904,6 +1957,9 @@ final class DocumentStore {
         windowWorkspaces[sourceIndex] = source
         windowWorkspaces[destinationIndex] = destination
         removeUnreferencedSessions()
+        if readingSourceID != sessionID, let moved = self.session(for: sessionID) {
+            persistReadingState(for: moved)
+        }
         rebuildSearchIfNeeded(in: source.id)
         rebuildSearchIfNeeded(in: destination.id)
         return true
@@ -1971,7 +2027,12 @@ final class DocumentStore {
             var seen = Set<UUID>()
             named.sessionIDs = named.sessionIDs.filter { validIDs.contains($0) && seen.insert($0).inserted }
             named.selectedSessionIDs.formIntersection(named.sessionIDs)
-            named.continuousReadingState.orderedSessionIDs.removeAll { !named.sessionIDs.contains($0) }
+            if let anchorID = selectionAnchorIDsByWorkspace[named.id], !named.sessionIDs.contains(anchorID) {
+                selectionAnchorIDsByWorkspace.removeValue(forKey: named.id)
+            }
+            named.continuousReadingState.orderedSessionIDs.removeAll {
+                !named.sessionIDs.contains($0) || session(for: $0)?.isBlank != false
+            }
             if named.continuousReadingState.orderedSessionIDs.count < 2 { named.continuousReadingState = ContinuousReadingState() }
             let invalid = named.referencedSessionIDs.subtracting(validIDs)
             removeLayoutSessions(invalid, from: &named)
@@ -2001,12 +2062,19 @@ final class DocumentStore {
     /// unless the user explicitly touched its visibility while it was empty.
     private func applyEmptyWindowSidebarPolicy(_ workspace: inout WindowWorkspace) {
         if workspace.sessionIDs.isEmpty {
+            if let explicitVisibility = workspace.outlineVisibilityWhileEmpty {
+                setOutlinePaneVisible(explicitVisibility, in: &workspace)
+                return
+            }
             if isOutlinePaneVisible(in: workspace) {
                 setOutlinePaneVisible(false, in: &workspace)
                 outlineAutoHiddenWindowIDs.insert(workspace.id)
             }
-        } else if outlineAutoHiddenWindowIDs.remove(workspace.id) != nil {
-            setOutlinePaneVisible(true, in: &workspace)
+        } else {
+            if outlineAutoHiddenWindowIDs.remove(workspace.id) != nil {
+                setOutlinePaneVisible(true, in: &workspace)
+            }
+            workspace.outlineVisibilityWhileEmpty = nil
         }
     }
 
@@ -2551,6 +2619,26 @@ extension DocumentStore {
     }
 
     @discardableResult
+    func activateAdjacentWorkspace(direction: Int, in windowID: UUID) -> Bool {
+        guard direction == -1 || direction == 1,
+              let window = windowWorkspace(for: windowID), window.workspaces.count > 1,
+              let currentIndex = window.workspaces.firstIndex(where: { $0.id == window.activeWorkspaceID }) else { return false }
+        let targetIndex = (currentIndex + direction + window.workspaces.count) % window.workspaces.count
+        activateWorkspace(window.workspaces[targetIndex].id, in: windowID)
+        return true
+    }
+
+    /// Workspace numbers are one-based and follow the saved order within the window.
+    @discardableResult
+    func activateWorkspace(at index: Int, in windowID: UUID) -> Bool {
+        guard index > 0,
+              let window = windowWorkspace(for: windowID), window.workspaces.indices.contains(index - 1),
+              window.workspaces[index - 1].id != window.activeWorkspaceID else { return false }
+        activateWorkspace(window.workspaces[index - 1].id, in: windowID)
+        return true
+    }
+
+    @discardableResult
     func createWorkspace(name: String, in windowID: UUID) -> UUID? {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return nil }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2595,6 +2683,10 @@ extension DocumentStore {
         let existing = window.workspaces[targetIndex].sessionIDs.first {
             self.session(for: $0).map { Self.normalizedDocumentURL($0.url) == Self.normalizedDocumentURL(session.url) } == true
         }
+        let readingSourceID = sessionID == publicID ? readingSessionID(forTab: publicID) : sessionID
+        if existing == nil, readingSourceID != publicID, let readingSource = self.session(for: readingSourceID) {
+            copyReadingState(from: readingSource, to: publicID)
+        }
         let movingIDs = Set(window.activeWorkspace.groups.flatMap(\.sessionIDs).filter {
             $0 == publicID || self.session(for: $0)?.tabSessionID == publicID
         }).union([publicID])
@@ -2607,6 +2699,9 @@ extension DocumentStore {
         normalizeWorkspace(&window)
         windowWorkspaces[index] = window
         removeUnreferencedSessions()
+        if existing == nil, readingSourceID != publicID, let moved = self.session(for: publicID) {
+            persistReadingState(for: moved)
+        }
         rebuildSearchIfNeeded(in: windowID)
         notifyChange(.content, windowIDs: [windowID])
         return true

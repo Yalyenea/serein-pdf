@@ -1,18 +1,21 @@
 import AppKit
 
 final class TitlebarTabItemView: NSView {
-    private static let cornerRadius: CGFloat = 3
-    private let sessionID: UUID
+    override var acceptsFirstResponder: Bool { true }
+    private static let cornerRadius: CGFloat = 4
+    private static let minimumWidth: CGFloat = 88
+    private static let maximumWidth: CGFloat = 196
+    let sessionID: UUID
     private let selectButton = TabDragSourceButton(title: "", target: nil, action: nil)
     private let dirtyIndicator = NSView()
     private let groupIndicator = NSView()
     private let titleLabel = NSTextField()
-    private let closeButton = NSButton(title: "×", target: nil, action: nil)
-    private let dividerView = NSView()
-    private let isDirty: Bool
-    private let isContinuousReadingMember: Bool
-    private let isContinuousReadingLeader: Bool
-    private let canStartContinuousReading: Bool
+    private let closeButton = NSButton(title: "", target: nil, action: nil)
+    private let contentStackView = NSStackView()
+    private var isDirty: Bool
+    private var isContinuousReadingMember: Bool
+    private var isContinuousReadingLeader: Bool
+    private var canStartContinuousReading: Bool
     private var onSelect: ((UUID, NSEvent.ModifierFlags) -> Void)?
     private var onAlternateSelect: ((UUID) -> Void)?
     private var onClose: ((UUID) -> Void)?
@@ -24,6 +27,9 @@ final class TitlebarTabItemView: NSView {
     private var onStartContinuousReading: ((UUID) -> Void)?
     private var onExitContinuousReading: ((UUID) -> Void)?
     private var preEditTitle = ""
+    private var isHovered = false
+    private var hoverTrackingArea: NSTrackingArea?
+    private var preferredWidthConstraint: NSLayoutConstraint?
 
     var isSelected: Bool = false {
         didSet { updateAppearance() }
@@ -33,11 +39,13 @@ final class TitlebarTabItemView: NSView {
         didSet { updateAppearance() }
     }
 
+    var isEditing: Bool { titleLabel.isEditable }
+
     override var intrinsicContentSize: NSSize {
-        let titleWidth = min(max(titleLabel.intrinsicContentSize.width, 72), 240)
         let dirtyWidth: CGFloat = isDirty ? 12 : 0
         let groupWidth: CGFloat = isContinuousReadingMember ? 8 : 0
-        return NSSize(width: titleWidth + dirtyWidth + groupWidth + 42, height: 28)
+        let width = titleLabel.intrinsicContentSize.width + dirtyWidth + groupWidth + 40
+        return NSSize(width: min(max(width, Self.minimumWidth), Self.maximumWidth), height: 24)
     }
 
     init(
@@ -107,7 +115,7 @@ final class TitlebarTabItemView: NSView {
         groupIndicator.isHidden = !(isContinuousReadingMember || isContinuousReadingLeader)
 
         titleLabel.stringValue = title
-        titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        titleLabel.font = .systemFont(ofSize: 11.5)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         titleLabel.isEditable = false
@@ -118,7 +126,9 @@ final class TitlebarTabItemView: NSView {
         titleLabel.backgroundColor = .clear
         titleLabel.delegate = self
 
-        closeButton.font = .systemFont(ofSize: 12, weight: .semibold)
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: L10n.text("Close Tab", "关闭标签"))
+        closeButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 9, weight: .regular)
+        closeButton.toolTip = L10n.text("Close Tab", "关闭标签")
         closeButton.isBordered = false
         closeButton.bezelStyle = .regularSquare
         closeButton.focusRingType = .none
@@ -126,25 +136,26 @@ final class TitlebarTabItemView: NSView {
         closeButton.action = #selector(handleClose)
         closeButton.setButtonType(.momentaryChange)
 
-        dividerView.wantsLayer = true
-
-        let stack = NSStackView(views: [groupIndicator, dirtyIndicator, titleLabel, closeButton])
+        let stack = contentStackView
+        [groupIndicator, dirtyIndicator, titleLabel, closeButton].forEach(stack.addArrangedSubview)
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = isContinuousReadingMember ? 6 : 7
+        stack.spacing = 6
         stack.edgeInsets = NSEdgeInsets(
             top: 0,
-            left: isContinuousReadingMember ? 14 : 10,
+            left: isContinuousReadingMember ? 12 : 9,
             bottom: 0,
-            right: 7
+            right: 6
         )
 
         addSubview(selectButton)
         addSubview(stack)
-        addSubview(dividerView)
         selectButton.translatesAutoresizingMaskIntoConstraints = false
         stack.translatesAutoresizingMaskIntoConstraints = false
-        dividerView.translatesAutoresizingMaskIntoConstraints = false
+
+        let preferredWidthConstraint = widthAnchor.constraint(equalToConstant: intrinsicContentSize.width)
+        preferredWidthConstraint.priority = .defaultHigh
+        self.preferredWidthConstraint = preferredWidthConstraint
 
         NSLayoutConstraint.activate([
             selectButton.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -155,16 +166,15 @@ final class TitlebarTabItemView: NSView {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            dividerView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            dividerView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            dividerView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            dividerView.widthAnchor.constraint(equalToConstant: 1),
+            preferredWidthConstraint,
+            widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumWidth),
+            widthAnchor.constraint(lessThanOrEqualToConstant: Self.maximumWidth),
             groupIndicator.widthAnchor.constraint(equalToConstant: 2),
             groupIndicator.heightAnchor.constraint(equalToConstant: 14),
             dirtyIndicator.widthAnchor.constraint(equalToConstant: 6),
             dirtyIndicator.heightAnchor.constraint(equalToConstant: 6),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
-            heightAnchor.constraint(equalToConstant: 28),
+            heightAnchor.constraint(equalToConstant: 24),
         ])
 
         self.isSelected = isSelected
@@ -184,6 +194,7 @@ final class TitlebarTabItemView: NSView {
         if isAlternate {
             onAlternateSelect?(sessionID)
         } else {
+            window?.makeFirstResponder(self)
             onSelect?(sessionID, modifierFlags)
         }
     }
@@ -191,6 +202,25 @@ final class TitlebarTabItemView: NSView {
     @objc
     private func handleClose() {
         onClose?(sessionID)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        updateAppearance()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        updateAppearance()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -201,7 +231,7 @@ final class TitlebarTabItemView: NSView {
 
         let localPoint = convert(point, from: superview)
         let closePoint = closeButton.convert(localPoint, from: self)
-        if closeButton.bounds.contains(closePoint) {
+        if closeButton.alphaValue > 0, closeButton.bounds.contains(closePoint) {
             return closeButton
         }
         return selectButton
@@ -272,12 +302,21 @@ final class TitlebarTabItemView: NSView {
         titleLabel.isSelectable = true
         titleLabel.isBezeled = true
         titleLabel.drawsBackground = true
-        titleLabel.backgroundColor = .controlBackgroundColor
+        updateAppearance()
         window?.makeFirstResponder(titleLabel)
+        updateAppearance()
         titleLabel.currentEditor()?.selectAll(nil)
     }
 
+    func finishEditing() {
+        guard isEditing else { return }
+        if let editor = titleLabel.currentEditor() { titleLabel.stringValue = editor.string }
+        commitEditing()
+        window?.makeFirstResponder(nil)
+    }
+
     private func commitEditing() {
+        guard titleLabel.isEditable else { return }
         titleLabel.isEditable = false
         titleLabel.isSelectable = false
         titleLabel.isBezeled = false
@@ -287,12 +326,15 @@ final class TitlebarTabItemView: NSView {
         let newTitle = titleLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard newTitle.isEmpty == false, newTitle != preEditTitle else {
             titleLabel.stringValue = preEditTitle
+            updateAppearance()
             return
         }
         titleLabel.stringValue = newTitle
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.onRename?(self.sessionID, newTitle)
+        updateAppearance()
+        let onRename = self.onRename
+        let sessionID = self.sessionID
+        DispatchQueue.main.async {
+            onRename?(sessionID, newTitle)
         }
     }
 
@@ -303,6 +345,7 @@ final class TitlebarTabItemView: NSView {
         titleLabel.isBezeled = false
         titleLabel.drawsBackground = false
         titleLabel.backgroundColor = .clear
+        updateAppearance()
     }
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -313,32 +356,67 @@ final class TitlebarTabItemView: NSView {
         updateAppearance()
     }
 
+    func updateState(
+        isSelected: Bool, isTabSelected: Bool, isDirty: Bool,
+        isContinuousReadingMember: Bool, isContinuousReadingLeader: Bool,
+        canStartContinuousReading: Bool
+    ) {
+        self.isSelected = isSelected
+        self.isTabSelected = isTabSelected
+        self.isDirty = isDirty
+        self.isContinuousReadingMember = isContinuousReadingMember
+        self.isContinuousReadingLeader = isContinuousReadingLeader
+        self.canStartContinuousReading = canStartContinuousReading
+        dirtyIndicator.isHidden = !isDirty
+        groupIndicator.isHidden = !(isContinuousReadingMember || isContinuousReadingLeader)
+        contentStackView.edgeInsets.left = isContinuousReadingMember ? 12 : 9
+        invalidateIntrinsicContentSize()
+        updateAppearance()
+    }
+
     private func updateAppearance() {
+        preferredWidthConstraint?.constant = intrinsicContentSize.width
+        let showsCloseButton = isSelected || isHovered || isEditing
+        closeButton.alphaValue = showsCloseButton ? 1 : 0
+        closeButton.isEnabled = showsCloseButton
+        closeButton.setAccessibilityHidden(!showsCloseButton)
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if isSelected {
-                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor.cgColor
+                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor.withAlphaComponent(0.5).cgColor
             } else if isTabSelected {
                 layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
-                    .withAlphaComponent(0.45)
+                    .withAlphaComponent(0.3)
+                    .cgColor
+            } else if isHovered {
+                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
+                    .withAlphaComponent(0.16)
                     .cgColor
             } else {
                 layer?.backgroundColor = NSColor.clear.cgColor
             }
             layer?.borderColor = NSColor.clear.cgColor
             layer?.borderWidth = 0
-            dividerView.layer?.backgroundColor = SplitViewController.dividerBackgroundColor.cgColor
             dirtyIndicator.layer?.backgroundColor = HighlightColor.pink.nsColor.cgColor
             groupIndicator.layer?.backgroundColor = isContinuousReadingLeader
                 ? HighlightColor.pink.nsColor.cgColor
                 : SplitViewController.chromeStrokeColor.withAlphaComponent(0.75).cgColor
+            titleLabel.textColor = isSelected || isTabSelected || titleLabel.isEditable
+                ? NightModeStyle.primaryTextColor
+                : NightModeStyle.secondaryTextColor
+            titleLabel.backgroundColor = titleLabel.isEditable ? NightModeStyle.readerBackdropColor : .clear
+            closeButton.contentTintColor = isSelected
+                ? NightModeStyle.secondaryTextColor
+                : NightModeStyle.tertiaryTextColor
+            if let editor = titleLabel.currentEditor() as? NSTextView {
+                editor.textColor = NightModeStyle.primaryTextColor
+                editor.backgroundColor = NightModeStyle.readerBackdropColor
+                editor.insertionPointColor = NightModeStyle.primaryTextColor
+                editor.selectedTextAttributes = [
+                    .backgroundColor: SplitViewController.selectedChromeBackgroundColor,
+                    .foregroundColor: NightModeStyle.primaryTextColor,
+                ]
+            }
         }
-        titleLabel.textColor = isSelected || isTabSelected
-            ? NightModeStyle.primaryTextColor
-            : NightModeStyle.secondaryTextColor
-        closeButton.contentTintColor = isSelected
-            ? NightModeStyle.primaryTextColor
-            : NightModeStyle.tertiaryTextColor
-        dividerView.isHidden = isSelected
     }
 }
 
@@ -350,7 +428,13 @@ extension TitlebarTabItemView: NSTextFieldDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             cancelEditing()
-            window?.makeFirstResponder(nil)
+            window?.makeFirstResponder(self)
+            return true
+        }
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+            titleLabel.stringValue = textView.string
+            commitEditing()
+            window?.makeFirstResponder(self)
             return true
         }
         return false

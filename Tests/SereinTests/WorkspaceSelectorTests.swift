@@ -18,23 +18,26 @@ struct WorkspaceSelectorTests {
         let horizontal = TitlebarTabsController(documentStore: store, windowID: windowID)
         vertical.loadViewIfNeeded()
         horizontal.loadViewIfNeeded()
-        let verticalSelector = try selector(in: vertical.view)
+        let verticalSelector = try #require(findView(identifier: "workspaceFooter", in: vertical.view) as? WorkspaceSelectorView)
         let horizontalSelector = try selector(in: horizontal.view)
 
-        #expect(verticalSelector.titleOfSelectedItem == "Research")
-        #expect(horizontalSelector.titleOfSelectedItem == "Research")
-        try select(index: 0, in: verticalSelector)
+        #expect(verticalSelector.testingCurrentWorkspaceName == "Research")
+        #expect(horizontalSelector.testingCurrentWorkspaceName == "Research")
+        let footer = try #require(findView(identifier: "workspaceFooter", in: vertical.view) as? WorkspaceSelectorView)
+        let firstButton = try #require(footer.testingWorkspaceButtons.first)
+        #expect(NSApp.sendAction(try #require(firstButton.action), to: firstButton.target, from: firstButton))
         #expect(store.activeWorkspaceID(in: windowID) == firstID)
         #expect(store.sessions(in: windowID).map(\.id) == [firstTab.id])
-        #expect(horizontalSelector.indexOfSelectedItem == 0)
+        #expect(horizontalSelector.testingMenu.items.first?.state == .on)
 
         try select(index: 1, in: horizontalSelector)
         #expect(store.activeWorkspaceID(in: windowID) == secondID)
         #expect(store.sessions(in: windowID).map(\.id) == [secondTab.id])
-        #expect(verticalSelector.titleOfSelectedItem == "Research")
+        #expect(verticalSelector.testingCurrentWorkspaceName == "Research")
         store.renameWorkspace(secondID, name: "Papers", in: windowID)
-        #expect(verticalSelector.titleOfSelectedItem == "Papers")
-        #expect(horizontalSelector.titleOfSelectedItem == "Papers")
+        #expect(verticalSelector.testingCurrentWorkspaceName == "Papers")
+        #expect(horizontalSelector.testingCurrentWorkspaceName == "Papers")
+        #expect(footer.testingWorkspaceButtons.last?.toolTip == "Papers")
     }
 
     @Test
@@ -73,22 +76,25 @@ struct WorkspaceSelectorTests {
         let horizontal = TitlebarTabsController(documentStore: store, windowID: windowID)
         vertical.loadViewIfNeeded()
         horizontal.loadViewIfNeeded()
-        for view in [vertical.view, horizontal.view] {
-            let selector = try selector(in: view)
+        let footer = try #require(findView(identifier: "workspaceFooter", in: vertical.view) as? WorkspaceSelectorView)
+        for selector in [footer, try selector(in: horizontal.view)] {
             #expect(!selector.isHiddenOrHasHiddenAncestor)
-            #expect(selector.itemTitles.contains("New Workspace…"))
-            #expect(selector.itemTitles.contains("Rename Workspace…"))
+            #expect(selector.testingMenu.items.map(\.title).contains("New Workspace"))
+            #expect(selector.testingMenu.items.map(\.title).contains("Rename"))
         }
-        #expect(horizontal.preferredContentSize.width >= 86)
+        #expect(horizontal.preferredContentSize.width >= 26)
+        #expect(!footer.isHiddenOrHasHiddenAncestor)
+        #expect(footer.testingWorkspaceButtons.count == 1)
+        #expect(!footer.testingAddButton.isHiddenOrHasHiddenAncestor)
     }
 
-    private func selector(in view: NSView) throws -> NSPopUpButton {
-        try #require(findView(identifier: "workspaceSelector", in: view) as? NSPopUpButton)
+    private func selector(in view: NSView) throws -> WorkspaceSelectorView {
+        try #require(findView(identifier: "workspaceSelector", in: view) as? WorkspaceSelectorView)
     }
 
-    private func select(index: Int, in selector: NSPopUpButton) throws {
-        selector.selectItem(at: index)
-        let action = try #require(selector.action)
-        #expect(NSApp.sendAction(action, to: selector.target, from: selector))
+    private func select(index: Int, in selector: WorkspaceSelectorView) throws {
+        let item = selector.testingMenu.items[index]
+        let action = try #require(item.action)
+        #expect(NSApp.sendAction(action, to: item.target, from: item))
     }
 }

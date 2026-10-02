@@ -81,6 +81,12 @@ private final class AnnotationColorBarView: NSView {
 private final class AnnotationCommentTextView: NSTextView {
     var onCommit: (() -> Void)?
     var onCancel: (() -> Void)?
+    var onChange: ((String) -> Void)?
+
+    override func didChangeText() {
+        super.didChangeText()
+        onChange?(string)
+    }
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
@@ -192,6 +198,8 @@ final class AnnotationHighlightCellView: NSTableCellView {
     func configure(
         with group: DocumentHighlightGroup,
         isEditing: Bool = false,
+        draftComment: String? = nil,
+        onChange: ((String) -> Void)? = nil,
         onSave: ((String) -> Void)? = nil,
         onCancel: (() -> Void)? = nil
     ) {
@@ -207,8 +215,9 @@ final class AnnotationHighlightCellView: NSTableCellView {
         editorFooter.isHidden = isEditing == false
         if isEditing {
             commentTextView.identifier = NSUserInterfaceItemIdentifier("AnnotationCommentEditor.\(group.groupID)")
-            commentTextView.string = group.comment
+            commentTextView.string = draftComment ?? group.comment
         }
+        commentTextView.onChange = onChange
         let tooltipParts = [group.snippet, group.normalizedComment].filter { $0.isEmpty == false }
         toolTip = tooltipParts.isEmpty ? nil : tooltipParts.joined(separator: "\n\n")
         refreshChromeColors()
@@ -311,6 +320,10 @@ final class AnnotationHighlightCellView: NSTableCellView {
         editorScrollView.isHidden ? nil : commentTextView.string
     }
 
+    var editor: NSTextView? {
+        editorScrollView.isHidden ? nil : commentTextView
+    }
+
     /// `width` is the full table column / cell width (not text-only width).
     static func preferredHeight(
         for group: DocumentHighlightGroup,
@@ -395,6 +408,18 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         let isCacheLoaded: Bool
     }
 
+    private struct EditKey: Hashable {
+        let sessionID: UUID
+        let groupID: String
+    }
+
+    private struct CommentDraft {
+        var originalComment: String
+        var comment: String
+
+        var isDirty: Bool { comment != originalComment }
+    }
+
     private static let horizontalInset: CGFloat = 2
     private static let textInset: CGFloat = 10
 
@@ -411,10 +436,14 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     private let emptyStateLabel = NSTextField(labelWithString: L10n.text("No annotations", "暂无批注"))
     private var rows: [AnnotationRow] = []
     private var currentGroupID: String?
-    private var editingGroupID: String?
-    private var editingSessionID: UUID?
+    private var editingKey: EditKey?
+    // Retain a conflicted draft when its row or document leaves the sidebar.
+    private var commentDrafts: [EditKey: CommentDraft] = [:]
+    private var isShowingCommentConflict = false
     private var lastMeasuredTableWidth: CGFloat = 0
     private var displayedSourceFingerprint: SourceFingerprint?
+
+    private var editingGroupID: String? { editingKey?.groupID }
 
     var selectedGroupID: String? {
         currentGroupID ?? selectedGroup()?.groupID
@@ -560,8 +589,14 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
         if change == .all, displayedSourceFingerprint == sourceFingerprint() {
             return
         }
-        if let editingGroupID {
-            _ = commitEditing(groupID: editingGroupID)
+        captureEditingComment()
+        let activeDocumentID = documentStore.activeSessionID(in: windowID).map {
+            documentStore.documentSessionID(for: $0)
+        }
+        if let key = editingKey,
+           key.sessionID != activeDocumentID {
+            _ = commitDraft(for: key)
+            editingKey = nil
         }
         rebuildRows()
     }
@@ -613,16 +648,15 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             onSelectionDidChange?(nil)
             return
         }
-        let previousEditingGroupID = editingGroupID
+        let previousEditingKey = editingKey
         currentGroupID = selectedGroup.groupID
         onSelectionDidChange?(selectedGroup.groupID)
-        guard let previousEditingGroupID,
-              previousEditingGroupID != selectedGroup.groupID else { return }
-        if commitEditing(groupID: previousEditingGroupID) {
-            return
-        }
-        editingGroupID = nil
-        reloadHighlightRow(groupID: previousEditingGroupID)
+        guard let previousEditingKey,
+              previousEditingKey.groupID != selectedGroup.groupID else { return }
+        captureEditingComment()
+        _ = commitDraft(for: previousEditingKey)
+        editingKey = nil
+        reloadHighlightRow(groupID: previousEditingKey.groupID)
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
@@ -644,9 +678,15 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? AnnotationHighlightCellView
                 ?? AnnotationHighlightCellView()
             cell.identifier = identifier
+            let key = editingKey.flatMap { $0.groupID == group.groupID ? $0 : nil }
             cell.configure(
                 with: group,
-                isEditing: editingGroupID == group.groupID,
+                isEditing: key != nil,
+                draftComment: key.flatMap { commentDrafts[$0]?.comment },
+                onChange: { [weak self] comment in
+                    guard let key else { return }
+                    self?.commentDrafts[key]?.comment = comment
+                },
                 onSave: { [weak self] comment in
                     self?.save(comment: comment, for: group.groupID)
                 },
@@ -681,14 +721,23 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
 
     private func rebuildRows() {
         guard isViewLoaded else { return }
+        captureEditingComment()
+        let focusedEditor = editingCell()?.editor
+        let wasEditing = focusedEditor != nil && tableView.window?.firstResponder === focusedEditor
+        let selectedRange = focusedEditor?.selectedRange()
         let previousGroupID = currentGroupID ?? selectedGroup()?.groupID
         rows = documentStore.annotationSections(in: windowID).flatMap { section in
             [AnnotationRow.section(section.title)] + section.highlights.map { .highlight($0) }
         }
         displayedSourceFingerprint = sourceFingerprint()
-        if let editingGroupID, group(for: editingGroupID) == nil {
-            self.editingGroupID = nil
-            editingSessionID = nil
+        commentDrafts = commentDrafts.filter { documentStore.session(for: $0.key.sessionID) != nil }
+        if let key = editingKey {
+            if let group = group(for: key.groupID) {
+                reconcileDraft(for: key, with: group.comment)
+            } else {
+                commentDrafts[key] = nil
+                editingKey = nil
+            }
         }
         tableView.reloadData()
 
@@ -705,6 +754,15 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
             tableView.deselectAll(nil)
             currentGroupID = nil
             onSelectionDidChange?(nil)
+        }
+        if wasEditing, let editor = editingCell(makeIfNecessary: true)?.editor {
+            tableView.window?.makeFirstResponder(editor)
+            if let selectedRange {
+                editor.setSelectedRange(NSRange(
+                    location: min(selectedRange.location, editor.string.utf16.count),
+                    length: min(selectedRange.length, max(editor.string.utf16.count - selectedRange.location, 0))
+                ))
+            }
         }
     }
 
@@ -757,8 +815,8 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     private func deleteSelectedGroup() {
         guard let group = selectedGroup() else { return }
         if editingGroupID == group.groupID {
-            editingGroupID = nil
-            editingSessionID = nil
+            if let editingKey { commentDrafts[editingKey] = nil }
+            editingKey = nil
         }
         onDeleteHighlight?(group)
     }
@@ -831,14 +889,29 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     }
 
     private func beginEditing(groupID: String) {
-        guard let row = rowIndex(for: groupID),
-              let sessionID = documentStore.activeSessionID(in: windowID) else { return }
-        let previousEditingGroupID = editingGroupID
-        editingGroupID = groupID
-        editingSessionID = sessionID
-        if let previousEditingGroupID, previousEditingGroupID != groupID {
-            reloadHighlightRow(groupID: previousEditingGroupID)
+        guard let group = group(for: groupID),
+              let readingSessionID = documentStore.activeSessionID(in: windowID) else { return }
+        let sessionID = documentStore.documentSessionID(for: readingSessionID)
+        let key = EditKey(sessionID: sessionID, groupID: groupID)
+        if editingKey == key {
+            _ = editingCell(makeIfNecessary: true)?.focusEditor()
+            return
         }
+        captureEditingComment()
+        let previousKey = editingKey
+        if let previousKey {
+            _ = commitDraft(for: previousKey)
+        }
+        editingKey = key
+        if commentDrafts[key] == nil {
+            commentDrafts[key] = CommentDraft(originalComment: group.comment, comment: group.comment)
+        } else {
+            reconcileDraft(for: key, with: group.comment)
+        }
+        if let previousKey {
+            reloadHighlightRow(groupID: previousKey.groupID)
+        }
+        guard let row = rowIndex(for: groupID) else { return }
         tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integer: row))
         tableView.reloadData(
             forRowIndexes: IndexSet(integer: row),
@@ -852,41 +925,79 @@ final class AnnotationsViewController: NSViewController, NSTableViewDataSource, 
     }
 
     private func save(comment: String, for groupID: String) {
-        guard editingGroupID == groupID,
-              let sessionID = editingSessionID else { return }
-        editingGroupID = nil
-        editingSessionID = nil
-        _ = documentStore.updateComment(comment, forHighlightGroup: groupID, in: sessionID)
-        reloadHighlightRow(groupID: groupID)
+        guard let key = editingKey, key.groupID == groupID else { return }
+        commentDrafts[key]?.comment = comment
+        if commitDraft(for: key) {
+            reloadHighlightRow(groupID: groupID)
+        } else {
+            confirmConflictedSave(for: key)
+        }
     }
 
-    private func commitEditing(groupID: String) -> Bool {
-        guard let row = rowIndex(for: groupID),
-              let cell = tableView.view(
-                atColumn: 0,
-                row: row,
-                makeIfNecessary: true
-              ) as? AnnotationHighlightCellView,
-              let comment = cell.editingComment,
-              let sessionID = editingSessionID else { return false }
+    private func editingCell(makeIfNecessary: Bool = false) -> AnnotationHighlightCellView? {
+        guard let groupID = editingGroupID, let row = rowIndex(for: groupID) else { return nil }
+        return tableView.view(atColumn: 0, row: row, makeIfNecessary: makeIfNecessary)
+            as? AnnotationHighlightCellView
+    }
 
-        editingGroupID = nil
-        editingSessionID = nil
-        let didChange = documentStore.updateComment(
-            comment,
-            forHighlightGroup: groupID,
-            in: sessionID
-        )
-        if didChange == false {
-            reloadHighlightRow(groupID: groupID)
+    private func captureEditingComment() {
+        guard let key = editingKey, let comment = editingCell()?.editingComment else { return }
+        commentDrafts[key]?.comment = comment
+    }
+
+    private func reconcileDraft(for key: EditKey, with comment: String) {
+        guard let draft = commentDrafts[key], draft.isDirty == false || draft.comment == comment else { return }
+        commentDrafts[key] = CommentDraft(originalComment: comment, comment: comment)
+    }
+
+    @discardableResult
+    private func commitDraft(for key: EditKey, overwriteConflict: Bool = false) -> Bool {
+        guard let draft = commentDrafts[key] else { return true }
+        let group = documentStore.annotationGroups(for: key.sessionID).first { $0.groupID == key.groupID }
+        guard let group else {
+            commentDrafts[key] = nil
+            if editingKey == key { editingKey = nil }
+            return true
         }
+        guard draft.isDirty, draft.comment != group.comment else {
+            commentDrafts[key] = nil
+            if editingKey == key { editingKey = nil }
+            return true
+        }
+        guard overwriteConflict || group.comment == draft.originalComment else { return false }
+        commentDrafts[key] = nil
+        if editingKey == key { editingKey = nil }
+        _ = documentStore.updateComment(draft.comment, forHighlightGroup: key.groupID, in: key.sessionID)
         return true
     }
 
+    private func confirmConflictedSave(for key: EditKey) {
+        guard isShowingCommentConflict == false, let window = view.window else { return }
+        isShowingCommentConflict = true
+        let alert = NSAlert()
+        alert.messageText = L10n.text("This comment changed elsewhere", "此评论已在其他位置更改")
+        alert.informativeText = L10n.text(
+            "Saving your draft will replace the current comment. You can continue editing to keep your draft.",
+            "保存草稿会覆盖当前评论。选择继续编辑可保留草稿。"
+        )
+        alert.addButton(withTitle: L10n.text("Save My Draft", "保存我的草稿"))
+        alert.addButton(withTitle: L10n.text("Keep Editing", "继续编辑"))
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            self.isShowingCommentConflict = false
+            if response == .alertFirstButtonReturn {
+                _ = self.commitDraft(for: key, overwriteConflict: true)
+                self.reloadHighlightRow(groupID: key.groupID)
+            } else if self.editingKey == key {
+                _ = self.editingCell(makeIfNecessary: true)?.focusEditor()
+            }
+        }
+    }
+
     private func endEditing(groupID: String) {
-        guard editingGroupID == groupID else { return }
-        editingGroupID = nil
-        editingSessionID = nil
+        guard let key = editingKey, key.groupID == groupID else { return }
+        commentDrafts[key] = nil
+        editingKey = nil
         reloadHighlightRow(groupID: groupID)
         tableView.window?.makeFirstResponder(tableView)
     }

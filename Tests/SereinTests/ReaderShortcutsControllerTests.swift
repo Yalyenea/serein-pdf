@@ -23,6 +23,24 @@ private final class ShortcutTableDataSource: NSObject, NSTableViewDataSource {
 
 @MainActor
 final class ReaderShortcutsControllerTests: XCTestCase {
+    func testWorkspaceArrowShortcutsMatchPhysicalKeysAndExposeNativeMenuEquivalents() throws {
+        let previous = try XCTUnwrap(AppConfiguration.default.shortcuts.bindings[.previousWorkspace])
+        let next = try XCTUnwrap(AppConfiguration.default.shortcuts.bindings[.nextWorkspace])
+        let left = makeKeyEvent(characters: "\u{F702}", keyCode: 123, modifierFlags: [.command, .option])
+        let right = makeKeyEvent(characters: "\u{F703}", keyCode: 124, modifierFlags: [.command, .option])
+        XCTAssertTrue(previous.matches(event: left))
+        XCTAssertTrue(next.matches(event: right))
+        XCTAssertFalse(previous.matches(event: right))
+        XCTAssertFalse(next.matches(event: left))
+        XCTAssertFalse(previous.matches(event: makeKeyEvent(characters: "\u{F702}", keyCode: 123, modifierFlags: [.control])))
+        XCTAssertEqual(previous.menuKeyEquivalent, "\u{F702}")
+        XCTAssertEqual(next.menuKeyEquivalent, "\u{F703}")
+        XCTAssertEqual(previous.displayString, "⌘⌥←")
+        XCTAssertEqual(next.displayString, "⌘⌥→")
+        XCTAssertEqual(try KeyboardShortcut.parse(previous.serializedValue), previous)
+        XCTAssertEqual(try KeyboardShortcut.parse(next.serializedValue), next)
+    }
+
     func testHighlightModeNumberKeysSelectPinkYellowAndGreen() {
         var triggeredCommands: [ShortcutCommand] = []
         let controller = ReaderShortcutsController(

@@ -49,6 +49,61 @@ struct OutlineViewControllerTests {
     }
 
     @Test
+    func selectedOutlineRowsRefreshBackgroundAcrossThemesAndAppearances() throws {
+        let selection = ThemeManager.shared.selection
+        defer {
+            ThemeManager.shared.apply(
+                light: selection.light, dark: selection.dark,
+                lightBackground: selection.lightBackground, darkBackground: selection.darkBackground
+            )
+        }
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: makeTemporaryPDFWithOutline(named: "outline-selection-theme"))
+        for isFloating in [false, true] {
+            let controller = OutlineViewController(
+                documentStore: store, windowID: store.defaultWindowID, isFloatingPresentation: isFloating
+            )
+            controller.loadViewIfNeeded()
+            controller.view.frame = NSRect(x: 0, y: 0, width: 260, height: 360)
+            controller.view.layoutSubtreeIfNeeded()
+            store.updateReadingPosition(ReadingPosition(pageIndex: 1, point: .zero), scaleFactor: 1, for: session.id)
+            let row = try #require(outlineRows(in: controller.view).first { $0.path == [1] })
+            #expect(controller.testingSelectedPath == [1])
+
+            func checkBackground() throws {
+                controller.refreshChromeColors()
+                #expect(outlineRows(in: controller.view).first { $0.path == [1] } === row)
+                #expect(controller.testingSelectedPath == [1])
+                let actual = try #require(row.layer?.backgroundColor)
+                var expected: CGColor?
+                row.effectiveAppearance.performAsCurrentDrawingAppearance {
+                    expected = NightModeStyle.selectedChromeBackgroundColor.cgColor
+                }
+                #expect(actual == expected)
+            }
+
+            controller.view.appearance = NSAppearance(named: .aqua)
+            for theme in LightTheme.allCases {
+                ThemeManager.shared.apply(light: theme, dark: .normal)
+                try checkBackground()
+            }
+            controller.view.appearance = NSAppearance(named: .darkAqua)
+            for theme in DarkTheme.allCases {
+                ThemeManager.shared.apply(light: .normal, dark: theme)
+                try checkBackground()
+            }
+            for name in [NSAppearance.Name.aqua, .darkAqua] {
+                let overrides = ThemeBackgroundOverrides(window: ThemeHexColor(hex: "#754263"))
+                ThemeManager.shared.apply(
+                    light: .normal, dark: .normal, lightBackground: overrides, darkBackground: overrides
+                )
+                controller.view.appearance = NSAppearance(named: name)
+                try checkBackground()
+            }
+        }
+    }
+
+    @Test
     func followingExpandsAncestorsAndResumesAfterManualBrowsingEnds() throws {
         let store = makeIsolatedDocumentStore()
         let session = try store.open(documentAt: makeTemporaryPDFWithOutline(
