@@ -30,6 +30,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add the recent-windows list on `W`, configurable right/below split shortcuts in all three document lists, and full PDF filename tooltips in both tab layouts. Ordinary opening reuses a tab within the active workspace.
 
 ### Reading
+- Restore the visible top-of-viewport position when switching PDFs in continuous layouts, including when PDFKit's current page has advanced beyond the page at the top.
 - Simplify sidebar and floating outlines to a single search-and-collapse row, removing the title, page counter, and footer spacing.
 - Show only `L` in the upper-right corner of locked readers, retaining the lock scope in its tooltip.
 - Add Seamless Pages (`Cmd+Option+P`) in View and Settings to remove page gaps while preserving the reading position and zoom.

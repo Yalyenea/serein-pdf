@@ -2632,9 +2632,12 @@ final class ReaderViewController: NSViewController {
         guard let page = pdfView.currentPage,
               let document = pdfView.document else { return }
         let pageIndex = document.index(for: page)
-        // Keep mid-page scroll in continuous mode (page taller than viewport).
+        // Preserve the visible top anchor across continuous page boundaries.
         let position: ReadingPosition
-        if let live = currentReadingPosition(), live.pageIndex == pageIndex {
+        if let live = currentReadingPosition(),
+           positionBelongsToCurrentSpread(
+               live, currentPageIndex: pageIndex, session: session, document: document
+           ) {
             position = live
         } else {
             let bounds = page.bounds(for: pdfView.displayBox)
@@ -3691,6 +3694,10 @@ final class ReaderViewController: NSViewController {
         session: DocumentSession,
         document: PDFDocument
     ) -> Bool {
+        // Continuous layouts can show the end of the previous page/spread at
+        // the top while PDFKit's currentPage follows the viewport's midline.
+        // That top anchor is a valid reading position and must be saved.
+        if usesContinuousScrolling { return true }
         guard session.displayMode.usesTwoUpLayout else {
             return position.pageIndex == currentPageIndex
         }
