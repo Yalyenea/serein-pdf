@@ -54,6 +54,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add Automatic, English, and Chinese interface language options in Settings. Automatic follows the system’s preferred language; changes apply after restarting the app. Localize menus, settings, sidebars, annotations, and translation controls.
 
 ### Translation
+- Show word pronunciation beside the speech button when system lookup returns a numbered headword, a word class before the pronunciation, or an inflected word's lemma. Preserve the word class and refresh pronunciation colors during theme changes and text selection.
 - Limit selection translation to automatic Chinese–English conversion with a direction switch. Show dictionary pronunciation, word class, and a compact definition for English words, with system speech controls for words and sentences.
 - Align word classes and definitions on one baseline, tighten pronunciation spacing, and keep word definitions free of nested scrolling while allowing long sentence translations to scroll.
 - Add Apple selection translation on `T` for macOS 15 and later, with automatic Chinese–English source detection.

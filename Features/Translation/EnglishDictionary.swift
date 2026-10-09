@@ -4,6 +4,7 @@ import Foundation
 struct EnglishDictionary: Equatable, Sendable {
     let definition: String
     let pronunciation: String?
+    private static let wordClassPattern = "phrasal verb|noun|verb|adjective|adverb|pronoun|preposition|conjunction|interjection|exclamation|determiner"
 
     var displayPronunciation: (region: String, text: String, voice: String)? {
         guard let pronunciation else { return nil }
@@ -18,7 +19,7 @@ struct EnglishDictionary: Equatable, Sendable {
 
     private var wordClassRange: Range<String.Index>? {
         definition.range(
-            of: #"^(?:[A-Z]\.\s+)?(?:phrasal verb|noun|verb|adjective|adverb|pronoun|preposition|conjunction|interjection|exclamation|determiner)\b"#,
+            of: "^(?:[A-Z]\\.\\s+)?(?:\(Self.wordClassPattern))\\b",
             options: .regularExpression
         )
     }
@@ -57,23 +58,33 @@ struct EnglishDictionary: Equatable, Sendable {
         }
         let text = (result as String).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
-        return EnglishDictionary(text: text, word: word)
+        return EnglishDictionary(text: text)
     }
 
-    init(text: String, word: String) {
-        // Apple's bilingual dictionaries delimit a headword's pronunciation with vertical bars.
-        // Keep other dictionary formats intact rather than guessing their structure.
-        if let opening = text.firstIndex(of: "|"),
-           text[..<opening].trimmingCharacters(in: .whitespacesAndNewlines)
-            .compare(word, options: .caseInsensitive) == .orderedSame,
-           let closing = text[text.index(after: opening)...].firstIndex(of: "|") {
-            let phonetics = text[text.index(after: opening)..<closing]
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            pronunciation = phonetics.isEmpty ? nil : phonetics
-            definition = text[text.index(after: closing)...].trimmingCharacters(in: .whitespacesAndNewlines)
-        } else {
+    init(text: String) {
+        // System lookup may return an inflected word's lemma, with a homograph
+        // number or word class before the bilingual entry's pronunciation bars.
+        guard let opening = text.firstIndex(of: "|"),
+              let closing = text[text.index(after: opening)...].firstIndex(of: "|") else {
             pronunciation = nil
             definition = text
+            return
+        }
+        let header = text[..<opening].trimmingCharacters(in: .whitespacesAndNewlines)
+        let headerPattern = "^[A-Za-z]+(?:['’-][A-Za-z]+)*(?:\\s+[0-9]+)?(?:\\s+[A-Z]\\.\\s+(?:\(Self.wordClassPattern)))?$"
+        guard header.range(of: headerPattern, options: .regularExpression) != nil else {
+            pronunciation = nil
+            definition = text
+            return
+        }
+        let phonetics = text[text.index(after: opening)..<closing]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        pronunciation = phonetics.isEmpty ? nil : phonetics
+        let body = text[text.index(after: closing)...].trimmingCharacters(in: .whitespacesAndNewlines)
+        if let wordClass = header.range(of: "[A-Z]\\.\\s+(?:\(Self.wordClassPattern))$", options: .regularExpression) {
+            definition = String(header[wordClass]) + " " + body
+        } else {
+            definition = body
         }
     }
 }

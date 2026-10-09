@@ -67,7 +67,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Pink-first highlight workflow (`a` to highlight) with a compact inline reader indicator
 - Underline workflow (`u` to underline) shares the compact mode, comment, undo, save, sidebar, and export pipeline
 - Strikethrough uses the same annotation pipeline with the plain `s` shortcut
-- Select Chinese or English text and press `t` to translate into the other language. English words show a compact dictionary entry with pronunciation and speech controls; long sentence translations scroll. Copy the result or add it as a new highlight with a translated comment attached to the original selection. A result is added only once and uses the normal undo and save workflow. Apple translation requires macOS 15 or later.
+- Select Chinese or English text and press `t` to translate into the other language. English words show a compact dictionary entry with pronunciation beside the speech button, including numbered headwords and inflected forms resolved by the system dictionary; long sentence translations scroll. Copy the result or add it as a new highlight with a translated comment attached to the original selection. A result is added only once and uses the normal undo and save workflow. Apple translation requires macOS 15 or later.
 - Choose Automatic, English, or 中文 in Settings → General → Language. Automatic follows the system’s first preferred language (Chinese or English); changes apply after restarting Serein.
 - Pink / yellow / green highlights use theme-specific sRGB palettes for Normal, Rose Pine Dawn, and Rose Pine Moon
 - While highlight mode is active, plain `1` / `2` / `3` switch pink / yellow / green without intercepting text-field input

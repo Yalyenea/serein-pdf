@@ -119,10 +119,12 @@ final class ReaderTranslationControllerTests: XCTestCase {
         defer { fixture.controller.close(); fixture.owner.close() }
         let content = try XCTUnwrap(fixture.panel.contentView as? TranslationPanelContent)
         content.display(dictionary: EnglishDictionary(
-            text: "inference | BrE ˈɪnf(ə)r(ə)n(t)s, AmE ˈɪnf(ə)rən(t)s | noun ① 推断 ② 推论",
-            word: "inference"
+            text: "inference | BrE ˈɪnf(ə)r(ə)n(t)s, AmE ˈɪnf(ə)rən(t)s | noun ① 推断 ② 推论"
         ))
         content.output.setSelectedRange(NSRange(location: 0, length: 1))
+        content.sourceLabel.selectText(nil)
+        let pronunciationEditor = try XCTUnwrap(content.sourceLabel.currentEditor() as? NSTextView)
+        let selectedPronunciation = pronunciationEditor.selectedRange()
         for theme in LightTheme.allCases {
             manager.apply(light: theme, dark: .rosePineMoon)
             fixture.owner.appearance = NSAppearance(named: .aqua)
@@ -152,7 +154,37 @@ final class ReaderTranslationControllerTests: XCTestCase {
             try assertTheme(content)
         }
         XCTAssertEqual(content.output.selectedRange(), NSRange(location: 0, length: 1))
+        XCTAssertEqual(pronunciationEditor.selectedRange(), selectedPronunciation)
         XCTAssertEqual(content.output.string, "n.\t推理")
+    }
+
+    func testWordPronunciationIsVisibleBesideTheSpeechButton() throws {
+        for (selection, text, phonetics) in [
+            ("learned", "learned 1 | BrE ˈləːnɪd, AmE ˈlərnəd | adjective ① 博学的", "ˈlərnəd"),
+            ("use", "use A. noun | BrE juːs, AmE jus | ① 使用", "jus"),
+            ("inferences", "inference | BrE ˈɪnf(ə)r(ə)n(t)s, AmE ˈɪnf(ə)rən(t)s | noun ① 推断", "ˈɪnf(ə)rən(t)s"),
+        ] {
+            let fixture = try makeFixture(text: selection) { TranslationTestHost(view: $0, translation: $1) }
+            defer { fixture.controller.close(); fixture.owner.close() }
+            let content = try XCTUnwrap(fixture.panel.contentView as? TranslationPanelContent)
+            content.display(dictionary: EnglishDictionary(text: text))
+            try assertLayout(content, panel: fixture.panel)
+
+            XCTAssertEqual(content.wordLabel.stringValue, selection)
+            XCTAssertEqual(content.sourceLabel.stringValue, "/\(phonetics)/")
+            XCTAssertFalse(content.sourceLabel.isHidden)
+            XCTAssertTrue(content.sourceLabel.isSelectable)
+            XCTAssertEqual(content.sourceSpeechLanguageIdentifier, "en-US")
+            XCTAssertTrue(content.sourceSpeechButton.isEnabled)
+            let label = content.sourceLabel.convert(content.sourceLabel.bounds, to: content)
+            let button = content.sourceSpeechButton.convert(content.sourceSpeechButton.bounds, to: content)
+            XCTAssertGreaterThan(label.width, 0)
+            XCTAssertLessThanOrEqual(label.maxX, button.minX)
+            XCTAssertLessThanOrEqual(button.minX - label.maxX, 12)
+            XCTAssertEqual(label.midY, button.midY, accuracy: 1)
+            XCTAssertLessThanOrEqual(button.maxX, content.bounds.maxX)
+            try savePreview(content, name: "translation-pronunciation-\(selection)")
+        }
     }
 
     func testWordPanelUsesChosenInterfaceLanguage() throws {
@@ -261,11 +293,19 @@ final class ReaderTranslationControllerTests: XCTestCase {
         let primary = try XCTUnwrap(storage.attribute(.foregroundColor, at: storage.length - 1, effectiveRange: nil) as? NSColor)
         let wordClass = try XCTUnwrap(storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor)
         let secondary = try XCTUnwrap(content.dictionaryText.textColor)
+        let pronunciation = try XCTUnwrap(content.sourceLabel.textColor)
+        let pronunciationEditorColor = try (content.sourceLabel.currentEditor() as? NSTextView).map {
+            try XCTUnwrap($0.textColor)
+        }
         let selection = try XCTUnwrap(content.output.selectedTextAttributes[.backgroundColor] as? NSColor)
         content.effectiveAppearance.performAsCurrentDrawingAppearance {
             XCTAssertEqual(ThemeHexColor(color: background), ThemeHexColor(color: NightModeStyle.paneBackgroundColor))
             XCTAssertEqual(ThemeHexColor(color: primary), ThemeHexColor(color: NightModeStyle.primaryTextColor))
             XCTAssertEqual(ThemeHexColor(color: secondary), ThemeHexColor(color: NightModeStyle.secondaryTextColor))
+            XCTAssertEqual(ThemeHexColor(color: pronunciation), ThemeHexColor(color: NightModeStyle.secondaryTextColor))
+            if let pronunciationEditorColor {
+                XCTAssertEqual(ThemeHexColor(color: pronunciationEditorColor), ThemeHexColor(color: NightModeStyle.secondaryTextColor))
+            }
             XCTAssertEqual(ThemeHexColor(color: wordClass), ThemeHexColor(color: NightModeStyle.secondaryTextColor))
             XCTAssertEqual(ThemeHexColor(color: selection), ThemeHexColor(color: NightModeStyle.selectedChromeBackgroundColor))
         }

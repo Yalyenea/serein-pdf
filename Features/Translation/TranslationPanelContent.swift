@@ -243,6 +243,7 @@ final class TranslationPanelContent: NSView {
         accentLabel.isHidden = true
         sourceLabel.stringValue = chinese ? L10n.text("Chinese", "中文") : L10n.text("English", "英文")
         sourceLabel.font = isWord ? NSFont(name: "Georgia", size: 15) : .systemFont(ofSize: 11)
+        sourceLabel.setAccessibilityLabel(isWord ? L10n.text("Pronunciation", "音标") : L10n.text("Source language", "原文语言"))
         sourceSpeechLanguageIdentifier = chinese ? "zh-CN" : "en-US"
         let sourceViews: [NSView] = isWord
             ? [accentLabel, sourceLabel, sourceSpeechButton, spacer()]
@@ -284,6 +285,7 @@ final class TranslationPanelContent: NSView {
         } else {
             sourceLabel.stringValue = L10n.text("English", "英文")
             accentLabel.isHidden = true
+            sourceSpeechLanguageIdentifier = "en-US"
         }
         wordClass = dictionary?.partOfSpeech
         renderOutput()
