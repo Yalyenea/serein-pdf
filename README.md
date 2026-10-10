@@ -89,6 +89,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 - Global Lock (`shift+l`) locks horizontal panning and magnification gestures across all windows and newly opened PDFs. It persists across restarts, preserves individual PDF lock states, and excludes Book modes. Turn it off to restore each PDF’s own lock; individual `l` toggles are disabled while Global Lock is on.
 - Opening, closing, or resizing sidebars preserves the reading anchor. Fit modes follow the available reading area; manual zoom scales proportionally with its width to preserve the horizontal content range, including while Lock is enabled.
 - Switching display modes after manual zoom fits the new page or spread width while preserving the live reading anchor.
+- Trackpad pinch and keyboard zoom preserve the reading viewport's center. Pinch retains PDFKit's native scaling, and panning sets the center for subsequent gestures. Page-only outline destinations navigate to the target page's top.
 - Sidebar and floating outlines share a compact search-and-collapse row, without a title or page-count footer.
 - Each reading pane shows a physical page number or spread range and total. Click the counter to enter a page number; Enter jumps and Esc cancels in place. Settings can hide all page counters immediately.
 - Each workspace and pane retains its own scale, page, and horizontal pan lock across launches. Window sidebars retain their widths separately from the reading splits.

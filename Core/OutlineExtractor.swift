@@ -32,6 +32,13 @@ enum OutlineExtractor {
               let page = destination.page else { return nil }
         let pageIndex = document.index(for: page)
         guard pageIndex != NSNotFound else { return nil }
-        return ReadingPosition(pageIndex: pageIndex, point: destination.point)
+        let bounds = page.bounds(for: .cropBox)
+        let point = destination.point
+        // PDFKit uses a sentinel for axes the outline leaves unspecified.
+        // Resolve those axes before the reader converts the point to scroll coordinates.
+        return ReadingPosition(pageIndex: pageIndex, point: CGPoint(
+            x: point.x == kPDFDestinationUnspecifiedValue ? bounds.minX : point.x,
+            y: point.y == kPDFDestinationUnspecifiedValue ? bounds.maxY : point.y
+        ))
     }
 }

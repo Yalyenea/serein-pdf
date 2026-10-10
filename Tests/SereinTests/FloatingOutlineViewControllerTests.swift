@@ -613,6 +613,48 @@ struct FloatingOutlineViewControllerTests {
     }
 
     @Test
+    func floatingOutlineWithUnspecifiedDestinationNavigatesToVisiblePageInLargePDF() throws {
+        _ = NSApplication.shared
+        let targetPageIndex = 900
+        let url = try makeLargeFloatingOutlinePDF(pageCount: 1200, targetPageIndex: targetPageIndex)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let fixture = try #require(PDFDocument(url: url))
+        let rawDestination = try #require(fixture.outlineRoot?.child(at: 0)?.destination)
+        #expect(rawDestination.point == CGPoint(
+            x: kPDFDestinationUnspecifiedValue,
+            y: kPDFDestinationUnspecifiedValue
+        ))
+        let store = makeIsolatedDocumentStore()
+        let session = try store.open(documentAt: url)
+        store.setDisplayMode(.singlePageContinuous, for: session.id)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        controller.showWindow(nil)
+        store.setRightSidebarVisible(false)
+        flushFloatingOutlineLayout(controller.window)
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        let workspace = split.readerWorkspaceViewController
+        let floating = workspace.floatingOutlineViewController
+        floating.testingSetHovered(true)
+        flushFloatingOutlineLayout(controller.window)
+        let row = try #require(floatingOutlineRows(in: floating.testingOutlineViewController.view).first)
+
+        row.performPrimaryAction()
+        // Keep the production callback and let PDFKit layout plus trailing writeback settle.
+        flushFloatingOutlineLayout(controller.window)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        controller.window?.layoutIfNeeded()
+        let reader = workspace.activeReaderViewController()
+        let document = try #require(reader.pdfView.document)
+        let currentPage = try #require(reader.pdfView.currentPage)
+        let visiblePosition = try #require(reader.testingCurrentReadingPosition)
+
+        #expect(visiblePosition.pageIndex == targetPageIndex)
+        #expect(document.index(for: currentPage) == targetPageIndex)
+        #expect(store.session(for: session.id)?.currentPageIndex == targetPageIndex)
+    }
+
+    @Test
     func resizingFloatingOutlineIsSymmetricAndKeepsReaderGeometryStable() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
@@ -719,6 +761,27 @@ struct FloatingOutlineViewControllerTests {
             position: ReadingPosition(pageIndex: 1, point: CGPoint(x: 20, y: 190))
         ))
     }
+}
+
+@MainActor
+private func makeLargeFloatingOutlinePDF(pageCount: Int, targetPageIndex: Int) throws -> URL {
+    let root = try TestPDFFixtures.makeRootDirectory(prefix: "large-floating-outline")
+    let url = root.appendingPathComponent("outlined.pdf")
+    var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+    let context = try #require(CGContext(url as CFURL, mediaBox: &mediaBox, nil))
+    for _ in 0..<pageCount {
+        context.beginPDFPage(nil)
+        context.endPDFPage()
+    }
+    // A page-only Core Graphics destination leaves both coordinates unspecified.
+    CGPDFContextSetOutline(context, [
+        kCGPDFOutlineChildren as String: [[
+            kCGPDFOutlineTitle as String: "Later chapter",
+            kCGPDFOutlineDestination as String: targetPageIndex + 1,
+        ]]
+    ] as CFDictionary)
+    context.closePDF()
+    return url
 }
 
 @MainActor

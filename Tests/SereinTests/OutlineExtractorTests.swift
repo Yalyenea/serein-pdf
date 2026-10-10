@@ -58,6 +58,58 @@ final class OutlineExtractorTests: XCTestCase {
         XCTAssertEqual(extracted.destinationPoint, point)
     }
 
+    func testExtractResolvesUnspecifiedAxesAgainstCropBoxWithoutRoundingExplicitCoordinates() throws {
+        let document = makeDocument(pageCount: 2)
+        let page = try XCTUnwrap(document.page(at: 1))
+        let cropBox = CGRect(x: 11.25, y: 17.5, width: 120.5, height: 190.75)
+        page.setBounds(cropBox, for: .cropBox)
+        let unspecified = kPDFDestinationUnspecifiedValue
+        let cases: [(point: CGPoint, expected: CGPoint)] = [
+            (CGPoint(x: unspecified, y: unspecified), CGPoint(x: cropBox.minX, y: cropBox.maxY)),
+            (CGPoint(x: unspecified, y: 120.625), CGPoint(x: cropBox.minX, y: 120.625)),
+            (CGPoint(x: 36.875, y: unspecified), CGPoint(x: 36.875, y: cropBox.maxY)),
+            (CGPoint(x: 36.875, y: 120.625), CGPoint(x: 36.875, y: 120.625)),
+        ]
+        let root = PDFOutline()
+        for (index, testCase) in cases.enumerated() {
+            let item = PDFOutline()
+            item.label = "Destination \(index)"
+            item.destination = PDFDestination(page: page, at: testCase.point)
+            root.insertChild(item, at: index)
+        }
+        document.outlineRoot = root
+
+        let extracted = OutlineExtractor.extract(from: document)
+
+        XCTAssertEqual(extracted.count, cases.count)
+        for (node, testCase) in zip(extracted, cases) {
+            XCTAssertEqual(node.pageIndex, 1)
+            XCTAssertEqual(node.destinationPoint, testCase.expected)
+        }
+    }
+
+    func testExtractResolvesUnspecifiedGoToActionDestinationAxes() throws {
+        let document = makeDocument(pageCount: 2)
+        let page = try XCTUnwrap(document.page(at: 1))
+        let root = PDFOutline()
+        let item = PDFOutline()
+        item.label = "Unspecified action destination"
+        item.action = PDFActionGoTo(destination: PDFDestination(
+            page: page,
+            at: CGPoint(x: kPDFDestinationUnspecifiedValue, y: kPDFDestinationUnspecifiedValue)
+        ))
+        root.insertChild(item, at: 0)
+        document.outlineRoot = root
+
+        let extracted = try XCTUnwrap(OutlineExtractor.extract(from: document).first)
+
+        XCTAssertEqual(extracted.pageIndex, 1)
+        XCTAssertEqual(extracted.destinationPoint, CGPoint(
+            x: page.bounds(for: .cropBox).minX,
+            y: page.bounds(for: .cropBox).maxY
+        ))
+    }
+
     private func makeDocument(pageCount: Int) -> PDFDocument {
         let document = PDFDocument()
 

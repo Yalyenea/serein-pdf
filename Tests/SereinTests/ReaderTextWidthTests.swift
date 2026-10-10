@@ -240,7 +240,7 @@ struct ReaderTextWidthTests {
             #expect(controller.toggleHorizontalPanLock())
             let scale = reader.pdfView.scaleFactor
             var magnificationRequests = 0
-            reader.pdfView.onUserMagnificationRequested = { magnificationRequests += 1 }
+            reader.pdfView.onUserMagnificationRequested = { _ in magnificationRequests += 1 }
             let event = try #require(NSEvent.otherEvent(
                 with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
                 windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0

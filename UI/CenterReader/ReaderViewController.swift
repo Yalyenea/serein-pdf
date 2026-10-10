@@ -308,7 +308,7 @@ final class ReaderPDFView: PDFView {
     var onInternalLinkPreviewRequested: ((PDFDestination, NSRect) -> Bool)?
     var onInternalLinkSplitRequested: ((PDFDestination) -> Bool)?
     var onAnnotationActivationRequested: ((NSEvent) -> Bool)?
-    var onUserMagnificationRequested: (() -> Void)?
+    var onUserMagnificationRequested: ((NSEvent) -> Void)?
     var onZoomInRequested: (() -> Void)?
     var onZoomOutRequested: (() -> Void)?
     var shouldAllowUserMagnification: (() -> Bool)?
@@ -493,13 +493,12 @@ final class ReaderPDFView: PDFView {
 
     override func magnify(with event: NSEvent) {
         guard allowsUserMagnification else { return }
-        onUserMagnificationRequested?()
-        super.magnify(with: event)
+        onUserMagnificationRequested?(event)
     }
 
     override func smartMagnify(with event: NSEvent) {
         guard allowsUserMagnification else { return }
-        onUserMagnificationRequested?()
+        onUserMagnificationRequested?(event)
         super.smartMagnify(with: event)
     }
 
@@ -701,8 +700,12 @@ final class ReaderViewController: NSViewController {
             guard let self else { return }
             self.pdfView.window?.makeFirstResponder(self.pdfView)
         }
-        pdfView.onUserMagnificationRequested = { [weak self] in
-            self?.beginUserMagnification()
+        pdfView.onUserMagnificationRequested = { [weak self] event in
+            if event.type == .magnify {
+                self?.magnifyKeepingViewportCenter(with: event)
+            } else {
+                self?.beginUserMagnification()
+            }
         }
         pdfView.onZoomInRequested = { [weak self] in self?.zoomIn() }
         pdfView.onZoomOutRequested = { [weak self] in self?.zoomOut() }
@@ -849,10 +852,7 @@ final class ReaderViewController: NSViewController {
                 guard let self else { return event }
                 var rewritten: NSEvent? = event
                 MainActor.assumeIsolated {
-                    rewritten = self.rewriteMagnificationEventIfPanLocked(event)
-                    if rewritten != nil {
-                        self.handleMagnificationEventIfNeeded(event)
-                    }
+                    rewritten = self.rewriteMagnificationEvent(event)
                 }
                 return rewritten
             }
@@ -2332,10 +2332,18 @@ final class ReaderViewController: NSViewController {
         consumeBookMomentumUntilEnd = false
     }
 
-    private func rewriteMagnificationEventIfPanLocked(_ event: NSEvent) -> NSEvent? {
-        guard shouldLockHorizontalPan else { return event }
+    private func rewriteMagnificationEvent(_ event: NSEvent) -> NSEvent? {
         guard pointerEventIsOverPDFContent(event) else { return event }
-        return nil
+        guard shouldLockHorizontalPan == false else { return nil }
+        if event.type == .magnify {
+            guard let hitView = event.window?.contentView?.hitTest(event.locationInWindow),
+                  hitView === pdfView || hitView.isDescendant(of: pdfView) else { return event }
+            // Consume the event before PDFKit's document view handles it again.
+            pdfView.magnify(with: event)
+            return nil
+        }
+        beginUserMagnification()
+        return event
     }
 
     private func pointerEventIsOverPDFContent(_ event: NSEvent) -> Bool {
@@ -2701,15 +2709,30 @@ final class ReaderViewController: NSViewController {
         }
     }
 
-    private func handleMagnificationEventIfNeeded(_ event: NSEvent) {
+    private func magnifyKeepingViewportCenter(with event: NSEvent) {
         guard shouldLockHorizontalPan == false,
               isAllPagesOverviewActive == false,
               pdfView.isHidden == false,
-              let window = pdfView.window,
-              event.window === window else { return }
-        let point = pdfView.convert(event.locationInWindow, from: nil)
-        guard pdfView.bounds.contains(point) else { return }
+              let session = targetSession(),
+              session.id == displayedSessionID,
+              let documentView = pdfView.documentView,
+              let anchor = captureViewportAnchor() else { return }
+        flushPendingReadingPositionWriteback()
         beginUserMagnification()
+        let wasApplyingStoreState = isApplyingStoreState
+        isApplyingStoreState = true
+        defer { isApplyingStoreState = wasApplyingStoreState }
+        // Keep PDFKit's native gesture scaling and fit-size resistance, then
+        // restore the same center used by explicit zoom commands.
+        isApplyingProgrammaticScale = true
+        documentView.magnify(with: event)
+        isApplyingProgrammaticScale = false
+        applyProgrammaticScale(pdfView.scaleFactor, viewportAnchor: anchor)
+        if let position = currentReadingPosition() {
+            displayedReadingPosition = position
+            documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
+        }
+        publishViewportPosition()
     }
 
     private func isUserMagnificationEvent(_ event: NSEvent?) -> Bool {
@@ -4236,6 +4259,10 @@ extension ReaderViewController {
 
     func testingBeginUserMagnification() {
         beginUserMagnification()
+    }
+
+    func testingRewriteMagnificationEvent(_ event: NSEvent) -> NSEvent? {
+        rewriteMagnificationEvent(event)
     }
 
     var testingReadingFocusIsEnabled: Bool {

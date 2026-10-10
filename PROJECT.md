@@ -183,6 +183,7 @@ flowchart LR
 - `Cmd+0` / `Cmd+9`:适应宽度 / 适应高度
 - `Cmd+Option+0`:主阅读区按当前页或当前双页的文字字形边界持续适配,左右各留 12pt,保持垂直阅读位置;保存 `fitTextWidth` 模式,阅读区尺寸或当前页变化后重算,无文本页保留该文档已保存的比例;`fit_text_width` 可在 Settings → Shortcuts 修改,`Cmd+0` 继续适应页面宽度
 - `Cmd+=` / `Cmd+-`:放大 / 缩小(进入 manual 缩放)
+- 触控板捏合与缩放快捷键保持阅读区中心,保留 PDFKit 原生倍率变化;滑动平移后,后续捏合保持新的中心位置。目录只指定目标页时,按该页顶部定位。
 - 物理右 `Cmd+1` / `Cmd+2` / `Cmd+3` / `Cmd+4` 保持 `Single Page` / `Single Page Continuous` / `Two-Up` / `Two-Up Continuous`;`Book` / `Book · Continuous Turn` 默认无快捷键,可从 View 菜单或 Settings 选择
 - `C` 在当前单页、双页或书籍布局内切换对应连续状态
 - 手动缩放后切换显示模式,按新单页 / 双页布局适应宽度并保留实时阅读锚点
