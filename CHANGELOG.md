@@ -30,6 +30,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add the recent-windows list on `W`, configurable right/below split shortcuts in all three document lists, and full PDF filename tooltips in both tab layouts. Ordinary opening reuses a tab within the active workspace.
 
 ### Reading
+- Keep floating-outline scrolling independent of the PDF reader, including at outline edges, with non-default scroll speeds, and while horizontal pan lock is enabled. Preserve the original reader's momentum when the pointer moves onto the outline.
+- Remove the floating outline rail's redundant hover tooltip.
 - Resolve unspecified outline destination coordinates before navigation, so page-only headings in large PDFs jump to the target page instead of leaving the viewport at the first page.
 - Keep trackpad pinch zoom centered on the reading viewport, matching keyboard zoom while preserving PDFKit's native scaling and allowing panning between gestures. Leave gestures over floating controls to those controls.
 - Restore the visible top-of-viewport position when switching PDFs in continuous layouts, including when PDFKit's current page has advanced beyond the page at the top.

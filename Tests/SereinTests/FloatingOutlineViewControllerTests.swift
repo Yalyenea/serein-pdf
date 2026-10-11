@@ -6,6 +6,86 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct FloatingOutlineViewControllerTests {
+    @Test(arguments: [
+        ReaderDisplayMode.singlePage, .twoUp, .singlePageContinuous,
+        .twoUpContinuous, .book, .bookContinuous,
+    ])
+    func floatingOutlineScrollStaysInOutline(mode: ReaderDisplayMode) throws {
+        _ = NSApplication.shared
+        var configuration = AppConfiguration.default
+        configuration.reader.scrollSpeed = 3
+        configuration.layout.floatingOutlineHeight = 240
+        let store = makeIsolatedDocumentStore(appConfiguration: configuration)
+        let session = try store.open(documentAt: makeLongFloatingOutlinePDF(named: "floating-scroll"))
+        store.setDisplayMode(mode, for: session.id)
+        store.setHorizontalPanLocked(true, for: session.id)
+        store.setRightSidebarVisible(false)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        controller.showWindow(nil)
+        let window = try #require(controller.window)
+        let content = try #require(window.contentView)
+        let split = try #require(window.contentViewController as? SplitViewController)
+        let floating = split.readerWorkspaceViewController.floatingOutlineViewController
+        let reader = split.readerViewController
+        floating.testingSetHovered(true)
+        flushFloatingOutlineLayout(window)
+        let scroll = try #require(
+            floatingOutlineView(identifier: "outlineScrollView", in: floating.view) as? NSScrollView
+        )
+        let clip = scroll.contentView
+        let maximumY = max((try #require(clip.documentView)).frame.height - clip.bounds.height, 0)
+        try #require(maximumY > 100)
+        let location = clip.convert(NSPoint(x: clip.bounds.midX, y: clip.bounds.midY), to: nil)
+        let hitPoint = content.superview?.convert(location, from: nil) ?? location
+        let hit = try #require(content.hitTest(hitPoint))
+        try #require(hit.isDescendant(of: scroll))
+        // The overlay occupies PDF coordinates, so bounds alone cannot route it.
+        try #require(reader.pdfView.bounds.contains(reader.pdfView.convert(location, from: nil)))
+        let position = try #require(reader.testingCurrentReadingPosition)
+        let scale = reader.pdfView.scaleFactor
+
+        for origin in [CGFloat(0), maximumY] {
+            clip.scroll(to: NSPoint(x: 0, y: origin))
+            scroll.reflectScrolledClipView(clip)
+            let startY = clip.bounds.minY
+            for (delta, phase, momentum) in [
+                (Int32(0), Int64(1), Int64(0)),
+                (-60, 2, 0), (-60, 2, 0), (0, 4, 0),
+                (-20, 0, 1), (-10, 0, 2), (0, 0, 3),
+            ] {
+                let event = try FloatingOutlineScrollEvent(
+                    deltaY: delta, phase: phase, momentum: momentum, window: window, location: location
+                )
+                let routed = reader.testingRewriteScrollEventAtPointer(event)
+                #expect(routed === event)
+                if let routed {
+                    // Native scrolling reads the fixture's CG backing event.
+                    let cg = try #require(routed.cgEvent)
+                    scroll.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
+                    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.008))
+                }
+            }
+            flushFloatingOutlineLayout(window)
+            if origin == 0 { #expect(clip.bounds.minY > startY + 20) }
+            #expect(clip.bounds.minY <= maximumY + 0.01)
+            let after = try #require(reader.testingCurrentReadingPosition)
+            #expect(after.pageIndex == position.pageIndex)
+            #expect(abs(after.point.x - position.point.x) < 0.01)
+            #expect(abs(after.point.y - position.point.y) < 0.01)
+            #expect(abs(reader.pdfView.scaleFactor - scale) < 0.001)
+        }
+
+        let horizontal = try FloatingOutlineScrollEvent(
+            deltaX: -120, deltaY: 0, phase: 1, window: window, location: location
+        )
+        #expect(reader.testingRewriteScrollEventAtPointer(horizontal) === horizontal)
+        let cg = try #require(horizontal.cgEvent)
+        scroll.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
+        #expect(clip.bounds.minX == 0)
+        #expect(reader.testingCurrentReadingPosition?.pageIndex == position.pageIndex)
+    }
+
     @Test
     func quickNavigationTogglesWithoutSearchFocusAndHandlesArrowKeys() throws {
         _ = NSApplication.shared
@@ -782,6 +862,47 @@ private func makeLargeFloatingOutlinePDF(pageCount: Int, targetPageIndex: Int) t
     ] as CFDictionary)
     context.closePDF()
     return url
+}
+
+private final class FloatingOutlineScrollEvent: NSEvent, @unchecked Sendable {
+    private let source: NSEvent
+    private let location: NSPoint
+    private let targetWindowNumber: Int
+    private weak var targetWindow: NSWindow?
+
+    @MainActor
+    init(
+        deltaX: Int32 = 0, deltaY: Int32, phase: Int64 = 0, momentum: Int64 = 0,
+        window: NSWindow, location: NSPoint
+    ) throws {
+        let cg = try #require(CGEvent(
+            scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2,
+            wheel1: deltaY, wheel2: deltaX, wheel3: 0
+        ))
+        cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+        cg.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum)
+        cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
+        cg.flags = []
+        source = try #require(NSEvent(cgEvent: cg))
+        targetWindow = window
+        targetWindowNumber = window.windowNumber
+        self.location = location
+        super.init()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var type: NSEvent.EventType { .scrollWheel }
+    override var cgEvent: CGEvent? { source.cgEvent }
+    override var phase: NSEvent.Phase { source.phase }
+    override var momentumPhase: NSEvent.Phase { source.momentumPhase }
+    override var scrollingDeltaX: CGFloat { source.scrollingDeltaX }
+    override var scrollingDeltaY: CGFloat { source.scrollingDeltaY }
+    override var hasPreciseScrollingDeltas: Bool { source.hasPreciseScrollingDeltas }
+    override var locationInWindow: NSPoint { location }
+    override var window: NSWindow? { targetWindow }
+    override var windowNumber: Int { targetWindowNumber }
+    override var modifierFlags: NSEvent.ModifierFlags { [] }
+    override var timestamp: TimeInterval { source.timestamp }
 }
 
 @MainActor

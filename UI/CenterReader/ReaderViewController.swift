@@ -2066,6 +2066,13 @@ final class ReaderViewController: NSViewController {
     }
 
     private func rewriteScrollEventIfNeeded(_ event: NSEvent, pointerIsOverPDF: Bool) -> NSEvent? {
+        // Direct scrolling follows the hit view; momentum keeps its original
+        // owner even when the pointer moves onto another view.
+        if !pointerIsOverPDF, event.momentumPhase.isEmpty {
+            resetVerticalPageGesture()
+            resetBookPageTurnState()
+            return event
+        }
         let displayMode = targetSession()?.displayMode
         if handleVerticalPageScroll(event, pointerIsOverPDF: pointerIsOverPDF) {
             return nil
@@ -2351,9 +2358,15 @@ final class ReaderViewController: NSViewController {
               pdfContainerView.isHidden == false,
               pdfView.isHidden == false,
               let window = event.window,
-              window === view.window else { return false }
-        let pointInPDF = pdfView.convert(event.locationInWindow, from: nil)
-        return pdfView.bounds.contains(pointInPDF)
+              window === view.window,
+              let contentView = window.contentView else { return false }
+        let point = contentView.superview?.convert(event.locationInWindow, from: nil)
+            ?? event.locationInWindow
+        guard let hitView = contentView.hitTest(point) else { return false }
+        // The presentation canvas forwards scrolling to the PDF. Its toolbar
+        // and other controls above the reader keep their own events.
+        return hitView === pdfView || hitView.isDescendant(of: pdfView)
+            || hitView === presentationOverlay
     }
 
     func setReadingFocusSettings(_ settings: ReadingFocusSettings) {
@@ -4314,6 +4327,10 @@ extension ReaderViewController {
 
     func testingRewriteScrollEvent(_ event: NSEvent, pointerIsOverPDF: Bool = true) -> NSEvent? {
         rewriteScrollEventIfNeeded(event, pointerIsOverPDF: pointerIsOverPDF)
+    }
+
+    func testingRewriteScrollEventAtPointer(_ event: NSEvent) -> NSEvent? {
+        rewriteScrollEventIfNeeded(event, pointerIsOverPDF: pointerEventIsOverPDFContent(event))
     }
 
     func testingPositionBelongsToCurrentSpread(

@@ -128,7 +128,7 @@ flowchart LR
 |---|---|---|
 | 左栏 Vertical Sidebar | 工作区选择器与当前工作区文档 tabs | 不放 outline / 不放缩略图 / 不做文件树;悬停显示完整 PDF 文件名 |
 | 标题栏 Horizontal Tabs | 水平模式下的工作区选择器与 tab strip | 占标题栏,不新增内容区 tab bar;空工作区保留选择器 |
-| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、嵌套分屏 | pane 数量由最小可读尺寸限制;右下角常驻实际页序 / 双页范围与总页数,点击就地输入跳页;正文可打开链接预览、翻译和评论小窗;普通 tab 切换保留原分屏组,`Option` 激活新增阅读区;右栏未显示 Outline 且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 或 `O` 展开;内容超出高度上限后内部滚动,拖动上下边缘调整高度不触发 PDF reflow |
+| 中栏 Reader Workspace | PDF 渲染、选择、find bar、批注、全览、嵌套分屏 | pane 数量由最小可读尺寸限制;右下角常驻实际页序 / 双页范围与总页数,点击就地输入跳页;正文可打开链接预览、翻译和评论小窗;普通 tab 切换保留原分屏组,`Option` 激活新增阅读区;右栏未显示 Outline 且当前 PDF 有目录时,阅读区右缘显示浮动目录轨,hover 或 `O` 展开;内容超出高度上限后内部滚动,目录内滚动及边缘滑动不影响正文,拖动上下边缘调整高度不触发 PDF reflow |
 | 右栏 Sidebar | Outline / Pages / Search / Annotations (segmented 切换) | Annotations 为全高紧凑评论流(仅页 section + 原文 / 评论,无时间戳,无横向滑动);连续阅读时 Outline 按 PDF 分组连续显示;长目录标题自动换行且 pane 保持紧凑、无水平滑动;侧栏与浮动目录共用单行搜索与折叠按钮,无顶部标题、底部页码和页脚留白;目录树支持筛选与一键折叠 / 展开;搜索预览与命中列表放在右栏,链接 / 翻译 / 批注使用阅读区小窗,非 Outline 态可展开浮动目录 |
 | 左右互换 | 配置项或 `Cmd+Shift+X` | 不改变上述职责,仅改变物理位置 |
 

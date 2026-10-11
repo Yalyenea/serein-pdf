@@ -178,6 +178,58 @@ struct PDFResponsiveScrollingTests {
         #expect(!reader.testingHandleVerticalPageScroll(event))
     }
 
+    @Test(arguments: [ReaderDisplayMode.singlePage, .twoUp, .book, .bookContinuous])
+    func directScrollYieldsWhenPointerMovesToOverlay(mode: ReaderDisplayMode) throws {
+        let (controller, reader, _, _) = try makePagedReader(mode: mode)
+        defer { controller.close() }
+        if mode.usesBookLayout {
+            reader.fitToHeight()
+            settle(controller.window)
+        }
+        let began = try makeEvent(WheelStep(delta: 0, phase: 1, expectedPhase: .began), direction: -1)
+        _ = reader.testingRewriteScrollEvent(began)
+        let position = try #require(reader.testingCurrentReadingPosition)
+        let changed = try makeEvent(
+            WheelStep(delta: 120, phase: 2, expectedPhase: .changed),
+            direction: -1, horizontal: mode.usesBookLayout
+        )
+        #expect(reader.testingRewriteScrollEvent(changed, pointerIsOverPDF: false) === changed)
+        let momentum = try makeEvent(
+            WheelStep(delta: 120, momentum: 1, expectedMomentum: .began),
+            direction: -1, horizontal: mode.usesBookLayout
+        )
+        #expect(reader.testingRewriteScrollEvent(momentum, pointerIsOverPDF: false) === momentum)
+        #expect(reader.testingCurrentReadingPosition == position)
+    }
+
+    @Test(arguments: [ReaderDisplayMode.singlePage, .twoUp])
+    func readerMomentumIsConsumedAfterPointerMovesToOverlay(mode: ReaderDisplayMode) throws {
+        let (controller, reader, _, _) = try makePagedReader(mode: mode)
+        defer { controller.close() }
+        reader.fitToHeight()
+        settle(controller.window)
+        for step in [
+            WheelStep(delta: 0, phase: 1, expectedPhase: .began),
+            WheelStep(delta: 120, phase: 2, expectedPhase: .changed),
+            WheelStep(delta: 0, phase: 4, expectedPhase: .ended),
+            WheelStep(delta: 60, momentum: 1, expectedMomentum: .began),
+        ] {
+            #expect(reader.testingRewriteScrollEvent(try makeEvent(step, direction: -1)) == nil)
+        }
+        let position = try #require(reader.testingCurrentReadingPosition)
+        for step in [
+            WheelStep(delta: 60, momentum: 2, expectedMomentum: .changed),
+            WheelStep(delta: 0, momentum: 3, expectedMomentum: .ended),
+        ] {
+            #expect(reader.testingRewriteScrollEvent(
+                try makeEvent(step, direction: -1), pointerIsOverPDF: false
+            ) == nil)
+        }
+        #expect(reader.testingCurrentReadingPosition == position)
+        let outside = try makeEvent(WheelStep(delta: 120, phase: 1, expectedPhase: .began), direction: -1)
+        #expect(reader.testingRewriteScrollEvent(outside, pointerIsOverPDF: false) === outside)
+    }
+
     private func makePagedReader(mode: ReaderDisplayMode) throws -> (MainWindowController, ReaderViewController, DocumentStore, UUID) {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
@@ -350,10 +402,11 @@ struct PDFResponsiveScrollingTests {
         ]
     }
 
-    private func makeEvent(_ step: WheelStep, direction: Int32) throws -> NSEvent {
+    private func makeEvent(_ step: WheelStep, direction: Int32, horizontal: Bool = false) throws -> NSEvent {
         let cg = try #require(CGEvent(
-            scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1,
-            wheel1: step.delta * direction, wheel2: 0, wheel3: 0
+            scrollWheelEvent2Source: nil, units: .pixel, wheelCount: horizontal ? 2 : 1,
+            wheel1: horizontal ? 0 : step.delta * direction,
+            wheel2: horizontal ? step.delta * direction : 0, wheel3: 0
         ))
         cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: step.phase)
         cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
@@ -363,7 +416,8 @@ struct PDFResponsiveScrollingTests {
         try #require(event.phase == step.expectedPhase)
         try #require(event.momentumPhase == step.expectedMomentum)
         try #require(event.hasPreciseScrollingDeltas)
-        try #require(abs(event.scrollingDeltaY - CGFloat(step.delta * direction)) < 0.01)
+        let delta = horizontal ? event.scrollingDeltaX : event.scrollingDeltaY
+        try #require(abs(delta - CGFloat(step.delta * direction)) < 0.01)
         return event
     }
 

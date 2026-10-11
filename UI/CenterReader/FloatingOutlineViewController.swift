@@ -265,7 +265,6 @@ final class FloatingOutlineViewController: NSViewController {
 
         markerView.identifier = NSUserInterfaceItemIdentifier("floatingOutlineMarkerRail")
         markerView.translatesAutoresizingMaskIntoConstraints = false
-        markerView.toolTip = L10n.text("Document outline", "文档目录")
         hoverView.addSubview(markerView)
 
         panelView.identifier = NSUserInterfaceItemIdentifier("floatingOutlinePanel")
