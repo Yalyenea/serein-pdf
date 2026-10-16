@@ -77,7 +77,7 @@ flowchart LR
 |---|---|
 | 多文档管理 | `DocumentStore` 持有多个 `DocumentSession` |
 | 多窗口管理 | 单 `DocumentStore` 持有多个 `WindowWorkspace`;每窗拥有一组具名工作区,各自保存 tab、搜索与阅读布局;关闭窗口保留工作区组,按关闭顺序排列并跨重启保留;最近窗口默认选中最近的其他窗口;支持合并窗口与跨窗移动 PDF |
-| 工作区入口 | 两种 tab 形态共用 `DocumentStore` 工作区模型；垂直模式仅在底部显示图标条，单击切换、右键图标重命名、`+` 新建；水平模式使用标题栏图标菜单；tab 右键可移动 PDF 到同窗其他工作区；空工作区保留入口 |
+| 工作区入口 | 两种 tab 形态共用 `DocumentStore` 工作区模型；垂直模式仅在底部显示图标条，单击切换、右键图标重命名或删除、`+` 新建；水平模式使用标题栏图标菜单；删除工作区前对未在其他打开窗口 / 工作区共享的 dirty PDF 提示保存 / 取消 / 丢弃，保留最后一个工作区；tab 右键可移动 PDF 到同窗其他工作区；空工作区保留入口 |
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 按稳定 pane ID 管理动态 Reader,以 `NSSplitView` + `ReaderSplitHostView` 递归呈现分屏树 |
 | 目录来源 | 右栏或浮动目录需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |

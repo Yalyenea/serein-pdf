@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 import XCTest
 @testable import Serein
 
@@ -41,7 +42,7 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
         XCTAssertEqual(workspaces.count, 2)
         XCTAssertTrue(workspaces.allSatisfy { $0.image == nil })
         XCTAssertTrue(menu.items.allSatisfy { $0.view != nil })
-        XCTAssertEqual(menu.items.suffix(2).map(\.title), ["New Workspace", "Rename"])
+        XCTAssertEqual(menu.items.suffix(3).map(\.title), ["New Workspace", "Rename", "Delete Workspace"])
         XCTAssertEqual(workspaces.filter { $0.state == .on }.map(\.title), ["Research"])
         let first = try XCTUnwrap(workspaces.first)
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(first.action), to: first.target, from: first))
@@ -58,7 +59,7 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
         let selector = try XCTUnwrap(findView(identifier: "workspaceFooter", in: controller.view) as? WorkspaceSelectorView)
         let icon = try XCTUnwrap(selector.testingWorkspaceButtons.last)
         let menu = try XCTUnwrap(icon.menu)
-        XCTAssertEqual(menu.items.map(\.title), ["New Workspace", "Rename"])
+        XCTAssertEqual(menu.items.map(\.title), ["New Workspace", "Rename", "Delete Workspace"])
         XCTAssertEqual(menu.items.last?.representedObject as? String, id.uuidString)
         store.renameWorkspace(id, name: "Papers", in: store.defaultWindowID)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
@@ -101,6 +102,68 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
         XCTAssertEqual(store.activeWorkspaceID(in: store.defaultWindowID), secondID)
         XCTAssertEqual(store.workspaces(in: store.defaultWindowID).first { $0.id == firstID }?.name, "Reading")
         XCTAssertEqual(footer.testingWorkspaceButtons.first?.toolTip, "Reading")
+    }
+
+    func testDeleteMenuTargetsWorkspaceInBothTabPresentations() throws {
+        _ = NSApplication.shared
+        for mode in [TabPresentationMode.verticalSidebar, .horizontalTitlebar] {
+            let store = makeIsolatedDocumentStore()
+            let windowID = store.defaultWindowID
+            let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+            let firstTab = store.newBlankTab(in: windowID)
+            let secondID = try XCTUnwrap(store.createWorkspace(name: "Research", in: windowID))
+            let secondTab = store.newBlankTab(in: windowID)
+            store.setTabPresentationMode(mode)
+            if mode == .horizontalTitlebar { store.activateWorkspace(firstID, in: windowID) }
+            let controller = MainWindowController(documentStore: store)
+            defer { controller.close() }
+            controller.showWindow(nil)
+            controller.window?.layoutIfNeeded()
+            let split = try XCTUnwrap(controller.window?.contentViewController as? SplitViewController)
+            let content = mode == .verticalSidebar ? split.verticalTabsViewController.view : split.titlebarTabsController.view
+            let selector = try XCTUnwrap(findView(
+                identifier: mode == .verticalSidebar ? "workspaceFooter" : "workspaceSelector", in: content
+            ) as? WorkspaceSelectorView)
+            let menu = try XCTUnwrap(mode == .verticalSidebar ? selector.testingWorkspaceButtons.first?.menu : selector.testingMenu)
+            let deleteIndex = try XCTUnwrap(menu.items.firstIndex { $0.title == "Delete Workspace" })
+            XCTAssertEqual(menu.items[deleteIndex].representedObject as? String, firstID.uuidString)
+            XCTAssertTrue(menu.items[deleteIndex].isEnabled)
+            menu.performActionForItem(at: deleteIndex)
+            XCTAssertEqual(store.workspaces(in: windowID).map(\.id), [secondID])
+            XCTAssertEqual(store.activeWorkspaceID(in: windowID), secondID)
+            XCTAssertEqual(store.sessions(in: windowID).map(\.id), [secondTab.id])
+            XCTAssertNil(store.session(for: firstTab.id))
+            let remainingMenu = try XCTUnwrap(mode == .verticalSidebar ? selector.testingWorkspaceButtons.first?.menu : selector.testingMenu)
+            XCTAssertFalse(try XCTUnwrap(remainingMenu.items.last).isEnabled)
+        }
+    }
+
+    func testWorkspaceDeletionHonorsSaveDiscardAndCancel() throws {
+        _ = NSApplication.shared
+        for response in [NSApplication.ModalResponse.alertSecondButtonReturn, .alertThirdButtonReturn, .alertFirstButtonReturn] {
+            let store = makeIsolatedDocumentStore()
+            let windowID = store.defaultWindowID
+            let workspaceID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+            let url = try TestPDFFixtures.makeBlankPDF(named: "workspace-delete-prompt")
+            defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+            let session = try store.open(documentAt: url)
+            let page = try XCTUnwrap(store.pdfDocument(for: session.id).page(at: 0))
+            let annotation = PDFAnnotation(bounds: CGRect(x: 20, y: 20, width: 60, height: 18), forType: .highlight, withProperties: nil)
+            page.addAnnotation(annotation)
+            store.noteHighlightsAdded([.init(pageIndex: 0, annotation: annotation)], for: session.id)
+            _ = store.createWorkspace(name: "Keep", in: windowID)
+            let controller = MainWindowController(documentStore: store)
+            defer { controller.close() }
+            // Answer the native modal from its event loop, exercising the actual save decision path.
+            DispatchQueue.main.async { NSApp.stopModal(withCode: response) }
+            let deleted = controller.requestDeleteWorkspace(workspaceID)
+            let cancelled = response == .alertSecondButtonReturn
+            XCTAssertEqual(deleted, !cancelled)
+            XCTAssertEqual(store.workspaces(in: windowID).contains { $0.id == workspaceID }, cancelled)
+            if cancelled { XCTAssertTrue(store.session(for: session.id)?.isDirty == true) }
+            let savedPage = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+            XCTAssertEqual(savedPage.annotations.count, response == .alertFirstButtonReturn ? 1 : 0)
+        }
     }
 
     func testLongFooterUsesNativeScrollAndRevealsNewlyActiveIcon() throws {

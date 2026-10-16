@@ -2658,6 +2658,42 @@ extension DocumentStore {
         notifyChange(.tabs, windowIDs: [windowID])
     }
 
+    func exclusiveDirtySessions(inWorkspace workspaceID: UUID, in windowID: UUID) -> [DocumentSession] {
+        guard let workspace = workspaces(in: windowID).first(where: { $0.id == workspaceID }) else { return [] }
+        let owners = Set(workspace.referencedSessionIDs.map { documentSessionID(for: $0) })
+        // Closed windows retain layouts, but cannot keep unsaved annotations alive on screen.
+        let ownersElsewhere = Set(windowWorkspaces.filter { !$0.isClosed }.flatMap { window in
+            window.workspaces.filter { window.id != windowID || $0.id != workspaceID }
+                .flatMap { Array($0.referencedSessionIDs) }
+        }.map { documentSessionID(for: $0) })
+        return sessions.filter { $0.isDirty && owners.contains($0.id) && !ownersElsewhere.contains($0.id) }
+    }
+
+    @discardableResult
+    func deleteWorkspace(_ workspaceID: UUID, in windowID: UUID) -> Bool {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              windowWorkspaces[index].workspaces.count > 1,
+              let workspaceIndex = windowWorkspaces[index].workspaces.firstIndex(where: { $0.id == workspaceID }) else { return false }
+        let wasActive = windowWorkspaces[index].activeWorkspaceID == workspaceID
+        if wasActive {
+            cancelSearchOperation(in: windowID)
+            searchSnapshots.removeValue(forKey: windowID)
+        }
+        windowWorkspaces[index].workspaces.remove(at: workspaceIndex)
+        if wasActive {
+            let adjacentIndex = min(workspaceIndex, windowWorkspaces[index].workspaces.count - 1)
+            windowWorkspaces[index].activeWorkspaceID = windowWorkspaces[index].workspaces[adjacentIndex].id
+        }
+        selectionAnchorIDsByWorkspace.removeValue(forKey: workspaceID)
+        normalizeWorkspace(&windowWorkspaces[index])
+        removeUnreferencedSessions()
+        if wasActive { recordActiveDocument(in: windowID) }
+        rebuildSearchIfNeeded(in: windowID)
+        prunePDFDocumentCache()
+        notifyChange([.content, .tabs], windowIDs: [windowID])
+        return true
+    }
+
     func activateWorkspace(_ workspaceID: UUID, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
               windowWorkspaces[index].workspaces.contains(where: { $0.id == workspaceID }),

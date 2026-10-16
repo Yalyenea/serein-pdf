@@ -19,6 +19,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Keep custom page text readable on light or dark paper, synchronize all readers, and use the window background around PDF pages in either appearance.
 
 ### Workspaces and comparison
+- Delete workspaces from either workspace menu, keeping at least one per window. Ask to save or discard unsaved annotations when their PDFs are not shared with another open workspace, and select an adjacent workspace when deleting the active one.
 - Default the recent-windows list to another window and retain closing order across relaunch. Keep saved window groups available for reopening.
 - Copy the current comparison pane's position and zoom when splitting from document lists, even after the original pane has closed. Show configured split shortcuts in the open-tabs footer and complete quick Control-Tab taps when Control is already released.
 - Add named workspaces within each window, with create, rename, switch, and move-document actions in both tab layouts. Keep independent reading positions for the same PDF across workspaces while sharing annotations, saving, and undo.

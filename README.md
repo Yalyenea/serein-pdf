@@ -13,7 +13,7 @@ The release DMG supports Apple silicon Macs running macOS 14 or later.
 ## Features
 
 - Tabbed documents with switchable layouts: left vertical sidebar or adaptive titlebar tabs, with the full PDF filename available on hover
-- Named workspaces within each window. Vertical tabs use a bottom icon strip: click to switch, right-click an icon to rename, and use `+` to create. Horizontal tabs use an icon-only workspace menu. Move PDFs between workspaces from either tab context menu; each workspace retains its documents and reading layouts, including after its window closes.
+- Named workspaces within each window. Vertical tabs use a bottom icon strip: click to switch, right-click an icon to rename or delete, and use `+` to create. Horizontal tabs use an icon-only workspace menu. Deleting a workspace asks about unsaved annotations when its PDFs are not open elsewhere; the last workspace stays available. Move PDFs between workspaces from either tab context menu; each workspace retains its documents and reading layouts, including after its window closes.
 - Switch adjacent workspaces with `cmd+option+←/→` or swipe horizontally over the workspace controls; navigation wraps at either end. Use `cmd+option+1…9` to select a workspace by its saved order within the window.
 - Click a starting point, then Shift-click an endpoint to select text, including across pages and from line-boundary whitespace. Further Shift-clicks adjust the endpoint; an ordinary click starts a new selection.
 - `cmd+o` supports selecting PDF files and folders; selected folders are scanned for PDFs automatically

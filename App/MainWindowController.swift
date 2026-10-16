@@ -674,6 +674,36 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         splitViewController.flushPendingReadingPositions()
     }
 
+    @discardableResult
+    func requestDeleteWorkspace(_ workspaceID: UUID) -> Bool {
+        let workspaces = documentStore.workspaces(in: windowID)
+        guard workspaces.count > 1, let workspace = workspaces.first(where: { $0.id == workspaceID }) else { return false }
+        flushPendingReadingPositions()
+        let dirtySessions = documentStore.exclusiveDirtySessions(inWorkspace: workspaceID, in: windowID)
+        if !dirtySessions.isEmpty {
+            let titles = dirtySessions.prefix(3).map(\.title).joined(separator: "\n")
+            let suffix = dirtySessions.count > 3 ? "\n…" : ""
+            let decision = presentUnsavedChangesAlert(
+                title: L10n.text("Save changes before deleting “\(workspace.name)”?", "删除“\(workspace.name)”前保存更改？"),
+                detail: L10n.text("These PDFs have unsaved annotations:\n\(titles)\(suffix)", "以下 PDF 有未保存的批注：\n\(titles)\(suffix)")
+            )
+            do {
+                switch decision {
+                case .save:
+                    try dirtySessions.forEach { try documentStore.saveAnnotations(for: $0.id) }
+                case .discard:
+                    try dirtySessions.forEach { try documentStore.discardUnsavedAnnotations(for: $0.id) }
+                case .cancel:
+                    return false
+                }
+            } catch {
+                presentSaveError(error)
+                return false
+            }
+        }
+        return documentStore.deleteWorkspace(workspaceID, in: windowID)
+    }
+
     func prepareForApplicationTermination() -> Bool {
         if allowsTerminationWithoutPrompt {
             allowsTerminationWithoutPrompt = false

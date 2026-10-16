@@ -378,6 +378,11 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         rename.representedObject = (workspaceID ?? documentStore.activeWorkspaceID(in: windowID))?.uuidString
         rename.isEnabled = rename.representedObject != nil
         menu.addItem(rename)
+        let delete = NSMenuItem(title: L10n.text("Delete Workspace", "删除工作区"), action: #selector(deleteWorkspace(_:)), keyEquivalent: "")
+        delete.target = self
+        delete.representedObject = rename.representedObject
+        delete.isEnabled = delete.representedObject != nil && documentStore.workspaces(in: windowID).count > 1
+        menu.addItem(delete)
         let width = min(max(menu.items.map {
             ($0.title as NSString).size(withAttributes: [.font: font]).width + 20
         }.max() ?? 0, 140), 240)
@@ -423,6 +428,13 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         if let rawID = sender.representedObject as? String, let id = UUID(uuidString: rawID) {
             presentNameEditor(workspaceID: id)
         }
+    }
+
+    @objc private func deleteWorkspace(_ sender: NSMenuItem) {
+        guard let rawID = sender.representedObject as? String, let id = UUID(uuidString: rawID),
+              let controller = window?.windowController as? MainWindowController else { return }
+        controller.requestDeleteWorkspace(id)
+        refresh()
     }
 
     private func monogram(for name: String) -> String { String(name.prefix(1)).uppercased() }

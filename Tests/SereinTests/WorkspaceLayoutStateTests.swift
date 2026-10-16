@@ -5,6 +5,90 @@ import XCTest
 
 @MainActor
 final class WorkspaceLayoutStateTests: XCTestCase {
+    func testDeleteWorkspaceRemovesSplitSessionsAndMRUAndPersistsAdjacentSelection() throws {
+        let suiteName = "SereinTests.WorkspaceDeletion.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = makePersistedStore(defaults: defaults)
+        let windowID = store.defaultWindowID
+        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let kept = try store.open(documentAt: makePDF("workspace-delete-kept", pageCount: 8))
+        let keptPosition = ReadingPosition(pageIndex: 3, point: CGPoint(x: 21, y: 72))
+        setReadingState(keptPosition, scale: 1.6, sessionID: kept.id, in: store)
+        let removedID = try XCTUnwrap(store.createWorkspace(name: "Remove", in: windowID))
+        _ = try store.open(documentAt: makePDF("workspace-delete-removed", pageCount: 8))
+        _ = try makeFourPaneLayout(in: store, windowID: windowID)
+        let removedSessionIDs = try XCTUnwrap(store.workspaces(in: windowID).first { $0.id == removedID }).referencedSessionIDs
+        let nextID = try XCTUnwrap(store.createWorkspace(name: "Next", in: windowID))
+        store.activateWorkspace(removedID, in: windowID)
+        store.updateSearch(query: "removed", scope: .allOpen, in: windowID)
+
+        XCTAssertTrue(store.deleteWorkspace(removedID, in: windowID))
+        XCTAssertEqual(store.workspaces(in: windowID).map(\.id), [firstID, nextID])
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), nextID)
+        XCTAssertTrue(store.sessions(in: windowID).isEmpty)
+        XCTAssertTrue(removedSessionIDs.allSatisfy { store.session(for: $0) == nil })
+        XCTAssertFalse(store.recentDocumentEntries(in: windowID).contains { $0.workspaceID == removedID })
+        XCTAssertEqual(store.searchSnapshot(in: windowID).query, "")
+        XCTAssertTrue(store.deleteWorkspace(nextID, in: windowID))
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), firstID)
+        XCTAssertEqual(store.activeSession(in: windowID)?.lastReadPosition, keptPosition)
+        XCTAssertEqual(store.activeSession(in: windowID)?.zoomScale, 1.6)
+        XCTAssertFalse(store.deleteWorkspace(firstID, in: windowID))
+        store.flushPersistence()
+
+        let restored = makePersistedStore(defaults: defaults)
+        try restored.restorePersistedState()
+        XCTAssertEqual(restored.workspaces(in: windowID).map(\.id), [firstID])
+        XCTAssertEqual(restored.activeWorkspaceID(in: windowID), firstID)
+        XCTAssertEqual(restored.sessions(in: windowID).map(\.id), [kept.id])
+        XCTAssertTrue(removedSessionIDs.allSatisfy { restored.session(for: $0) == nil })
+    }
+
+    func testDeletingInactiveWorkspacePreservesActiveLayoutAndOtherWindows() throws {
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let removed = store.newBlankTab(in: windowID)
+        let activeID = try XCTUnwrap(store.createWorkspace(name: "Active", in: windowID))
+        _ = try store.open(documentAt: makePDF("workspace-delete-active", pageCount: 8))
+        _ = try makeFourPaneLayout(in: store, windowID: windowID)
+        let activeWorkspace = try XCTUnwrap(store.windowWorkspace(for: windowID)).activeWorkspace
+        let otherWindowID = store.createWindow()
+        let otherWindow = store.windowWorkspace(for: otherWindowID)
+
+        XCTAssertFalse(store.deleteWorkspace(firstID, in: otherWindowID))
+        XCTAssertFalse(store.deleteWorkspace(UUID(), in: windowID))
+        XCTAssertTrue(store.deleteWorkspace(firstID, in: windowID))
+        XCTAssertNil(store.session(for: removed.id))
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), activeID)
+        XCTAssertEqual(store.windowWorkspace(for: windowID)?.activeWorkspace, activeWorkspace)
+        XCTAssertEqual(store.windowWorkspace(for: otherWindowID), otherWindow)
+    }
+
+    func testDeletionDirtyChecksRespectSharedDocumentsAcrossWorkspacesAndClosedWindows() throws {
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let sourceID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let source = try store.open(documentAt: makePDF("workspace-delete-dirty"))
+        _ = try makeFourPaneLayout(in: store, windowID: windowID)
+        try addUnsavedHighlight(to: source.id, in: store)
+        XCTAssertEqual(store.exclusiveDirtySessions(inWorkspace: sourceID, in: windowID).map(\.id), [source.id])
+        let sharedID = try XCTUnwrap(store.createWorkspace(name: "Shared", in: windowID))
+        let shared = try store.open(documentAt: source.url, in: windowID)
+        XCTAssertTrue(store.exclusiveDirtySessions(inWorkspace: sourceID, in: windowID).isEmpty)
+        XCTAssertTrue(store.deleteWorkspace(sourceID, in: windowID))
+        XCTAssertTrue(store.session(for: shared.id)?.isDirty == true)
+        XCTAssertTrue(try store.pdfDocument(for: shared.id).page(at: 0)?.annotations.isEmpty == false)
+        XCTAssertEqual(store.exclusiveDirtySessions(inWorkspace: sharedID, in: windowID).map(\.id), [source.id])
+
+        let otherWindowID = store.createWindow()
+        _ = try store.open(documentAt: source.url, in: otherWindowID)
+        XCTAssertTrue(store.exclusiveDirtySessions(inWorkspace: sharedID, in: windowID).isEmpty)
+        store.closeWindow(id: otherWindowID)
+        XCTAssertEqual(store.exclusiveDirtySessions(inWorkspace: sharedID, in: windowID).map(\.id), [source.id])
+    }
+
     func testWorkspaceNavigationIncludesEmptyWorkspacesAndPreservesSavedOrderAndReadingState() throws {
         let suiteName = "SereinTests.WorkspaceNavigation.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
