@@ -4016,9 +4016,14 @@ final class ReaderViewController: NSViewController {
 
         let pointInView = pdfView.convert(anchor.pagePoint, from: anchor.page)
         let pointInDoc = documentView.convert(pointInView, from: pdfView)
+        // Legacy scrollbars make PDFView's center differ from the clip center.
+        // Restore the same reference point used when capturing the anchor.
+        let centerInDoc = documentView.convert(
+            NSPoint(x: pdfView.bounds.midX, y: pdfView.bounds.midY), from: pdfView
+        )
         let desiredOrigin = NSPoint(
-            x: pointInDoc.x - clipView.bounds.width * 0.5,
-            y: pointInDoc.y - clipView.bounds.height * 0.5
+            x: clipView.bounds.origin.x + pointInDoc.x - centerInDoc.x,
+            y: clipView.bounds.origin.y + pointInDoc.y - centerInDoc.y
         )
         let targetBounds = clipView.constrainBoundsRect(
             NSRect(origin: desiredOrigin, size: clipView.bounds.size)

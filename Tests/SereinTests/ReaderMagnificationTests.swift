@@ -144,6 +144,11 @@ struct ReaderMagnificationTests {
         store.setScaleMode(.manual, scaleFactor: 2, for: session.id)
         let split = try #require(controller.window?.contentViewController as? SplitViewController)
         settle(controller)
+        let scroll = try #require(split.readerViewController.pdfView.subviews.compactMap { $0 as? NSScrollView }.first)
+        // Always-visible scrollbars shrink the clip view, unlike overlay scrollbars.
+        scroll.scrollerStyle = .legacy
+        scroll.tile()
+        settle(controller)
         try body(controller, split.readerViewController, store, session.id)
     }
 

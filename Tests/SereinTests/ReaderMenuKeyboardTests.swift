@@ -143,6 +143,10 @@ final class ReaderMenuKeyboardTests: XCTestCase {
         let url = try TestPDFFixtures.makeLabeledPDF(named: "workspace-menu-keys",
             pageSizes: Array(repeating: NSSize(width: 612, height: 792), count: 8))
         _ = try store.open(documentAt: url, in: controller.windowID)
+        // Keep enough reader width for two panes on smaller CI displays.
+        store.setLeftSidebarVisible(false, in: controller.windowID)
+        store.setRightSidebarVisible(false, in: controller.windowID)
+        settle(window)
         XCTAssertTrue(controller.splitCurrentPDF(layout: .sideBySide))
         settle(window)
         let originalID = try XCTUnwrap(store.activeWorkspaceID(in: controller.windowID))
@@ -218,6 +222,8 @@ final class ReaderMenuKeyboardTests: XCTestCase {
         }
         let url = try TestPDFFixtures.makeLabeledPDF(named: "menu-editor", pageSizes: [NSSize(width: 612, height: 792)])
         _ = try store.open(documentAt: url)
+        store.setLeftSidebarVisible(false)
+        store.setRightSidebarVisible(false)
         readerWindow.setContentSize(NSSize(width: 1400, height: 900))
         reader.showWindow(nil)
         readerWindow.makeKeyAndOrderFront(nil)
