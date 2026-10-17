@@ -16,6 +16,12 @@ final class PDFContainerView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        // The parent refresh runs before this child inherits its new appearance.
+        setNightModeEnabled(effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+    }
+
     func embedPDFView(_ view: NSView) {
         addSubview(view)
         readingFocusOverlay.translatesAutoresizingMaskIntoConstraints = false

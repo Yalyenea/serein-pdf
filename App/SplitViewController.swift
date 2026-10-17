@@ -2,9 +2,16 @@ import AppKit
 
 /// Keeps native divider geometry and hit testing without drawing a seam.
 private final class SeamlessSplitView: NSSplitView {
+    var onAppearanceChanged: (() -> Void)?
+
     override var dividerThickness: CGFloat { 1 }
 
     override func drawDivider(in rect: NSRect) {}
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChanged?()
+    }
 }
 
 final class SplitViewController: NSSplitViewController {
@@ -54,7 +61,13 @@ final class SplitViewController: NSSplitViewController {
         rightSidebarViewController = RightSidebarViewController(documentStore: documentStore, windowID: windowID)
         titlebarTabsController = TitlebarTabsController(documentStore: documentStore, windowID: windowID)
         super.init(nibName: nil, bundle: nil)
-        splitView = SeamlessSplitView()
+        let surface = SeamlessSplitView()
+        splitView = surface
+        // App-level appearance observation can run before the window inherits it.
+        surface.onAppearanceChanged = { [weak self] in
+            guard let self, self.isViewLoaded else { return }
+            self.refreshChromeColors()
+        }
         wireInteractions()
         rightSidebarViewController.configure(pdfView: readerWorkspaceViewController.activeReaderViewController().pdfView)
     }

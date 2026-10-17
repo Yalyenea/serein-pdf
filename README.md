@@ -236,7 +236,9 @@ move_current_pdf_to_new_window = "none" # cmd+k, cmd+n is a built-in chord
 
 - Layout widths seed new windows. Dragged sidebar widths belong to the window
   and restore with it; each reading split saves its own divider proportion.
-- `mode = "system"` follows the current macOS appearance.
+- `mode = "system"` follows the current macOS appearance. Switching macOS between
+  light and dark refreshes reader and sidebar backgrounds immediately, including
+  custom page and window colors, while preserving the current page and zoom.
 - `light_theme` and `dark_theme` are selected independently, so you can pair
   any available light preset with any dark preset. `cmd+k`, then `cmd+t`
   cycles the current appearance's presets.

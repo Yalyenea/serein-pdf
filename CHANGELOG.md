@@ -14,6 +14,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Preserve annotation comment drafts and editing focus while the sidebar refreshes or the same PDF is viewed in another pane. Ask before overwriting a comment changed elsewhere, and refresh outline selection colors against each row's appearance.
 
 ### Appearance
+- Refresh reader, PDF margin, and sidebar backgrounds when the system switches between light and dark appearances, including custom backgrounds. Preserve the current page and zoom without requiring a manual theme refresh.
 - Add Rosewash's curated presets for a total of 17 light and 28 dark themes, with independent selections and cycling through the current appearance's themes.
 - Customize PDF page and window/sidebar backgrounds separately for light and dark appearances in Settings. Save colors immediately, preserve them across theme changes, and reset each appearance to its selected theme's defaults.
 - Keep custom page text readable on light or dark paper, synchronize all readers, and use the window background around PDF pages in either appearance.

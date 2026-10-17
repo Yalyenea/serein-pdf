@@ -79,6 +79,7 @@ private final class SereinWordmarkView: NSView {
 
 private final class ReaderSurfaceView: NSView {
     var onOpenURLs: (([URL]) -> Void)?
+    var onAppearanceChanged: (() -> Void)?
 
     private let dropHighlightView = NSView()
 
@@ -91,6 +92,11 @@ private final class ReaderSurfaceView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChanged?()
     }
 
     override func layout() {
@@ -583,7 +589,6 @@ final class ReaderViewController: NSViewController {
     private var isNavigatingHistory: Bool { historyNavigationEpoch != 0 }
     private var pendingExternalNavigation: PendingExternalNavigation?
     private var externalNavigationToken = 0
-    private var appearanceObservation: NSKeyValueObservation?
     nonisolated(unsafe) private var leftMouseDownMonitor: Any?
     nonisolated(unsafe) private var leftMouseUpMonitor: Any?
     nonisolated(unsafe) private var panLockScrollMonitor: Any?
@@ -779,13 +784,9 @@ final class ReaderViewController: NSViewController {
             name: Notification.Name.PDFViewScaleChanged,
             object: pdfView
         )
-        syncNightModeFromSystem()
-        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.syncNightModeFromSystem()
-                self.applyReaderAppearance()
-            }
+        syncNightModeFromAppearance()
+        (view as? ReaderSurfaceView)?.onAppearanceChanged = { [weak self] in
+            self?.refreshThemeAppearance()
         }
         syncLocalEventMonitoring()
         refreshDisplayedDocument()
@@ -793,8 +794,8 @@ final class ReaderViewController: NSViewController {
         applyReaderAppearance()
     }
 
-    private func syncNightModeFromSystem() {
-        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    private func syncNightModeFromAppearance() {
+        let isDark = view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         readerState.isNightModeEnabled = isDark
     }
 
@@ -2457,7 +2458,7 @@ final class ReaderViewController: NSViewController {
     }
 
     func refreshThemeAppearance() {
-        syncNightModeFromSystem()
+        syncNightModeFromAppearance()
         lastThemeFilterSignature = nil
         applyReaderAppearance()
     }
@@ -3805,7 +3806,7 @@ final class ReaderViewController: NSViewController {
     }
 
     private func syncPDFMarginBackground() {
-        let appearance = NSApp.effectiveAppearance
+        let appearance = view.effectiveAppearance
         discoverPDFPrivateViewsIfNeeded()
         appearance.performAsCurrentDrawingAppearance {
             let backgroundColor = NightModeStyle.pageBackgroundColor.usingColorSpace(.sRGB)
@@ -4070,7 +4071,7 @@ final class ReaderViewController: NSViewController {
             to: selection,
             color: NightModeStyle.highlightColor(
                 for: readerState.highlightColor,
-                appearance: NSApp.effectiveAppearance
+                appearance: view.effectiveAppearance
             ),
             type: type
         )
@@ -4086,7 +4087,7 @@ final class ReaderViewController: NSViewController {
         annotationInteraction.refreshThemeAppearance()
         presentationOverlay.refreshThemeAppearance()
         let isNightModeEnabled = readerState.isNightModeEnabled
-        let appearance = NSApp.effectiveAppearance
+        let appearance = view.effectiveAppearance
         appearance.performAsCurrentDrawingAppearance {
             let pageBackground = NightModeStyle.readerBackdropColor
             let usesFlatPDFChrome = NightModeStyle.prefersFlatPDFChrome(for: appearance)
@@ -4205,7 +4206,7 @@ final class ReaderViewController: NSViewController {
         highlightModeLabel.stringValue = "\(readerState.annotationMode?.modeTitle ?? L10n.text("Highlight", "高亮")) · Esc"
         highlightModeColorDot.layer?.backgroundColor = NightModeStyle.highlightColor(
             for: color,
-            appearance: NSApp.effectiveAppearance
+            appearance: view.effectiveAppearance
         ).withAlphaComponent(0.85).cgColor
     }
 
@@ -4223,11 +4224,11 @@ final class ReaderViewController: NSViewController {
         referencePreview.applyTheme()
         translationController.refreshThemeAppearance()
         discoverPDFPrivateViewsIfNeeded()
-        let appearance = NSApp.effectiveAppearance
+        let appearance = view.effectiveAppearance
         let signature = "\(appearance.name.rawValue)|\(readerState.isNightModeEnabled)|\(pdfPrivateViewGeneration)"
         guard signature != lastThemeFilterSignature else { return }
         lastThemeFilterSignature = signature
-        let filters = NightModeStyle.makePDFContentFilters(for: NSApp.effectiveAppearance)
+        let filters = NightModeStyle.makePDFContentFilters(for: appearance)
         pdfView.contentFilters = filters
         pdfDocumentView()?.contentFilters = []
         for pageView in pdfPageViews() {

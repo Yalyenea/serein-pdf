@@ -594,6 +594,63 @@ struct WindowChromeTests {
     }
 
     @Test
+    func inheritedAppearanceRefreshesBackgroundsWithoutExplicitThemeRefresh() throws {
+        let app = NSApplication.shared
+        let previousAppearance = app.appearance
+        let selection = ThemeManager.shared.selection
+        defer {
+            ThemeManager.shared.apply(light: selection.light, dark: selection.dark,
+                                      lightBackground: selection.lightBackground, darkBackground: selection.darkBackground)
+            app.appearance = previousAppearance
+        }
+        // Exercise inherited changes, without the explicit refresh used by Settings and I.
+        for changesApplication in [true, false] {
+            app.appearance = NSAppearance(named: .aqua)
+            ThemeManager.shared.apply(light: .rosePineDawn, dark: .rosePineMoon)
+            let store = makeIsolatedDocumentStore()
+            _ = try store.open(documentAt: makeTemporaryPDF(named: "inherited-appearance"))
+            let controller = MainWindowController(documentStore: store)
+            defer { controller.close() }
+            controller.showWindow(nil)
+            let window = try #require(controller.window)
+            let split = try #require(window.contentViewController as? SplitViewController)
+            let reader = split.readerViewController
+            flushLayout(window)
+            let scale = reader.pdfView.scaleFactor
+            let page = reader.pdfView.currentPage
+            let container = try #require(findDescendant(of: PDFContainerView.self, in: reader.view))
+
+            for custom in [false, true] {
+                if custom {
+                    ThemeManager.shared.apply(light: .normal, dark: .normal,
+                        lightBackground: .init(page: ThemeHexColor(hex: "#fff2dc"), window: ThemeHexColor(hex: "#eedbcc")),
+                        darkBackground: .init(page: ThemeHexColor(hex: "#172131"), window: ThemeHexColor(hex: "#203142")))
+                    controller.refreshThemeAppearance()
+                }
+                for name in [NSAppearance.Name.darkAqua, .aqua, .darkAqua, .aqua] {
+                    if changesApplication { app.appearance = NSAppearance(named: name) }
+                    else { window.appearance = NSAppearance(named: name) }
+                    flushLayout(window)
+                    let appearance = try #require(NSAppearance(named: name))
+                    let theme = ThemeManager.shared.snapshot.descriptor(for: appearance)
+                    let expected = theme.color(for: .readerBackdrop, appearance: appearance)
+                    for surface in [split.view, split.splitView, reader.view, container,
+                                    split.verticalTabsViewController.view, split.rightSidebarViewController.view] {
+                        let background = try #require(surface.layer?.backgroundColor)
+                        #expect(ThemeHexColor(color: try #require(NSColor(cgColor: background))) == ThemeHexColor(color: expected),
+                                "\(type(of: surface)); app change: \(changesApplication); custom: \(custom); \(name)")
+                    }
+                    let clip = try #require(pdfClipView(in: reader.pdfView))
+                    assertColor(clip.backgroundColor, matches: theme.color(for: .pageBackground, appearance: appearance))
+                    #expect(reader.isNightModeEnabled == (name == .darkAqua))
+                    #expect(reader.pdfView.currentPage === page)
+                    #expect(abs(reader.pdfView.scaleFactor - scale) < 0.0001)
+                }
+            }
+        }
+    }
+
+    @Test
     func appearanceTogglePreservesPageGeometryAndZoom() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance

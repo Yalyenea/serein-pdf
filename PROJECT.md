@@ -141,6 +141,7 @@ flowchart LR
 - 水平 tab 在窗口按钮旁靠左排列，标签高 24pt、常规字重、轻选中底色，宽度随标题内容自适应，整条标签随窗口宽度调整并支持滚动，不添加外层边框。
 - 垂直模式不重复显示工作区顶部标题；底部工作区图标支持横向滚动并显示当前工作区。标题栏工作区入口只显示图标，完整名称放在悬停提示；菜单统一左对齐、13pt 常规字体，用轻底色标记当前工作区，新建与重命名文案不加省略号。
 - 外观配置拆为 `Mode` + `Light Theme` + `Dark Theme`,默认 `system + normal + rose_pine_moon`
+- `system` 跟随 macOS 明暗切换，阅读区、PDF 页边与侧栏背景按各视图的有效外观自动刷新，包含自定义纸面 / 窗口颜色；保留当前页码与缩放，无需手动刷新或重新打开文档。
 - 亮色 17 套、暗色 28 套，包含 Normal 与 Rosewash 对应变体；保留 `rose_pine_dawn` / `rose_pine_moon` 既有 ID，其余采用主题家族 ID
 - Settings 在明暗主题旁分别提供 Page / Window 色井与重置按钮；纸面和窗口 / 侧栏背景独立覆盖、即时保存，切换主题保留覆盖。配置使用 `light_page_background` / `light_window_background` / `dark_page_background` / `dark_window_background`，值为 `#RRGGBB` 或空字符串（主题默认）；非法色值报错。自定义纸面按亮度选择黑字或深色映射，窗口文字按背景对比度调整，不修改 PDF 文件
 - `rose_pine_dawn` 仅把 PDF 白底映射成接近 Obsidian 的暖纸色,保留正文与图表原色;侧栏使用不透明的扁平主题表面
