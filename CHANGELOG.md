@@ -4,6 +4,8 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-17
+
 ### Menus
 - Move the recent-file list from File > Open Recent to a top-level Recent menu beside File.
 - Remove the Edit menu while preserving Cut, Copy, Paste, and Select All keyboard shortcuts.
