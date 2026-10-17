@@ -363,7 +363,11 @@ final class TabsInteractionRegressionTests: XCTestCase {
             editor.insertText("Saved across workspaces", replacementRange: editor.selectedRange())
 
             XCTAssertTrue(store.activateAdjacentWorkspace(direction: 1, in: store.defaultWindowID))
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+            // Rename callbacks run on the next main-queue turn; a fixed delay
+            // can expire before that turn on a busy CI runner.
+            let renameCommitted = expectation(description: "Deferred tab rename completed")
+            DispatchQueue.main.async { renameCommitted.fulfill() }
+            wait(for: [renameCommitted], timeout: 2)
 
             XCTAssertEqual(store.session(for: session.id)?.title, "Saved across workspaces")
             XCTAssertFalse(field.isEditable)
