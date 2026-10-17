@@ -4,6 +4,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Menus
+- Move the recent-file list from File > Open Recent to a top-level Recent menu beside File.
+- Remove the Edit menu while preserving Cut, Copy, Paste, and Select All keyboard shortcuts.
+
 ### Tabs and sidebars
 - Keep vertical workspace controls in a bottom icon strip: click to switch, right-click an icon to rename, and use `+` to create. Remove the duplicate workspace header.
 - Use an icon-only titlebar workspace chooser with a compact themed menu, regular text, and a light background for the current workspace. Remove the checkmark gutter and ellipses from New Workspace and Rename; retain keyboard navigation and confirmation.

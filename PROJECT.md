@@ -118,6 +118,8 @@ flowchart LR
 
 ## 4. UI 与交互
 
+菜单栏在 File 后提供独立的 Recent（最近）菜单，展示原 File → Open Recent 的最近文件列表。移除 Edit（编辑）菜单，保留剪切、复制、粘贴与全选快捷键。
+
 全局 Lock：`Shift+L` 切换所有窗口及后续打开 PDF 的横向位置锁定与手势缩放限制，书籍模式除外。`reader.global_horizontal_pan_lock` 保存全局开关；开启时禁用单文件 `L`，不改写各 PDF 的独立 Lock 状态，关闭后恢复。View 菜单、命令面板和快捷键设置提供入口。
 
 ### 4.1 信息架构

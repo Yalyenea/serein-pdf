@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var openTabsPaletteEntries: [WorkspaceDocumentEntry] = []
     private var sharingServicePicker: NSSharingServicePicker?
     private var temporaryShareDirectories: [URL] = []
-    private lazy var recentFilesMenu = NSMenu(title: L10n.text("Open Recent", "最近打开"))
+    private lazy var recentFilesMenu = NSMenu(title: L10n.text("Recent", "最近"))
     private var displayedRecentDocumentURLs: [URL]?
     private lazy var windowMenu = NSMenu(title: L10n.text("Window", "窗口"))
     private lazy var moveCurrentPDFToWindowMenu = NSMenu(title: L10n.text("Move Current PDF to Window", "将当前 PDF 移至窗口"))
@@ -652,7 +652,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         let mainMenu = NSMenu()
         mainMenu.addItem(buildApplicationMenuItem())
         mainMenu.addItem(buildFileMenuItem())
-        mainMenu.addItem(buildEditMenuItem())
+        let recentItem = NSMenuItem(title: recentFilesMenu.title, action: nil, keyEquivalent: "")
+        recentItem.submenu = recentFilesMenu
+        mainMenu.addItem(recentItem)
         mainMenu.addItem(buildTabsMenuItem())
         mainMenu.addItem(buildAnnotateMenuItem())
         mainMenu.addItem(buildViewMenuItem())
@@ -732,6 +734,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             keyEquivalent: "q"
         )
         quitItem.target = NSApp
+        for item in makeEditingShortcutItems() {
+            appMenu.addItem(item)
+        }
         appMenuItem.submenu = appMenu
         return appMenuItem
     }
@@ -879,8 +884,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             command: .copyHighlightsMarkdown,
             action: #selector(copyHighlightsMarkdown(_:))
         )
-        let recentItem = NSMenuItem(title: L10n.text("Open Recent", "最近打开"), action: nil, keyEquivalent: "")
-        recentItem.submenu = recentFilesMenu
         let reopenClosedItem = makeConfiguredMenuItem(
             title: L10n.text("Reopen Closed Tab", "重新打开已关闭标签页"),
             command: .reopenLastClosed,
@@ -906,7 +909,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             openWithItem,
             copyCurrentPDFPathItem,
             copyCurrentPageAsImageItem,
-            recentItem,
             reopenClosedItem,
             findItem,
             findAllOpenItem,
@@ -929,35 +931,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return fileMenuItem
     }
 
-    private func buildEditMenuItem() -> NSMenuItem {
-        let editMenuItem = NSMenuItem(title: L10n.text("Edit", "编辑"), action: nil, keyEquivalent: "")
-        let editMenu = NSMenu(title: L10n.text("Edit", "编辑"))
-        editMenu.autoenablesItems = true
-
-        let undoItem = NSMenuItem(title: L10n.text("Undo", "撤销"), action: Selector(("undo:")), keyEquivalent: "")
-        let redoItem = NSMenuItem(title: L10n.text("Redo", "重做"), action: Selector(("redo:")), keyEquivalent: "")
+    private func makeEditingShortcutItems() -> [NSMenuItem] {
         let cutItem = NSMenuItem(title: L10n.text("Cut", "剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         let copyItem = NSMenuItem(title: L10n.text("Copy", "复制"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         let pasteItem = NSMenuItem(title: L10n.text("Paste", "粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         let selectAllItem = NSMenuItem(title: L10n.text("Select All", "全选"), action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
 
-        for item in [cutItem, copyItem, pasteItem, selectAllItem] {
+        let items = [cutItem, copyItem, pasteItem, selectAllItem]
+        for item in items {
             item.keyEquivalentModifierMask = [.command]
             item.target = nil
+            // AppKit routes standard editing shortcuts through menu items, even without a visible Edit menu.
+            item.isHidden = true
+            item.allowsKeyEquivalentWhenHidden = true
         }
-
-        editMenu.items = [
-            undoItem,
-            redoItem,
-            .separator(),
-            cutItem,
-            copyItem,
-            pasteItem,
-            .separator(),
-            selectAllItem,
-        ]
-        editMenuItem.submenu = editMenu
-        return editMenuItem
+        return items
     }
 
     private func buildTabsMenuItem() -> NSMenuItem {

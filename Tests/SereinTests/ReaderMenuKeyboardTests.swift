@@ -27,6 +27,14 @@ final class ReaderMenuKeyboardTests: XCTestCase {
         let url = try TestPDFFixtures.makeLabeledPDF(named: "print-menu", pageSizes: [NSSize(width: 612, height: 792)])
         let session = try store.open(documentAt: url, in: reader.windowID)
         _ = try store.pdfDocument(for: session.id)
+        let mainMenu = try XCTUnwrap(app.mainMenu)
+        XCTAssertEqual(Array(mainMenu.items.prefix(3).map(\.title)),
+                       ["Serein", L10n.text("File", "文件"), L10n.text("Recent", "最近")])
+        XCTAssertFalse(mainMenu.items.contains { $0.title == L10n.text("Edit", "编辑") })
+        let recentMenu = try XCTUnwrap(mainMenu.items[2].submenu)
+        let recentItem = try XCTUnwrap(recentMenu.items.first { ($0.representedObject as? URL) == url })
+        XCTAssertTrue(recentItem.target === delegate)
+        XCTAssertNotNil(recentItem.action)
         XCTAssertTrue(delegate.validateMenuItem(item))
         XCTAssertEqual(item.keyEquivalent, "p")
         XCTAssertEqual(item.keyEquivalentModifierMask, [.command])
@@ -268,6 +276,33 @@ final class ReaderMenuKeyboardTests: XCTestCase {
         NSApp.sendEvent(makeKeyEvent(characters: "\u{0B}", keyCode: 40,
                                     charactersIgnoringModifiers: "k", modifierFlags: [.control], window: window))
         XCTAssertEqual(editor.string, "ab")
+
+        // Exercise the real menu routing so hiding Edit cannot silently disable text commands.
+        let pasteboard = NSPasteboard.general
+        let savedItems = pasteboard.pasteboardItems?.map { item in
+            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+        } ?? []
+        defer {
+            pasteboard.clearContents()
+            let items = savedItems.map { representations in
+                let item = NSPasteboardItem()
+                for (type, data) in representations { item.setData(data, forType: type) }
+                return item
+            }
+            pasteboard.writeObjects(items)
+        }
+        let menu = try XCTUnwrap(NSApp.mainMenu)
+        for (key, code) in [("a", 0), ("c", 8), ("x", 7), ("v", 9)] {
+            XCTAssertTrue(menu.performKeyEquivalent(with: makeKeyEvent(
+                characters: key, keyCode: UInt16(code), modifierFlags: [.command], window: window)))
+            switch key {
+            case "a": XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 2))
+            case "c": XCTAssertEqual(pasteboard.string(forType: .string), "ab")
+            case "x": XCTAssertEqual(editor.string, "")
+            case "v": XCTAssertEqual(editor.string, "ab")
+            default: break
+            }
+        }
     }
 
     private func find(_ command: ShortcutCommand, in menu: NSMenu) -> NSMenuItem? {
