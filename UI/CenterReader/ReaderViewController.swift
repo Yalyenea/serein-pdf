@@ -2601,7 +2601,10 @@ final class ReaderViewController: NSViewController {
             }
             return
         }
-        if syncDisplayedStateWithoutRefreshIfPossible() == false {
+        // Annotation-only changes redraw in place; replaying a stale store
+        // position here can undo a page turn whose writeback is still pending.
+        if notification.documentStoreChange.containsOnly(.annotations) == false,
+           syncDisplayedStateWithoutRefreshIfPossible() == false {
             refreshDisplayedDocument()
         }
         if notification.documentStoreChange.contains(.appearance) {

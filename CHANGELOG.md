@@ -38,6 +38,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add the recent-windows list on `W`, configurable right/below split shortcuts in all three document lists, and full PDF filename tooltips in both tab layouts. Ordinary opening reuses a tab within the active workspace.
 
 ### Reading
+- Preserve the live page and scroll position when annotation state changes before a page-turn update reaches the document store.
 - Keep floating-outline scrolling independent of the PDF reader, including at outline edges, with non-default scroll speeds, and while horizontal pan lock is enabled. Preserve the original reader's momentum when the pointer moves onto the outline.
 - Remove the floating outline rail's redundant hover tooltip.
 - Resolve unspecified outline destination coordinates before navigation, so page-only headings in large PDFs jump to the target page instead of leaving the viewport at the first page.
