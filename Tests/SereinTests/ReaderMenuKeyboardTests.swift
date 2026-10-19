@@ -267,6 +267,28 @@ final class ReaderMenuKeyboardTests: XCTestCase {
         sheet.orderOut(nil)
         readerWindow.makeKeyAndOrderFront(nil)
         XCTAssertTrue(focusItems.allSatisfy(\.isEnabled))
+
+        store.setTabPresentationMode(.horizontalTitlebar)
+        settle(readerWindow)
+        let split = try XCTUnwrap(readerWindow.contentViewController as? SplitViewController)
+        let selector = try XCTUnwrap(findView(identifier: "workspaceSelector", in: split.titlebarTabsController.view) as? WorkspaceSelectorView)
+        selector.testingShowPicker()
+        let picker = selector.testingPicker
+        let spaceID = try XCTUnwrap(store.activeWorkspaceID(in: reader.windowID))
+        picker.beginRenaming(spaceID)
+        settle(picker.testingPanel)
+        let field = try XCTUnwrap(picker.activeNameField)
+        let spaceEditor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        try assertNativeControlEditing(spaceEditor, in: picker.testingPanel, focusItems: focusItems)
+        XCTAssertEqual(store.focusedPane(in: reader.windowID), focus)
+        NSApp.sendEvent(makeKeyEvent(characters: "\r", keyCode: 36, window: picker.testingPanel))
+        XCTAssertEqual(store.workspaces(in: reader.windowID).first?.name, "ab")
+        XCTAssertNil(picker.activeNameField)
+        picker.beginRenaming(spaceID)
+        picker.activeNameField?.stringValue = "Discard"
+        NSApp.sendEvent(makeKeyEvent(characters: "\u{1B}", keyCode: 53, window: picker.testingPanel))
+        XCTAssertEqual(store.workspaces(in: reader.windowID).first?.name, "ab")
+        picker.dismiss()
     }
 
     private func assertNativeControlEditing(_ editor: NSTextView, in window: NSWindow,

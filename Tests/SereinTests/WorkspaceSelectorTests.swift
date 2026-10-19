@@ -28,7 +28,7 @@ struct WorkspaceSelectorTests {
         #expect(NSApp.sendAction(try #require(firstButton.action), to: firstButton.target, from: firstButton))
         #expect(store.activeWorkspaceID(in: windowID) == firstID)
         #expect(store.sessions(in: windowID).map(\.id) == [firstTab.id])
-        #expect(horizontalSelector.testingMenu.items.first?.state == .on)
+        #expect(horizontalSelector.testingPicker.testingNameButtons.first?.accessibilityValue() as? String == "Current Space")
 
         try select(index: 1, in: horizontalSelector)
         #expect(store.activeWorkspaceID(in: windowID) == secondID)
@@ -79,8 +79,8 @@ struct WorkspaceSelectorTests {
         let footer = try #require(findView(identifier: "workspaceFooter", in: vertical.view) as? WorkspaceSelectorView)
         for selector in [footer, try selector(in: horizontal.view)] {
             #expect(!selector.isHiddenOrHasHiddenAncestor)
-            #expect(selector.testingMenu.items.map(\.title).contains("New Workspace"))
-            #expect(selector.testingMenu.items.map(\.title).contains("Rename"))
+            #expect(selector.testingPicker.testingNewButton.title.contains("New space"))
+            #expect(!selector.testingPicker.testingNameButtons.isEmpty)
         }
         #expect(horizontal.preferredContentSize.width >= 26)
         #expect(!footer.isHiddenOrHasHiddenAncestor)
@@ -93,7 +93,7 @@ struct WorkspaceSelectorTests {
     }
 
     private func select(index: Int, in selector: WorkspaceSelectorView) throws {
-        let item = selector.testingMenu.items[index]
+        let item = selector.testingPicker.testingNameButtons[index]
         let action = try #require(item.action)
         #expect(NSApp.sendAction(action, to: item.target, from: item))
     }

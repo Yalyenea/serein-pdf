@@ -221,7 +221,7 @@ final class VerticalTabItemView: NSView {
         onContextMenu?(sessionID)
         let menu = NSMenu()
         if let workspaces = onMoveToWorkspaceMenu?(sessionID) {
-            let moveItem = NSMenuItem(title: L10n.text("Move to Workspace", "移至工作区"), action: nil, keyEquivalent: "")
+            let moveItem = NSMenuItem(title: L10n.text("Move to Space", "移至空间"), action: nil, keyEquivalent: "")
             moveItem.submenu = workspaces
             menu.addItem(moveItem)
             menu.addItem(.separator())

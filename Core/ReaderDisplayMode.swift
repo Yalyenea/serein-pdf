@@ -283,12 +283,12 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         case .nextTab:
             L10n.text("Next Tab", "下一个标签页")
         case .previousWorkspace:
-            L10n.text("Previous Workspace", "上一个工作区")
+            L10n.text("Previous Space", "上一个空间")
         case .nextWorkspace:
-            L10n.text("Next Workspace", "下一个工作区")
+            L10n.text("Next Space", "下一个空间")
         case .workspace1, .workspace2, .workspace3, .workspace4, .workspace5,
              .workspace6, .workspace7, .workspace8, .workspace9:
-            L10n.text("Go to Workspace \(workspaceIndex!)", "切换至工作区 \(workspaceIndex!)")
+            L10n.text("Go to Space \(workspaceIndex!)", "切换至空间 \(workspaceIndex!)")
         case .showAllTabs:
             L10n.text("Show All Tabs", "显示所有标签页")
         case .toggleContinuousReading:

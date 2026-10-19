@@ -3,121 +3,56 @@ import AppKit
 private final class WorkspaceIconsScrollView: NSScrollView {
     var onScroll: ((NSEvent) -> Bool)?
     var onLayout: (() -> Void)?
-
     override func scrollWheel(with event: NSEvent) {
         if onScroll?(event) != true { super.scrollWheel(with: event) }
     }
-
-    override func layout() {
-        super.layout()
-        onLayout?()
-    }
+    override func layout() { super.layout(); onLayout?() }
 }
 
-private final class WorkspaceMenuRowView: NSView {
-    var isHighlighted = false { didSet { needsDisplay = true } }
-
-    init(width: CGFloat, isSeparator: Bool) {
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: isSeparator ? 7 : 26))
-        autoresizingMask = [.width]
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override var acceptsFirstResponder: Bool {
-        enclosingMenuItem?.isEnabled == true && enclosingMenuItem?.isSeparatorItem == false
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let item = enclosingMenuItem else { return }
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            NightModeStyle.readerBackdropColor.setFill()
-            bounds.fill()
-            if item.isSeparatorItem {
-                NightModeStyle.tertiaryTextColor.withAlphaComponent(0.18).setFill()
-                NSRect(x: 10, y: bounds.midY, width: bounds.width - 20, height: 0.5).fill()
-                return
-            }
-            if isHighlighted || item.state == .on {
-                SplitViewController.selectedChromeBackgroundColor
-                    .withAlphaComponent(isHighlighted ? 0.65 : 0.4).setFill()
-                NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 1), xRadius: 4, yRadius: 4).fill()
-            }
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.lineBreakMode = .byTruncatingTail
-            let title = NSAttributedString(string: item.title, attributes: [
-                .font: NSFont.systemFont(ofSize: 13),
-                .foregroundColor: item.isEnabled ? NightModeStyle.primaryTextColor : NightModeStyle.tertiaryTextColor,
-                .paragraphStyle: paragraph,
-            ])
-            let height = title.size().height
-            title.draw(in: NSRect(x: 10, y: (bounds.height - height) / 2,
-                                  width: bounds.width - 20, height: height))
-        }
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        performMenuAction(enclosingMenuItem)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 36 || event.keyCode == 76 || event.keyCode == 49 {
-            performMenuAction(enclosingMenuItem?.menu?.highlightedItem)
-        } else {
-            super.keyDown(with: event)
-        }
-    }
-
-    private func performMenuAction(_ item: NSMenuItem?) {
-        guard let item, item.isEnabled, !item.isSeparatorItem,
-              let menu = item.menu else { return }
-        let index = menu.index(of: item)
-        menu.cancelTracking()
-        menu.performActionForItem(at: index)
-    }
-}
-
-final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
-    enum Style {
-        case compact
-        case sidebarFooter
-    }
-
+final class WorkspaceSelectorView: NSView {
+    enum Style { case compact, sidebarFooter }
     private struct MoveDestination {
         let sessionID: UUID
         let workspaceID: UUID
     }
-
-    private struct WorkspaceItem: Equatable {
-        let id: UUID
-        let name: String
-    }
-
     let style: Style
     private let documentStore: DocumentStore
     private let windowID: UUID
-    private let menuButton = NSButton(title: "", target: nil, action: nil)
+    private let menuButton = SpaceButton(title: "", target: nil, action: nil)
     private let iconsScrollView = WorkspaceIconsScrollView()
     private let iconsDocumentView = NSView()
     private let iconsStack = NSStackView()
-    private let addButton = NSButton(title: "", target: nil, action: nil)
+    private let addButton = SpaceButton(title: "", target: nil, action: nil)
     private var iconButtons: [NSButton] = []
-    private var displayedItems: [WorkspaceItem] = []
+    private var displayedItems: [NamedWorkspace] = []
     private var displayedActiveID: UUID?
     private var needsRevealActiveIcon = false
     private var gestureIsHorizontal: Bool?
     private var gestureDeltaX: CGFloat = 0
     private var didSwitchInGesture = false
-    private weak var nameSubmitButton: NSButton?
-    private weak var nameField: NSTextField?
-    private weak var openMenu: NSMenu?
+
+    private lazy var picker: SpacePickerController = {
+        let picker = SpacePickerController()
+        picker.onActivate = { [weak self] in self?.activateWorkspace($0) }
+        picker.onCreate = { [weak self] name, icon in
+            guard let self else { return }
+            self.flushPendingReadingPositions()
+            self.documentStore.createWorkspace(name: name, icon: icon, in: self.windowID)
+            self.refresh()
+        }
+        picker.onRename = { [weak self] id, name in
+            guard let self else { return }
+            self.documentStore.renameWorkspace(id, name: name, in: self.windowID)
+            self.refresh()
+        }
+        picker.onIcon = { [weak self] id, icon in
+            guard let self else { return }
+            self.documentStore.setWorkspaceIcon(icon, for: id, in: self.windowID)
+            self.refresh()
+        }
+        picker.onDelete = { [weak self] in self?.deleteWorkspace($0) }
+        return picker
+    }()
 
     init(documentStore: DocumentStore, windowID: UUID, style: Style = .compact) {
         self.documentStore = documentStore
@@ -126,46 +61,37 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         super.init(frame: .zero)
         identifier = NSUserInterfaceItemIdentifier(style == .sidebarFooter ? "workspaceFooter" : "workspaceSelector")
         setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        if style == .sidebarFooter {
-            configureFooter()
-        } else {
-            configureNameButton()
-        }
+        if style == .sidebarFooter { configureFooter() } else { configureNameButton() }
         refresh()
     }
-
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override var intrinsicContentSize: NSSize {
         if style == .sidebarFooter { return NSSize(width: 120, height: 28) }
         return NSSize(width: 26, height: 24)
     }
-
     private func configureNameButton() {
         menuButton.isBordered = false
         menuButton.focusRingType = .none
         menuButton.target = self
-        menuButton.action = #selector(showWorkspaceMenu)
+        menuButton.action = #selector(showWorkspacePicker)
         menuButton.identifier = NSUserInterfaceItemIdentifier("workspaceMenuButton")
-        menuButton.setAccessibilityLabel(L10n.text("Workspace", "工作区"))
+        menuButton.setAccessibilityLabel(L10n.text("Space", "空间"))
+        menuButton.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: nil)
+        menuButton.imagePosition = .imageOnly
+        menuButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
         menuButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(menuButton)
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 24),
+            widthAnchor.constraint(equalToConstant: 26),
             menuButton.leadingAnchor.constraint(equalTo: leadingAnchor),
             menuButton.trailingAnchor.constraint(equalTo: trailingAnchor),
             menuButton.topAnchor.constraint(equalTo: topAnchor),
             menuButton.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        menuButton.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: nil)
-        menuButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
-        menuButton.imagePosition = .imageOnly
-        widthAnchor.constraint(equalToConstant: 26).isActive = true
     }
-
     private func configureFooter() {
         iconsStack.orientation = .horizontal
         iconsStack.alignment = .centerY
@@ -183,10 +109,9 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         iconsScrollView.onLayout = { [weak self] in self?.layoutWorkspaceIcons() }
         addButton.isBordered = false
         addButton.focusRingType = .none
-        addButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: L10n.text("New Workspace", "新建工作区"))
-        addButton.imageScaling = .scaleProportionallyDown
+        addButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)
         addButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
-        addButton.toolTip = L10n.text("New Workspace", "新建工作区")
+        addButton.toolTip = L10n.text("New space", "新建空间")
         addButton.setAccessibilityLabel(addButton.toolTip)
         addButton.target = self
         addButton.action = #selector(createWorkspace)
@@ -210,40 +135,48 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
             iconsStack.bottomAnchor.constraint(equalTo: iconsDocumentView.bottomAnchor),
         ])
     }
-
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         return style == .sidebarFooter || hit == nil ? hit : menuButton
     }
-
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         refreshChromeColors()
     }
-
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { picker.dismiss() }
+        super.viewWillMove(toWindow: newWindow)
+    }
     func refresh() {
-        let workspaces = documentStore.workspaces(in: windowID)
+        let items = documentStore.workspaces(in: windowID)
         let activeID = documentStore.activeWorkspaceID(in: windowID)
-        let active = workspaces.first { $0.id == activeID }
+        let active = items.first { $0.id == activeID }
         menuButton.toolTip = active?.name
         menuButton.setAccessibilityValue(active?.name)
-        let items = workspaces.map { WorkspaceItem(id: $0.id, name: $0.name) }
-        if style == .sidebarFooter, items != displayedItems {
+        // Selection and editing must not replace buttons halfway through a double click.
+        if style == .sidebarFooter, items.map(\.id) != displayedItems.map(\.id) {
             iconsStack.arrangedSubviews.forEach {
                 iconsStack.removeArrangedSubview($0)
                 $0.removeFromSuperview()
             }
             iconButtons = items.map { item in
-                let button = NSButton(title: monogram(for: item.name), target: self, action: #selector(activateIcon(_:)))
-                button.font = .systemFont(ofSize: 11, weight: .medium)
+                let button = SpaceButton(title: "", target: self, action: #selector(activateIcon(_:)))
+                // Sidebar clicks switch directly; right-clicks use the titlebar's picker.
+                button.onRightClick = { [weak self, weak button] in
+                    guard let self, let button else { return }
+                    self.togglePicker(relativeTo: button)
+                }
+                button.onDoubleClick = { [weak self, weak button] in
+                    guard let self, let button else { return }
+                    self.showPicker(relativeTo: button)
+                    self.picker.beginRenaming(item.id)
+                }
                 button.isBordered = false
                 button.focusRingType = .none
-                button.toolTip = item.name
-                button.setAccessibilityLabel(item.name)
                 button.identifier = NSUserInterfaceItemIdentifier(item.id.uuidString)
-                button.menu = workspaceMenu(for: item.id)
                 button.wantsLayer = true
                 button.layer?.cornerRadius = 3
+                button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
                 iconsStack.addArrangedSubview(button)
                 NSLayoutConstraint.activate([
                     button.widthAnchor.constraint(equalToConstant: 24),
@@ -252,15 +185,22 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
                 return button
             }
         }
-        needsRevealActiveIcon = needsRevealActiveIcon || items != displayedItems || activeID != displayedActiveID
+        for (button, item) in zip(iconButtons, items) {
+            button.title = item.icon == nil ? String(item.name.prefix(1)).uppercased() : ""
+            button.image = item.icon.flatMap { NSImage(systemSymbolName: $0.rawValue, accessibilityDescription: nil) }
+            button.imagePosition = item.icon == nil ? .noImage : .imageOnly
+            button.toolTip = item.name
+            button.setAccessibilityLabel(item.name)
+        }
+        needsRevealActiveIcon = needsRevealActiveIcon || items.map(\.id) != displayedItems.map(\.id) || activeID != displayedActiveID
         displayedItems = items
         displayedActiveID = activeID
+        picker.update(spaces: items, activeID: activeID)
         invalidateIntrinsicContentSize()
         iconsScrollView.needsLayout = true
         needsLayout = true
         refreshChromeColors()
     }
-
     private func layoutWorkspaceIcons() {
         iconsDocumentView.frame.size = NSSize(width: max(iconsScrollView.contentSize.width, iconsStack.fittingSize.width), height: 24)
         iconsDocumentView.layoutSubtreeIfNeeded()
@@ -269,11 +209,9 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
             needsRevealActiveIcon = false
         }
     }
-
     private var activeIconButton: NSButton? {
         iconButtons.first { $0.identifier?.rawValue == displayedActiveID?.uuidString }
     }
-
     func refreshChromeColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             menuButton.contentTintColor = NightModeStyle.secondaryTextColor
@@ -286,15 +224,12 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
                     .foregroundColor: isActive ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor,
                 ])
                 button.layer?.backgroundColor = isActive
-                    ? SplitViewController.selectedChromeBackgroundColor.withAlphaComponent(0.45).cgColor
-                    : NSColor.clear.cgColor
-                button.setAccessibilityValue(isActive ? L10n.text("Current Workspace", "当前工作区") : nil)
+                    ? SplitViewController.selectedChromeBackgroundColor.withAlphaComponent(0.45).cgColor : NSColor.clear.cgColor
+                button.setAccessibilityValue(isActive ? L10n.text("Current Space", "当前空间") : nil)
             }
         }
-        refreshMenuColors(openMenu)
-        refreshNameEditorColors()
+        picker.refreshTheme(appearance: effectiveAppearance)
     }
-
     override func scrollWheel(with event: NSEvent) {
         if !handleScrollWheel(event) { super.scrollWheel(with: event) }
     }
@@ -347,159 +282,26 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         guard let rawID = sender.identifier?.rawValue, let id = UUID(uuidString: rawID) else { return }
         activateWorkspace(id)
     }
-
-    @objc private func activateMenuItem(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? UUID else { return }
-        activateWorkspace(id)
+    private func showPicker(relativeTo anchor: NSView) {
+        refresh()
+        picker.show(relativeTo: anchor, above: style == .sidebarFooter)
     }
-
-    private func workspaceMenu(for workspaceID: UUID? = nil) -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        let font = NSFont.systemFont(ofSize: 13)
-        menu.font = font
-        menu.appearance = effectiveAppearance
-        menu.delegate = self
-        if style == .compact {
-            for workspace in documentStore.workspaces(in: windowID) {
-                let item = NSMenuItem(title: workspace.name, action: #selector(activateMenuItem(_:)), keyEquivalent: "")
-                item.target = self
-                item.representedObject = workspace.id
-                item.state = workspace.id == documentStore.activeWorkspaceID(in: windowID) ? .on : .off
-                menu.addItem(item)
-            }
-            menu.addItem(.separator())
-        }
-        let create = NSMenuItem(title: L10n.text("New Workspace", "新建工作区"), action: #selector(createWorkspace), keyEquivalent: "")
-        create.target = self
-        menu.addItem(create)
-        let rename = NSMenuItem(title: L10n.text("Rename", "重命名"), action: #selector(renameWorkspace(_:)), keyEquivalent: "")
-        rename.target = self
-        rename.representedObject = (workspaceID ?? documentStore.activeWorkspaceID(in: windowID))?.uuidString
-        rename.isEnabled = rename.representedObject != nil
-        menu.addItem(rename)
-        let delete = NSMenuItem(title: L10n.text("Delete Workspace", "删除工作区"), action: #selector(deleteWorkspace(_:)), keyEquivalent: "")
-        delete.target = self
-        delete.representedObject = rename.representedObject
-        delete.isEnabled = delete.representedObject != nil && documentStore.workspaces(in: windowID).count > 1
-        menu.addItem(delete)
-        let width = min(max(menu.items.map {
-            ($0.title as NSString).size(withAttributes: [.font: font]).width + 20
-        }.max() ?? 0, 140), 240)
-        for item in menu.items {
-            let row = WorkspaceMenuRowView(width: ceil(width), isSeparator: item.isSeparatorItem)
-            row.appearance = effectiveAppearance
-            row.toolTip = item.title
-            item.view = row
-        }
-        return menu
+    private func togglePicker(relativeTo anchor: NSView) {
+        if picker.isVisible { picker.dismiss() } else { showPicker(relativeTo: anchor) }
     }
-
-    func menuWillOpen(_ menu: NSMenu) {
-        openMenu = menu
-        refreshMenuColors(menu)
+    @objc private func showWorkspacePicker() {
+        togglePicker(relativeTo: menuButton)
     }
-
-    func menuDidClose(_ menu: NSMenu) {
-        openMenu = nil
+    @objc private func createWorkspace() {
+        showPicker(relativeTo: style == .sidebarFooter ? addButton : menuButton)
+        picker.beginCreating()
     }
-
-    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
-        for rowItem in menu.items {
-            (rowItem.view as? WorkspaceMenuRowView)?.isHighlighted = rowItem === item
-        }
-    }
-
-    private func refreshMenuColors(_ menu: NSMenu?) {
-        menu?.appearance = effectiveAppearance
-        menu?.items.forEach {
-            $0.view?.appearance = effectiveAppearance
-            $0.view?.needsDisplay = true
-        }
-    }
-
-    @objc private func showWorkspaceMenu() {
-        workspaceMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.minY), in: self)
-    }
-
-    @objc private func createWorkspace() { presentNameEditor(workspaceID: nil) }
-
-    @objc private func renameWorkspace(_ sender: NSMenuItem) {
-        if let rawID = sender.representedObject as? String, let id = UUID(uuidString: rawID) {
-            presentNameEditor(workspaceID: id)
-        }
-    }
-
-    @objc private func deleteWorkspace(_ sender: NSMenuItem) {
-        guard let rawID = sender.representedObject as? String, let id = UUID(uuidString: rawID),
-              let controller = window?.windowController as? MainWindowController else { return }
+    private func deleteWorkspace(_ id: UUID) {
+        guard let controller = window?.windowController as? MainWindowController else { return }
+        picker.dismiss()
         controller.requestDeleteWorkspace(id)
         refresh()
     }
-
-    private func monogram(for name: String) -> String { String(name.prefix(1)).uppercased() }
-
-    private func presentNameEditor(workspaceID: UUID?) {
-        guard let window else { return }
-        let workspaces = documentStore.workspaces(in: windowID)
-        let currentName = workspaces.first { $0.id == workspaceID }?.name
-        var nextNumber = workspaces.count + 1
-        while workspaces.contains(where: { $0.name == L10n.text("Workspace \(nextNumber)", "工作区 \(nextNumber)") }) { nextNumber += 1 }
-        let alert = NSAlert()
-        alert.messageText = workspaceID == nil ? L10n.text("New Workspace", "新建工作区") : L10n.text("Rename Workspace", "重命名工作区")
-        alert.addButton(withTitle: workspaceID == nil ? L10n.text("Create", "创建") : L10n.text("Rename", "重命名"))
-        alert.addButton(withTitle: L10n.text("Cancel", "取消"))
-        let field = NSTextField(string: currentName ?? L10n.text("Workspace \(nextNumber)", "工作区 \(nextNumber)"))
-        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        field.setAccessibilityLabel(L10n.text("Workspace name", "工作区名称"))
-        field.delegate = self
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-        nameSubmitButton = alert.buttons.first
-        nameField = field
-        refreshNameEditorColors()
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard let self else { return }
-            self.nameSubmitButton = nil
-            self.nameField = nil
-            guard response == .alertFirstButtonReturn else { return }
-            let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { return }
-            if let workspaceID {
-                self.documentStore.renameWorkspace(workspaceID, name: name, in: self.windowID)
-            } else {
-                self.flushPendingReadingPositions()
-                self.documentStore.createWorkspace(name: name, in: self.windowID)
-            }
-            self.refresh()
-        }
-    }
-
-    private func refreshNameEditorColors() {
-        guard let field = nameField else { return }
-        field.window?.appearance = effectiveAppearance
-        field.effectiveAppearance.performAsCurrentDrawingAppearance {
-            field.textColor = NightModeStyle.primaryTextColor
-            field.backgroundColor = NightModeStyle.readerBackdropColor
-            if let editor = field.currentEditor() as? NSTextView {
-                editor.textColor = NightModeStyle.primaryTextColor
-                editor.backgroundColor = NightModeStyle.readerBackdropColor
-                editor.insertionPointColor = NightModeStyle.primaryTextColor
-                editor.selectedTextAttributes = [
-                    .foregroundColor: NightModeStyle.primaryTextColor,
-                    .backgroundColor: SplitViewController.selectedChromeBackgroundColor,
-                ]
-            }
-        }
-    }
-
-    func controlTextDidBeginEditing(_ notification: Notification) { refreshNameEditorColors() }
-
-    func controlTextDidChange(_ notification: Notification) {
-        guard let field = notification.object as? NSTextField else { return }
-        nameSubmitButton?.isEnabled = !field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     func moveMenu(for sessionID: UUID) -> NSMenu? {
         guard let session = documentStore.session(for: sessionID), !session.isBlank else { return nil }
         let activeID = documentStore.activeWorkspaceID(in: windowID)
@@ -525,12 +327,11 @@ final class WorkspaceSelectorView: NSView, NSTextFieldDelegate, NSMenuDelegate {
 #if DEBUG
 extension WorkspaceSelectorView {
     var testingCurrentWorkspaceName: String { displayedItems.first { $0.id == displayedActiveID }?.name ?? "" }
-    var testingMenu: NSMenu { workspaceMenu() }
     var testingWorkspaceButtons: [NSButton] { iconButtons }
     var testingAddButton: NSButton { addButton }
-    var testingNameField: NSTextField? { nameField }
+    var testingPicker: SpacePickerController { picker }
     func testingActivateWorkspace(_ id: UUID) { activateWorkspace(id) }
     func testingHandleScrollWheel(_ event: NSEvent) -> Bool { handleScrollWheel(event) }
-    func testingPresentNameEditor(workspaceID: UUID?) { presentNameEditor(workspaceID: workspaceID) }
+    func testingShowPicker() { showPicker(relativeTo: style == .sidebarFooter ? addButton : menuButton) }
 }
 #endif

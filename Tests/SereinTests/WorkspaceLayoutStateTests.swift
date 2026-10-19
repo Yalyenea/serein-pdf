@@ -5,6 +5,48 @@ import XCTest
 
 @MainActor
 final class WorkspaceLayoutStateTests: XCTestCase {
+    func testSpaceIconsPersistPerSpaceAndWindow() throws {
+        let suite = "SereinTests.SpaceIcons.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = makePersistedStore(defaults: defaults)
+        let windowID = store.defaultWindowID
+        let first = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let second = try XCTUnwrap(store.createWorkspace(name: "Research", icon: .leaf, in: windowID))
+        let otherWindow = store.createWindow()
+        store.setWorkspaceIcon(.books, for: first, in: windowID)
+        store.setWorkspaceIcon(.star, for: second, in: otherWindow)
+        XCTAssertEqual(store.workspaces(in: windowID).map(\.icon), [.books, .leaf])
+        XCTAssertNil(store.workspaces(in: otherWindow).first?.icon)
+        store.flushPersistence()
+
+        let restored = makePersistedStore(defaults: defaults)
+        try restored.restorePersistedState()
+        XCTAssertEqual(restored.workspaces(in: windowID).map(\.icon), [.books, .leaf])
+        XCTAssertEqual(restored.activeWorkspaceID(in: windowID), second)
+        restored.setWorkspaceIcon(nil, for: first, in: windowID)
+        restored.flushPersistence()
+        let withoutIcon = makePersistedStore(defaults: defaults)
+        try withoutIcon.restorePersistedState()
+        XCTAssertEqual(withoutIcon.workspaces(in: windowID).map(\.icon), [nil, .leaf])
+    }
+
+    func testSavedSpaceWithoutIconStillDecodesAndPaletteSymbolsExist() throws {
+        var space = NamedWorkspace(name: "Research")
+        space.icon = .books
+        space.sessionIDs = [UUID()]
+        let data = try JSONEncoder().encode(space)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "icon")
+        let decoded = try JSONDecoder().decode(NamedWorkspace.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertNil(decoded.icon)
+        XCTAssertEqual(decoded.id, space.id)
+        XCTAssertEqual(decoded.sessionIDs, space.sessionIDs)
+        for icon in SpaceIcon.allCases {
+            XCTAssertNotNil(NSImage(systemSymbolName: icon.rawValue, accessibilityDescription: nil), icon.rawValue)
+        }
+    }
+
     func testDeleteWorkspaceRemovesSplitSessionsAndMRUAndPersistsAdjacentSelection() throws {
         let suiteName = "SereinTests.WorkspaceDeletion.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

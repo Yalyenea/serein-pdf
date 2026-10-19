@@ -2639,11 +2639,12 @@ extension DocumentStore {
     }
 
     @discardableResult
-    func createWorkspace(name: String, in windowID: UUID) -> UUID? {
+    func createWorkspace(name: String, icon: SpaceIcon? = nil, in windowID: UUID) -> UUID? {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return nil }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
-        let workspace = NamedWorkspace(name: name)
+        var workspace = NamedWorkspace(name: name)
+        workspace.icon = icon
         windowWorkspaces[index].workspaces.append(workspace)
         activateWorkspace(workspace.id, in: windowID)
         return workspace.id
@@ -2655,6 +2656,14 @@ extension DocumentStore {
               let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
               let workspaceIndex = windowWorkspaces[index].workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
         windowWorkspaces[index].workspaces[workspaceIndex].name = name
+        notifyChange(.tabs, windowIDs: [windowID])
+    }
+
+    func setWorkspaceIcon(_ icon: SpaceIcon?, for workspaceID: UUID, in windowID: UUID) {
+        guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }),
+              let spaceIndex = windowWorkspaces[index].workspaces.firstIndex(where: { $0.id == workspaceID }),
+              windowWorkspaces[index].workspaces[spaceIndex].icon != icon else { return }
+        windowWorkspaces[index].workspaces[spaceIndex].icon = icon
         notifyChange(.tabs, windowIDs: [windowID])
     }
 

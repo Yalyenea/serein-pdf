@@ -18,7 +18,7 @@ Requires an Apple silicon Mac running macOS 14 or later. Selection translation r
 
 ## Features
 
-- **Tabs and workspaces.** Organize PDFs into named workspaces with vertical or titlebar tabs.
+- **Tabs and spaces.** Organize PDFs into named spaces with vertical or titlebar tabs, custom icons, and inline naming.
 - **Split reading.** Compare documents in nested splits, with independent navigation and zoom in each pane.
 - **Reading modes.** Single-page, two-page, and book layouts, continuous scrolling, and an all-pages overview.
 - **Navigation.** Search the current PDF or open documents, browse outlines, and move through reading history.
@@ -67,6 +67,8 @@ just test    # Run tests
 just build   # Build build/Serein.app
 just dmg     # Package a DMG
 ```
+
+`just test` runs XCTest and Swift Testing separately and checks both final summaries. Swift Testing uses a dedicated main-thread host so AppKit event loops cannot end the run early.
 
 See [PROJECT.md](PROJECT.md) for architecture and behavior, [TASKS.md](TASKS.md) for planned work, and [REVIEW.md](REVIEW.md) for engineering debt.
 

@@ -1707,7 +1707,7 @@ struct WindowChromeTests {
         #expect(selector.window === window)
         #expect(window.toolbar?.items.first?.isBordered == false)
         #expect(!selector.isHiddenOrHasHiddenAncestor)
-        #expect(selector.testingMenu.items.contains { $0.title == "New Workspace" })
+        #expect(selector.testingPicker.testingNewButton.title.contains("New space"))
         #expect(findAllDescendants(of: TitlebarTabItemView.self, in: tabsView).isEmpty)
 
         let session = try store.open(documentAt: makeTemporaryPDF(named: "titlebar-open"))

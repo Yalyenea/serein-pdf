@@ -31,7 +31,7 @@ jobs:
           xcodebuild -version
 
       - name: Test
-        run: swift test --no-parallel
+        run: ./Scripts/test.sh
 
       - name: Build .app
         env:

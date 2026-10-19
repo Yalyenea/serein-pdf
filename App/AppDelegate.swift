@@ -951,7 +951,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func buildTabsMenuItem() -> NSMenuItem {
         let tabsMenuItem = NSMenuItem(title: L10n.text("Tabs", "标签页"), action: nil, keyEquivalent: "")
         let tabsMenu = managedMenu(title: L10n.text("Tabs", "标签页"))
-        let workspaceItem = NSMenuItem(title: L10n.text("Workspaces", "工作区"), action: nil, keyEquivalent: "")
+        let workspaceItem = NSMenuItem(title: L10n.text("Spaces", "空间"), action: nil, keyEquivalent: "")
         let workspaceMenu = managedMenu(title: workspaceItem.title)
         workspaceMenu.items = [
             makeConfiguredMenuItem(title: ShortcutCommand.previousWorkspace.menuTitle,
@@ -1785,7 +1785,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             guard let window = documentStore.windowWorkspace(for: windowID) else { return nil }
             let session = documentStore.activeSession(in: windowID)
             let workspaceName = documentStore.workspaces(in: windowID)
-                .first { $0.id == documentStore.activeWorkspaceID(in: windowID) }?.name ?? L10n.text("Workspace", "工作区")
+                .first { $0.id == documentStore.activeWorkspaceID(in: windowID) }?.name ?? L10n.text("Space", "空间")
             let isClosed = !documentStore.windowIDs().contains(windowID)
             return RecentWindowsPaletteItem(
                 windowID: windowID,

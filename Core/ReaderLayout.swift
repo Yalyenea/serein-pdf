@@ -99,9 +99,52 @@ struct ReaderLayoutGroup: Equatable, Codable, Sendable {
     }
 }
 
+/// A small, stable symbol palette keeps Space identity consistent across both tab styles.
+enum SpaceIcon: String, CaseIterable, Codable, Sendable {
+    case books = "books.vertical"
+    case document = "doc.text"
+    case bookmark = "bookmark"
+    case study = "graduationcap"
+    case work = "briefcase"
+    case code = "chevron.left.forwardslash.chevron.right"
+    case science = "flask"
+    case leaf = "leaf"
+    case globe = "globe"
+    case star = "star"
+    case heart = "heart"
+    case moon = "moon"
+    case coffee = "cup.and.saucer"
+    case bolt = "bolt"
+    case music = "headphones"
+    case layers = "square.stack"
+
+    var label: String {
+        switch self {
+        case .books: L10n.text("Books", "书籍")
+        case .document: L10n.text("Document", "文档")
+        case .bookmark: L10n.text("Bookmark", "书签")
+        case .study: L10n.text("Study", "学习")
+        case .work: L10n.text("Work", "工作")
+        case .code: L10n.text("Code", "代码")
+        case .science: L10n.text("Science", "科学")
+        case .leaf: L10n.text("Leaf", "叶子")
+        case .globe: L10n.text("Globe", "地球")
+        case .star: L10n.text("Star", "星星")
+        case .heart: L10n.text("Heart", "爱心")
+        case .moon: L10n.text("Moon", "月亮")
+        case .coffee: L10n.text("Coffee", "咖啡")
+        case .bolt: L10n.text("Lightning", "闪电")
+        case .music: L10n.text("Music", "音乐")
+        case .layers: L10n.text("Layers", "图层")
+        }
+    }
+}
+
 struct NamedWorkspace: Equatable, Codable, Sendable {
     let id: UUID
     var name: String
+    // Optional so saved Spaces created before icon selection retain their identity.
+    var icon: SpaceIcon?
     var sessionIDs: [UUID] = []
     var selectedSessionIDs: Set<UUID> = []
     var continuousReadingState = ContinuousReadingState()
@@ -111,7 +154,7 @@ struct NamedWorkspace: Equatable, Codable, Sendable {
     var searchQuery = ""
     var searchScope: SearchScope = .currentDocument
 
-    init(id: UUID = UUID(), name: String = L10n.text("Workspace", "工作区")) {
+    init(id: UUID = UUID(), name: String = L10n.text("Space", "空间")) {
         self.id = id
         self.name = name
     }

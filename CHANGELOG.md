@@ -4,6 +4,15 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ## [Unreleased]
 
+### Spaces
+- Rename workspace controls to Spaces and replace the switcher menu with a compact themed panel. Keep the titlebar entry as the original group icon without a name or arrow.
+- Click sidebar Space icons to switch; right-click to open the same panel as the titlebar without changing the active Space.
+- Create and rename Spaces inline. Press Enter or click outside to save a name, or Escape to cancel. Choose from 16 icons or use the name's initial; restore icon choices across relaunch.
+- Use arrow keys and Enter to switch, F2 to rename, and Delete to remove a Space. Keep the final Space and protect unsaved annotations when deleting.
+
+### Development
+- Keep Swift Testing on the physical main thread in a dedicated host and require complete passing summaries from both test frameworks before reporting success.
+
 ## [0.8.0] - 2026-10-17
 
 ### Menus

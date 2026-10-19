@@ -5,49 +5,61 @@ import XCTest
 
 @MainActor
 final class WorkspaceSelectorInteractionTests: XCTestCase {
-    func testKeyboardConfirmationActivatesHighlightedWorkspaceFromAnotherRow() throws {
+    func testKeyboardSwitchesFocusedSpaceAndKeepsPickerOpen() throws {
         let store = makeIsolatedDocumentStore()
         let windowID = store.defaultWindowID
-        let originalID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
         let researchID = try XCTUnwrap(store.createWorkspace(name: "Research", in: windowID))
+        store.activateWorkspace(firstID, in: windowID)
         let selector = WorkspaceSelectorView(documentStore: store, windowID: windowID)
-        let source = selector.testingMenu
-        let menu = WorkspaceKeyboardTestMenu()
-        menu.autoenablesItems = false
-        for item in source.items {
-            source.removeItem(item)
-            menu.addItem(item)
-        }
-        let receivingRow = try XCTUnwrap(menu.items.first?.view)
-        menu.keyboardSelection = menu.items[1]
-        for keyCode in [UInt16(36), 76, 49] {
-            store.activateWorkspace(originalID, in: windowID)
-            receivingRow.keyDown(with: makeKeyEvent(characters: keyCode == 49 ? " " : "\r", keyCode: keyCode))
-            XCTAssertEqual(store.activeWorkspaceID(in: windowID), researchID, "Confirmation key \(keyCode)")
-        }
+        let window = host(selector, size: NSSize(width: 320, height: 240))
+        defer { window.close() }
+        selector.testingShowPicker()
+        let picker = selector.testingPicker
+        XCTAssertTrue(picker.handleKey(makeKeyEvent(characters: "", keyCode: 125)))
+        XCTAssertTrue(picker.handleKey(makeKeyEvent(characters: "\r", keyCode: 36)))
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), researchID)
+        XCTAssertTrue(picker.isVisible)
+        XCTAssertNil(window.attachedSheet)
+        XCTAssertEqual(picker.testingPanel.frame.width, 196)
+        let nameButton = try XCTUnwrap(picker.testingNameButtons.last)
+        let doubleClick = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: .zero,
+            modifierFlags: [], timestamp: 0, windowNumber: picker.testingPanel.windowNumber,
+            context: nil, eventNumber: 0, clickCount: 2, pressure: 1))
+        nameButton.mouseDown(with: doubleClick)
+        XCTAssertEqual(picker.activeNameField?.stringValue, "Research")
+        picker.finishEditing(commit: false)
+        XCTAssertTrue(picker.handleKey(makeKeyEvent(characters: "", keyCode: 53)))
+        XCTAssertFalse(picker.isVisible)
     }
 
-    func testCompactControlUsesOneIconAndMenuMarksCurrentWorkspace() throws {
+    func testCompactControlUsesOnlyTheOriginalGroupIcon() throws {
         let store = makeIsolatedDocumentStore()
-        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: store.defaultWindowID))
-        _ = store.createWorkspace(name: "Research", in: store.defaultWindowID)
-        let selector = WorkspaceSelectorView(documentStore: store, windowID: store.defaultWindowID)
-        XCTAssertEqual(selector.intrinsicContentSize, NSSize(width: 26, height: 24))
-        XCTAssertTrue(findAllDescendants(of: NSTextField.self, in: selector).isEmpty)
+        let windowID = store.defaultWindowID
+        _ = try XCTUnwrap(store.createWorkspace(name: "Research", icon: .leaf, in: windowID))
+        let selector = WorkspaceSelectorView(documentStore: store, windowID: windowID)
         let button = try XCTUnwrap(findDescendant(of: NSButton.self, in: selector))
+        XCTAssertEqual(button.title, "")
         XCTAssertNotNil(button.image)
+        XCTAssertEqual(button.imagePosition, .imageOnly)
         XCTAssertEqual(button.toolTip, "Research")
-        let menu = selector.testingMenu
-        let workspaces = menu.items.filter { $0.representedObject is UUID }
-        XCTAssertEqual(workspaces.count, 2)
-        XCTAssertTrue(workspaces.allSatisfy { $0.image == nil })
-        XCTAssertTrue(menu.items.allSatisfy { $0.view != nil })
-        XCTAssertEqual(menu.items.suffix(3).map(\.title), ["New Workspace", "Rename", "Delete Workspace"])
-        XCTAssertEqual(workspaces.filter { $0.state == .on }.map(\.title), ["Research"])
-        let first = try XCTUnwrap(workspaces.first)
-        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(first.action), to: first.target, from: first))
-        XCTAssertEqual(store.activeWorkspaceID(in: store.defaultWindowID), firstID)
-        XCTAssertEqual(selector.testingMenu.items.filter { $0.state == .on }.count, 1)
+        XCTAssertEqual(selector.intrinsicContentSize, NSSize(width: 26, height: 24))
+        XCTAssertEqual(selector.testingPicker.testingNameButtons.count, 2)
+        XCTAssertEqual(selector.testingPicker.testingNameButtons.last?.accessibilityValue() as? String, "Current Space")
+        XCTAssertTrue(selector.testingPicker.testingNameButtons.allSatisfy { $0.image == nil })
+        XCTAssertNil(button.menu)
+        let window = host(selector, size: NSSize(width: 320, height: 240))
+        defer { window.close() }
+        let picker = selector.testingPicker
+        try rightClick(button)
+        XCTAssertTrue(picker.isVisible)
+        XCTAssertNil(window.attachedSheet)
+        button.performClick(nil)
+        XCTAssertFalse(picker.isVisible)
+        button.performClick(nil)
+        XCTAssertTrue(picker.isVisible)
+        XCTAssertTrue(selector.testingPicker === picker)
+        XCTAssertTrue(picker.testingNameButtons.allSatisfy { $0.menu == nil })
     }
 
     func testVerticalSidebarHasOnlyFooterWorkspaceControls() throws {
@@ -58,53 +70,134 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
         XCTAssertNil(findView(identifier: "workspaceSelector", in: controller.view))
         let selector = try XCTUnwrap(findView(identifier: "workspaceFooter", in: controller.view) as? WorkspaceSelectorView)
         let icon = try XCTUnwrap(selector.testingWorkspaceButtons.last)
-        let menu = try XCTUnwrap(icon.menu)
-        XCTAssertEqual(menu.items.map(\.title), ["New Workspace", "Rename", "Delete Workspace"])
-        XCTAssertEqual(menu.items.last?.representedObject as? String, id.uuidString)
+        XCTAssertNil(icon.menu)
         store.renameWorkspace(id, name: "Papers", in: store.defaultWindowID)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
         XCTAssertEqual(selector.testingCurrentWorkspaceName, "Papers")
     }
 
-    func testFooterIconsAreOneClickActionsWithFullNameTooltips() throws {
+    func testFooterClickSwitchesAndRightClickOpensSharedPickerWithoutSwitching() throws {
         let store = makeIsolatedDocumentStore()
         let firstID = try XCTUnwrap(store.activeWorkspaceID(in: store.defaultWindowID))
-        _ = store.createWorkspace(name: "研究", in: store.defaultWindowID)
-        let footer = WorkspaceSelectorView(documentStore: store, windowID: store.defaultWindowID, style: .sidebarFooter)
-        XCTAssertEqual(footer.testingWorkspaceButtons.last?.title, "研")
-        XCTAssertEqual(footer.testingWorkspaceButtons.last?.toolTip, "研究")
-        let firstButton = try XCTUnwrap(footer.testingWorkspaceButtons.first)
-        firstButton.performClick(nil)
-        XCTAssertEqual(store.activeWorkspaceID(in: store.defaultWindowID), firstID)
-        XCTAssertEqual(firstButton.accessibilityValue() as? String, "Current Workspace")
-        XCTAssertFalse(footer.testingAddButton.isHidden)
-        XCTAssertEqual(footer.testingAddButton.toolTip, "New Workspace")
-    }
-
-    func testFooterContextMenuRenamesItsWorkspaceWithoutSwitching() throws {
-        let store = makeIsolatedDocumentStore()
-        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: store.defaultWindowID))
-        let secondID = try XCTUnwrap(store.createWorkspace(name: "Research", in: store.defaultWindowID))
+        let secondID = try XCTUnwrap(store.createWorkspace(name: "研究", in: store.defaultWindowID))
         let footer = WorkspaceSelectorView(documentStore: store, windowID: store.defaultWindowID, style: .sidebarFooter)
         let window = host(footer, size: NSSize(width: 320, height: 240))
         defer { window.close() }
-        let menu = try XCTUnwrap(footer.testingWorkspaceButtons.first?.menu)
-        menu.performActionForItem(at: 1)
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
-        let sheet = try XCTUnwrap(window.attachedSheet)
-        let field = try XCTUnwrap(footer.testingNameField)
-        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
-        XCTAssertEqual(editor.string, "Workspace")
-        editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
-        editor.insertText("Reading", replacementRange: editor.selectedRange())
-        window.endSheet(sheet, returnCode: .alertFirstButtonReturn)
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+        XCTAssertEqual(footer.testingWorkspaceButtons.last?.title, "研")
+        XCTAssertEqual(footer.testingWorkspaceButtons.last?.toolTip, "研究")
+        let firstButton = try XCTUnwrap(footer.testingWorkspaceButtons.first)
+        try rightClick(firstButton)
         XCTAssertEqual(store.activeWorkspaceID(in: store.defaultWindowID), secondID)
-        XCTAssertEqual(store.workspaces(in: store.defaultWindowID).first { $0.id == firstID }?.name, "Reading")
+        XCTAssertTrue(footer.testingPicker.isVisible)
+        XCTAssertEqual(footer.testingPicker.testingNameButtons.count, 2)
+        XCTAssertNil(window.attachedSheet)
+        XCTAssertNil(firstButton.menu)
+        try rightClick(firstButton)
+        XCTAssertFalse(footer.testingPicker.isVisible)
+        firstButton.performClick(nil)
+        XCTAssertEqual(store.activeWorkspaceID(in: store.defaultWindowID), firstID)
+        XCTAssertFalse(footer.testingPicker.isVisible)
+        XCTAssertEqual(firstButton.accessibilityValue() as? String, "Current Space")
+        XCTAssertFalse(footer.testingAddButton.isHidden)
+        XCTAssertEqual(footer.testingAddButton.toolTip, "New space")
+    }
+
+    func testFooterDoubleClickRenamesInline() throws {
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        _ = try XCTUnwrap(store.createWorkspace(name: "Research", in: windowID))
+        let footer = WorkspaceSelectorView(documentStore: store, windowID: windowID, style: .sidebarFooter)
+        let window = host(footer, size: NSSize(width: 320, height: 240))
+        defer { window.close() }
+        let button = try XCTUnwrap(footer.testingWorkspaceButtons.first)
+        button.performClick(nil)
+        let doubleClick = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: .zero,
+            modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 0, clickCount: 2, pressure: 1))
+        button.mouseDown(with: doubleClick)
+        let picker = footer.testingPicker
+        let field = try XCTUnwrap(picker.activeNameField)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        XCTAssertNil(window.attachedSheet)
+        XCTAssertEqual(editor.string, "Space")
+        editor.selectAll(nil)
+        editor.insertText("Reading", replacementRange: editor.selectedRange())
+        XCTAssertTrue(picker.control(field, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), firstID)
+        XCTAssertEqual(store.workspaces(in: windowID).first { $0.id == firstID }?.name, "Reading")
         XCTAssertEqual(footer.testingWorkspaceButtons.first?.toolTip, "Reading")
     }
 
-    func testDeleteMenuTargetsWorkspaceInBothTabPresentations() throws {
+    func testNewSpaceAndRenameCommitCancelAndValidateWithoutButtons() throws {
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let selector = WorkspaceSelectorView(documentStore: store, windowID: windowID)
+        let window = host(selector, size: NSSize(width: 320, height: 240))
+        defer { window.close() }
+        selector.testingShowPicker()
+        let picker = selector.testingPicker
+        try savePreview(picker, name: "switch")
+        picker.beginCreating()
+        var field = try XCTUnwrap(picker.activeNameField)
+        XCTAssertEqual(field.stringValue, "Space 2")
+        field.stringValue = "   "
+        XCTAssertFalse(picker.finishEditing(commit: true))
+        XCTAssertEqual(store.workspaces(in: windowID).count, 1)
+        picker.finishEditing(commit: false)
+        XCTAssertNil(picker.activeNameField)
+        picker.beginCreating()
+        field = try XCTUnwrap(picker.activeNameField)
+        field.stringValue = "Writing"
+        try XCTUnwrap(picker.testingDraftIconButton).performClick(nil)
+        picker.selectIcon(.moon)
+        XCTAssertTrue(picker.activeNameField === field)
+        try savePreview(picker, name: "create")
+        XCTAssertTrue(picker.finishEditing(commit: true))
+        XCTAssertEqual(store.workspaces(in: windowID).count, 2)
+        XCTAssertEqual(store.workspaces(in: windowID).last?.icon, .moon)
+        let id = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        picker.beginRenaming(id)
+        field = try XCTUnwrap(picker.activeNameField)
+        field.stringValue = "Discard"
+        picker.finishEditing(commit: false)
+        XCTAssertEqual(store.workspaces(in: windowID).last?.name, "Writing")
+        picker.beginRenaming(id)
+        picker.activeNameField?.stringValue = "Writing notes"
+        picker.dismiss()
+        XCTAssertEqual(store.workspaces(in: windowID).last?.name, "Writing notes")
+        XCTAssertNil(window.attachedSheet)
+    }
+
+    func testIconSelectionUpdatesBothControlsWithoutEndingRename() throws {
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let id = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let footer = WorkspaceSelectorView(documentStore: store, windowID: windowID, style: .sidebarFooter)
+        let window = host(footer, size: NSSize(width: 320, height: 240))
+        defer { window.close() }
+        footer.testingShowPicker()
+        let picker = footer.testingPicker
+        picker.beginRenaming(id)
+        let field = try XCTUnwrap(picker.activeNameField)
+        field.stringValue = "Draft name"
+        picker.showIcons(for: id)
+        XCTAssertEqual(picker.testingIconChoices.count, SpaceIcon.allCases.count + 1)
+        try savePreview(picker, name: "icons")
+        picker.selectIcon(.books)
+        XCTAssertTrue(picker.activeNameField === field)
+        XCTAssertEqual(field.stringValue, "Draft name")
+        XCTAssertNotNil(footer.testingWorkspaceButtons.first?.image)
+        XCTAssertEqual(store.workspaces(in: windowID).first?.icon, .books)
+        picker.finishEditing(commit: true)
+        XCTAssertEqual(store.workspaces(in: windowID).first?.name, "Draft name")
+        picker.showIcons(for: id)
+        picker.selectIcon(nil)
+        XCTAssertNil(footer.testingWorkspaceButtons.first?.image)
+        XCTAssertEqual(footer.testingWorkspaceButtons.first?.title, "D")
+    }
+
+    func testDeleteKeyTargetsFocusedSpaceInBothTabPresentations() throws {
         _ = NSApplication.shared
         for mode in [TabPresentationMode.verticalSidebar, .horizontalTitlebar] {
             let store = makeIsolatedDocumentStore()
@@ -124,17 +217,17 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
             let selector = try XCTUnwrap(findView(
                 identifier: mode == .verticalSidebar ? "workspaceFooter" : "workspaceSelector", in: content
             ) as? WorkspaceSelectorView)
-            let menu = try XCTUnwrap(mode == .verticalSidebar ? selector.testingWorkspaceButtons.first?.menu : selector.testingMenu)
-            let deleteIndex = try XCTUnwrap(menu.items.firstIndex { $0.title == "Delete Workspace" })
-            XCTAssertEqual(menu.items[deleteIndex].representedObject as? String, firstID.uuidString)
-            XCTAssertTrue(menu.items[deleteIndex].isEnabled)
-            menu.performActionForItem(at: deleteIndex)
+            selector.testingShowPicker()
+            let picker = selector.testingPicker
+            try XCTUnwrap(picker.testingNameButtons.first).performClick(nil)
+            XCTAssertTrue(picker.handleKey(makeKeyEvent(characters: "", keyCode: 51)))
             XCTAssertEqual(store.workspaces(in: windowID).map(\.id), [secondID])
             XCTAssertEqual(store.activeWorkspaceID(in: windowID), secondID)
             XCTAssertEqual(store.sessions(in: windowID).map(\.id), [secondTab.id])
             XCTAssertNil(store.session(for: firstTab.id))
-            let remainingMenu = try XCTUnwrap(mode == .verticalSidebar ? selector.testingWorkspaceButtons.first?.menu : selector.testingMenu)
-            XCTAssertFalse(try XCTUnwrap(remainingMenu.items.last).isEnabled)
+            selector.testingShowPicker()
+            XCTAssertTrue(picker.handleKey(makeKeyEvent(characters: "", keyCode: 51)))
+            XCTAssertEqual(store.workspaces(in: windowID).map(\.id), [secondID])
         }
     }
 
@@ -243,68 +336,70 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
                                       lightBackground: original.lightBackground, darkBackground: original.darkBackground)
         }
         let store = makeIsolatedDocumentStore()
-        _ = store.createWorkspace(name: "Research", in: store.defaultWindowID)
-        let compact = WorkspaceSelectorView(documentStore: store, windowID: store.defaultWindowID)
+        let id = try XCTUnwrap(store.createWorkspace(name: "Research", icon: .leaf, in: store.defaultWindowID))
         let footer = WorkspaceSelectorView(documentStore: store, windowID: store.defaultWindowID, style: .sidebarFooter)
         let window = host(footer, size: NSSize(width: 320, height: 240))
         defer { window.close() }
-        footer.testingPresentNameEditor(workspaceID: store.activeWorkspaceID(in: store.defaultWindowID))
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
-        let sheet = try XCTUnwrap(window.attachedSheet)
-        defer { window.endSheet(sheet, returnCode: .alertSecondButtonReturn) }
-        let field = try XCTUnwrap(footer.testingNameField)
+        footer.testingShowPicker()
+        let picker = footer.testingPicker
+        picker.beginRenaming(id)
+        let field = try XCTUnwrap(picker.activeNameField)
         let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
-        editor.insertText("Unsaved workspace name", replacementRange: editor.selectedRange())
-        let menu = compact.testingMenu
-        compact.menuWillOpen(menu)
-        defer { compact.menuDidClose(menu) }
-        let controls = [compact, footer]
+        editor.selectAll(nil)
+        editor.insertText("Unsaved space name", replacementRange: editor.selectedRange())
+        picker.showIcons(for: id)
         for light in LightTheme.allCases {
             window.appearance = NSAppearance(named: .aqua)
-            compact.appearance = NSAppearance(named: .aqua)
-            footer.appearance = NSAppearance(named: .aqua)
             ThemeManager.shared.apply(light: light, dark: .rosePineMoon)
-            checkTheme(controls: controls, field: field, editor: editor)
-            XCTAssertTrue(menu.items.allSatisfy { $0.view?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua })
-            XCTAssertEqual(sheet.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), .aqua)
+            footer.refreshChromeColors()
+            checkTheme(footer: footer, field: field, editor: editor)
+            if light == .rosePineDawn { try savePreview(picker, name: "light-edit") }
         }
         for dark in DarkTheme.allCases {
             window.appearance = NSAppearance(named: .darkAqua)
-            compact.appearance = NSAppearance(named: .darkAqua)
-            footer.appearance = NSAppearance(named: .darkAqua)
             ThemeManager.shared.apply(light: .normal, dark: dark)
-            checkTheme(controls: controls, field: field, editor: editor)
-            XCTAssertTrue(menu.items.allSatisfy { $0.view?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua })
-            XCTAssertEqual(sheet.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), .darkAqua)
+            footer.refreshChromeColors()
+            checkTheme(footer: footer, field: field, editor: editor)
+            if dark == .rosePineMoon { try savePreview(picker, name: "dark-edit") }
         }
         let background = ThemeBackgroundOverrides(window: try XCTUnwrap(ThemeHexColor(hex: "#102035")))
         ThemeManager.shared.apply(light: .normal, dark: .normal, lightBackground: background, darkBackground: background)
-        checkTheme(controls: controls, field: field, editor: editor)
+        footer.refreshChromeColors()
+        checkTheme(footer: footer, field: field, editor: editor)
         XCTAssertTrue(field.currentEditor() === editor)
-        XCTAssertEqual(editor.string, "Unsaved workspace name")
+        XCTAssertEqual(editor.string, "Unsaved space name")
+        picker.finishEditing(commit: false)
     }
 
-    private func checkTheme(controls: [WorkspaceSelectorView], field: NSTextField, editor: NSTextView) {
-        controls.forEach { $0.refreshChromeColors() }
-        for selector in controls {
-            selector.effectiveAppearance.performAsCurrentDrawingAppearance {
-                if selector.style == .compact {
-                    let button = findDescendant(of: NSButton.self, in: selector)
-                    XCTAssertEqual(button?.contentTintColor?.usingColorSpace(.sRGB), NightModeStyle.secondaryTextColor.usingColorSpace(.sRGB))
-                }
-                for button in selector.testingWorkspaceButtons {
-                    let expected = button.accessibilityValue() as? String == "Current Workspace" ? NightModeStyle.primaryTextColor : NightModeStyle.secondaryTextColor
-                    let color = button.attributedTitle.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
-                    XCTAssertEqual(color?.usingColorSpace(.sRGB), expected.usingColorSpace(.sRGB))
-                }
-            }
-        }
+    private func checkTheme(footer: WorkspaceSelectorView, field: NSTextField, editor: NSTextView) {
         field.effectiveAppearance.performAsCurrentDrawingAppearance {
-            XCTAssertEqual(field.backgroundColor?.usingColorSpace(.sRGB), NightModeStyle.readerBackdropColor.usingColorSpace(.sRGB))
-            XCTAssertEqual(editor.backgroundColor.usingColorSpace(.sRGB), NightModeStyle.readerBackdropColor.usingColorSpace(.sRGB))
+            XCTAssertEqual(field.textColor?.usingColorSpace(.sRGB), NightModeStyle.primaryTextColor.usingColorSpace(.sRGB))
             XCTAssertEqual(editor.textColor?.usingColorSpace(.sRGB), NightModeStyle.primaryTextColor.usingColorSpace(.sRGB))
             XCTAssertEqual(editor.insertionPointColor.usingColorSpace(.sRGB), NightModeStyle.primaryTextColor.usingColorSpace(.sRGB))
+            XCTAssertEqual(editor.backgroundColor.usingColorSpace(.sRGB), NightModeStyle.readerBackdropColor.usingColorSpace(.sRGB))
+            for button in footer.testingPicker.testingIconChoices {
+                XCTAssertEqual(button.contentTintColor?.usingColorSpace(.sRGB), NightModeStyle.secondaryTextColor.usingColorSpace(.sRGB))
+            }
         }
+        XCTAssertNil(footer.window?.attachedSheet)
+    }
+
+    private func savePreview(_ picker: SpacePickerController, name: String) throws {
+        guard let directory = ProcessInfo.processInfo.environment["SEREIN_SPACE_PREVIEW"],
+              let view = picker.testingPanel.contentView else { return }
+        view.layoutSubtreeIfNeeded()
+        picker.testingPanel.displayIfNeeded()
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("space-\(name).png"))
+    }
+
+    private func rightClick(_ button: NSButton) throws {
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown, location: .zero,
+            modifierFlags: [], timestamp: 0, windowNumber: button.window?.windowNumber ?? 0,
+            context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        button.rightMouseDown(with: event)
     }
 
     private func scrollEvent(x: Int32, y: Int32, phase: Int64 = 0, momentum: Int64 = 0) throws -> NSEvent {
@@ -334,9 +429,4 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
         root.layoutSubtreeIfNeeded()
         return window
     }
-}
-
-private final class WorkspaceKeyboardTestMenu: NSMenu {
-    var keyboardSelection: NSMenuItem?
-    override var highlightedItem: NSMenuItem? { keyboardSelection }
 }
