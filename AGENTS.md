@@ -40,3 +40,11 @@ Native macOS PDF reader.
 - Prefer validating UI and interaction changes with real PDFs from `~/Downloads` when available.
 - Prefer clarity and compactness over premature flexibility.
 - Don't use computer-use tool unless i ask.
+
+## Release Process
+
+1. Prepare the version, build number, and changelog, then run `just test` locally. Confirm that both XCTest and Swift Testing finish with passing summaries; a zero exit code with an incomplete test run is insufficient.
+2. Run `just dmg` locally to build the release app and package the DMG. Verify the app's version, build number, and code signature, then mount the DMG and check the bundled app.
+3. Create and push the release tag only after all local checks pass. Keep GitHub's release tests enabled and avoid using repeated release runs to discover issues that can be checked locally.
+4. If GitHub Actions fails, inspect the logs, reproduce the failing conditions locally, and verify the fix before retrying. Rebuild and recheck the release package when application code changes.
+5. After publication, download the public DMG and verify its checksum, bundled version, and code signature before reporting the release complete. Install and launch the local app when requested.
