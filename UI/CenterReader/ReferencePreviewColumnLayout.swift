@@ -73,10 +73,34 @@ enum ReferencePreviewColumnLayout {
                   supporting.filter({ hasBody($0, onLeft: false) }).count >= 3,
                   supporting.count * 2 >= evidence.count else { continue }
             if best == nil || supporting.count > best!.rows.count {
-                best = (gap, supporting)
+                // A short line can make its candidate gap wider than the actual
+                // gutter. Use all supporting rows before deciding which side
+                // contains the destination (including a hanging reference number).
+                let glyphs = supporting.flatMap { $0 }
+                let left = glyphs.filter { $0.maxX <= strip.lowerBound }.map(\.maxX).max()!
+                let right = glyphs.filter { $0.minX >= strip.upperBound }.map(\.minX).min()!
+                best = (left...right, supporting)
             }
         }
-        guard let best else { return nil }
+        guard let best else {
+            // A final bibliography page may contain only one column, plus a
+            // full-width running header. Fit the local body when it is narrow
+            // and the destination itself is not on that spanning header.
+            let bodyRows = rows.filter { row in
+                let span = row.last!.maxX - row[0].minX
+                return span > width * 0.18 && span < width * 0.6
+            }
+            let body = bodyRows.flatMap { $0 }
+            guard bodyRows.count >= 3, let left = body.map(\.minX).min(), let right = body.map(\.maxX).max(),
+                  right - left < width * 0.6,
+                  characterBounds.contains(where: { $0.minX < left - minimumGap || $0.maxX > right + minimumGap }),
+                  nearest.allSatisfy({ $0.minX >= left && $0.maxX <= right }),
+                  target.x >= left - width * 0.018, target.x <= right + width * 0.018 else { return nil }
+            let padding = width * 0.018
+            return CGRect(x: max(pageBounds.minX, left - padding), y: pageBounds.minY,
+                          width: min(pageBounds.maxX, right + padding) - max(pageBounds.minX, left - padding),
+                          height: pageBounds.height)
+        }
         let center = (best.gap.lowerBound + best.gap.upperBound) / 2
         let padding = width * 0.018
         // A destination inside the gutter does not identify either column.

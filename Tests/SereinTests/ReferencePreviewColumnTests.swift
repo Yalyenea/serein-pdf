@@ -59,6 +59,35 @@ final class ReferencePreviewColumnTests: XCTestCase {
         ))
     }
 
+    func testShortFirstLineDoesNotPutHangingReferenceNumberInGutter() throws {
+        var characters = textBlock(x: 50, top: 700, columns: 40)
+            + textBlock(x: 320, top: 700, columns: 36)
+        // The first candidate ends at the indented body. Later reference
+        // numbers establish the actual right edge of the gutter at x = 305.
+        for row in 1..<24 {
+            characters.append(CGRect(x: 305, y: 700 - CGFloat(row) * 16, width: 5, height: 10))
+        }
+        let bounds = try XCTUnwrap(ReferencePreviewColumnLayout.columnBounds(
+            characterBounds: characters, pageBounds: pageBounds, target: CGPoint(x: 305, y: 708)
+        ))
+        XCTAssertTrue(bounds.contains(CGPoint(x: 305, y: 680)))
+        XCTAssertTrue(bounds.contains(CGPoint(x: 530, y: 680)))
+        XCTAssertLessThan(bounds.width, 300)
+    }
+
+    func testLastReferencePageFitsLoneColumnButKeepsSpanningHeader() throws {
+        let characters = textBlock(x: 50, top: 650, columns: 36)
+            + textBlock(x: 50, top: 730, columns: 83, rows: 1)
+        let bounds = try XCTUnwrap(ReferencePreviewColumnLayout.columnBounds(
+            characterBounds: characters, pageBounds: pageBounds, target: CGPoint(x: 50, y: 660)
+        ))
+        XCTAssertLessThan(bounds.width, 300)
+        XCTAssertTrue(bounds.contains(CGPoint(x: 250, y: 640)))
+        XCTAssertNil(ReferencePreviewColumnLayout.columnBounds(
+            characterBounds: characters, pageBounds: pageBounds, target: CGPoint(x: 50, y: 740)
+        ))
+    }
+
     func testNarrowGutterWithMixedGlyphHeightsAndDestinationBeforeRightText() throws {
         let bounds = CGRect(x: 0, y: 0, width: 612, height: 792)
         let glyphs = [

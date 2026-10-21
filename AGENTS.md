@@ -16,6 +16,8 @@ Native macOS PDF reader.
 - Track open work in [TASKS.md](TASKS.md); open debt in [REVIEW.md](REVIEW.md).
 - Completed milestone checklists live under [docs/archive/](docs/archive/) — do not re-expand them into live TASKS.
 - Keep docs in sync when scope or behavior changes.
+- Before every commit, update the relevant documentation in that commit to match its final behavior, configuration, and validation. Keep changes scoped to the work being committed.
+- When a similar bug recurs, compare earlier fixes and record the distinct trigger, affected entry points, and regression coverage. For PDF links, consult [docs/reference-link-regressions.md](docs/reference-link-regressions.md) and check destination resolution, column geometry, navigation, and history separately.
 - Multi-theme expansion plan: [docs/theme-presets-plan.md](docs/theme-presets-plan.md).
 
 ## Product Rules

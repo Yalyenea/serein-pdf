@@ -526,7 +526,7 @@ final class ReaderPDFView: PDFView {
         let pointOnPage = convert(pointInView, to: page)
         guard let annotation = page.annotations.first(where: {
             $0.type == "Link" && $0.bounds.contains(pointOnPage)
-        }), let destination = (annotation.action as? PDFActionGoTo)?.destination ?? annotation.destination,
+        }), let destination = ReferenceLinkDestination.resolve(annotation),
               let targetPage = destination.page,
               targetPage.document === document else { return nil }
         return (destination, convert(annotation.bounds, from: page))
@@ -1469,7 +1469,7 @@ final class ReaderViewController: NSViewController {
         let pageIndex = document.index(for: page)
         guard pageIndex >= 0, pageIndex < document.pageCount else { return false }
         return go(
-            to: ReadingPosition(pageIndex: pageIndex, point: destination.point),
+            to: ReadingPosition(pageIndex: pageIndex, point: ReferenceLinkDestination.navigationPoint(for: destination)),
             recordHistory: true
         )
     }
@@ -1484,7 +1484,7 @@ final class ReaderViewController: NSViewController {
         flushPendingReadingPositionWriteback()
         return onSplitRequested?(
             sourceSessionID,
-            ReadingPosition(pageIndex: pageIndex, point: destination.point),
+            ReadingPosition(pageIndex: pageIndex, point: ReferenceLinkDestination.navigationPoint(for: destination)),
             layout
         ) ?? false
     }

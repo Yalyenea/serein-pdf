@@ -135,7 +135,7 @@ private final class ReferencePDFView: PDFView {
                    && $0.bounds.contains(convert(point, to: page))
            }) {
             if event.clickCount == 1, annotation.type == "Link",
-               let destination = (annotation.action as? PDFActionGoTo)?.destination ?? annotation.destination,
+               let destination = ReferenceLinkDestination.resolve(annotation),
                destination.page?.document === sourcePage.document {
                 onInternalLink?(destination)
             }
