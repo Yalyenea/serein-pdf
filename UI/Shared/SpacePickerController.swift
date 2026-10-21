@@ -26,24 +26,28 @@ private final class SpacePickerSurface: NSView {
 private final class SpacePickerRow: NSView {
     let iconButton = SpaceButton(title: "", target: nil, action: nil)
     let nameButton = SpaceButton(title: "", target: nil, action: nil)
+    let deleteButton = SpaceButton(title: "", target: nil, action: nil)
     let field = NSTextField(string: "")
     var isActive = false
     var isFocused = false
     var isEditing = false
     var isHovered = false
+    var canDelete = false
     private var tracking: NSTrackingArea?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = 4
-        for button in [iconButton, nameButton] {
+        for button in [iconButton, nameButton, deleteButton] {
             button.isBordered = false
             button.focusRingType = .none
             button.font = .systemFont(ofSize: 13)
             addSubview(button)
         }
         iconButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        deleteButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
+        deleteButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
         nameButton.alignment = .left
         nameButton.lineBreakMode = .byTruncatingTail
         field.font = .systemFont(ofSize: 13)
@@ -59,8 +63,10 @@ private final class SpacePickerRow: NSView {
     override func layout() {
         super.layout()
         iconButton.frame = NSRect(x: 4, y: 3, width: 24, height: 22)
-        nameButton.frame = NSRect(x: 31, y: 3, width: bounds.width - 39, height: 22)
-        field.frame = NSRect(x: 31, y: 5, width: bounds.width - 39, height: 19)
+        let deleteWidth: CGFloat = deleteButton.isHidden ? 0 : 26
+        deleteButton.frame = NSRect(x: bounds.width - 26, y: 4, width: 22, height: 22)
+        nameButton.frame = NSRect(x: 31, y: 3, width: bounds.width - 39 - deleteWidth, height: 22)
+        field.frame = NSRect(x: 31, y: 5, width: bounds.width - 39 - deleteWidth, height: 19)
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -88,6 +94,8 @@ private final class SpacePickerRow: NSView {
                 .foregroundColor: NightModeStyle.primaryTextColor,
             ])
             iconButton.contentTintColor = NightModeStyle.secondaryTextColor
+            deleteButton.isHidden = !canDelete || isEditing
+            deleteButton.contentTintColor = NightModeStyle.secondaryTextColor
             field.textColor = NightModeStyle.primaryTextColor
             field.backgroundColor = NightModeStyle.readerBackdropColor
             if let editor = field.currentEditor() as? NSTextView {
@@ -210,6 +218,9 @@ final class SpacePickerController: NSObject, NSTextFieldDelegate, NSWindowDelega
             row.iconButton.setAccessibilityLabel(L10n.text("Icon for \(space.name)", "\(space.name)的图标"))
             row.isActive = space.id == activeID
             row.isFocused = space.id == focusedID
+            row.canDelete = spaces.count > 1
+            row.deleteButton.toolTip = L10n.text("Delete space", "删除空间")
+            row.deleteButton.setAccessibilityLabel(L10n.text("Delete \(space.name)", "删除\(space.name)"))
             row.refreshTheme()
         }
         layoutSurface()
@@ -225,6 +236,9 @@ final class SpacePickerController: NSObject, NSTextFieldDelegate, NSWindowDelega
         row.iconButton.identifier = identity
         row.iconButton.target = self
         row.iconButton.action = #selector(chooseRowIcon(_:))
+        row.deleteButton.identifier = identity
+        row.deleteButton.target = self
+        row.deleteButton.action = #selector(deleteRow(_:))
         row.field.delegate = self
         list.addSubview(row)
         return row
@@ -427,6 +441,11 @@ final class SpacePickerController: NSObject, NSTextFieldDelegate, NSWindowDelega
             layoutSurface()
         } else if let value = sender.identifier?.rawValue, let id = UUID(uuidString: value) { showIcons(for: id) }
     }
+    @objc private func deleteRow(_ sender: NSButton) {
+        guard let value = sender.identifier?.rawValue, let id = UUID(uuidString: value),
+              finishEditing(commit: true) else { return }
+        onDelete?(id)
+    }
     @objc private func chooseSymbol(_ sender: NSButton) {
         selectIcon(sender.tag == 0 ? nil : SpaceIcon.allCases[sender.tag - 1])
     }
@@ -540,6 +559,7 @@ extension SpacePickerController {
     var testingPanel: NSPanel { panel }
     var testingNameButtons: [NSButton] { spaces.compactMap { rows[$0.id]?.nameButton } }
     var testingIconButtons: [NSButton] { spaces.compactMap { rows[$0.id]?.iconButton } }
+    var testingDeleteButtons: [NSButton] { spaces.compactMap { rows[$0.id]?.deleteButton } }
     var testingIconChoices: [NSButton] { iconChoices }
     var testingDraftIconButton: NSButton? { draftRow?.iconButton }
     var testingNewButton: NSButton { newButton }

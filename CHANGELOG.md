@@ -16,6 +16,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Click sidebar Space icons to switch; right-click to open the same panel as the titlebar without changing the active Space.
 - Create and rename Spaces inline. Press Enter or click outside to save a name, or Escape to cancel. Choose from 16 icons or use the name's initial; restore icon choices across relaunch.
 - Use arrow keys and Enter to switch, F2 to rename, and Delete to remove a Space. Keep the final Space and protect unsaved annotations when deleting.
+- Add a delete button to each Space row. Hide it while renaming or when only one Space remains; update its color with the current theme.
 
 ### Development
 - Keep Swift Testing on the physical main thread in a dedicated host and require complete passing summaries from both test frameworks before reporting success.

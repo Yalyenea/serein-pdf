@@ -231,6 +231,32 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
         }
     }
 
+    func testDeleteButtonRemovesSpaceAndHidesWhenAlone() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let windowID = store.defaultWindowID
+        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        let secondID = try XCTUnwrap(store.createWorkspace(name: "Research", in: windowID))
+        store.setTabPresentationMode(.verticalSidebar)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        controller.showWindow(nil)
+        controller.window?.layoutIfNeeded()
+        let split = try XCTUnwrap(controller.window?.contentViewController as? SplitViewController)
+        let selector = try XCTUnwrap(findView(identifier: "workspaceFooter", in: split.verticalTabsViewController.view) as? WorkspaceSelectorView)
+        selector.testingShowPicker()
+        let picker = selector.testingPicker
+        XCTAssertEqual(picker.testingDeleteButtons.count, 2)
+        XCTAssertTrue(picker.testingDeleteButtons.allSatisfy { !$0.isHidden && $0.toolTip != nil })
+        try XCTUnwrap(picker.testingDeleteButtons.first).performClick(nil)
+        XCTAssertEqual(store.workspaces(in: windowID).map(\.id), [secondID])
+        XCTAssertEqual(store.activeWorkspaceID(in: windowID), secondID)
+        XCTAssertFalse(picker.isVisible)
+        selector.testingShowPicker()
+        XCTAssertEqual(picker.testingDeleteButtons.count, 1)
+        XCTAssertTrue(picker.testingDeleteButtons.allSatisfy(\.isHidden))
+    }
+
     func testWorkspaceDeletionHonorsSaveDiscardAndCancel() throws {
         _ = NSApplication.shared
         for response in [NSApplication.ModalResponse.alertSecondButtonReturn, .alertThirdButtonReturn, .alertFirstButtonReturn] {
@@ -378,6 +404,9 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
             XCTAssertEqual(editor.insertionPointColor.usingColorSpace(.sRGB), NightModeStyle.primaryTextColor.usingColorSpace(.sRGB))
             XCTAssertEqual(editor.backgroundColor.usingColorSpace(.sRGB), NightModeStyle.readerBackdropColor.usingColorSpace(.sRGB))
             for button in footer.testingPicker.testingIconChoices {
+                XCTAssertEqual(button.contentTintColor?.usingColorSpace(.sRGB), NightModeStyle.secondaryTextColor.usingColorSpace(.sRGB))
+            }
+            for button in footer.testingPicker.testingDeleteButtons {
                 XCTAssertEqual(button.contentTintColor?.usingColorSpace(.sRGB), NightModeStyle.secondaryTextColor.usingColorSpace(.sRGB))
             }
         }
