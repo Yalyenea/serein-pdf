@@ -8,6 +8,9 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Locate numbered bibliography entries when citation links specify only a page. Share the resolved position between previews, direct navigation, and splits; resolve unspecified navigation coordinates before scrolling.
 - Keep hanging reference numbers inside single-column previews and fit a lone bibliography column without letting running headers or distant page content widen it.
 
+### Sidebars
+- Raise the default left sidebar minimum width from 36 to 180 points. Startup restoration and divider dragging use the configured minimum; existing configuration files retain their explicit value.
+
 ### Spaces
 - Rename workspace controls to Spaces and replace the switcher menu with a compact themed panel. Keep the titlebar entry as the original group icon without a name or arrow.
 - Click sidebar Space icons to switch; right-click to open the same panel as the titlebar without changing the active Space.

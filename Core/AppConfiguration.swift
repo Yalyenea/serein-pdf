@@ -246,7 +246,7 @@ struct AppConfiguration: Equatable, Sendable {
 
         static let `default` = Layout(
             leftSidebarWidth: 220,
-            leftSidebarMinWidth: 36,
+            leftSidebarMinWidth: 180,
             leftSidebarMaxWidth: 520,
             rightSidebarWidth: 320,
             rightSidebarMinWidth: 120,
@@ -706,7 +706,7 @@ auto_save = "after_10_minutes"
 
 [layout]
 left_sidebar_width = 220
-left_sidebar_min_width = 36
+left_sidebar_min_width = 180
 left_sidebar_max_width = 520
 right_sidebar_width = 320
 right_sidebar_min_width = 120

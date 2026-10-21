@@ -329,6 +329,9 @@ flowchart LR
 | `isSplitEnabled` | 当前布局是否包含多个 pane |
 | `recentlyClosedURLs` | 当前工作区最近关闭 tab 栈 |
 | `leftSidebarWidth` / `rightSidebarWidth` | 窗口级侧栏宽度,新窗口由配置初始化,随窗口恢复 |
+
+左侧栏默认宽度为 220 pt，默认最小宽度为 180 pt。`layout.left_sidebar_min_width` 同时约束启动恢复与拖动；恢复的窗口宽度过小时，显示宽度按下限调整。已有 `config.toml` 保留显式配置，旧配置中的 `left_sidebar_min_width = 36` 需改为 `180` 才会使用新下限。
+
 ### 5.4 辅助模型
 
 | 模型 | 用途 |
