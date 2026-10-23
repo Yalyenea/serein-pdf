@@ -10,7 +10,6 @@ final class VerticalTabItemView: NSView {
     private let closeButton = NSButton(title: "×", target: nil, action: nil)
     private let separator = NSBox()
     private let contentStackView = NSStackView()
-    private var isDirty: Bool
     private var isContinuousReadingMember: Bool
     private var isContinuousReadingLeader: Bool
     private var canStartContinuousReading: Bool
@@ -59,7 +58,6 @@ final class VerticalTabItemView: NSView {
         onMoveToWorkspaceMenu: ((UUID) -> NSMenu?)? = nil
     ) {
         self.sessionID = sessionID
-        self.isDirty = isDirty
         self.isContinuousReadingMember = isContinuousReadingMember
         self.isContinuousReadingLeader = isContinuousReadingLeader
         self.canStartContinuousReading = canStartContinuousReading
@@ -341,7 +339,6 @@ final class VerticalTabItemView: NSView {
     ) {
         self.isSelected = isSelected
         self.isTabSelected = isTabSelected
-        self.isDirty = isDirty
         self.isContinuousReadingMember = isContinuousReadingMember
         self.isContinuousReadingLeader = isContinuousReadingLeader
         self.canStartContinuousReading = canStartContinuousReading

@@ -5,7 +5,6 @@ final class ReaderShortcutWindow: NSWindow {
     var plainShortcutHandler: ((NSEvent, NSWindow) -> Bool)?
     var presentationShortcutHandler: ((NSEvent) -> Bool)?
     var numberedTabShortcutHandler: ((Int) -> Void)?
-    var reservesTransparentTitlebarDragArea = true
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown,
@@ -80,8 +79,7 @@ final class ReaderShortcutWindow: NSWindow {
     }
 
     func shouldHandleTransparentTitlebarDrag(with event: NSEvent) -> Bool {
-        guard reservesTransparentTitlebarDragArea,
-              event.type == .leftMouseDown,
+        guard event.type == .leftMouseDown,
               event.clickCount == 1,
               toolbar == nil,
               styleMask.contains(.fullSizeContentView),

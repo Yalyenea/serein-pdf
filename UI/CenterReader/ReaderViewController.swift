@@ -741,9 +741,6 @@ final class ReaderViewController: NSViewController {
         annotationInteraction.onCreateMarkupRequested = { [weak self] type in
             self?.createHighlightFromCurrentSelection(type: type)
         }
-        annotationInteraction.onNavigateRequested = { [weak self] group in
-            self?.focus(on: group, showPulse: false)
-        }
         annotationInteraction.onSendSelectionToCodexRequested = { [weak self] text in
             self?.onSendSelectionToCodexRequested?(text)
         }
@@ -2398,14 +2395,6 @@ final class ReaderViewController: NSViewController {
         annotationInteraction.addOrEditComment()
     }
 
-    func presentCommentEditor(for group: DocumentHighlightGroup) {
-        annotationInteraction.presentCommentEditor(for: group)
-    }
-
-    func dismissCommentEditor() {
-        annotationInteraction.dismissCommentEditor()
-    }
-
     @discardableResult
     func removeHighlightUnderCursor() -> Bool {
         annotationInteraction.removeHighlightUnderCursor()
@@ -2452,11 +2441,6 @@ final class ReaderViewController: NSViewController {
         return didRedo
     }
 
-    func toggleNightMode() {
-        readerState.isNightModeEnabled.toggle()
-        applyReaderAppearance()
-    }
-
     func refreshThemeAppearance() {
         syncNightModeFromAppearance()
         lastThemeFilterSignature = nil
@@ -2466,17 +2450,6 @@ final class ReaderViewController: NSViewController {
     func saveAnnotations() throws {
         guard let sessionID = targetSessionID else { return }
         try documentStore.saveAnnotations(for: sessionID)
-    }
-
-    @discardableResult
-    func search(for query: String) -> Bool {
-        documentStore.updateSearch(
-            query: query,
-            scope: findBarView.scope,
-            options: findBarView.searchOptions,
-            in: windowID
-        )
-        return documentStore.searchSnapshot(in: windowID).totalMatches > 0
     }
 
     var isFindBarVisible: Bool {
@@ -2548,20 +2521,6 @@ final class ReaderViewController: NSViewController {
         lastSubmittedSearchKey = nil
         pendingFindNavigationAfterSearch = nil
         pdfView.window?.makeFirstResponder(pdfView)
-    }
-
-    @discardableResult
-    func findNextMatch() -> Bool {
-        guard documentStore.searchSnapshot(in: windowID).totalMatches > 0 else { return false }
-        onFindActionRequested?(.activateNext)
-        return true
-    }
-
-    @discardableResult
-    func findPreviousMatch() -> Bool {
-        guard documentStore.searchSnapshot(in: windowID).totalMatches > 0 else { return false }
-        onFindActionRequested?(.activatePrevious)
-        return true
     }
 
     func updateFindStatus(matchIndex: Int?, totalMatches: Int) {
@@ -3138,20 +3097,16 @@ final class ReaderViewController: NSViewController {
         }
     }
 
-    func focus(on highlight: DocumentHighlightGroup, showPulse: Bool = true) {
+    func focus(on highlight: DocumentHighlightGroup) {
         if let selection = highlight.primarySelection {
             go(to: selection, setSelection: false)
-            if showPulse {
-                annotationInteraction.showFocusPulse(for: highlight)
-            }
+            annotationInteraction.showFocusPulse(for: highlight)
             return
         }
 
         guard pdfView.document?.page(at: highlight.pageIndex) != nil else { return }
         _ = jumpToPage(highlight.pageIndex, recordHistory: true)
-        if showPulse {
-            annotationInteraction.showFocusPulse(for: highlight)
-        }
+        annotationInteraction.showFocusPulse(for: highlight)
     }
 
     @discardableResult

@@ -7,9 +7,6 @@ struct ReaderPane: RawRepresentable, Hashable, Codable, Sendable {
     static let primary = ReaderPane(rawValue: "primary")
     static let secondary = ReaderPane(rawValue: "secondary")
 
-    /// Used by the two-pane command entry points, not by layout traversal.
-    var other: ReaderPane { self == .primary ? .secondary : .primary }
-
     init(from decoder: Decoder) throws {
         rawValue = try decoder.singleValueContainer().decode(String.self)
     }

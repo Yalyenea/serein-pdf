@@ -70,7 +70,6 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
     private var state = OpenTabsPaletteState()
     private var activationMode: OpenTabsPaletteActivationMode = .explicitSelection
     private var isApplyingSelection = false
-    private weak var parentWindow: NSWindow?
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private let titleLabel = NSTextField(labelWithString: L10n.text("Open Tabs", "已打开标签页"))
@@ -119,7 +118,6 @@ final class OpenTabsPaletteController: NSWindowController, NSWindowDelegate, NST
     }
 
     func show(items: [OpenTabsPaletteItem], activationMode: OpenTabsPaletteActivationMode, relativeTo parentWindow: NSWindow?) {
-        self.parentWindow = parentWindow
         self.activationMode = activationMode
         state.replaceItems(items, activationMode: activationMode)
         updateFooter()

@@ -5,14 +5,6 @@ enum AppLanguage: String, CaseIterable, Sendable {
     case english = "en"
     case chinese = "zh"
 
-    var menuTitle: String {
-        switch self {
-        case .automatic: L10n.text("Automatic", "自动")
-        case .english: "English"
-        case .chinese: "中文"
-        }
-    }
-
     func resolved(preferredLanguages: [String]) -> AppLanguage {
         guard self == .automatic else { return self }
         return preferredLanguages.first?.lowercased().hasPrefix("zh") == true ? .chinese : .english

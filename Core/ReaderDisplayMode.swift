@@ -396,34 +396,6 @@ enum ShortcutCommand: String, CaseIterable, Sendable {
         }
     }
 
-    var displayMode: ReaderDisplayMode? {
-        switch self {
-        case .singlePage:
-            .singlePage
-        case .singlePageContinuous:
-            .singlePageContinuous
-        case .twoUp:
-            .twoUp
-        case .twoUpContinuous:
-            .twoUpContinuous
-        case .book:
-            .book
-        case .bookContinuous:
-            .bookContinuous
-        default:
-            nil
-        }
-    }
-
-    var highlightColor: HighlightColor? {
-        switch self {
-        case .highlightColorPink: .pink
-        case .highlightColorYellow: .yellow
-        case .highlightColorGreen: .green
-        default: nil
-        }
-    }
-
     var annotationMarkupType: AnnotationMarkupType? {
         switch self {
         case .highlightSelection: .highlight

@@ -7,7 +7,6 @@ final class ReaderAnnotationInteractionController: NSObject {
     var activeSessionID: UUID?
     var onFocusRequested: (() -> Void)?
     var onCreateMarkupRequested: ((AnnotationMarkupType) -> DocumentHighlightGroup?)?
-    var onNavigateRequested: ((DocumentHighlightGroup) -> Void)?
     var onSendSelectionToCodexRequested: ((String) -> Void)?
     var onSendPageImageToCodexRequested: ((NSImage, Int) -> Void)?
     var shouldSuppressPreview: ((String) -> Bool)?
@@ -194,35 +193,35 @@ final class ReaderAnnotationInteractionController: NSObject {
         guard let hit = annotationHit(at: event.locationInWindow),
               event.clickCount == 2 || hit.isCommentIcon else { return false }
         onFocusRequested?()
-        presentCommentEditor(for: hit.group, navigate: false)
+        presentCommentEditor(for: hit.group)
         return true
     }
 
     @discardableResult
     func addOrEditComment() -> Bool {
         if let createdGroup = onCreateMarkupRequested?(.highlight) {
-            presentCommentEditor(for: createdGroup, navigate: false)
+            presentCommentEditor(for: createdGroup)
             return true
         }
         if let pointInWindow = hostView?.window?.mouseLocationOutsideOfEventStream,
            let group = annotationHit(at: pointInWindow)?.group {
-            presentCommentEditor(for: group, navigate: false)
+            presentCommentEditor(for: group)
             return true
         }
         if let hoveredGroup {
-            presentCommentEditor(for: hoveredGroup, navigate: false)
+            presentCommentEditor(for: hoveredGroup)
             return true
         }
         if let lastHoveredGroup,
            let lastHoveredAt,
            Date().timeIntervalSince(lastHoveredAt) < 0.45 {
-            presentCommentEditor(for: lastHoveredGroup, navigate: false)
+            presentCommentEditor(for: lastHoveredGroup)
             return true
         }
         return false
     }
 
-    func presentCommentEditor(for group: DocumentHighlightGroup, navigate: Bool = true) {
+    private func presentCommentEditor(for group: DocumentHighlightGroup) {
         if let panel = commentEditorPanel, presentedGroup?.groupID == group.groupID {
             cancelPendingPreview()
             cancelPendingHide()
@@ -232,10 +231,6 @@ final class ReaderAnnotationInteractionController: NSObject {
         clearPreview()
         dismissCommentEditor()
 
-        if navigate {
-            onNavigateRequested?(group)
-            showFocusPulse(for: group)
-        }
         showCommentCard(for: group, editing: true)
     }
 
@@ -373,7 +368,7 @@ final class ReaderAnnotationInteractionController: NSObject {
               let group = documentStore.annotationGroup(containing: annotation, for: session.id) else {
             return nil
         }
-        return HighlightAnnotationHit(annotation: annotation, page: page, group: group, isCommentIcon: commentAnnotation != nil)
+        return HighlightAnnotationHit(annotation: annotation, group: group, isCommentIcon: commentAnnotation != nil)
     }
 
     private func refreshCommentIcons() {
@@ -500,11 +495,11 @@ final class ReaderAnnotationInteractionController: NSObject {
     @objc
     private func editContextComment(_ sender: Any?) {
         if let contextGroup {
-            presentCommentEditor(for: contextGroup, navigate: false)
+            presentCommentEditor(for: contextGroup)
             return
         }
         if let createdGroup = onCreateMarkupRequested?(.highlight) {
-            presentCommentEditor(for: createdGroup, navigate: false)
+            presentCommentEditor(for: createdGroup)
         }
     }
 
@@ -611,7 +606,6 @@ final class CommentIconOverlayView: NSView {
 
 private struct HighlightAnnotationHit {
     let annotation: PDFAnnotation
-    let page: PDFPage
     let group: DocumentHighlightGroup
     let isCommentIcon: Bool
 }

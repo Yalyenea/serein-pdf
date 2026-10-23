@@ -235,7 +235,7 @@ final class WorkspaceSelectorInteractionTests: XCTestCase {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let windowID = store.defaultWindowID
-        let firstID = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
+        _ = try XCTUnwrap(store.activeWorkspaceID(in: windowID))
         let secondID = try XCTUnwrap(store.createWorkspace(name: "Research", in: windowID))
         store.setTabPresentationMode(.verticalSidebar)
         let controller = MainWindowController(documentStore: store)

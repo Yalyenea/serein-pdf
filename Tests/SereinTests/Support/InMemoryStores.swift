@@ -37,10 +37,6 @@ final class TestInMemoryRecentFilesStore: RecentFilesStore {
         recentFiles
     }
 
-    func recordOpen(for url: URL) throws -> [URL] {
-        try recordOpen(for: [url])
-    }
-
     func recordOpen(for urls: [URL]) throws -> [URL] {
         for url in urls {
             recentFiles.removeAll { $0 == url }

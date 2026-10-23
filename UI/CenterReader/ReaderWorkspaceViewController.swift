@@ -490,10 +490,6 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
         activeReaderViewController().redoLastHighlight()
     }
 
-    func toggleNightMode() {
-        activeReaderViewController().toggleNightMode()
-    }
-
     @discardableResult
     func toggleReadingFocusMode() -> Bool {
         isReadingFocusModeEnabled.toggle()

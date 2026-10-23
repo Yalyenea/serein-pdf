@@ -330,7 +330,6 @@ extension WorkspaceSelectorView {
     var testingWorkspaceButtons: [NSButton] { iconButtons }
     var testingAddButton: NSButton { addButton }
     var testingPicker: SpacePickerController { picker }
-    func testingActivateWorkspace(_ id: UUID) { activateWorkspace(id) }
     func testingHandleScrollWheel(_ event: NSEvent) -> Bool { handleScrollWheel(event) }
     func testingShowPicker() { showPicker(relativeTo: style == .sidebarFooter ? addButton : menuButton) }
 }

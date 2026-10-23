@@ -100,17 +100,6 @@ enum HighlightExportFormat: String, CaseIterable {
     case plainText = "plain_text"
     case json
 
-    var title: String {
-        switch self {
-        case .markdown:
-            "Markdown"
-        case .plainText:
-            L10n.text("Plain Text", "纯文本")
-        case .json:
-            "JSON"
-        }
-    }
-
     var fileExtension: String {
         switch self {
         case .markdown:

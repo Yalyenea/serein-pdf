@@ -20,6 +20,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Development
 - Keep Swift Testing on the physical main thread in a dedicated host and require complete passing summaries from both test frameworks before reporting success.
+- Remove unused reader search/comment wrappers, the old night-mode forwarding chain, obsolete model helpers, write-only fields, and unused test hooks. Preserve framework callbacks and references that keep observers, sharing UI, and cached PDF pages alive.
+- Check search-history restoration against the actual viewport position and zoom before leaving the document. Keep separate checks for the navigation target, persisted history, and visible search result; the last page's scroll limit can leave the previous page at the viewport top.
+- Give the four-pane workflow test enough reader space by hiding both sidebars. Cover 800 × 600 and 1480 × 940 window requests, checking pane counts and directional focus after each step while retaining workspace restoration checks.
+- Validation (2026-10-22): complete `just test` passed with 685 XCTest tests (one publisher-PDF test skipped because its sample was not supplied) and 246 Swift Testing tests in 22 suites. Both frameworks reported zero failures.
 
 ## [0.8.0] - 2026-10-17
 

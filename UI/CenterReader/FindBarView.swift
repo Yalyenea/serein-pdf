@@ -49,10 +49,6 @@ final class FindBarView: NSView, NSTextFieldDelegate {
     private var selectedMatchIndex: Int?
     private var keyboardSelectionRequested = false
 
-    var query: String {
-        queryField.stringValue
-    }
-
     var scope: SearchScope {
         scopeControl.selectedSegment == 1 ? .allOpen : .currentDocument
     }

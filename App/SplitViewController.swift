@@ -578,10 +578,6 @@ final class SplitViewController: NSSplitViewController {
         readerWorkspaceViewController.redoLastHighlight()
     }
 
-    func toggleNightMode() {
-        readerWorkspaceViewController.toggleNightMode()
-    }
-
     func saveAnnotations() throws {
         try readerWorkspaceViewController.saveAnnotations()
     }

@@ -6,8 +6,8 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct WorkspaceWorkflowTests {
-    @Test
-    func menuCommandsBuildFourPanesAndRestoreWorkspace() async throws {
+    @Test(arguments: [NSSize(width: 800, height: 600), NSSize(width: 1480, height: 940)])
+    func menuCommandsBuildFourPanesAndRestoreWorkspace(contentSize: NSSize) async throws {
         _ = NSApplication.shared
         let previousPolicy = NSApp.activationPolicy()
         NSApp.setActivationPolicy(.accessory)
@@ -36,27 +36,36 @@ struct WorkspaceWorkflowTests {
             ?? TestPDFFixtures.makeLabeledPDF(named: "workspace-workflow", pageSizes: Array(repeating: NSSize(width: 612, height: 792), count: 6))
         let source = try store.open(documentAt: url)
         let workspaceID = try #require(store.activeWorkspaceID(in: controller.windowID))
+        // AppKit can shrink this window to the current screen. Reserve its width
+        // for the four readers instead of relying on a large desktop plus sidebars.
+        store.setLeftSidebarVisible(false, in: controller.windowID)
         store.setRightSidebarVisible(false, in: controller.windowID)
-        window.setContentSize(NSSize(width: 1480, height: 940))
+        window.setContentSize(contentSize)
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
         let app = AppDelegate()
         app.installMenuForTesting(documentStore: store, controllers: [controller])
         settle(window)
+        let split = try #require(window.contentViewController as? SplitViewController)
+        let readers = split.readerWorkspaceViewController
+        try #require(readers.canSplitPane(layout: .sideBySide))
+        try #require(readers.canSplitPane(layout: .stacked))
 
         try invoke(.splitCurrentPDFRight, app: app)
         settle(window)
+        try #require(store.readerPanes(in: controller.windowID).count == 2)
+        try #require(store.focusedPane(in: controller.windowID) == .secondary)
         try invoke(.splitCurrentPDFDown, app: app)
         settle(window)
+        try #require(store.readerPanes(in: controller.windowID).count == 3)
         try invoke(.focusPaneLeft, app: app)
+        try #require(store.focusedPane(in: controller.windowID) == .primary)
         try invoke(.splitCurrentPDFDown, app: app)
         settle(window)
         let panes = store.readerPanes(in: controller.windowID)
         #expect(panes.count == 4)
         #expect(Set(panes.compactMap(\.sessionID)).count == 4)
         #expect(store.sessions(in: controller.windowID).map(\.id) == [source.id])
-        let split = try #require(window.contentViewController as? SplitViewController)
-        let readers = split.readerWorkspaceViewController
         for (index, pane) in panes.enumerated() {
             let reader = try #require(readers.readerViewController(for: pane.id))
             reader.goToPage(index)

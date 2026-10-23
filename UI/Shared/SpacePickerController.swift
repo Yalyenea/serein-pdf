@@ -558,7 +558,6 @@ final class SpacePickerController: NSObject, NSTextFieldDelegate, NSWindowDelega
 extension SpacePickerController {
     var testingPanel: NSPanel { panel }
     var testingNameButtons: [NSButton] { spaces.compactMap { rows[$0.id]?.nameButton } }
-    var testingIconButtons: [NSButton] { spaces.compactMap { rows[$0.id]?.iconButton } }
     var testingDeleteButtons: [NSButton] { spaces.compactMap { rows[$0.id]?.deleteButton } }
     var testingIconChoices: [NSButton] { iconChoices }
     var testingDraftIconButton: NSButton? { draftRow?.iconButton }

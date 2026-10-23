@@ -49,25 +49,11 @@ struct ContinuousReadingState: Equatable, Codable, Sendable {
 struct ContinuousReadingTarget: Equatable, Sendable {
     var sessionID: UUID
     var readingPosition: ReadingPosition
-
-    var pageIndex: Int {
-        readingPosition.pageIndex
-    }
 }
 
 struct ReaderSplitPair: Equatable, Sendable {
     var primarySessionID: UUID
     var secondarySessionID: UUID
-
-    func pane(containing sessionID: UUID) -> ReaderPane? {
-        if primarySessionID == sessionID {
-            return .primary
-        }
-        if secondarySessionID == sessionID {
-            return .secondary
-        }
-        return nil
-    }
 }
 
 struct WindowWorkspace: Equatable, Codable, Sendable {
@@ -227,10 +213,5 @@ struct WindowWorkspace: Equatable, Codable, Sendable {
                   group.sessionIDs.count >= 2 else { return nil }
             return ReaderSplitPair(primarySessionID: group.sessionIDs[0], secondarySessionID: group.sessionIDs[1])
         }
-    }
-
-    mutating func setSession(_ sessionID: UUID?, for pane: ReaderPane) {
-        guard paneIDs.contains(pane) else { return }
-        activeWorkspace.activeGroup?.sessionIDsByPane[pane] = sessionID
     }
 }

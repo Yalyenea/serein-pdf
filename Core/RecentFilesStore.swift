@@ -2,7 +2,6 @@ import Foundation
 
 protocol RecentFilesStore {
     func loadRecentFiles() throws -> [URL]
-    func recordOpen(for url: URL) throws -> [URL]
     func recordOpen(for urls: [URL]) throws -> [URL]
     func replaceURL(_ oldURL: URL, with newURL: URL) throws -> [URL]
 }

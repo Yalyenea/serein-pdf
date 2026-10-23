@@ -1046,14 +1046,6 @@ final class DocumentStore {
         return roots
     }
 
-    func pageCount(for sessionID: UUID) -> Int? {
-        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return nil }
-        if let pageCount = sessions[sessionIndex].pageCount {
-            return pageCount
-        }
-        return loadedPDFDocument(for: sessionID)?.pageCount
-    }
-
     func refreshExternallyChangedFile(at url: URL) {
         let normalizedURL = url.standardizedFileURL
         let matchingIndexes = sessions.indices.filter {

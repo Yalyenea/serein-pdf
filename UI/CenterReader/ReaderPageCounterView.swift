@@ -3,7 +3,6 @@ import AppKit
 /// A pane-local physical page counter with an inline jump field.
 final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
     var onBeginEditing: (() -> Void)?
-    var onEndEditing: (() -> Void)?
     var onGoToPage: ((Int) -> Bool)?
     var onReturnFocus: (() -> Void)?
 
@@ -139,7 +138,6 @@ final class ReaderPageCounterView: NSView, NSTextFieldDelegate {
         }
         field.isHidden = true
         button.isHidden = false
-        onEndEditing?()
         if restoreFocus { onReturnFocus?() }
     }
 

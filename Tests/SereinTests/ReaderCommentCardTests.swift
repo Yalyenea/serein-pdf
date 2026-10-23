@@ -9,6 +9,7 @@ final class ReaderCommentCardTests: XCTestCase {
         let fixture = try makeFixture()
         defer { fixture.close() }
         let keyWindow = NSApp.keyWindow
+        let readingBounds = fixture.pdfView.convert(fixture.pdfView.bounds, to: fixture.page)
         fixture.controller.handlePointerMoved(try fixture.event(.mouseMoved, in: fixture.annotation.bounds))
         settle(until: { fixture.controller.testingCommentPanel != nil })
 
@@ -60,12 +61,14 @@ final class ReaderCommentCardTests: XCTestCase {
         XCTAssertNil(fixture.controller.testingCommentPanel)
         XCTAssertTrue(fixture.window.firstResponder === fixture.pdfView)
         XCTAssertEqual(fixture.store.annotationGroups(for: fixture.sessionID).first?.comment, fixture.comment)
+        assertReadingPosition(in: fixture, matches: readingBounds)
     }
 
     func testClickingEachMarkupIconOpensFocusedEditorAndSavesToDocumentStore() throws {
         for type in AnnotationMarkupType.allCases {
             let fixture = try makeFixture(type: type)
             defer { fixture.close() }
+            let readingBounds = fixture.pdfView.convert(fixture.pdfView.bounds, to: fixture.page)
             XCTAssertNil(fixture.controller.testingCommentPanel)
             fixture.pdfView.mouseDown(with: try fixture.event(.leftMouseDown, in: fixture.iconBounds))
 
@@ -84,12 +87,14 @@ final class ReaderCommentCardTests: XCTestCase {
             XCTAssertEqual(fixture.annotation.contents, comment)
             XCTAssertEqual(fixture.store.annotationGroups(for: fixture.sessionID).first?.comment, comment)
             XCTAssertEqual(fixture.store.session(for: fixture.sessionID)?.isDirty, true)
+            assertReadingPosition(in: fixture, matches: readingBounds)
         }
     }
 
     func testCancelAndSessionChangesCloseCardWithoutSavingDrafts() throws {
         let fixture = try makeFixture()
         defer { fixture.close() }
+        let readingBounds = fixture.pdfView.convert(fixture.pdfView.bounds, to: fixture.page)
         fixture.pdfView.mouseDown(with: try fixture.event(.leftMouseDown, in: fixture.iconBounds))
         let cancelledPanel = try XCTUnwrap(fixture.controller.testingCommentPanel)
         let text = try XCTUnwrap(cancelledPanel.firstResponder as? NSTextView)
@@ -135,6 +140,17 @@ final class ReaderCommentCardTests: XCTestCase {
         fixture.controller.sessionDidChange()
         settle(0.17)
         XCTAssertNil(fixture.controller.testingCommentPanel)
+        assertReadingPosition(in: fixture, matches: readingBounds)
+    }
+
+    private func assertReadingPosition(in fixture: Fixture, matches expected: NSRect,
+                                       file: StaticString = #filePath, line: UInt = #line) {
+        let actual = fixture.pdfView.convert(fixture.pdfView.bounds, to: fixture.page)
+        XCTAssertTrue(fixture.pdfView.currentPage === fixture.page, file: file, line: line)
+        // Allow subpixel layout rounding while still catching navigation or zoom.
+        XCTAssertEqual(actual.origin.x, expected.origin.x, accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(actual.origin.y, expected.origin.y, accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(actual.size, expected.size, file: file, line: line)
     }
 
     private func makeFixture(type: AnnotationMarkupType = .highlight) throws -> Fixture {
@@ -174,9 +190,6 @@ final class ReaderCommentCardTests: XCTestCase {
         let controller = ReaderAnnotationInteractionController(documentStore: store, pdfView: pdfView)
         controller.activeSessionID = session.id
         controller.install(in: pdfView)
-        controller.onNavigateRequested = { _ in
-            XCTFail("Editing a visible comment must not move the reader")
-        }
         pdfView.onAnnotationActivationRequested = { [weak controller] event in
             controller?.activateAnnotation(at: event) ?? false
         }

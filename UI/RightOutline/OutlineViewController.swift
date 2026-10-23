@@ -311,12 +311,6 @@ final class OutlineRowView: NSControl {
         )
     }
 
-    func setSelected(_ selected: Bool) {
-        guard isRowSelected != selected else { return }
-        isRowSelected = selected
-        updateSelectionAppearance()
-    }
-
     func updateAppearance(attributedTitle: NSAttributedString, isExpanded: Bool, isSelected: Bool) {
         textField.attributedStringValue = attributedTitle
         isRowExpanded = isExpanded

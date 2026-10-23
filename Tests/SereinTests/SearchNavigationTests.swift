@@ -487,6 +487,11 @@ final class SearchNavigationTests: XCTestCase {
         flushSearchNavigationLayout(windowController.window)
         try assertReader(reader, displays: firstMatch, in: firstSession.id, store: store)
 
+        // At the document end, scroll limits can keep the previous page at the
+        // viewport top even though PDFKit's current page is the search target.
+        let previousViewport = try XCTUnwrap(reader.currentPosition)
+        let previousScale = reader.pdfView.scaleFactor
+
         XCTAssertTrue(split.findNextMatch())
         flushSearchNavigationLayout(windowController.window)
         try assertReader(reader, displays: secondMatch, in: secondSession.id, store: store)
@@ -506,7 +511,10 @@ final class SearchNavigationTests: XCTestCase {
         XCTAssertEqual(reader.pdfView.document?.index(for: currentPage), backPosition.pageIndex)
         XCTAssertEqual(store.session(for: firstSession.id)?.lastReadPosition, backPosition)
         let livePosition = try XCTUnwrap(reader.testingCurrentReadingPosition)
-        XCTAssertEqual(livePosition.pageIndex, backPosition.pageIndex)
+        XCTAssertEqual(livePosition.pageIndex, previousViewport.pageIndex)
+        XCTAssertEqual(livePosition.point.x, previousViewport.point.x, accuracy: 1)
+        XCTAssertEqual(livePosition.point.y, previousViewport.point.y, accuracy: 1)
+        XCTAssertEqual(reader.pdfView.scaleFactor, previousScale, accuracy: 0.001)
         let backTargetSelection = try XCTUnwrap(store.searchSelection(for: firstMatch))
         let backTargetPage = try XCTUnwrap(backTargetSelection.pages.first)
         let backTargetBounds = backTargetSelection.bounds(for: backTargetPage)
