@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4.152.0/config-schema.json",
+  "name": "serein-website",
+  "account_id": "7e2b42d1cd23a8fa44b55fbd593f45c1",
+  "compatibility_date": "2026-10-22",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./Website",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+  "routes": [
+    { "pattern": "serein.yfff.me", "custom_domain": true }
+  ]
+}

@@ -1,0 +1,4 @@
+# Publish only the page and its assets, keeping repository notes private.
+/*
+!/index.html
+!/assets/

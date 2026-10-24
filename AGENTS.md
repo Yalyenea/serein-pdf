@@ -40,6 +40,7 @@ Native macOS PDF reader.
 - Prefer validating UI and interaction changes with real PDFs from `~/Downloads` when available.
 - Prefer clarity and compactness over premature flexibility.
 - Don't use computer-use tool unless i ask.
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
 
 ## Release Process
 

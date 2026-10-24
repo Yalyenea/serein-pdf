@@ -541,7 +541,7 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 
 ### 8.3 Milestone 13.1 网站后续
 
-- 单页静态网站包含功能、截图、快捷键、文档与 GitHub 入口，支持中英文和明暗主题；通过 GitHub Pages 部署到 `serein.yfff.me`。
+- 单页静态网站包含功能、截图、安装问答与下载入口，支持中英文和明暗主题；快捷键与发行说明链接至 GitHub。Cloudflare Workers 通过 `wrangler.website.jsonc` 托管到 `https://serein.yfff.me`，GitHub Actions 负责网站检查；`.assetsignore` 仅发布首页与资源。
 - 阅读器与批注截图已补充；PDF 演示待需要时补充。
 
 ### 8.4 多主题预设与自定义背景 ✅

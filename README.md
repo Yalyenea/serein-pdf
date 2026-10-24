@@ -6,7 +6,7 @@
 
 A minimal PDF reader for macOS, built with Swift, AppKit, and PDFKit.
 
-[Website](http://serein.yfff.me) · [Download](https://github.com/Yalyenea/serein-pdf/releases/latest) · [Changelog](CHANGELOG.md)
+[Website](https://serein.yfff.me) · [Download](https://github.com/Yalyenea/serein-pdf/releases/latest) · [Changelog](CHANGELOG.md)
 
 ![Serein reading a PDF with page thumbnails in the sidebar](Website/assets/serein-reader-light.webp)
 
