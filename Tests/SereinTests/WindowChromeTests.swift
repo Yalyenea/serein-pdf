@@ -3711,6 +3711,53 @@ struct WindowChromeTests {
         #expect(reader.shouldApplyFitWidth(targetScale, for: session) == true)
     }
 
+    @Test(arguments: [TabPresentationMode.verticalSidebar, .horizontalTitlebar])
+    func hiddenFindBarDoesNotImposeMinimumReaderWidth(tabMode: TabPresentationMode) throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        store.setTabPresentationMode(tabMode)
+        store.setLeftSidebarVisible(false)
+        store.setRightSidebarVisible(false)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let window = try #require(controller.window)
+        let split = try #require(window.contentViewController as? SplitViewController)
+        let workspace = split.readerWorkspaceViewController
+        let reader = workspace.primaryReaderViewController
+
+        // A narrow display can constrain the window before its first presentation.
+        window.setContentSize(NSSize(width: 795, height: 940))
+        controller.showWindow(nil)
+        for width: CGFloat in [795, 560, 795] {
+            window.setContentSize(NSSize(width: width, height: 640))
+            flushLayout(window)
+            let available = try #require(window.contentView).bounds
+            #expect(abs(split.view.bounds.width - available.width) < 1)
+            #expect(abs(workspace.view.bounds.width - available.width) < 1)
+            #expect(abs(reader.view.bounds.width - workspace.view.bounds.width) < 1)
+            #expect(abs(reader.pdfView.bounds.width - reader.view.bounds.width) < 1)
+            #expect(workspace.view.fittingSize.width <= ReaderPaneGeometry.minimumSize.width)
+        }
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "narrow-reader-find"))
+        store.setRightSidebarVisible(false)
+        flushLayout(window)
+        reader.showFindBar()
+        flushLayout(window)
+        let findBar = try #require(findDescendant(of: FindBarView.self, in: reader.view))
+        #expect(reader.isFindBarVisible)
+        #expect(abs(findBar.bounds.width - reader.view.bounds.width) < 1)
+
+        reader.hideFindBar()
+        flushLayout(window)
+        #expect(workspace.view.fittingSize.width <= ReaderPaneGeometry.minimumSize.width)
+
+        _ = store.newBlankTab()
+        flushLayout(window)
+        #expect(workspace.view.fittingSize.width <= ReaderPaneGeometry.minimumSize.width)
+        #expect(abs(reader.view.bounds.width - workspace.view.bounds.width) < 1)
+    }
+
     @Test
     func emptyReaderStaysBlankWhenNoDocumentIsOpen() {
         _ = NSApplication.shared

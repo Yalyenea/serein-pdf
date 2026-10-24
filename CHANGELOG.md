@@ -5,6 +5,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Reading
+- Allow narrow reader layouts by applying the search bar's width constraint only while it is visible. Cover both tab presentations, 795- and 560-point windows, and empty, PDF, search, and blank-tab transitions.
 - Locate numbered bibliography entries when citation links specify only a page. Share the resolved position between previews, direct navigation, and splits; resolve unspecified navigation coordinates before scrolling.
 - Keep hanging reference numbers inside single-column previews and fit a lone bibliography column without letting running headers or distant page content widen it.
 
@@ -19,11 +20,13 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a delete button to each Space row. Hide it while renaming or when only one Space remains; update its color with the current theme.
 
 ### Development
+- Stabilize comment double-click tests with a fixed zoom, a visible highlight, and queued mouse-down and mouse-up events. Verify that the comment card enters editing without opening the sidebar.
+- Wait for deferred Return-key tab renames to commit, and verify thumbnail recovery when the system has evicted offscreen cached images.
 - Keep Swift Testing on the physical main thread in a dedicated host and require complete passing summaries from both test frameworks before reporting success.
 - Remove unused reader search/comment wrappers, the old night-mode forwarding chain, obsolete model helpers, write-only fields, and unused test hooks. Preserve framework callbacks and references that keep observers, sharing UI, and cached PDF pages alive.
 - Check search-history restoration against the actual viewport position and zoom before leaving the document. Keep separate checks for the navigation target, persisted history, and visible search result; the last page's scroll limit can leave the previous page at the viewport top.
 - Give the four-pane workflow test enough reader space by hiding both sidebars. Cover 800 × 600 and 1480 × 940 window requests, checking pane counts and directional focus after each step while retaining workspace restoration checks.
-- Validation (2026-10-22): complete `just test` passed with 685 XCTest tests (one publisher-PDF test skipped because its sample was not supplied) and 246 Swift Testing tests in 22 suites. Both frameworks reported zero failures.
+- Validation (2026-10-23): complete `just test` passed with 685 XCTest tests and 247 Swift Testing tests in 22 suites, with zero failures or skips. Supplying `SEREIN_REFERENCE_TEST_PDF` also validated 73 citation previews against the original publisher PDF.
 
 ## [0.8.0] - 2026-10-17
 

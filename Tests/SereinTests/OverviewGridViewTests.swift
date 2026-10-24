@@ -32,7 +32,7 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0..<6))
     }
 
-    func testClipViewScrollingRendersNewNeighborhoodReleasesFarPagesAndRestoresFromCache() {
+    func testClipViewScrollingRendersNewNeighborhoodReleasesFarPagesAndRestoresVisiblePages() {
         _ = NSApplication.shared
         let grid = makeLaidOutGrid(pageCount: 60)
         grid.testingFlushRenders()
@@ -44,9 +44,14 @@ final class OverviewGridViewTests: XCTestCase {
         XCTAssertEqual(grid.testingThumbnailImageIndices, Set(18...50))
         XCTAssertEqual(grid.testingLiveItemViewCount, 33)
 
-        // Back to the top: cached pages reappear synchronously, no rasterization.
+        // NSCache may evict offscreen bitmaps under memory pressure. Reuse any
+        // survivors immediately and render cache misses before checking recovery.
         XCTAssertTrue(grid.testingClipViewScroll(to: .zero))
-        XCTAssertEqual(grid.testingThumbnailImageIndices, Set(0...20))
+        let topPages = Set(0...20)
+        XCTAssertTrue(grid.testingThumbnailImageIndices.isSubset(of: topPages))
+        XCTAssertEqual(grid.testingPendingRenderIndices, topPages.subtracting(grid.testingThumbnailImageIndices))
+        grid.testingFlushRenders()
+        XCTAssertEqual(grid.testingThumbnailImageIndices, topPages)
         XCTAssertTrue(grid.testingPendingRenderIndices.isEmpty)
     }
 

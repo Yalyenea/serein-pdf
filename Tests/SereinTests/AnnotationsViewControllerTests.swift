@@ -746,11 +746,20 @@ final class AnnotationsViewControllerTests: XCTestCase {
             windowController.window?.contentViewController as? SplitViewController
         )
         let reader = split.readerViewController
+        // Fix the zoom before deriving click coordinates so this interaction
+        // test is independent of deferred fit-width reflow during window setup.
+        store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
+        reader.pdfView.layoutDocumentView()
+        reader.pdfView.go(to: selection)
+        flushAnnotationNavigationLayout(windowController.window)
         let annotation = try XCTUnwrap(records.first?.annotation)
         let page = try XCTUnwrap(annotation.page)
         let annotationBounds = reader.pdfView.convert(annotation.bounds, from: page)
+        let pointInPDF = NSPoint(x: annotationBounds.midX, y: annotationBounds.midY)
+        XCTAssertTrue(reader.pdfView.visibleRect.contains(pointInPDF),
+                      "Highlight \(annotationBounds) must be visible in \(reader.pdfView.visibleRect)")
         let pointInWindow = reader.pdfView.convert(
-            NSPoint(x: annotationBounds.midX, y: annotationBounds.midY),
+            pointInPDF,
             to: nil
         )
         let event = try XCTUnwrap(
@@ -767,11 +776,29 @@ final class AnnotationsViewControllerTests: XCTestCase {
             )
         )
 
-        reader.pdfView.mouseDown(with: event)
+        let mouseUp = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseUp, location: pointInWindow, modifierFlags: [], timestamp: 0.01,
+            windowNumber: try XCTUnwrap(windowController.window).windowNumber,
+            context: nil, eventNumber: 2, clickCount: 2, pressure: 0
+        ))
+        // Match the app event loop (a2844fc); queue the release first so a missed
+        // annotation hit cannot leave PDFKit waiting inside its native tracking loop.
+        NSApp.postEvent(mouseUp, atStart: true)
+        NSApp.postEvent(event, atStart: true)
+        let dispatched = try XCTUnwrap(NSApp.nextEvent(
+            matching: .leftMouseDown, until: .now, inMode: .default, dequeue: true
+        ))
+        XCTAssertEqual(NSApp.currentEvent?.type, .leftMouseDown)
+        NSApp.sendEvent(dispatched)
 
         XCTAssertFalse(store.isRightSidebarVisible(in: store.defaultWindowID))
         let panel = try XCTUnwrap(windowController.window?.childWindows?.compactMap { $0 as? AnnotationCommentPanel }.first)
+        let dispatchedUp = try XCTUnwrap(NSApp.nextEvent(
+            matching: .leftMouseUp, until: .now, inMode: .default, dequeue: true
+        ))
+        NSApp.sendEvent(dispatchedUp)
         XCTAssertTrue(panel.isVisible)
+        XCTAssertTrue(panel.editor.isEditing)
         XCTAssertEqual(store.annotationGroups(for: session.id).first?.groupID, group.groupID)
     }
 

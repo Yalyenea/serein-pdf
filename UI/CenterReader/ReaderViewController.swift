@@ -571,6 +571,7 @@ final class ReaderViewController: NSViewController {
     private let referencePreview = ReaderReferencePreviewController()
     private lazy var translationController = ReaderTranslationController(documentStore: documentStore)
     private let findBarView = FindBarView()
+    private var findBarWidthConstraint: NSLayoutConstraint?
     private var pdfContainerTopConstraint: NSLayoutConstraint?
     private var readerState = ReaderState()
     private(set) var displayedSessionID: UUID?
@@ -1070,6 +1071,8 @@ final class ReaderViewController: NSViewController {
 
         let pdfTop = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
         pdfContainerTopConstraint = pdfTop
+        // Hidden search controls must not impose their minimum width on the reader.
+        findBarWidthConstraint = findBarView.widthAnchor.constraint(equalTo: container.widthAnchor)
 
         NSLayoutConstraint.activate([
             emptyStateWordmark.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -1106,7 +1109,6 @@ final class ReaderViewController: NSViewController {
             overviewGridView.topAnchor.constraint(equalTo: container.topAnchor),
             overviewGridView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             findBarView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            findBarView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             findBarView.topAnchor.constraint(equalTo: container.topAnchor),
             findBarView.heightAnchor.constraint(equalToConstant: 36),
         ])
@@ -2486,6 +2488,7 @@ final class ReaderViewController: NSViewController {
         onFocusRequested?()
         if findBarView.isHidden {
             findBarView.isHidden = false
+            findBarWidthConstraint?.isActive = true
             pdfContainerTopConstraint?.isActive = false
             pdfContainerTopConstraint = pdfContainerView.topAnchor.constraint(equalTo: findBarView.bottomAnchor)
             pdfContainerTopConstraint?.isActive = true
@@ -2512,6 +2515,7 @@ final class ReaderViewController: NSViewController {
         guard let container = view as NSView? else { return }
         guard findBarView.isHidden == false else { return }
         findBarView.isHidden = true
+        findBarWidthConstraint?.isActive = false
         pdfContainerTopConstraint?.isActive = false
         pdfContainerTopConstraint = pdfContainerView.topAnchor.constraint(equalTo: container.topAnchor)
         pdfContainerTopConstraint?.isActive = true

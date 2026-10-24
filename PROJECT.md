@@ -81,7 +81,7 @@ flowchart LR
 | tab 展示 | `verticalSidebar` / `horizontalTitlebar` 动态切换,共用同一套文档切换命令 |
 | 中栏承载 | `ReaderWorkspaceViewController` 按稳定 pane ID 管理动态 Reader,以 `NSSplitView` + `ReaderSplitHostView` 递归呈现分屏树 |
 | 目录来源 | 右栏或浮动目录需要时才从 `PDFDocument.outlineRoot` 抽取 `OutlineNode` |
-| 搜索预览 | find bar 只负责输入 / scope / 大小写 / 全词 / 导航,所有 preview 与命中列表都放右栏 |
+| 搜索预览 | find bar 只负责输入 / scope / 大小写 / 全词 / 导航,所有 preview 与命中列表都放右栏；搜索条仅显示时约束为阅读区宽度，隐藏时不参与阅读区最小宽度计算 |
 | 搜索范围 | `This Document` / `All Open`;`All Open` 覆盖当前工作区的公开 PDF tabs,跨文档命中点击先切 session 再跳转；结果以窗口级 `SearchSnapshot` 显式重建，读取不触发 PDF IO |
 | 多 PDF 连续阅读 | 工作区内连续组保存有序 session IDs;不合成虚拟 PDF,只在页边界切换到组内相邻 PDF |
 | PDF 热重载 | `DocumentStore` 通过文件 / 目录事件监听已打开 PDF,空闲时不轮询;原地写入只检查对应文件,原子替换及目录重建后重新绑定监听;只重载 clean sessions,优先恢复 PDFView 实时页码;dirty 批注会话保持内存状态 |
@@ -500,6 +500,14 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 搜索回退分别验证导航目标、持久化历史和实际视口。连续阅读到文档末尾时，滚动边界可能让上一页仍位于视口顶部；回退后的视口应与离开前的页码、页内坐标和缩放比较，不能假定视口顶部页等于搜索目标页。
 
 四区工作流测试收起左右侧栏，覆盖 800 × 600 与 1480 × 940 两种窗口请求尺寸。AppKit 可能按当前屏幕缩小窗口，因此操作前检查实际可用分屏空间，再逐步验证阅读区数量与焦点，最后验证工作区恢复和关闭行为。生产界面继续使用每区至少 320 × 160 pt 的限制。
+
+窄屏回归覆盖两种 tab 形态、795 / 560 pt 窗口宽度，以及空窗、PDF、搜索条开关和空白 tab。隐藏搜索条后，阅读区的适配尺寸应允许原有 320 pt 下限；搜索条显示时仍铺满阅读区。
+
+评论双击测试先固定 100% 缩放并显示目标高亮，再通过 AppKit 事件队列派发按下 / 抬起事件，验证评论卡进入编辑状态且右栏保持关闭。此前 `a2844fc` 修复图标命中对 `currentEvent` 的依赖；本次入口为 `AnnotationsViewControllerTests.testDoubleClickHighlightOpensOwnCommentPanel`，补充首次 fit-width 重排使点击坐标失效，以及缺少抬起事件使 PDFKit 等待的触发条件。
+
+标签改名测试等待主队列提交回调后再检查名称与焦点。`51bb52e` 已覆盖切换工作区时提交，本次补齐 Enter 提交入口，移除固定 20ms 等待。缩略图回滚测试允许 `NSCache` 回收离屏图片，检查已恢复图片与待渲染页的对应关系，并等待缺失图片恢复完整。
+
+2026-10-23 验证：设置 `SEREIN_REFERENCE_TEST_PDF` 后完整 `just test` 通过，685 项 XCTest、247 项 Swift Testing，0 失败、0 跳过；真实 PDF 的 73 个引用预览通过。
 
 ## 7. 已完成里程碑(概览)
 

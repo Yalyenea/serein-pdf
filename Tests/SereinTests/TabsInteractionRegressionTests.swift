@@ -68,7 +68,11 @@ final class TabsInteractionRegressionTests: XCTestCase {
             XCTAssertTrue(window.firstResponder === editor)
             editor.insertText("Renamed tab", replacementRange: editor.selectedRange())
             NSApp.sendEvent(makeReturnKeyEvent(in: window))
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+            // As in the workspace-switch regression, wait for the queued rename
+            // callback instead of assuming a fixed delay advances the main queue.
+            let renameCommitted = expectation(description: "Return tab rename completed")
+            DispatchQueue.main.async { renameCommitted.fulfill() }
+            wait(for: [renameCommitted], timeout: 2)
 
             XCTAssertEqual(store.session(for: session.id)?.title, "Renamed tab")
             XCTAssertFalse(field.isEditable)
