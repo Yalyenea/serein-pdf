@@ -1119,13 +1119,23 @@ final class DocumentStore {
 
     func setScaleMode(_ mode: ReaderScaleMode, scaleFactor: CGFloat, for sessionID: UUID) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        let modeChanged = sessions[sessionIndex].scaleMode != mode
+        let previousMode = sessions[sessionIndex].scaleMode
+        let modeChanged = previousMode != mode
         let scaleChanged = abs(sessions[sessionIndex].zoomScale - scaleFactor) > 0.001
         let needsUpdate = modeChanged || scaleChanged
         guard needsUpdate else { return }
 
         sessions[sessionIndex].scaleMode = mode
         sessions[sessionIndex].zoomScale = scaleFactor
+        if modeChanged, appConfiguration.reader.autoLockAfterFitTextWidth {
+            // Only mode transitions change Lock so a manual unlock survives page refits.
+            if mode == .fitTextWidth {
+                sessions[sessionIndex].isHorizontalPanLocked = !sessions[sessionIndex].isBlank
+                    && !sessions[sessionIndex].displayMode.usesBookLayout
+            } else if previousMode == .fitTextWidth {
+                sessions[sessionIndex].isHorizontalPanLocked = false
+            }
+        }
         persistReadingState(for: sessions[sessionIndex])
         if modeChanged {
             notifyChange(.content, sessionIDs: [sessionID])
@@ -1511,6 +1521,8 @@ final class DocumentStore {
     func updateAppConfiguration(_ configuration: AppConfiguration) {
         guard appConfiguration != configuration else { return }
         let previousFitWidthOnOpen = appConfiguration.reader.fitWidthOnOpen
+        let autoLockChanged = appConfiguration.reader.autoLockAfterFitTextWidth
+            != configuration.reader.autoLockAfterFitTextWidth
         let previousSwapped = appConfiguration.layout.sidebarsSwapped
         let newSwapped = configuration.layout.sidebarsSwapped
         let widthChangesOnlySwapDefaults = previousSwapped != newSwapped &&
@@ -1542,8 +1554,19 @@ final class DocumentStore {
 
         for index in sessions.indices {
             sessions[index].annotationSavePolicy = configuration.annotations.autoSavePolicy
+            let wasTextFit = sessions[index].scaleMode == .fitTextWidth
             if fitWidthChanged, sessions[index].scaleMode != targetScaleMode {
                 sessions[index].scaleMode = targetScaleMode
+            }
+            if autoLockChanged, wasTextFit {
+                sessions[index].isHorizontalPanLocked = configuration.reader.autoLockAfterFitTextWidth
+                    && sessions[index].scaleMode == .fitTextWidth
+                    && !sessions[index].isBlank && !sessions[index].displayMode.usesBookLayout
+            } else if wasTextFit, sessions[index].scaleMode != .fitTextWidth,
+                      configuration.reader.autoLockAfterFitTextWidth {
+                sessions[index].isHorizontalPanLocked = false
+            }
+            if fitWidthChanged || autoLockChanged && wasTextFit {
                 persistReadingState(for: sessions[index])
             }
         }

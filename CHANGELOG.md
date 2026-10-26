@@ -5,6 +5,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Reading
+- Add an optional Auto Lock after Fit Text Width setting. Lock when entering text fit and unlock when switching to another zoom mode; preserve manual unlocks during page and viewport refits, and keep Global Lock independent.
 - Allow narrow reader layouts by applying the search bar's width constraint only while it is visible. Cover both tab presentations, 795- and 560-point windows, and empty, PDF, search, and blank-tab transitions.
 - Locate numbered bibliography entries when citation links specify only a page. Share the resolved position between previews, direct navigation, and splits; resolve unspecified navigation coordinates before scrolling.
 - Keep hanging reference numbers inside single-column previews and fit a lone bibliography column without letting running headers or distant page content widen it.

@@ -1176,6 +1176,10 @@ final class ReaderViewController: NSViewController {
         applyProgrammaticScale(scale, viewportAnchor: anchor)
         displayedScaleMode = .fitTextWidth
         documentStore.setScaleMode(.fitTextWidth, scaleFactor: pdfView.scaleFactor, for: session.id)
+        // Store notifications are suppressed during the fit; apply its new Lock here.
+        if let fittedSession = targetSession() {
+            applyHorizontalPanLock(documentStore.effectiveHorizontalPanLock(for: fittedSession))
+        }
         if let position = currentReadingPosition() {
             displayedReadingPosition = position
             documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
@@ -2952,7 +2956,12 @@ final class ReaderViewController: NSViewController {
         updatePanLockIndicator()
         if isHorizontalPanLocked != documentStore.effectiveHorizontalPanLock(for: session) {
             applyHorizontalPanLock(documentStore.effectiveHorizontalPanLock(for: session))
-            return true
+            // A Lock-only change must not sample the viewport while its constraint settles.
+            // A simultaneous scale command still needs the checks below.
+            if displayedScaleMode == session.scaleMode,
+               abs(pdfView.scaleFactor - session.zoomScale) <= 0.001 {
+                return true
+            }
         }
 
         guard let livePosition = currentReadingPosition() else { return false }

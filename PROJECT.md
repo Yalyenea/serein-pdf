@@ -124,6 +124,8 @@ Space 浮层每行提供删除按钮；改名时隐藏按钮，仅剩一个 Spac
 
 全局 Lock：`Shift+L` 切换所有窗口及后续打开 PDF 的横向位置锁定与手势缩放限制，书籍模式除外。`reader.global_horizontal_pan_lock` 保存全局开关；开启时禁用单文件 `L`，不改写各 PDF 的独立 Lock 状态，关闭后恢复。View 菜单、命令面板和快捷键设置提供入口。
 
+Settings → General → Reading 提供 `Auto lock after fit text width`，配置为 `reader.auto_lock_after_fit_text_width`，默认关闭。开启后，进入文本宽度适配时锁定，切换到其他缩放模式时解锁；设置切换立即应用于已处于文本适配的文档。`L` 手动解锁后，换页或阅读区尺寸变化时保持解锁，并保存该状态；全局 Lock 继续独立生效，书籍模式不启用锁定。相关验证通过 157 项 XCTest 与 36 项 Swift Testing，覆盖配置持久化、模式切换、手动解锁、全局锁及中英文设置布局。
+
 ### 4.1 信息架构
 
 无缝页面：`Cmd+Option+P`、View 菜单与 Settings → General → Reading 切换页间空隙，`reader.seamless_pages` 默认关闭；切换保留阅读位置与缩放。滚动边界贴合首尾纸面；单页与双页连续模式保留系统惯性减速。Settings 的 Scroll Speed 调整连续模式滚动速度，`reader.scroll_speed` 范围为 0.5–3.0，默认 1.0；手指拖动与惯性阶段使用相同倍率，设置立即生效。

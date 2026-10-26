@@ -39,10 +39,14 @@ final class LocalizationTests: XCTestCase {
             XCTAssertEqual(window.title, language == .chinese ? "设置" : "Settings")
             var views = [try XCTUnwrap(window.contentView)]
             var popup: NSPopUpButton?
+            var autoLock: NSButton?
             while let view = views.popLast() {
                 if view.identifier?.rawValue == "languagePopUp" { popup = view as? NSPopUpButton }
+                if view.identifier?.rawValue == "autoLockAfterFitTextWidthCheckbox" { autoLock = view as? NSButton }
                 views.append(contentsOf: view.subviews)
             }
+            XCTAssertEqual(try XCTUnwrap(autoLock).title, language == .chinese
+                ? "适合文本宽度后自动锁定" : "Auto lock after fit text width")
             let control = try XCTUnwrap(popup)
             XCTAssertEqual(control.itemTitles, [language == .chinese ? "自动" : "Automatic", "English", "中文"])
             XCTAssertEqual(control.selectedItem?.representedObject as? String, language.rawValue)

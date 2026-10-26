@@ -3,6 +3,20 @@ import XCTest
 @testable import Serein
 
 final class AppConfigurationTests: XCTestCase {
+    func testAutoLockAfterFitTextWidthPersistsAndValidates() throws {
+        try withTemporaryConfigRoot(self) { rootURL in
+            let store = try AppConfigurationStore(fileURL: rootURL.appendingPathComponent("config.toml"))
+            var configuration = try store.load()
+            XCTAssertFalse(configuration.reader.autoLockAfterFitTextWidth)
+            for enabled in [true, false] {
+                configuration.reader.autoLockAfterFitTextWidth = enabled
+                try store.save(configuration)
+                XCTAssertEqual(try store.load(), configuration)
+            }
+        }
+        XCTAssertThrowsError(try AppConfigurationParser().parse("[reader]\nauto_lock_after_fit_text_width = yes"))
+    }
+
     func testWorkspaceNavigationShortcutsPersistOverridesAndClearedBindings() throws {
         try withTemporaryConfigRoot(self) { rootURL in
             let store = try AppConfigurationStore(fileURL: rootURL.appendingPathComponent("config.toml"))

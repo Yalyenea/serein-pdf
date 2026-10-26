@@ -90,23 +90,87 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertFalse(store.effectiveHorizontalPanLock(for: second))
     }
 
+    func testAutoTextFitLockFollowsModeAndPreservesManualUnlockDuringRefits() throws {
+        let store = makeStore()
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "auto-text-lock"))
+        store.setScaleMode(.fitTextWidth, scaleFactor: 1.5, for: session.id)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+        var configuration = store.appConfiguration
+        configuration.reader.autoLockAfterFitTextWidth = true
+        store.updateAppConfiguration(configuration)
+        XCTAssertTrue(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+
+        for mode in [ReaderScaleMode.manual, .fitWidth, .fitHeight] {
+            store.setScaleMode(mode, scaleFactor: 1, for: session.id)
+            XCTAssertFalse(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+            store.setScaleMode(.fitTextWidth, scaleFactor: 1.5, for: session.id)
+            XCTAssertTrue(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+        }
+        store.setHorizontalPanLocked(false, for: session.id)
+        store.setScaleMode(.fitTextWidth, scaleFactor: 1.8, for: session.id)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+        configuration.reader.autoLockAfterFitTextWidth = false
+        store.updateAppConfiguration(configuration)
+        store.setHorizontalPanLocked(true, for: session.id)
+        store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
+        XCTAssertTrue(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+    }
+
+    func testAutoTextFitLockHandlesGlobalLockBookModeAndSettingsChanges() throws {
+        var configuration = AppConfiguration.default
+        configuration.reader.autoLockAfterFitTextWidth = true
+        let store = makeStore(appConfiguration: configuration)
+        let session = try store.open(documentAt: makeTemporaryPDF(named: "auto-lock-settings"))
+        store.setScaleMode(.fitTextWidth, scaleFactor: 1.5, for: session.id)
+        configuration.reader.globalHorizontalPanLock = true
+        store.updateAppConfiguration(configuration)
+        store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
+        XCTAssertTrue(store.effectiveHorizontalPanLock(for: try XCTUnwrap(store.session(for: session.id))))
+        configuration.reader.globalHorizontalPanLock = false
+        store.updateAppConfiguration(configuration)
+        XCTAssertFalse(store.effectiveHorizontalPanLock(for: try XCTUnwrap(store.session(for: session.id))))
+
+        store.setDisplayMode(.book, for: session.id)
+        store.setScaleMode(.fitTextWidth, scaleFactor: 1.5, for: session.id)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+        store.setDisplayMode(.singlePage, for: session.id)
+        store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
+        store.setScaleMode(.fitTextWidth, scaleFactor: 1.5, for: session.id)
+        configuration.reader.autoLockAfterFitTextWidth = false
+        store.updateAppConfiguration(configuration)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+        configuration.reader.autoLockAfterFitTextWidth = true
+        store.updateAppConfiguration(configuration)
+        configuration.reader.fitWidthOnOpen = true
+        store.updateAppConfiguration(configuration)
+        XCTAssertEqual(store.session(for: session.id)?.scaleMode, .fitWidth)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: session.id)).isHorizontalPanLocked)
+    }
+
     func testTextWidthFitModePersistsAcrossReopenAndRestore() throws {
         let persistence = InMemoryDocumentStorePersistence()
         let readingStates = InMemoryReadingStateStore()
-        let store = makeStore(persistence: persistence, readingStateStore: readingStates)
+        var configuration = AppConfiguration.default
+        configuration.reader.autoLockAfterFitTextWidth = true
+        let store = makeStore(persistence: persistence, readingStateStore: readingStates, appConfiguration: configuration)
         let session = try store.open(documentAt: makeTemporaryPDF(named: "text-fit-state"))
         store.setScaleMode(.fitTextWidth, scaleFactor: 1.75, for: session.id)
         let state = try XCTUnwrap(readingStates.states[session.url])
         let decoded = try JSONDecoder().decode(PersistedReadingState.self, from: JSONEncoder().encode(state))
         XCTAssertEqual(decoded.scaleMode, .fitTextWidth)
-        let restored = makeStore(persistence: persistence, readingStateStore: readingStates)
+        XCTAssertEqual(decoded.isHorizontalPanLocked, true)
+        let restored = makeStore(persistence: persistence, readingStateStore: readingStates, appConfiguration: configuration)
         try restored.restorePersistedState()
         XCTAssertEqual(restored.activeSession?.scaleMode, .fitTextWidth)
         XCTAssertEqual(restored.activeSession?.zoomScale, 1.75)
+        XCTAssertEqual(restored.activeSession?.isHorizontalPanLocked, true)
+        // A manual unlock in text fit is part of the saved reading state.
+        store.setHorizontalPanLocked(false, for: session.id)
         store.close(sessionID: session.id)
         let reopened = try store.open(documentAt: session.url)
         XCTAssertEqual(reopened.scaleMode, .fitTextWidth)
         XCTAssertEqual(reopened.zoomScale, 1.75)
+        XCTAssertFalse(reopened.isHorizontalPanLocked)
     }
 
     func testReadingStateWithoutPanLockStillDecodes() throws {

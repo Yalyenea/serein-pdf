@@ -2,7 +2,7 @@ import AppKit
 
 private enum SettingsWindowMetrics {
     static let contentWidth: CGFloat = 680
-    static let generalContentSize = NSSize(width: contentWidth, height: 766)
+    static let generalContentSize = NSSize(width: contentWidth, height: 794)
     static let libraryContentSize = NSSize(width: contentWidth, height: 484)
     static let shortcutsContentSize = NSSize(width: contentWidth, height: 620)
     static let pageSegmentWidth: CGFloat = 88
@@ -277,6 +277,11 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         target: nil,
         action: nil
     )
+    private let autoLockAfterFitTextWidthCheckbox = NSButton(
+        checkboxWithTitle: L10n.text("Auto lock after fit text width", "适合文本宽度后自动锁定"),
+        target: nil,
+        action: nil
+    )
     private let autoSavePopUp = NSPopUpButton()
     private let scrollSpeedSlider = NSSlider(value: 1, minValue: 0.5, maxValue: 3, target: nil, action: nil)
     private let scrollSpeedValueLabel = NSTextField(labelWithString: "1.0×")
@@ -455,6 +460,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         applyBackgroundControls()
         selectItem(in: displayModePopUp, matching: configuration.reader.defaultDisplayMode.rawValue)
         fitWidthCheckbox.state = configuration.reader.fitWidthOnOpen ? .on : .off
+        autoLockAfterFitTextWidthCheckbox.state = configuration.reader.autoLockAfterFitTextWidth ? .on : .off
         showPageCounterCheckbox.state = configuration.reader.showPageCounter ? .on : .off
         seamlessPagesCheckbox.state = configuration.reader.seamlessPages ? .on : .off
         scrollSpeedSlider.doubleValue = Double(configuration.reader.scrollSpeed)
@@ -531,6 +537,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         updatedConfiguration.appearance.darkTheme = darkTheme
         updatedConfiguration.reader.defaultDisplayMode = displayMode
         updatedConfiguration.reader.fitWidthOnOpen = fitWidthCheckbox.state == .on
+        updatedConfiguration.reader.autoLockAfterFitTextWidth = autoLockAfterFitTextWidthCheckbox.state == .on
         updatedConfiguration.reader.showPageCounter = showPageCounterCheckbox.state == .on
         updatedConfiguration.reader.seamlessPages = seamlessPagesCheckbox.state == .on
         updatedConfiguration.reader.scrollSpeed = CGFloat((scrollSpeedSlider.doubleValue * 10).rounded() / 10)
@@ -673,6 +680,12 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         fitWidthCheckbox.target = self
         fitWidthCheckbox.action = #selector(handleGeneralControlChanged(_:))
 
+        autoLockAfterFitTextWidthCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        autoLockAfterFitTextWidthCheckbox.identifier = NSUserInterfaceItemIdentifier("autoLockAfterFitTextWidthCheckbox")
+        autoLockAfterFitTextWidthCheckbox.controlSize = .small
+        autoLockAfterFitTextWidthCheckbox.target = self
+        autoLockAfterFitTextWidthCheckbox.action = #selector(handleGeneralControlChanged(_:))
+
         showPageCounterCheckbox.translatesAutoresizingMaskIntoConstraints = false
         showPageCounterCheckbox.identifier = NSUserInterfaceItemIdentifier("showPageCounterCheckbox")
         showPageCounterCheckbox.controlSize = .small
@@ -791,6 +804,7 @@ private final class SettingsViewController: NSViewController, NSSearchFieldDeleg
         let readingGrid = makeSettingsGrid([
             [makeRowLabel(L10n.text("Default Display", "默认显示")), displayModePopUp],
             [makeRowLabel(L10n.text("Open Behavior", "打开文档")), fitWidthCheckbox],
+            [makeRowLabel(L10n.text("Text Width", "文本宽度")), autoLockAfterFitTextWidthCheckbox],
             [makeRowLabel(L10n.text("Page Counter", "页码")), showPageCounterCheckbox],
             [makeRowLabel(L10n.text("Seamless Pages", "无缝页面")), seamlessPagesCheckbox],
             [makeRowLabel(L10n.text("Scroll Speed", "滚动速度")), makeReadingFocusSliderStack(

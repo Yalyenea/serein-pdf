@@ -2090,7 +2090,7 @@ struct WindowChromeTests {
         controller.showWindow(nil)
 
         let window = try #require(controller.window)
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 766))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 794))
         controller.selectPageForTesting(1)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
@@ -2104,7 +2104,7 @@ struct WindowChromeTests {
         controller.selectPageForTesting(0)
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
 
-        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 766))
+        #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 680, height: 794))
     }
 
     @Test
@@ -2131,6 +2131,28 @@ struct WindowChromeTests {
         controller.sync(configuration: .default)
         #expect(checkbox.state == .on)
         #expect(publishedConfigurations.count == 1)
+    }
+
+    @Test
+    func settingsAutoLockAppliesImmediatelyAndSyncsAcrossAppearances() throws {
+        _ = NSApplication.shared
+        var published: AppConfiguration?
+        let controller = SettingsWindowController(configuration: .default) { published = $0 }
+        defer { controller.close() }
+        controller.showWindow(nil)
+        let content = try #require(controller.window?.contentView)
+        let checkbox = try #require(findView(identifier: "autoLockAfterFitTextWidthCheckbox", in: content) as? NSButton)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            controller.window?.appearance = NSAppearance(named: appearance)
+            #expect(checkbox.state == .off)
+            checkbox.performClick(nil)
+            #expect(published?.reader.autoLockAfterFitTextWidth == true)
+            controller.sync(configuration: .default)
+            #expect(checkbox.state == .off)
+            content.layoutSubtreeIfNeeded()
+            #expect(content.bounds.contains(checkbox.convert(checkbox.bounds, to: content)))
+            #expect(checkbox.bounds.width >= checkbox.intrinsicContentSize.width)
+        }
     }
 
     @Test

@@ -7,6 +7,53 @@ import Testing
 @MainActor
 struct ReaderTextWidthTests {
     @Test
+    func autoLockUpdatesReaderAndUnlocksAfterEveryZoomCommand() throws {
+        try withReader { controller, reader, store, sessionID in
+            var configuration = store.appConfiguration
+            configuration.reader.autoLockAfterFitTextWidth = true
+            store.updateAppConfiguration(configuration)
+            let commands: [() -> Void] = [
+                { reader.fitToWidth() }, { reader.fitToHeight() }, { reader.fitToPage() },
+                { reader.zoomIn() }, { reader.zoomOut() },
+                { reader.pdfView.zoomIn(nil) }, { reader.pdfView.zoomOut(nil) },
+                { store.setScaleMode(.manual, scaleFactor: 0.75, for: sessionID) },
+            ]
+            for command in commands {
+                reader.fitToTextWidth()
+                settle(controller)
+                #expect(reader.testingHorizontalPanLockIsEnabled)
+                #expect(reader.testingPanLockIndicatorIsVisible)
+                let clip = try clipView(in: reader.pdfView)
+                let lockedX = clip.bounds.origin.x
+                clip.setBoundsOrigin(NSPoint(x: lockedX + 55, y: clip.bounds.origin.y))
+                #expect(abs(clip.bounds.origin.x - lockedX) < 0.1)
+                command()
+                settle(controller)
+                #expect(store.session(for: sessionID)?.scaleMode != .fitTextWidth)
+                #expect(!reader.testingHorizontalPanLockIsEnabled)
+                #expect(!reader.testingPanLockIndicatorIsVisible)
+            }
+            #expect(abs(reader.pdfView.scaleFactor - 0.75) < 0.001)
+        }
+    }
+
+    @Test
+    func autoLockCanBeManuallyUnlockedWithoutRelockingOnResize() throws {
+        try withReader { controller, reader, store, _ in
+            var configuration = store.appConfiguration
+            configuration.reader.autoLockAfterFitTextWidth = true
+            store.updateAppConfiguration(configuration)
+            reader.fitToTextWidth()
+            settle(controller)
+            #expect(!controller.toggleHorizontalPanLock())
+            reader.fitToTextWidth()
+            store.setRightSidebarVisible(false, in: controller.windowID)
+            settle(controller)
+            #expect(!reader.testingHorizontalPanLockIsEnabled)
+        }
+    }
+
+    @Test
     func fitsAsymmetricTextMarginsAndPersistsFitMode() throws {
         try withReader { controller, reader, store, sessionID in
             let page = try #require(reader.pdfView.document?.page(at: 0))

@@ -204,6 +204,7 @@ struct AppConfiguration: Equatable, Sendable {
         var seamlessPages = false
         var scrollSpeed: CGFloat = 1
         var globalHorizontalPanLock = false
+        var autoLockAfterFitTextWidth = false
         var readingFocus: ReadingFocusSettings
 
         init(
@@ -697,6 +698,7 @@ show_page_counter = true
 seamless_pages = false
 scroll_speed = 1.0
 global_horizontal_pan_lock = false
+auto_lock_after_fit_text_width = false
 reading_focus_width = "page"
 reading_focus_custom_width = 0.72
 reading_focus_height = 96
@@ -865,6 +867,7 @@ show_page_counter = \(configuration.reader.showPageCounter ? "true" : "false")
 seamless_pages = \(configuration.reader.seamlessPages ? "true" : "false")
 scroll_speed = \(serializedDecimal(configuration.reader.scrollSpeed))
 global_horizontal_pan_lock = \(configuration.reader.globalHorizontalPanLock ? "true" : "false")
+auto_lock_after_fit_text_width = \(configuration.reader.autoLockAfterFitTextWidth ? "true" : "false")
 reading_focus_width = "\(configuration.reader.readingFocus.widthMode.rawValue)"
 reading_focus_custom_width = \(serializedDecimal(configuration.reader.readingFocus.customWidthRatio))
 reading_focus_height = \(Int(configuration.reader.readingFocus.height.rounded()))
@@ -1029,6 +1032,7 @@ redo_last_highlight = "\(serializedShortcut(.redoLastHighlight, configuration: c
         "seamless_pages",
         "scroll_speed",
         "global_horizontal_pan_lock",
+        "auto_lock_after_fit_text_width",
         "reading_focus_width",
         "reading_focus_custom_width",
         "reading_focus_height",
@@ -1328,6 +1332,8 @@ struct AppConfigurationParser {
             configuration.reader.defaultDisplayMode = displayMode
         case ("reader", "global_horizontal_pan_lock"):
             configuration.reader.globalHorizontalPanLock = try parseBool(rawValue)
+        case ("reader", "auto_lock_after_fit_text_width"):
+            configuration.reader.autoLockAfterFitTextWidth = try parseBool(rawValue)
         case ("reader", "fit_width_on_open"):
             configuration.reader.fitWidthOnOpen = try parseBool(rawValue)
         case ("reader", "show_page_counter"):
