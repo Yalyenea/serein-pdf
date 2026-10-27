@@ -150,7 +150,7 @@ final class ReaderShortcutsControllerTests: XCTestCase {
         let event = makeKeyEvent(characters: "L", modifierFlags: [.shift])
         XCTAssertTrue(global.matches(event: event))
         XCTAssertFalse(individual.matches(event: event))
-        XCTAssertEqual(global.menuKeyEquivalent, "l")
+        XCTAssertEqual(global.menuKeyEquivalent, "L")
         XCTAssertEqual(global.modifierMask, [.shift])
     }
 

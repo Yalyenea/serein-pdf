@@ -1870,7 +1870,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func toggleGlobalHorizontalPanLockAction(_ sender: Any?) {
         var configuration = appConfiguration
         configuration.reader.globalHorizontalPanLock.toggle()
-        applyUpdatedConfiguration(configuration)
+        guard applyUpdatedConfiguration(configuration) else { return }
+        if let controller = mainWindowController,
+           let session = documentStore.activeSession(in: controller.windowID) {
+            // Switching scope must not leave a second lock underneath the active one.
+            documentStore.setHorizontalPanLocked(false, for: session.id)
+        }
     }
 
     @objc
@@ -1882,7 +1887,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     @objc
     private func toggleHorizontalPanLockAction(_ sender: Any?) {
-        mainWindowController?.toggleHorizontalPanLock()
+        guard let controller = mainWindowController,
+              let session = documentStore.activeSession(in: controller.windowID),
+              !session.isBlank, !session.displayMode.usesBookLayout else { return }
+        if appConfiguration.reader.globalHorizontalPanLock {
+            var configuration = appConfiguration
+            configuration.reader.globalHorizontalPanLock = false
+            guard applyUpdatedConfiguration(configuration) else { return }
+            documentStore.setHorizontalPanLocked(true, for: session.id)
+        } else {
+            controller.toggleHorizontalPanLock()
+        }
     }
 
     @objc
@@ -2746,8 +2761,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func applyUpdatedConfiguration(_ configuration: AppConfiguration) {
-        guard let configStore else { return }
+    @discardableResult
+    private func applyUpdatedConfiguration(_ configuration: AppConfiguration) -> Bool {
+        guard let configStore else { return false }
         let previousConfiguration = appConfiguration
         var newConfiguration = configuration
         let libraryFoldersChanged = previousConfiguration.library.folderURLs != newConfiguration.library.folderURLs
@@ -2775,6 +2791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
                     folderURLs: newConfiguration.library.folderURLs
                 )
             }
+            return true
         } catch {
             appConfiguration = previousConfiguration
             applyApplicationAppearance()
@@ -2782,6 +2799,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             documentStore.updateAppConfiguration(previousConfiguration)
             settingsWindowController?.sync(configuration: previousConfiguration)
             presentConfigurationSaveError(error)
+            return false
         }
     }
 
@@ -3094,13 +3112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menuItem.state = appConfiguration.reader.seamlessPages ? .on : .off
             return true
         case #selector(toggleHorizontalPanLockAction(_:)):
-            let global = appConfiguration.reader.globalHorizontalPanLock
-            menuItem.title = global ? L10n.text("Horizontal Pan Lock (Global Lock On)", "横向平移锁定（全局已锁定）") : ShortcutCommand.toggleHorizontalPanLock.menuTitle
-            if global {
-                menuItem.state = controller?.isHorizontalPanLocked == true ? .on : .off
-                return false
-            }
-            menuItem.state = controller?.isHorizontalPanLocked == true ? .on : .off
+            menuItem.state = !appConfiguration.reader.globalHorizontalPanLock
+                && controller?.isHorizontalPanLocked == true ? .on : .off
             return activePDFSession.map { $0.displayMode.usesBookLayout == false } == true
         case #selector(showReadingFocusControlsAction(_:)):
             return activePDFSession != nil
@@ -3285,8 +3298,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
 #if DEBUG
 extension AppDelegate {
-    func installMenuForTesting(documentStore: DocumentStore, controllers: [MainWindowController]) {
+    func installMenuForTesting(
+        documentStore: DocumentStore, controllers: [MainWindowController],
+        configStore: AppConfigurationStore? = nil
+    ) {
         self.documentStore = documentStore
+        self.configStore = configStore
         appConfiguration = documentStore.appConfiguration
         mainWindowControllers = Dictionary(uniqueKeysWithValues: controllers.map { ($0.windowID, $0) })
         installMainMenu()

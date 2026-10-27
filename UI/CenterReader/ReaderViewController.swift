@@ -560,7 +560,7 @@ final class ReaderViewController: NSViewController {
     private let highlightModeIndicator = NSStackView()
     private let highlightModeColorDot = NSView()
     private let highlightModeLabel = NSTextField(labelWithString: L10n.text("Highlight · Esc", "高亮 · Esc"))
-    private let panLockIndicator = NSTextField(labelWithString: "L")
+    private let panLockIndicator = NSImageView()
     private let switchTitleToastView = NSView()
     private let switchTitleToastLabel = NSTextField(labelWithString: "")
     private lazy var annotationInteraction = ReaderAnnotationInteractionController(
@@ -1022,12 +1022,9 @@ final class ReaderViewController: NSViewController {
         highlightModeIndicator.addArrangedSubview(highlightModeLabel)
 
         panLockIndicator.translatesAutoresizingMaskIntoConstraints = false
-        panLockIndicator.font = .systemFont(ofSize: 11, weight: .medium)
-        panLockIndicator.textColor = NightModeStyle.secondaryTextColor
-        panLockIndicator.alignment = .right
-        panLockIndicator.isEditable = false
-        panLockIndicator.isBordered = false
-        panLockIndicator.drawsBackground = false
+        panLockIndicator.identifier = NSUserInterfaceItemIdentifier("panLockIndicator")
+        panLockIndicator.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
+        panLockIndicator.imageScaling = .scaleProportionallyDown
         panLockIndicator.isHidden = true
 
         switchTitleToastView.translatesAutoresizingMaskIntoConstraints = false
@@ -1097,6 +1094,8 @@ final class ReaderViewController: NSViewController {
             highlightModeColorDot.heightAnchor.constraint(equalToConstant: 7),
             panLockIndicator.topAnchor.constraint(equalTo: pdfContainerView.topAnchor, constant: 8),
             panLockIndicator.trailingAnchor.constraint(equalTo: pdfContainerView.trailingAnchor, constant: -12),
+            panLockIndicator.widthAnchor.constraint(equalToConstant: 14),
+            panLockIndicator.heightAnchor.constraint(equalToConstant: 14),
             switchTitleToastView.topAnchor.constraint(equalTo: pdfContainerView.topAnchor, constant: 10),
             switchTitleToastView.centerXAnchor.constraint(equalTo: pdfContainerView.centerXAnchor),
             switchTitleToastView.widthAnchor.constraint(lessThanOrEqualTo: pdfContainerView.widthAnchor, multiplier: 0.62),
@@ -4189,10 +4188,10 @@ final class ReaderViewController: NSViewController {
     private func updatePanLockIndicator() {
         panLockIndicator.isHidden = !isHorizontalPanLocked
         let global = documentStore.appConfiguration.reader.globalHorizontalPanLock
-        panLockIndicator.toolTip = global ? L10n.text("Global Lock is enabled for all PDFs", "已为所有 PDF 启用全局锁定") : L10n.text("Horizontal pan lock for this PDF", "锁定当前 PDF 的横向移动")
-        panLockIndicator.setAccessibilityLabel(panLockIndicator.toolTip)
+        panLockIndicator.image = NSImage(systemSymbolName: global ? "lock.fill" : "lock", accessibilityDescription: nil)
+        panLockIndicator.setAccessibilityLabel(global ? L10n.text("Global Lock", "全局锁定") : L10n.text("Locked", "已锁定"))
         panLockIndicator.effectiveAppearance.performAsCurrentDrawingAppearance {
-            panLockIndicator.textColor = NightModeStyle.secondaryTextColor
+            panLockIndicator.contentTintColor = NightModeStyle.secondaryTextColor
         }
     }
 

@@ -6,12 +6,12 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct ReaderTextWidthTests {
-    @Test
-    func autoLockUpdatesReaderAndUnlocksAfterEveryZoomCommand() throws {
-        try withReader { controller, reader, store, sessionID in
-            var configuration = store.appConfiguration
-            configuration.reader.autoLockAfterFitTextWidth = true
-            store.updateAppConfiguration(configuration)
+    @Test(arguments: [ReaderDisplayMode.singlePage, .singlePageContinuous])
+    func autoLockUpdatesReaderAndUnlocksAfterEveryZoomCommand(_ mode: ReaderDisplayMode) throws {
+        var configuration = AppConfiguration.default
+        configuration.reader.fitWidthOnOpen = true
+        configuration.reader.autoLockAfterFitTextWidth = true
+        try withReader(mode: mode, configuration: configuration) { controller, reader, store, sessionID in
             let commands: [() -> Void] = [
                 { reader.fitToWidth() }, { reader.fitToHeight() }, { reader.fitToPage() },
                 { reader.zoomIn() }, { reader.zoomOut() },
@@ -19,8 +19,9 @@ struct ReaderTextWidthTests {
                 { store.setScaleMode(.manual, scaleFactor: 0.75, for: sessionID) },
             ]
             for command in commands {
-                reader.fitToTextWidth()
+                controller.fitReaderToTextWidth()
                 settle(controller)
+                try expectTextFillsViewport([try #require(reader.pdfView.currentPage)], in: reader.pdfView)
                 #expect(reader.testingHorizontalPanLockIsEnabled)
                 #expect(reader.testingPanLockIndicatorIsVisible)
                 let clip = try clipView(in: reader.pdfView)
@@ -360,10 +361,11 @@ struct ReaderTextWidthTests {
 private func withReader(
     url: URL? = nil,
     mode: ReaderDisplayMode = .singlePage,
+    configuration: AppConfiguration = .default,
     body: (MainWindowController, ReaderViewController, DocumentStore, UUID) throws -> Void
 ) throws {
     _ = NSApplication.shared
-    let store = makeIsolatedDocumentStore()
+    let store = makeIsolatedDocumentStore(appConfiguration: configuration)
     let controller = MainWindowController(documentStore: store)
     defer { controller.close() }
     let session = try store.open(documentAt: try url ?? makeTextPDF())

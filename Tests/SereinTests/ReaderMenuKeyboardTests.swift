@@ -4,6 +4,75 @@ import XCTest
 
 @MainActor
 final class ReaderMenuKeyboardTests: XCTestCase {
+    func testLockShortcutsSwitchScopeAndUnlockWithoutOverlappingStates() throws {
+        try withTemporaryConfigRoot(self) { root in
+            let app = NSApplication.shared
+            let previousMenu = app.mainMenu
+            let previousWindowsMenu = app.windowsMenu
+            let previousAppearance = app.appearance
+            let previousTheme = ThemeManager.shared.selection
+            var configuration = AppConfiguration.default
+            configuration.reader.autoLockAfterFitTextWidth = true
+            let configStore = try AppConfigurationStore(fileURL: root.appendingPathComponent("config.toml"))
+            try configStore.save(configuration)
+            let store = makeIsolatedDocumentStore(appConfiguration: configuration)
+            let controller = MainWindowController(documentStore: store)
+            let delegate = AppDelegate()
+            let window = try XCTUnwrap(controller.window)
+            defer {
+                NotificationCenter.default.removeObserver(delegate)
+                controller.close()
+                app.mainMenu = previousMenu
+                app.windowsMenu = previousWindowsMenu
+                app.appearance = previousAppearance
+                ThemeManager.shared.apply(light: previousTheme.light, dark: previousTheme.dark,
+                    lightBackground: previousTheme.lightBackground, darkBackground: previousTheme.darkBackground)
+            }
+            let other = try store.open(documentAt: TestPDFFixtures.makeLabeledPDF(named: "other-lock-scope"))
+            let session = try store.open(documentAt: TestPDFFixtures.makeSearchablePDF(
+                named: "active-lock-scope", pages: ["Selectable text for automatic width fitting."]))
+            controller.showWindow(nil)
+            window.makeKeyAndOrderFront(nil)
+            settle(window)
+            delegate.installMenuForTesting(documentStore: store, controllers: [controller], configStore: configStore)
+            controller.fitReaderToTextWidth()
+            settle(window)
+            XCTAssertEqual(store.session(for: session.id)?.isHorizontalPanLocked, true)
+            let menu = try XCTUnwrap(app.mainMenu)
+            let localItem = try XCTUnwrap(find(.toggleHorizontalPanLock, in: menu))
+            let globalItem = try XCTUnwrap(find(.toggleGlobalHorizontalPanLock, in: menu))
+            let icon = try XCTUnwrap(findView(identifier: "panLockIndicator", in: XCTUnwrap(window.contentView)) as? NSImageView)
+            let localImage = try XCTUnwrap(icon.image?.tiffRepresentation)
+            var globalImage: Data?
+
+            for (shift, global, local) in [
+                (true, true, false), (false, false, true), (false, false, false),
+                (true, true, false), (true, false, false), (false, false, true),
+                (true, true, false), (true, false, false),
+            ] {
+                XCTAssertTrue(delegate.validateMenuItem(localItem))
+                XCTAssertTrue(menu.performKeyEquivalent(with: makeKeyEvent(
+                    characters: shift ? "L" : "l", keyCode: 37,
+                    charactersIgnoringModifiers: shift ? "L" : "l",
+                    modifierFlags: shift ? [.shift] : [], window: window)))
+                settle(window)
+                XCTAssertEqual(store.appConfiguration.reader.globalHorizontalPanLock, global)
+                XCTAssertEqual(try configStore.load().reader.globalHorizontalPanLock, global)
+                XCTAssertEqual(store.session(for: session.id)?.isHorizontalPanLocked, local)
+                XCTAssertEqual(controller.isHorizontalPanLocked, global || local)
+                XCTAssertEqual(store.effectiveHorizontalPanLock(for: try XCTUnwrap(store.session(for: other.id))), global)
+                XCTAssertTrue(delegate.validateMenuItem(localItem))
+                XCTAssertTrue(delegate.validateMenuItem(globalItem))
+                XCTAssertEqual(localItem.state, local ? .on : .off)
+                XCTAssertEqual(globalItem.state, global ? .on : .off)
+                XCTAssertEqual(icon.isHidden, !global && !local)
+                XCTAssertNil(icon.toolTip)
+                if global { globalImage = try XCTUnwrap(icon.image?.tiffRepresentation) }
+            }
+            XCTAssertNotEqual(localImage, try XCTUnwrap(globalImage))
+        }
+    }
+
     func testPrintMenuTracksCurrentPDFAndBlankTab() throws {
         let app = NSApplication.shared
         let previousMenu = app.mainMenu

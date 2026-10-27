@@ -492,7 +492,8 @@ struct KeyboardShortcut: Equatable, Sendable {
         case "right":
             "\u{F703}"
         default:
-            key
+            // AppKit matches Shift-only letter equivalents against uppercase event text.
+            modifiers == [.shift] && key.count == 1 ? key.uppercased() : key
         }
     }
 

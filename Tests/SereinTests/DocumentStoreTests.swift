@@ -74,8 +74,6 @@ final class DocumentStoreTests: XCTestCase {
         var configuration = store.appConfiguration
         configuration.reader.globalHorizontalPanLock = true
         store.updateAppConfiguration(configuration)
-        store.setHorizontalPanLocked(false, for: first.id)
-        store.setHorizontalPanLocked(true, for: second.id)
         XCTAssertTrue(try XCTUnwrap(store.session(for: first.id)).isHorizontalPanLocked)
         XCTAssertFalse(try XCTUnwrap(store.session(for: second.id)).isHorizontalPanLocked)
         XCTAssertTrue(store.effectiveHorizontalPanLock(for: second))
