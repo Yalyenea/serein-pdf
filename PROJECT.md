@@ -578,6 +578,10 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 
 ## 10. 开发约束
 
+日常开发使用 `just run`。`just install` 使用保留 `-O` 与 Release 条件编译行为的增量构建，独立缓存位于 `.build/install`；关闭全模块优化，以便按文件重新编译。`just build`、`just install release`、`just dmg` 和 `just ship` 使用完整 Release 优化。本地增量构建使用 SwiftPM 的 native 后端，当前工具链会显示弃用提示。
+
+构建验证：项目副本中对同一阅读器源文件做相同改动，完整 Release 构建耗时 30.9 秒，增量构建 3.2 秒；新本地缓存首次构建并安装 31.9 秒，无改动再次安装 4.2 秒。本地及完整 Release 应用包的代码签名、安装副本一致性、脚本语法和命令路由均已验证。
+
 1. 先结构正确,再视觉精致。
 2. 不为未来假设场景预埋抽象。
 3. 不写 fallback、不写兼容层。

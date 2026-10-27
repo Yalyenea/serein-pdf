@@ -1,21 +1,38 @@
 #!/usr/bin/env bash
-# Build a release Serein.app bundle under build/Serein.app
-# Usage: Scripts/make-app.sh [output-dir]
+# Build an optimized Serein.app bundle under build/Serein.app.
+# Usage: Scripts/make-app.sh [output-dir] [release|local]
 
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUT_DIR="${1:-$PROJECT_ROOT/build}"
+BUILD_MODE="${2:-release}"
 APP_NAME="Serein"
 APP_BUNDLE="$OUTPUT_DIR/$APP_NAME.app"
 CODESIGN_IDENTITY="${SEREIN_CODESIGN_IDENTITY:-Serein Local Code Signing}"
 
 cd "$PROJECT_ROOT"
 
-echo "==> swift build -c release"
-swift build -c release --disable-sandbox
+SWIFT_BUILD_ARGS=(-c release --disable-sandbox)
+case "$BUILD_MODE" in
+    release) ;;
+    local)
+        # Keep -O and Release behavior, but rebuild only changed files locally.
+        # Separate caches prevent these flags from invalidating release builds.
+        # The native driver supplies the per-file dependency maps this mode needs.
+        SWIFT_BUILD_ARGS+=(--build-system native --scratch-path "$PROJECT_ROOT/.build/install"
+            -Xswiftc -no-whole-module-optimization -Xswiftc -incremental -Xswiftc -enable-batch-mode)
+        ;;
+    *)
+        echo "error: unknown build mode '$BUILD_MODE'; use release or local" >&2
+        exit 1
+        ;;
+esac
 
-BIN_PATH="$(swift build -c release --disable-sandbox --show-bin-path)"
+echo "==> swift build -c release ($BUILD_MODE)"
+swift build "${SWIFT_BUILD_ARGS[@]}"
+
+BIN_PATH="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)"
 EXECUTABLE="$BIN_PATH/$APP_NAME"
 
 if [[ ! -x "$EXECUTABLE" ]]; then

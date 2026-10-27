@@ -23,6 +23,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a delete button to each Space row. Hide it while renaming or when only one Space remains; update its color with the current theme.
 
 ### Development
+- Use an optimized incremental Release build for `just install`, with a separate `.build/install` cache. Keep whole-module optimization for `just build`, `just install release`, `just dmg`, and `just ship`.
 - Stabilize comment double-click tests with a fixed zoom, a visible highlight, and queued mouse-down and mouse-up events. Verify that the comment card enters editing without opening the sidebar.
 - Wait for deferred Return-key tab renames to commit, and verify thumbnail recovery when the system has evicted offscreen cached images.
 - Keep Swift Testing on the physical main thread in a dedicated host and require complete passing summaries from both test frameworks before reporting success.

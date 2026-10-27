@@ -50,8 +50,9 @@ dmg: build
 icon:
     ./Scripts/make-icon.sh
 
-# Copy the built .app into /Applications (overwrites existing install).
-install: build
+# Build incrementally with -O and install locally; `just install release` uses full release optimization.
+install mode="local":
+    ./Scripts/make-app.sh "{{BUILD_DIR}}" "{{mode}}"
     @echo "==> installing {{APP_BUNDLE}} -> {{INSTALL_DIR}}/{{APP_NAME}}.app"
     rm -rf "{{INSTALL_DIR}}/{{APP_NAME}}.app"
     cp -R "{{APP_BUNDLE}}" "{{INSTALL_DIR}}/"
@@ -64,7 +65,7 @@ register:
     @echo "registered {{BUNDLE_ID}} with Launch Services."
 
 # Full release flow: build .app -> install -> register.
-ship: install register
+ship: (install "release") register
     @echo "done. Serein is installed."
 
 # Remove build artifacts and the installed .app.

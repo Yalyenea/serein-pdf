@@ -63,12 +63,16 @@ just run
 ```
 
 ```sh
-just test    # Run tests
-just build   # Build build/Serein.app
-just dmg     # Package a DMG
+just test             # Run tests
+just install          # Install an optimized incremental Release build
+just install release  # Install a full Release build
+just build            # Build the full Release build/Serein.app
+just dmg              # Package a full Release DMG
 ```
 
 `just test` runs XCTest and Swift Testing separately and checks both final summaries. Swift Testing uses a dedicated main-thread host so AppKit event loops cannot end the run early.
+
+Local installation keeps `-O` optimization and Release behavior, with per-file compilation cached in `.build/install`. The first install initializes this cache. `just build`, `just install release`, `just dmg`, and `just ship` use full whole-module optimization. Local installation currently uses SwiftPM's native build backend, which recent toolchains mark as deprecated.
 
 See [PROJECT.md](PROJECT.md) for architecture and behavior, [TASKS.md](TASKS.md) for planned work, and [REVIEW.md](REVIEW.md) for engineering debt.
 
