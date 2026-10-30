@@ -5,17 +5,16 @@ import XCTest
 
 @MainActor
 final class AnnotationsViewControllerTests: XCTestCase {
-    func testReaderContextMenuKeepsNativePDFKitItems() throws {
+    func testReaderContextMenuUsesOnlyItsProvider() throws {
         let custom = NSMenu(title: "Serein")
         custom.addItem(NSMenuItem(title: "Highlight Selection", action: nil, keyEquivalent: ""))
-        let native = NSMenu(title: "PDFKit")
-        native.addItem(NSMenuItem(title: "Translate", action: nil, keyEquivalent: ""))
-        native.addItem(NSMenuItem(title: "Look Up", action: nil, keyEquivalent: ""))
-
-        let menu = try XCTUnwrap(ReaderPDFView.mergeContextMenus(custom: custom, native: native))
-
-        XCTAssertEqual(menu.items.map(\.title), ["Highlight Selection", "", "Translate", "Look Up"])
-        XCTAssertTrue(menu.items[1].isSeparatorItem)
+        let view = ReaderPDFView()
+        view.contextMenuProvider = { _ in custom }
+        let menu = try XCTUnwrap(view.menu(for: makeRightClickEvent(in: view)))
+        XCTAssertTrue(menu === custom)
+        XCTAssertEqual(menu.items.map(\.title), ["Highlight Selection"])
+        view.contextMenuProvider = nil
+        XCTAssertNil(view.menu(for: makeRightClickEvent(in: view)))
     }
 
     func testMultipleCommentsShareOneFullHeightScrollableFeed() throws {
@@ -711,7 +710,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
         let editItem = try XCTUnwrap(menu.item(withTitle: "Edit Comment"))
         XCTAssertEqual(editItem.keyEquivalent, "m")
         XCTAssertEqual(editItem.keyEquivalentModifierMask, [])
-        XCTAssertTrue(menu.item(withTitle: "Remove Annotation")?.isEnabled == true)
+        XCTAssertTrue(menu.item(withTitle: "Delete Annotation")?.isEnabled == true)
 
         let previousMode = store.rightSidebarMode(in: store.defaultWindowID)
         let target = try XCTUnwrap(editItem.target as? NSObject)
@@ -957,7 +956,7 @@ final class AnnotationsViewControllerTests: XCTestCase {
 
     func testReaderContextMenuIncludesCopyPageAsImage() throws {
         let store = makeStore()
-        _ = try store.open(documentAt: makeTemporaryPDF(named: "copy-page-menu"))
+        _ = try store.open(documentAt: TestPDFFixtures.makeSearchablePDF(named: "copy-page-menu", pages: [""]))
         let windowController = MainWindowController(documentStore: store)
         defer { windowController.close() }
         windowController.showWindow(nil)
@@ -974,6 +973,101 @@ final class AnnotationsViewControllerTests: XCTestCase {
         XCTAssertTrue(item.isEnabled)
         XCTAssertEqual(item.keyEquivalent, "c")
         XCTAssertEqual(item.keyEquivalentModifierMask, [.command, .option])
+    }
+
+    func testReaderContextMenuCopiesOnlyClickedImageAndKeepsSourcePage() throws {
+        let document = try EmbeddedImagePDFFixture.document(content: "80 0 0 40 50 70 cm /Red Do")
+        let root = try TestPDFFixtures.makeRootDirectory(prefix: "embedded-image-menu")
+        let url = root.appendingPathComponent("image.pdf")
+        XCTAssertTrue(document.write(to: url))
+        let store = makeStore()
+        _ = try store.open(documentAt: url)
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushAnnotationNavigationLayout(windowController.window)
+        let split = try XCTUnwrap(windowController.window?.contentViewController as? SplitViewController)
+        let pdfView = split.readerViewController.pdfView
+        let page = try XCTUnwrap(pdfView.document?.page(at: 0))
+        func menu(at point: CGPoint) throws -> NSMenu {
+            let event = try XCTUnwrap(NSEvent.mouseEvent(with: .rightMouseDown,
+                location: pdfView.convert(pdfView.convert(point, from: page), to: nil),
+                modifierFlags: [], timestamp: 0, windowNumber: try XCTUnwrap(pdfView.window).windowNumber,
+                context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+            return try XCTUnwrap(pdfView.menu(for: event))
+        }
+        let imageMenu = try menu(at: CGPoint(x: 80, y: 90))
+        let item = try XCTUnwrap(imageMenu.item(withTitle: "Copy Image"))
+        XCTAssertEqual(imageMenu.items.first, item)
+        XCTAssertNil(imageMenu.item(withTitle: ShortcutCommand.copyCurrentPageAsImage.menuTitle))
+        XCTAssertNil(try menu(at: CGPoint(x: 200, y: 250)).item(withTitle: "Copy Image"))
+
+        // Keep the menu payload bound to its source even when the reader changes documents.
+        pdfView.document = nil
+        let region = try XCTUnwrap(item.representedObject as? PDFEmbeddedImageService.Region)
+        XCTAssertTrue(region.page === page)
+        XCTAssertEqual(try XCTUnwrap(region.image()).size, NSSize(width: 160, height: 80))
+        let pasteboard = NSPasteboard.general
+        let savedItems = pasteboard.pasteboardItems?.map { item in
+            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+        } ?? []
+        defer {
+            pasteboard.clearContents()
+            pasteboard.writeObjects(savedItems.map { representations in
+                let item = NSPasteboardItem()
+                for (type, data) in representations { item.setData(data, forType: type) }
+                return item
+            })
+        }
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(item.action), to: item.target, from: item))
+        let images = pasteboard.readObjects(forClasses: [NSImage.self])
+        XCTAssertEqual((images?.first as? NSImage)?.size, NSSize(width: 160, height: 80))
+    }
+
+    func testAreaCopyMenuProtectsExistingSelectionFromAutomaticHighlight() throws {
+        let store = makeStore()
+        let url = try TestPDFFixtures.makeSearchablePDF(named: "area-copy-highlight-mode", pages: ["selected text"])
+        let session = try store.open(documentAt: url)
+        let windowController = MainWindowController(documentStore: store)
+        defer { windowController.close() }
+        windowController.showWindow(nil)
+        flushAnnotationNavigationLayout(windowController.window)
+        let split = try XCTUnwrap(windowController.window?.contentViewController as? SplitViewController)
+        let reader = split.readerViewController
+        let document = try XCTUnwrap(reader.pdfView.document)
+        store.setScaleMode(.manual, scaleFactor: 1, for: session.id)
+        reader.pdfView.layoutDocumentView()
+        flushAnnotationNavigationLayout(windowController.window)
+        XCTAssertFalse(reader.triggerAnnotationShortcut(.highlight))
+        reader.pdfView.currentSelection = try XCTUnwrap(document.findString("selected text", withOptions: []).first)
+        let menu = try XCTUnwrap(reader.pdfView.menu(for: makeRightClickEvent(in: reader.pdfView)))
+        let item = try XCTUnwrap(menu.item(withTitle: "Copy Area…"))
+        XCTAssertTrue(item.isEnabled)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(item.action), to: item.target, from: item))
+        let overlay = try XCTUnwrap(reader.pdfView.areaSelectionOverlay)
+        XCTAssertTrue(overlay.isSelecting)
+        var copied = false
+        overlay.copyImage = { _ in copied = true; return true }
+        let page = try XCTUnwrap(document.page(at: 0))
+        func event(_ type: NSEvent.EventType, x: CGFloat, y: CGFloat) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.mouseEvent(with: type,
+                location: reader.pdfView.convert(reader.pdfView.convert(CGPoint(x: x, y: y), from: page), to: nil),
+                modifierFlags: [], timestamp: 0, windowNumber: try XCTUnwrap(overlay.window).windowNumber,
+                context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+        }
+        let visible = reader.pdfView.convert(reader.pdfView.visibleRect, to: page).intersection(page.bounds(for: .cropBox))
+        let start = CGPoint(x: visible.midX - 20, y: visible.midY - 20)
+        let end = CGPoint(x: visible.midX + 20, y: visible.midY + 20)
+        overlay.mouseDown(with: try event(.leftMouseDown, x: start.x, y: start.y))
+        overlay.mouseDragged(with: try event(.leftMouseDragged, x: end.x, y: end.y))
+        XCTAssertNotNil(overlay.selectionRect)
+        // Run the actual local mouse-up monitors before the selection view receives the event.
+        NSApp.postEvent(try event(.leftMouseUp, x: end.x, y: end.y), atStart: true)
+        let mouseUp = try XCTUnwrap(NSApp.nextEvent(matching: .leftMouseUp, until: .now, inMode: .default, dequeue: true))
+        overlay.mouseUp(with: mouseUp)
+        XCTAssertTrue(copied)
+        XCTAssertTrue(try XCTUnwrap(document.page(at: 0)).annotations.isEmpty)
+        XCTAssertFalse(try XCTUnwrap(store.session(for: session.id)).isDirty)
     }
 
     func testReaderContextMenuSendsSelectionAndPageImageToCodexHandlers() throws {
@@ -1084,7 +1178,14 @@ final class AnnotationsViewControllerTests: XCTestCase {
 
 @MainActor
 private func makeRightClickEvent(in view: NSView) -> NSEvent {
-    let location = NSPoint(x: view.bounds.midX, y: view.bounds.midY)
+    let location: NSPoint
+    if let pdfView = view as? PDFView, let selection = pdfView.currentSelection,
+       let page = selection.pages.first {
+        let bounds = selection.selectionsByLine().first?.bounds(for: page) ?? selection.bounds(for: page)
+        location = pdfView.convert(NSPoint(x: bounds.midX, y: bounds.midY), from: page)
+    } else {
+        location = NSPoint(x: view.bounds.midX, y: view.bounds.midY)
+    }
     let pointInWindow = view.convert(location, to: nil)
     return NSEvent.mouseEvent(
         with: .rightMouseDown,

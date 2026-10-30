@@ -4,6 +4,7 @@ final class PDFContainerView: NSView {
     let readingFocusOverlay = ReadingFocusOverlayView()
     let presentationOverlay = PresentationAnnotationOverlayView()
     let pageCounterView = ReaderPageCounterView()
+    let areaSelectionOverlay = ReaderAreaSelectionView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -46,6 +47,15 @@ final class PDFContainerView: NSView {
             pageCounterView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             pageCounterView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
         ])
+        areaSelectionOverlay.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(areaSelectionOverlay)
+        NSLayoutConstraint.activate([
+            areaSelectionOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            areaSelectionOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            areaSelectionOverlay.topAnchor.constraint(equalTo: topAnchor),
+            areaSelectionOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        (view as? ReaderPDFView)?.areaSelectionOverlay = areaSelectionOverlay
     }
 
     func setReadingFocusEnabled(_ isEnabled: Bool) {
@@ -63,5 +73,6 @@ final class PDFContainerView: NSView {
         }
         readingFocusOverlay.setNightModeEnabled(isEnabled)
         pageCounterView.refreshThemeAppearance()
+        areaSelectionOverlay.refreshThemeAppearance()
     }
 }

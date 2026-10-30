@@ -56,6 +56,17 @@ final class ReaderShiftClickSelectionTests: XCTestCase {
         try click(0, 2, edge: 0, offsetX: -0.1)
         try click(0, 6, shift: true, edge: 1, offsetX: 0.1)
         XCTAssertEqual(view.currentSelection?.string, "CDEFG")
+        // Control-click takes the same context-menu path as right-click and must keep the Shift anchor.
+        let contextPage = try XCTUnwrap(document.page(at: 0))
+        let contextBounds = contextPage.characterBounds(at: 10)
+        let contextPoint = view.convert(NSPoint(x: contextBounds.midX, y: contextBounds.midY), from: contextPage)
+        let contextDown = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown,
+            location: view.convert(contextPoint, to: nil), modifierFlags: [.control], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 3, clickCount: 1, pressure: 1))
+        NSApp.postEvent(contextDown, atStart: true)
+        _ = try XCTUnwrap(NSApp.nextEvent(matching: .leftMouseDown, until: .now, inMode: .default, dequeue: true))
+        // Inspect hit testing without opening a blocking pop-up menu in the test runner.
+        XCTAssertTrue(view.hitTest(contextPoint) === view)
         try click(0, 4, shift: true, edge: 1, offsetX: 0.1)
         XCTAssertEqual(view.currentSelection?.string, "CDE")
         try click(0, 0, shift: true, edge: 0, offsetX: -0.1)

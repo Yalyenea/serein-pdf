@@ -7,6 +7,7 @@ final class ReaderShortcutWindow: NSWindow {
     var numberedTabShortcutHandler: ((Int) -> Void)?
 
     override func sendEvent(_ event: NSEvent) {
+        if handleAreaSelectionKey(event) { return }
         if event.type == .keyDown,
            presentationShortcutHandler?(event) == true {
             return
@@ -29,6 +30,7 @@ final class ReaderShortcutWindow: NSWindow {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleAreaSelectionKey(event) { return true }
         if presentationShortcutHandler?(event) == true {
             return true
         }
@@ -51,6 +53,13 @@ final class ReaderShortcutWindow: NSWindow {
         }
         if modifiers.isEmpty { return false }
         return super.performKeyEquivalent(with: event)
+    }
+
+    private func handleAreaSelectionKey(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown, !event.modifierFlags.contains(.command),
+              let selection = firstResponder as? ReaderAreaSelectionView else { return false }
+        selection.keyDown(with: event)
+        return true
     }
 
     func handlePhysicalCommandNumberShortcut(with event: NSEvent) -> Bool {

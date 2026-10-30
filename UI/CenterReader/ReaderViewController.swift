@@ -305,6 +305,7 @@ final class ReaderPDFView: PDFView {
     // PDFKit reads its native document getter from the form-filling queue.
     // Clear our UI cache explicitly without overriding that getter in Swift.
     func setReaderDocument(_ document: PDFDocument?) {
+        areaSelectionOverlay?.cancel()
         commentIcons.retainPages([])
         textSelectionAnchor = nil
         self.document = document
@@ -320,6 +321,7 @@ final class ReaderPDFView: PDFView {
     var shouldAllowUserMagnification: (() -> Bool)?
     var onPointerMoved: ((NSEvent?) -> Void)?
     var contextMenuProvider: ((NSEvent) -> NSMenu?)?
+    weak var areaSelectionOverlay: ReaderAreaSelectionView?
 
     private var pointerTrackingArea: NSTrackingArea?
     private var textSelectionAnchor: (page: PDFPage, point: NSPoint)?
@@ -411,14 +413,7 @@ final class ReaderPDFView: PDFView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        let custom = contextMenuProvider?(event)
-        if managedAnnotation(at: convert(event.locationInWindow, from: nil)) != nil {
-            return custom
-        }
-        return Self.mergeContextMenus(
-            custom: custom,
-            native: super.menu(for: event)
-        )
+        contextMenuProvider?(event)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -427,6 +422,9 @@ final class ReaderPDFView: PDFView {
             return super.hitTest(point)
         }
         let localPoint = convert(point, from: superview)
+        if let event = NSApp.currentEvent,
+           event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control)),
+           bounds.contains(localPoint) { return self }
         if bounds.contains(localPoint), managedAnnotation(at: localPoint) != nil {
             return self
         }
@@ -440,21 +438,8 @@ final class ReaderPDFView: PDFView {
             ?? HighlightService.highlightAnnotation(at: pagePoint, on: page)
     }
 
-    static func mergeContextMenus(custom: NSMenu?, native: NSMenu?) -> NSMenu? {
-        guard let custom else { return native }
-        guard let native else { return custom }
-        let customItems = custom.items
-        guard customItems.isEmpty == false else { return native }
-
-        customItems.forEach(custom.removeItem)
-        for (index, item) in customItems.enumerated() {
-            native.insertItem(item, at: index)
-        }
-        native.insertItem(.separator(), at: customItems.count)
-        return native
-    }
-
     private func handleTextSelectionMouseDown(_ event: NSEvent) -> Bool {
+        guard !event.modifierFlags.contains(.control) else { return false }
         let point = convert(event.locationInWindow, from: nil)
         let endpoint = textEndpoint(at: point)
         if event.modifierFlags.intersection([.shift, .command, .option, .control]) == .shift,
@@ -475,6 +460,10 @@ final class ReaderPDFView: PDFView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) {
+            rightMouseDown(with: event)
+            return
+        }
         if let link = internalLink(at: event) {
             if event.modifierFlags.contains(.command) {
                 _ = onInternalLinkNavigationRequested?(link.destination)
@@ -489,6 +478,10 @@ final class ReaderPDFView: PDFView {
             return
         }
         super.mouseDown(with: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        if let menu = menu(for: event) { NSMenu.popUpContextMenu(menu, with: event, for: self) }
     }
 
     private func textEndpoint(at point: NSPoint) -> (page: PDFPage, point: NSPoint)? {
@@ -723,15 +716,11 @@ final class ReaderViewController: NSViewController {
             self.annotationInteraction.handlePointerMoved(event)
         }
         pdfView.contextMenuProvider = { [weak self] event in
-            guard let self else { return nil }
-            guard let menu = self.annotationInteraction.makeContextMenu(for: event) else { return nil }
-            if self.selectedText?.isEmpty == false {
-                let item = NSMenuItem(title: L10n.text("Translate Selection…", "翻译所选文本…"), action: #selector(self.translateSelection), keyEquivalent: "")
-                item.target = self
-                menu.addItem(.separator())
-                menu.addItem(item)
-            }
-            return menu
+            self?.annotationInteraction.makeContextMenu(for: event)
+        }
+        annotationInteraction.onTranslateSelectionRequested = { [weak self] selection in
+            guard let self, let sessionID = self.displayedSessionID else { return }
+            _ = self.translationController.show(selection: selection, sessionID: sessionID, in: self.pdfView)
         }
         pdfView.onAnnotationActivationRequested = { [weak self] event in
             self?.annotationInteraction.activateAnnotation(at: event) ?? false
@@ -2748,6 +2737,8 @@ final class ReaderViewController: NSViewController {
 
     private func applyHighlightOnMouseUpIfNeeded(event: NSEvent) {
         guard presentationOverlay.isPresentationEnabled == false,
+              pdfContainerView.areaSelectionOverlay.isSelecting == false,
+              !event.modifierFlags.contains(.control),
               readerState.isAnnotationModeEnabled,
               isApplyingHighlightSelection == false,
               let window = pdfView.window,

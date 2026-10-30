@@ -223,7 +223,10 @@ Settings → General → Reading 提供 `Auto lock after fit text width`，配�
 - `Cmd+O`:打开 PDF 或文件夹(自动扫描并打开文件夹内 PDF,支持多选文件夹)
 - `Cmd+R`:在 Finder 中显示当前 PDF
 - `Cmd+Shift+C`:复制当前 PDF 路径到剪贴板
-- `Cmd+Option+C`:复制当前页为图片(2× mediaBox,含批注,不含夜间滤镜);阅读区右键同样提供
+- `Cmd+Option+C`:复制当前页为图片(2× mediaBox,含批注,不含夜间滤镜);页面空白处右键同样提供
+- 图片上右键“复制图片”：定位嵌入图片并复制该区域的可见内容，支持嵌套对象、内联图片、旋转、裁剪和透明蒙版；优先按图片像素密度或页面 2× 比例渲染，长边上限 8192 像素、总像素上限 1600 万。纯矢量图使用框选复制。
+- 阅读区右键“框选复制…”：十字光标拖出矩形，松开后自动复制，`Esc` 或右键取消；反向拖动可用，范围限制在起始页与可见阅读区内。输出为原色白底图片，包含批注，默认页面 2× 比例，沿用相同像素上限；切换文档、调整阅读区尺寸或窗口失去焦点时取消，完成后焦点回阅读器，不新增批注。
+- 右键菜单由 Serein 管理，保留原生菜单样式，关闭 PDFKit 默认项及系统自动追加的 Services / Writing Tools。文字显示复制、翻译、标记子菜单与评论；批注显示摘录、评论、颜色与删除；图片显示图片复制；网页链接保留“在浏览器中打开”和“复制链接”，内部链接沿用阅读导航与历史。复制操作按 PDF 权限显示，Codex 位于末尾并遵循集成开关；菜单绑定源文档和点击对象，失效菜单不能在另一文档上修改批注、翻译、框选或发送到 Codex。`Control` 点按与右键共用菜单，保留 `Shift` 选择起点。
 - `Ctrl+Cmd+C`:有选区时发送文字到 Codex,否则发送当前页图片;`Ctrl+Cmd+Shift+C`:发送当前 PDF;Reader 右键按当前上下文只显示一项;Settings > General 可关闭 Codex 集成
 - `File > Open With` 或 PDF tab 右键:动态选择兼容的已安装应用打开 PDF;`Reveal in Finder` 独立保留
 - `Cmd+W`:多屏时只关闭焦点 pane,其余区域补位;单屏时关闭多选 tabs 或当前 tab
@@ -381,7 +384,8 @@ Core/                                     # 文档 / 窗口 / 配置 / 持久化
   SecurityScopedAccessController.swift    # `/Users` 等访问 root 的 security-scoped bookmark 持久访问
   PDFLibrary.swift                        # PDF 库扫描、root / folder / item catalog
   CleanPDFService.swift                   # 生成保留 Link / Widget、移除可见用户批注的 PDF 副本
-  PDFPageImageService.swift               # 当前页栅格化为 NSImage 并写入剪贴板
+  PDFPageImageService.swift               # 当前页与框选区域栅格化、原生剪贴板写入
+  PDFEmbeddedImageService.swift           # 按页解析嵌入图片、变换与裁剪，按需生成复制图像
   DocumentStore.swift                     # 多文档 + 多窗口中枢:sessions / workspaces / 命令入口
   DocumentStorePersistence.swift          # UserDefaults 编解码独立阅读状态 / 工作区 / 完整布局与窗口组
   DocumentSession.swift                   # 单文档会话:页码、缩放、显示模式、dirty、undo 栈等
@@ -418,6 +422,7 @@ UI/CenterReader/                          # 中栏阅读区
   ReferencePreviewPageWindow.swift        # 初始一页、最多三页的邻页副本窗口
   ReaderAnnotationInteractionController.swift # 高亮 hit-test、hover 预览、菜单、评论面板与 pulse
   PDFContainerView.swift                  # PDFView 宿主,承载阅读聚焦 overlay,切夜间模式时同步背景色
+  ReaderAreaSelectionView.swift           # 单次框选复制、页内裁剪、取消与主题刷新
   ReadingFocusOverlayView.swift           # 鼠标跟随圆角镂空遮罩、页 / 栏 / 自定义宽度几何
   ReadingFocusControlsViewController.swift # 当前窗口聚焦宽高紧凑调节面板
   ReaderShortcutsController.swift         # reader 快捷键(j/k/g/…)分发
@@ -479,7 +484,10 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
   AnnotationsViewControllerTests.swift    # 批注列表 / comment 编辑
   AnnotationSaveTests.swift               # 手动 / 自动批注保存策略
   CleanPDFServiceTests.swift              # Clean Copy 保留 Link / Widget 且不污染源文档
-  PDFPageImageServiceTests.swift          # 当前页 2× 栅格化与剪贴板写入
+  PDFPageImageServiceTests.swift          # 整页 / 区域栅格化、旋转、批注与剪贴板写入
+  PDFEmbeddedImageServiceTests.swift      # 图片定位、嵌套 / 内联对象、裁剪、透明蒙版与复制权限
+  ReaderAreaSelectionViewTests.swift      # 拖动、取消、焦点返回与主题切换
+  ReaderContextMenuTests.swift            # 点击目标、权限、源选区绑定、浏览器与内部链接
   HighlightServiceTests.swift             # 高亮 apply / remove / 分组
   HighlightExporterTests.swift            # 三种导出格式
   HighlightUndoTests.swift                # 撤销栈上限与 added/removed 还原
@@ -581,6 +589,8 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 日常开发使用 `just run`。`just install` 使用保留 `-O` 与 Release 条件编译行为的增量构建，独立缓存位于 `.build/install`；关闭全模块优化，以便按文件重新编译。`just build`、`just install release`、`just dmg` 和 `just ship` 使用完整 Release 优化。本地增量构建使用 SwiftPM 的 native 后端，当前工具链会显示弃用提示。
 
 构建验证：项目副本中对同一阅读器源文件做相同改动，完整 Release 构建耗时 30.9 秒，增量构建 3.2 秒；新本地缓存首次构建并安装 31.9 秒，无改动再次安装 4.2 秒。本地及完整 Release 应用包的代码签名、安装副本一致性、脚本语法和命令路由均已验证。
+
+图片复制与右键菜单验证（2026-10-30）：完整 `just test` 通过 720 项 XCTest（真实样本项默认跳过）与 250 项 Swift Testing；另指定本机原始论文补跑样本项，73 个引用预览及阅读器导航通过。覆盖图片解析、区域渲染、框选交互、45 套主题切换、复制权限、菜单源对象绑定、键盘与导航历史。
 
 1. 先结构正确,再视觉精致。
 2. 不为未来假设场景预埋抽象。

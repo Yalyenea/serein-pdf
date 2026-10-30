@@ -25,6 +25,7 @@ Requires an Apple silicon Mac running macOS 14 or later. Selection translation r
 - **Annotations.** Highlight, underline, strike through, and add comments. Export annotations as Markdown, plain text, or JSON.
 - **Link previews.** Preview internal references in a resizable window, pin them, or open them in a split.
 - **Reading tools.** Fit to text width, lock horizontal panning, and follow the cursor with a reading focus band.
+- **Image copying.** Right-click an embedded image to copy it, or choose Copy Area and drag around a chart, text, or annotations. Release to copy; press Escape to cancel.
 - **Themes.** Light and dark presets with custom page and window colors.
 - **Translation.** Translate Chinese and English selections, look up words, and save translations as comments.
 - **PDF library.** Browse local folders and reopen recent documents.

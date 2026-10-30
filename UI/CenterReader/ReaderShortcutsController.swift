@@ -179,6 +179,7 @@ final class ReaderShortcutsController {
 
     static func shouldHandlePlainShortcut(for firstResponder: NSResponder?) -> Bool {
         guard let firstResponder else { return true }
+        if firstResponder is ReaderAreaSelectionView { return false }
         if let inputClient = firstResponder as? NSTextInputClient, inputClient.hasMarkedText() {
             return false
         }

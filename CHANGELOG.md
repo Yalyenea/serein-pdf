@@ -5,6 +5,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 ## [Unreleased]
 
 ### Reading
+- Copy embedded images from the context menu, preserving their appearance, rotation, clipping, and transparency.
+- Add Copy Area: drag a rectangle on one page and release to copy vectors, text, images, and annotations on white paper. Escape or right-click cancels; copying preserves PDF colors independently of reader zoom and themes.
+- Replace PDFKit's default context menu with actions for the clicked text, image, annotation, link, or page. Keep Open in Browser and Copy Link, group text markup in a submenu, and hide unrelated actions and automatic Services/Writing Tools entries.
+- Bind menu actions to their source selection, page, and document. Preserve PDFKit text clipboard formats, prevent stale selections from affecting other targets, and keep Control-click from changing the Shift-selection anchor or adding highlights.
 - Switch between current-PDF lock (`L`) and Global Lock (`Shift+L`) with either shortcut; repeat the current scope's shortcut to unlock. Clear the active PDF's overlapping local lock when changing Global Lock, and fix native menu matching for Shift-only letter shortcuts.
 - Show an outline lock for the current PDF and a filled lock for Global Lock, with theme-aware colors and accessibility labels. Remove the letter indicator and hover tooltip.
 - Add an optional Auto Lock after Fit Text Width setting. Lock when entering text fit and unlock when switching to another zoom mode; preserve manual unlocks during page and viewport refits, and keep Global Lock independent.
@@ -23,6 +27,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a delete button to each Space row. Hide it while renaming or when only one Space remains; update its color with the current theme.
 
 ### Development
+- Validation (2026-10-30): complete `just test` passed with 720 XCTest tests (one publisher-PDF test skipped by default) and 250 Swift Testing tests in 22 suites. Rerunning the publisher-PDF test with the local fixture passed and validated 73 citation previews and reader navigation.
 - Use an optimized incremental Release build for `just install`, with a separate `.build/install` cache. Keep whole-module optimization for `just build`, `just install release`, `just dmg`, and `just ship`.
 - Stabilize comment double-click tests with a fixed zoom, a visible highlight, and queued mouse-down and mouse-up events. Verify that the comment card enters editing without opening the sidebar.
 - Wait for deferred Return-key tab renames to commit, and verify thumbnail recovery when the system has evicted offscreen cached images.
