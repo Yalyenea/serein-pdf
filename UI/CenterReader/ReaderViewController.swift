@@ -1027,6 +1027,12 @@ final class ReaderViewController: NSViewController {
         switchTitleToastLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         switchTitleToastLabel.alignment = .center
         switchTitleToastLabel.lineBreakMode = .byTruncatingMiddle
+        // Below the center split item's holding priority, so a long file name
+        // truncates instead of widening the reader and the window on narrow screens.
+        switchTitleToastLabel.setContentCompressionResistancePriority(
+            NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1),
+            for: .horizontal
+        )
         switchTitleToastLabel.isEditable = false
         switchTitleToastLabel.isBordered = false
         switchTitleToastLabel.drawsBackground = false

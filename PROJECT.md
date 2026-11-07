@@ -513,6 +513,8 @@ Tests/SereinTests/                      # Swift Testing + XCTest 测试套件
 
 窄屏回归覆盖两种 tab 形态、795 / 560 pt 窗口宽度，以及空窗、PDF、搜索条开关和空白 tab。隐藏搜索条后，阅读区的适配尺寸应允许原有 320 pt 下限；搜索条显示时仍铺满阅读区。
 
+切换 PDF 的文件名提示是另一种触发：`11ad043` 处理隐藏搜索条的固定最小宽度，这次是可见提示里的长文件名。标签默认抗压缩优先级 750 高于中栏保持优先级 250 和窗口保持尺寸的 500，没有空格的长文件名会把阅读区和窗口撑宽，页面在超出屏幕的阅读区内居中，看起来偏右，Fit Width 也会截掉右侧。提示标签的横向抗压缩优先级现在低于中栏保持优先级，长文件名改为中间截断。入口为打开或切换 PDF 时的提示，回归测试 `WindowChromeTests.longSwitchTitleToastDoesNotWidenNarrowWindow` 在 800 pt 窗口中打开长文件名 PDF，检查窗口宽度不变。
+
 评论双击测试先固定 100% 缩放并显示目标高亮，再通过 AppKit 事件队列派发按下 / 抬起事件，验证评论卡进入编辑状态且右栏保持关闭。此前 `a2844fc` 修复图标命中对 `currentEvent` 的依赖；本次入口为 `AnnotationsViewControllerTests.testDoubleClickHighlightOpensOwnCommentPanel`，补充首次 fit-width 重排使点击坐标失效，以及缺少抬起事件使 PDFKit 等待的触发条件。
 
 标签改名测试等待主队列提交回调后再检查名称与焦点。`51bb52e` 已覆盖切换工作区时提交，本次补齐 Enter 提交入口，移除固定 20ms 等待。缩略图回滚测试允许 `NSCache` 回收离屏图片，检查已恢复图片与待渲染页的对应关系，并等待缺失图片恢复完整。

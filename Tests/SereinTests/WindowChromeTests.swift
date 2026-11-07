@@ -500,6 +500,36 @@ struct WindowChromeTests {
     }
 
     @Test
+    func longSwitchTitleToastDoesNotWidenNarrowWindow() throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+
+        controller.window?.setContentSize(NSSize(width: 800, height: 900))
+
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "switch-toast-narrow"))
+        flushLayout(controller.window)
+        let initialWidth = try #require(controller.window?.frame.width)
+
+        guard let splitController = controller.window?.contentViewController as? SplitViewController else {
+            Issue.record("Failed to locate reader internals")
+            return
+        }
+        let reader = splitController.readerViewController
+
+        let longName = String(repeating: "Long_Title_Segment_", count: 8)
+        let second = try store.open(documentAt: makeTemporaryPDF(named: longName))
+        flushLayout(controller.window)
+
+        #expect(reader.testingSwitchTitleToastIsVisible)
+        #expect(reader.testingSwitchTitleToastTitle == second.title)
+        #expect(abs((controller.window?.frame.width ?? 0) - initialWidth) <= 0.5)
+        let contentWidth = controller.window?.contentView?.frame.width ?? 0
+        #expect(reader.view.frame.width <= contentWidth + 0.5)
+    }
+
+    @Test
     func nightModeUsesSidebarPDFBackgroundOutsideFilteredContent() throws {
         let app = NSApplication.shared
         let previousAppearance = app.appearance
