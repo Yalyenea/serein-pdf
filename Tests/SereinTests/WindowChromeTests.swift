@@ -8,6 +8,13 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct WindowChromeTests {
+    init() {
+        // Native animation completions need the main queue, which synchronous
+        // MainActor tests cannot drain by spinning a nested run loop. Animated
+        // transitions are exercised in SidebarChromeRegressionTests (XCTest).
+        SplitViewController.sidebarAnimationDuration = 0
+    }
+
     @Test
     func mainWindowDoesNotUseAppKitStateRestoration() {
         _ = NSApplication.shared
@@ -92,18 +99,21 @@ struct WindowChromeTests {
     }
 
     @Test
-    func verticalTabsDetachToolbarStrip() {
+    func verticalTabsHideToolbarStrip() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         let controller = MainWindowController(documentStore: store)
         defer { controller.close() }
         controller.window?.layoutIfNeeded()
 
-        #expect(controller.window?.toolbar == nil)
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        #expect(controller.window?.toolbar != nil)
+        #expect(split.titlebarTabsController.view.isHidden)
 
         store.setTabPresentationMode(.horizontalTitlebar)
         controller.window?.layoutIfNeeded()
         #expect(controller.window?.toolbar != nil)
+        #expect(!split.titlebarTabsController.view.isHidden)
 
         _ = store.newBlankTab()
         controller.window?.layoutIfNeeded()
@@ -111,11 +121,12 @@ struct WindowChromeTests {
 
         store.setTabPresentationMode(.verticalSidebar)
         controller.window?.layoutIfNeeded()
-        #expect(controller.window?.toolbar == nil)
+        #expect(controller.window?.toolbar != nil)
+        #expect(split.titlebarTabsController.view.isHidden)
     }
 
     @Test
-    func horizontalTabsHideWhenLeftSidebarReturns() {
+    func horizontalTabsHideWhenLeftSidebarReturns() throws {
         _ = NSApplication.shared
         let store = makeIsolatedDocumentStore()
         _ = store.newBlankTab()
@@ -128,7 +139,9 @@ struct WindowChromeTests {
 
         store.setLeftSidebarVisible(true)
         controller.window?.layoutIfNeeded()
-        #expect(controller.window?.toolbar == nil)
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        #expect(controller.window?.toolbar != nil)
+        #expect(split.titlebarTabsController.view.isHidden)
     }
 
     @Test
@@ -144,9 +157,9 @@ struct WindowChromeTests {
         #expect(controller.view.layer?.backgroundColor == NSColor.clear.cgColor)
 
         let selectedTab = try #require(findDescendant(of: TitlebarTabItemView.self, in: controller.view))
-        #expect(selectedTab.layer?.cornerRadius == 4)
-        #expect(selectedTab.intrinsicContentSize.height == 24)
-        #expect(selectedTab.intrinsicContentSize.height < controller.view.frame.height)
+        #expect(selectedTab.layer?.cornerRadius == 0)
+        #expect(selectedTab.intrinsicContentSize.height == 26)
+        #expect(selectedTab.intrinsicContentSize.height == controller.view.frame.height)
 
         controller.setTabsStripVisible(false)
         #expect(controller.preferredContentSize == NSSize(width: 1, height: 1))
@@ -230,7 +243,7 @@ struct WindowChromeTests {
     }
 
     @Test
-    func transparentTitlebarDragAreaIsReservedBeforePDFContent() throws {
+    func nativeToolbarHandlesTitlebarDragWithoutStealingPDFContent() throws {
         _ = NSApplication.shared
         let controller = MainWindowController(documentStore: makeIsolatedDocumentStore())
         defer { controller.close() }
@@ -238,14 +251,42 @@ struct WindowChromeTests {
         let contentView = try #require(window.contentView)
         window.layoutIfNeeded()
 
-        #expect(window.toolbar == nil)
+        #expect(window.toolbar != nil)
         #expect(window.contentLayoutRect.maxY < contentView.bounds.maxY)
 
         let titlebarPoint = NSPoint(x: contentView.bounds.midX, y: contentView.bounds.maxY - 2)
         let readerPoint = NSPoint(x: contentView.bounds.midX, y: window.contentLayoutRect.maxY - 2)
 
-        #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: titlebarPoint)))
+        #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: titlebarPoint)) == false)
         #expect(window.shouldHandleTransparentTitlebarDrag(with: mouseDownEvent(in: window, at: readerPoint)) == false)
+    }
+
+    @Test(arguments: [TabPresentationMode.verticalSidebar, .horizontalTitlebar])
+    func titlebarRegionIsReservedOnlyForHorizontalTabs(tabMode: TabPresentationMode) throws {
+        _ = NSApplication.shared
+        let store = makeIsolatedDocumentStore()
+        _ = try store.open(documentAt: makeTemporaryPDF(named: "reserved-titlebar"))
+        store.setTabPresentationMode(tabMode)
+        let controller = MainWindowController(documentStore: store)
+        defer { controller.close() }
+        let window = try #require(controller.window)
+        let split = try #require(window.contentViewController as? SplitViewController)
+        window.layoutIfNeeded()
+        let contentFrame = split.splitView.convert(split.splitView.bounds, to: nil)
+        let pdfFrame = split.readerViewController.pdfView.convert(split.readerViewController.pdfView.bounds, to: nil)
+        let toolbarView = try #require(window.toolbar?.items.first?.view)
+        let toolbarFrame = toolbarView.convert(toolbarView.bounds, to: nil)
+
+        if tabMode == .horizontalTitlebar {
+            #expect(abs(contentFrame.maxY - window.contentLayoutRect.maxY) < 0.5)
+            #expect(pdfFrame.maxY <= window.contentLayoutRect.maxY + 0.5)
+            #expect(pdfFrame.maxY < toolbarFrame.minY)
+        } else {
+            #expect(abs(contentFrame.maxY - split.view.bounds.maxY) < 0.5)
+            #expect(abs(pdfFrame.maxY - split.view.bounds.maxY) < 0.5)
+        }
+        #expect(split.view.safeAreaInsets.top > 0)
+        #expect((split.view.layer?.backgroundColor?.alpha ?? 0) == 1)
     }
 
     @Test
@@ -610,6 +651,9 @@ struct WindowChromeTests {
             app.appearance = NSAppearance(named: name)
             controller.refreshThemeAppearance()
             flushLayout(controller.window)
+            let button = try #require(controller.window?.toolbar?.items.first?.view as? NSButton)
+            assertColor(resolvedColor(try #require(button.contentTintColor), in: button.effectiveAppearance),
+                        matches: resolvedColor(NightModeStyle.secondaryTextColor, in: button.effectiveAppearance))
             for (index, reader) in readers.enumerated() {
                 #expect(reader.pdfView.currentPage === pages[index])
                 #expect(abs(reader.pdfView.scaleFactor - zooms[index]) < 0.001)
@@ -1464,7 +1508,9 @@ struct WindowChromeTests {
             flushLayout(controller.window)
 
             #expect(controller.isImmersiveModeEnabled)
-            #expect(controller.window?.toolbar == nil)
+            #expect(controller.window?.toolbar != nil)
+            let split = try #require(controller.window?.contentViewController as? SplitViewController)
+            #expect(split.titlebarTabsController.view.isHidden)
             #expect(store.tabPresentationMode(in: windowID) == .horizontalTitlebar)
             #expect(store.isLeftSidebarVisible(in: windowID) == false)
             #expect(store.isRightSidebarVisible(in: windowID) == false)
@@ -1474,7 +1520,7 @@ struct WindowChromeTests {
         flushLayout(controller.window)
 
         #expect(controller.isImmersiveModeEnabled == false)
-        #expect(controller.window?.toolbar == nil)
+        #expect(controller.window?.toolbar != nil)
         #expect(store.isLeftSidebarVisible(in: windowID))
         #expect(store.isRightSidebarVisible(in: windowID))
     }
@@ -1735,7 +1781,7 @@ struct WindowChromeTests {
         let selector = try #require(findView(identifier: "workspaceSelector", in: tabsView) as? WorkspaceSelectorView)
         #expect(window.toolbar != nil)
         #expect(selector.window === window)
-        #expect(window.toolbar?.items.first?.isBordered == false)
+        #expect(window.toolbar?.items.first(where: { $0.itemIdentifier == .titlebarTabs })?.isBordered == false)
         #expect(!selector.isHiddenOrHasHiddenAncestor)
         #expect(selector.testingPicker.testingNewButton.title.contains("New space"))
         #expect(findAllDescendants(of: TitlebarTabItemView.self, in: tabsView).isEmpty)
@@ -3873,6 +3919,7 @@ private func flushLayout(_ window: NSWindow?) {
     window?.layoutIfNeeded()
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
     window?.layoutIfNeeded()
+    #expect(waitForChromeLayout(in: window))
 }
 
 @MainActor

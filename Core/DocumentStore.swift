@@ -59,7 +59,10 @@ extension Notification {
     }
 
     var isOnlySidebarVisibilityChange: Bool {
-        documentStoreChange.containsOnly(.sidebarVisibility)
+        let change = documentStoreChange
+        // Moving tabs between sidebar and titlebar changes chrome only; readers
+        // must preserve their live anchor and reflow with the sidebar in one pass.
+        return change.contains(.sidebarVisibility) && change.containsOnly([.sidebarVisibility, .tabs])
     }
 
     var isOnlyRightSidebarModeChange: Bool {
@@ -67,7 +70,7 @@ extension Notification {
     }
 
     var isOnlySidebarChromeChange: Bool {
-        documentStoreChange.containsOnly([.sidebarVisibility, .rightSidebarMode])
+        documentStoreChange.containsOnly([.sidebarVisibility, .rightSidebarMode]) || isOnlySidebarVisibilityChange
     }
 
     var isOnlyReadingPositionChange: Bool {
@@ -902,11 +905,11 @@ final class DocumentStore {
     func setTabPresentationMode(_ mode: TabPresentationMode, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
         var workspace = windowWorkspaces[index]
-        guard workspace.tabPresentationMode != mode else { return }
-        workspace.tabPresentationMode = mode
-
         let tabsPaneShouldBeVisible = mode == .verticalSidebar
         let tabsOnRight = appConfiguration.layout.sidebarsSwapped
+        let tabsPaneIsVisible = tabsOnRight ? workspace.isRightSidebarVisible : workspace.isLeftSidebarVisible
+        guard workspace.tabPresentationMode != mode || tabsPaneIsVisible != tabsPaneShouldBeVisible else { return }
+        workspace.tabPresentationMode = mode
         if tabsOnRight {
             workspace.isRightSidebarVisible = tabsPaneShouldBeVisible
         } else {
@@ -1167,8 +1170,11 @@ final class DocumentStore {
 
     func setLeftSidebarVisible(_ isVisible: Bool, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
-        let explicitlyControlsOutline = appConfiguration.layout.sidebarsSwapped &&
-            windowWorkspaces[index].sessionIDs.isEmpty
+        if !appConfiguration.layout.sidebarsSwapped {
+            setTabPresentationMode(isVisible ? .verticalSidebar : .horizontalTitlebar, in: windowID)
+            return
+        }
+        let explicitlyControlsOutline = windowWorkspaces[index].sessionIDs.isEmpty
         let clearsAutoHiddenState = explicitlyControlsOutline &&
             outlineAutoHiddenWindowIDs.contains(windowID)
         let recordsEmptyWindowIntent = explicitlyControlsOutline &&
@@ -1189,8 +1195,11 @@ final class DocumentStore {
 
     func setRightSidebarVisible(_ isVisible: Bool, in windowID: UUID) {
         guard let index = windowWorkspaces.firstIndex(where: { $0.id == windowID }) else { return }
-        let explicitlyControlsOutline = appConfiguration.layout.sidebarsSwapped == false &&
-            windowWorkspaces[index].sessionIDs.isEmpty
+        if appConfiguration.layout.sidebarsSwapped {
+            setTabPresentationMode(isVisible ? .verticalSidebar : .horizontalTitlebar, in: windowID)
+            return
+        }
+        let explicitlyControlsOutline = windowWorkspaces[index].sessionIDs.isEmpty
         let clearsAutoHiddenState = explicitlyControlsOutline &&
             outlineAutoHiddenWindowIDs.contains(windowID)
         let recordsEmptyWindowIntent = explicitlyControlsOutline &&
@@ -1835,6 +1844,12 @@ final class DocumentStore {
         }
         if windowWorkspaces.isEmpty { windowWorkspaces = [WindowWorkspace()] }
         for index in windowWorkspaces.indices {
+            // Older sessions allowed hiding the document sidebar without changing
+            // tab mode. Preserve that visibility choice while keeping tabs reachable.
+            let tabsPaneIsVisible = appConfiguration.layout.sidebarsSwapped
+                ? windowWorkspaces[index].isRightSidebarVisible
+                : windowWorkspaces[index].isLeftSidebarVisible
+            windowWorkspaces[index].tabPresentationMode = tabsPaneIsVisible ? .verticalSidebar : .horizontalTitlebar
             for workspaceIndex in windowWorkspaces[index].workspaces.indices {
                 for groupIndex in windowWorkspaces[index].workspaces[workspaceIndex].groups.indices {
                     windowWorkspaces[index].workspaces[workspaceIndex].groups[groupIndex].zoomedPane = nil

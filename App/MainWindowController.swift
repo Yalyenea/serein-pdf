@@ -1,7 +1,22 @@
 import AppKit
+import QuartzCore
 
 extension NSToolbarItem.Identifier {
+    static let toggleDocumentSidebar = NSToolbarItem.Identifier("local.yfff.Serein.toggleDocumentSidebar")
     static let titlebarTabs = NSToolbarItem.Identifier("local.yfff.Serein.titlebarTabs")
+}
+
+private final class DocumentSidebarButton: NSButton {
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshChromeColors()
+    }
+
+    func refreshChromeColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            contentTintColor = NightModeStyle.secondaryTextColor
+        }
+    }
 }
 
 final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindowDelegate {
@@ -9,14 +24,32 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let tabPresentationMode: TabPresentationMode
         let tabsOnRight: Bool
         let isTabsPaneVisible: Bool
-        let isImmersiveModeEnabled: Bool
         let hidesTitlebarTabs: Bool
+        let isDemoModeEnabled: Bool
+        let isOverviewPresentationActive: Bool
         let hasTabs: Bool
     }
 
     private struct WindowTitleState: Equatable {
         let title: String
         let representedURL: URL?
+    }
+
+    private struct TabSnapshot {
+        let frame: NSRect
+        let image: NSImage
+        var isComposited = false
+    }
+
+    private struct TabTransfer {
+        let workspaceID: UUID?
+        let targetMode: TabPresentationMode
+        let panel: NSPanel
+        let sources: [String: TabSnapshot]
+        var cells: [String: (view: NSView, image: NSImageView)]
+        let backdrop: NSImageView
+        var targets: [String: TabSnapshot] = [:]
+        var isAnimating = false
     }
 
     static let defaultContentSize = NSSize(width: 1480, height: 960)
@@ -26,6 +59,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     let windowID: UUID
     private let splitViewController: SplitViewController
     private let toolbar = NSToolbar(identifier: "MainToolbar")
+    private let sidebarToggleItem = NSToolbarItem(itemIdentifier: .toggleDocumentSidebar)
+    private let sidebarToggleButton = DocumentSidebarButton(title: "", target: nil, action: nil)
     private let titlebarTabsItem = NSToolbarItem(itemIdentifier: .titlebarTabs)
     private var allowsTerminationWithoutPrompt = false
     private var demoModeSnapshot: DemoModeSnapshot?
@@ -34,6 +69,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     private var appliedWindowChromeState: WindowChromeState?
     private var appliedWindowTitleState: WindowTitleState?
     private var readerInteractionInstallers: [(ReaderViewController) -> Void] = []
+    private var tabTransfer: TabTransfer?
     var shouldCloseHandler: ((MainWindowController) -> Bool)?
     var didCloseHandler: ((MainWindowController) -> Void)?
 
@@ -45,7 +81,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
 
         window.title = "Serein"
         window.setContentSize(Self.defaultContentSize)
-        window.minSize = Self.minimumWindowSize
+        // A separate frame minimum would make AppKit raise the content minimum
+        // when the compact toolbar is attached.
         window.contentMinSize = Self.minimumWindowSize
         window.minFullScreenContentSize = Self.minimumWindowSize
         window.center()
@@ -74,6 +111,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 self.readerInteractionInstallers.forEach { $0(reader) }
             }
         }
+        splitViewController.readerWorkspaceViewController.onOverviewPresentationDidChange = { [weak self] in
+            self?.applyWindowChromeState()
+        }
+        splitViewController.onWillAnimateSidebarChange = { [weak self] in
+            self?.beginTabTransferIfNeeded() ?? false
+        }
+        splitViewController.onDidApplyChromeLayout = { [weak self] in
+            self?.startTabTransferIfReady()
+        }
 
         window.numberedTabShortcutHandler = { [weak self] oneBasedIndex in
             self?.activateNumberedTab(oneBasedIndex)
@@ -83,6 +129,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         }
         window.delegate = self
         toolbar.delegate = self
+        configureSidebarToggleItem()
         shouldCascadeWindows = true
         splitViewController.verticalTabsViewController.onCloseSessionRequested = { [weak self] sessionID in
             self?.requestCloseSession(sessionID)
@@ -124,6 +171,13 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.affects(windowID: windowID) else { return }
+        let invalidatesTabViews = !notification.isOnlySidebarVisibilityChange
+            && !notification.documentStoreChange.intersection([.content, .tabs, .annotations, .appearance]).isEmpty
+        if let tabTransfer,
+           invalidatesTabViews || tabTransfer.workspaceID != documentStore.activeWorkspaceID(in: windowID)
+            || tabTransfer.targetMode != documentStore.tabPresentationMode(in: windowID) {
+            cancelTabTransfer()
+        }
         guard notification.isOnlySidebarChromeChange == false else {
             applyWindowChromeState()
             return
@@ -148,6 +202,52 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         titlebarTabsItem.visibilityPriority = .high
     }
 
+    private func configureSidebarToggleItem() {
+        sidebarToggleButton.identifier = NSUserInterfaceItemIdentifier("toggleDocumentSidebar")
+        sidebarToggleButton.isBordered = false
+        sidebarToggleButton.bezelStyle = .regularSquare
+        sidebarToggleButton.focusRingType = .none
+        sidebarToggleButton.imagePosition = .imageOnly
+        sidebarToggleButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        sidebarToggleButton.target = self
+        sidebarToggleButton.action = #selector(toggleDocumentSidebar)
+        sidebarToggleButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            sidebarToggleButton.widthAnchor.constraint(equalToConstant: 28),
+            sidebarToggleButton.heightAnchor.constraint(equalToConstant: 26),
+        ])
+        sidebarToggleItem.label = L10n.text("Document Sidebar", "文档侧栏")
+        sidebarToggleItem.paletteLabel = sidebarToggleItem.label
+        sidebarToggleItem.view = sidebarToggleButton
+        sidebarToggleItem.isBordered = false
+        // Keep the layout switch reachable before tabs enter the overflow menu.
+        sidebarToggleItem.visibilityPriority = .user
+    }
+
+    @objc
+    private func toggleDocumentSidebar() {
+        let tabsOnRight = documentStore.appConfiguration.layout.sidebarsSwapped
+        if tabsOnRight {
+            documentStore.setRightSidebarVisible(!documentStore.isRightSidebarVisible(in: windowID), in: windowID)
+        } else {
+            documentStore.setLeftSidebarVisible(!documentStore.isLeftSidebarVisible(in: windowID), in: windowID)
+        }
+    }
+
+    private func refreshSidebarToggle(tabsOnRight: Bool, isVisible: Bool) {
+        let label = isVisible
+            ? L10n.text("Hide Document Sidebar", "隐藏文档侧栏")
+            : L10n.text("Show Document Sidebar", "显示文档侧栏")
+        sidebarToggleButton.image = NSImage(
+            systemSymbolName: tabsOnRight ? "sidebar.right" : "sidebar.left",
+            accessibilityDescription: label
+        )
+        sidebarToggleButton.toolTip = label
+        sidebarToggleButton.setAccessibilityLabel(label)
+        sidebarToggleButton.setAccessibilityValue(isVisible ? 1 : 0)
+        sidebarToggleButton.refreshChromeColors()
+    }
+
     private func updateTitlebarTabsAvailableWidth() {
         guard let window else { return }
         let buttonEdge = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]
@@ -156,7 +256,8 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
             .map { $0.convert($0.bounds, to: nil).maxX }
             .max() ?? 0
         let leadingInset = max(buttonEdge + 16, 16)
-        let trailingInset: CGFloat = 20
+        // Reserve the persistent toggle and native spacing before sizing tabs.
+        let trailingInset: CGFloat = 20 + 28 + 16
         splitViewController.titlebarTabsController.setAvailableWidth(
             max(window.frame.width - leadingInset - trailingInset, 1)
         )
@@ -174,29 +275,255 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         } ?? false
         if changedTabPresentation || tabsPaneVisible || !hasTabs {
             hidesTitlebarTabs = false
-        } else if isImmersiveModeEnabled,
-                  appliedWindowChromeState?.isImmersiveModeEnabled != true {
-            // Opening only the outline must not undo the user's hidden tab chrome.
-            hidesTitlebarTabs = true
         }
         let state = WindowChromeState(
             tabPresentationMode: tabPresentationMode,
             tabsOnRight: tabsOnRight,
             isTabsPaneVisible: tabsPaneVisible,
-            isImmersiveModeEnabled: isImmersiveModeEnabled,
             hidesTitlebarTabs: hidesTitlebarTabs,
+            isDemoModeEnabled: isDemoModeEnabled,
+            isOverviewPresentationActive: splitViewController.readerWorkspaceViewController.isOverviewPresentationActive,
             hasTabs: hasTabs
         )
         guard appliedWindowChromeState != state else { return }
+        if changedTabPresentation, tabTransfer == nil { beginTabTransferIfNeeded() }
         appliedWindowChromeState = state
+        refreshSidebarToggle(tabsOnRight: tabsOnRight, isVisible: tabsPaneVisible)
         let shouldShowTitlebarTabs =
             state.tabPresentationMode == .horizontalTitlebar &&
             !tabsPaneVisible &&
-            !state.hidesTitlebarTabs
+            !state.hidesTitlebarTabs &&
+            !state.isDemoModeEnabled &&
+            !state.isOverviewPresentationActive
 
         splitViewController.titlebarTabsController.setTabsStripVisible(shouldShowTitlebarTabs)
-        synchronizeWindowToolbar(isVisible: shouldShowTitlebarTabs)
+        synchronizeWindowToolbar(isVisible: !state.isDemoModeEnabled)
         synchronizeTitlebarTabsItem(isVisible: shouldShowTitlebarTabs)
+        splitViewController.setTitlebarRegionVisible(shouldShowTitlebarTabs)
+        startTabTransferIfReady()
+    }
+
+    private func tabContainer(for mode: TabPresentationMode) -> NSView {
+        mode == .verticalSidebar
+            ? splitViewController.verticalTabsViewController.view
+            : splitViewController.titlebarTabsController.view
+    }
+
+    private func tabImage(of view: NSView, in rect: NSRect) -> NSImage? {
+        guard rect.width > 1, rect.height > 1,
+              let bitmap = view.bitmapImageRepForCachingDisplay(in: rect) else { return nil }
+        view.cacheDisplay(in: rect, to: bitmap)
+        let image = NSImage(size: rect.size)
+        image.addRepresentation(bitmap)
+        return image
+    }
+
+    private func presentationItems(for mode: TabPresentationMode) -> [(id: String, view: NSView)] {
+        mode == .verticalSidebar
+            ? splitViewController.verticalTabsViewController.presentationItems()
+            : splitViewController.titlebarTabsController.presentationItems()
+    }
+
+    private func transferFrame(_ rect: NSRect, from view: NSView, in window: NSWindow, to panel: NSPanel) -> NSRect {
+        panel.convertFromScreen(window.convertToScreen(view.convert(rect, to: nil)))
+    }
+
+    private func presentationSnapshots(for mode: TabPresentationMode, panel: NSPanel) -> [String: TabSnapshot] {
+        var snapshots: [String: TabSnapshot] = [:]
+        guard let window else { return snapshots }
+        for item in presentationItems(for: mode) {
+            let view = item.view
+            let visible = view.visibleRect.intersection(view.bounds)
+            guard view.window === window, !view.isHiddenOrHasHiddenAncestor,
+                  let image = tabImage(of: view, in: visible) else { continue }
+            snapshots[item.id] = TabSnapshot(frame: transferFrame(visible, from: view, in: window, to: panel), image: image)
+        }
+        return snapshots
+    }
+
+    private func transferCell(_ snapshot: TabSnapshot, id: String) -> (view: NSView, image: NSImageView) {
+        let view = NSView(frame: snapshot.frame)
+        view.identifier = NSUserInterfaceItemIdentifier(id)
+        view.wantsLayer = true
+        if !snapshot.isComposited {
+            window?.effectiveAppearance.performAsCurrentDrawingAppearance {
+                view.layer?.backgroundColor = NightModeStyle.readerBackdropColor.cgColor
+            }
+        }
+        let image = NSImageView(frame: view.bounds)
+        image.autoresizingMask = [.width, .height]
+        image.imageScaling = .scaleAxesIndependently
+        image.image = snapshot.image
+        view.addSubview(image)
+        return (view, image)
+    }
+
+    private func inFlightTabSnapshots() -> [String: TabSnapshot]? {
+        guard let transfer = tabTransfer else { return nil }
+        guard transfer.isAnimating else { return transfer.sources }
+        var snapshots: [String: TabSnapshot] = [:]
+        for (id, cell) in transfer.cells {
+            guard let layer = cell.view.layer?.presentation() else {
+                snapshots[id] = transfer.sources[id]
+                continue
+            }
+            guard layer.opacity > 0.01, layer.bounds.width > 1, layer.bounds.height > 1 else { continue }
+            let image = NSImage(size: layer.bounds.size)
+            image.lockFocus()
+            if let context = NSGraphicsContext.current?.cgContext {
+                context.translateBy(x: -layer.bounds.minX, y: -layer.bounds.minY)
+                layer.render(in: context)
+            }
+            image.unlockFocus()
+            snapshots[id] = TabSnapshot(frame: layer.frame, image: image, isComposited: true)
+        }
+        return snapshots
+    }
+
+    @discardableResult
+    private func beginTabTransferIfNeeded() -> Bool {
+        guard let window, window.isVisible,
+              SplitViewController.sidebarAnimationDuration > 0,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              !isDemoModeEnabled, !isAllPagesOverviewActive,
+              let previous = appliedWindowChromeState, !previous.hidesTitlebarTabs,
+              previous.tabPresentationMode != documentStore.tabPresentationMode(in: windowID) else { return false }
+        // A reversal starts from the displayed layer positions, not the final
+        // layout already prepared beneath the previous animation.
+        let interrupted = inFlightTabSnapshots()
+        cancelTabTransfer()
+
+        let panel = NSPanel(contentRect: window.frame, styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
+        panel.identifier = NSUserInterfaceItemIdentifier("tabPresentationTransfer")
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = true
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
+        panel.appearance = window.effectiveAppearance
+        let canvas = NSView(frame: NSRect(origin: .zero, size: window.frame.size))
+        canvas.wantsLayer = true
+        panel.contentView = canvas
+        let sources = interrupted ?? presentationSnapshots(for: previous.tabPresentationMode, panel: panel)
+        guard !sources.isEmpty else { return false }
+
+        // Keep native window controls above every moving navigation item.
+        let maskPath = CGMutablePath()
+        maskPath.addRect(canvas.bounds)
+        for button in [window.standardWindowButton(.closeButton), window.standardWindowButton(.miniaturizeButton),
+                       window.standardWindowButton(.zoomButton), sidebarToggleButton].compactMap({ $0 })
+            where button.window === window && !button.isHidden {
+            maskPath.addRect(transferFrame(button.bounds, from: button, in: window, to: panel).insetBy(dx: -2, dy: -2))
+        }
+        let mask = CAShapeLayer()
+        mask.frame = canvas.bounds
+        mask.path = maskPath
+        mask.fillRule = .evenOdd
+        canvas.layer?.mask = mask
+
+        let container = tabContainer(for: previous.tabPresentationMode)
+        let visibleItems = presentationItems(for: previous.tabPresentationMode).filter { sources[$0.id] != nil }
+        visibleItems.forEach { $0.view.alphaValue = 0 }
+        var bounds = container.bounds
+        if previous.tabPresentationMode == .verticalSidebar {
+            let insets = container.safeAreaInsets
+            bounds.origin.y += container.isFlipped ? insets.top : insets.bottom
+            bounds.size.height -= insets.top + insets.bottom
+        }
+        let backdrop = NSImageView(frame: transferFrame(bounds, from: container, in: window, to: panel))
+        backdrop.image = tabImage(of: container, in: bounds)
+        backdrop.imageScaling = .scaleAxesIndependently
+        canvas.addSubview(backdrop)
+        visibleItems.forEach { $0.view.alphaValue = 1 }
+        var cells: [String: (view: NSView, image: NSImageView)] = [:]
+        for (id, snapshot) in sources {
+            let cell = transferCell(snapshot, id: id)
+            canvas.addSubview(cell.view)
+            cells[id] = cell
+        }
+        let targetMode = documentStore.tabPresentationMode(in: windowID)
+        tabTransfer = TabTransfer(workspaceID: documentStore.activeWorkspaceID(in: windowID), targetMode: targetMode,
+                                  panel: panel, sources: sources, cells: cells, backdrop: backdrop)
+        container.alphaValue = 0
+        tabContainer(for: targetMode).alphaValue = 0
+        window.addChildWindow(panel, ordered: .above)
+        return true
+    }
+
+    private func startTabTransferIfReady() {
+        guard var transfer = tabTransfer, !transfer.isAnimating, let window,
+              !splitViewController.isApplyingSidebarLayout,
+              appliedWindowChromeState?.tabPresentationMode == transfer.targetMode else { return }
+        transfer.isAnimating = true
+        tabTransfer = transfer
+
+        // Finish the real destination layout and scrolling before measuring any
+        // endpoints. Nothing is moved or remeasured after this single animation.
+        window.layoutIfNeeded()
+        if transfer.targetMode == .verticalSidebar {
+            splitViewController.verticalTabsViewController.revealActiveTabForTransition()
+        } else {
+            splitViewController.titlebarTabsController.revealActiveTabForTransition()
+        }
+        window.layoutIfNeeded()
+        let targets = presentationSnapshots(for: transfer.targetMode, panel: transfer.panel)
+        tabTransfer?.targets = targets
+        var cells = transfer.cells
+        for (id, snapshot) in targets where cells[id] == nil {
+            let cell = transferCell(snapshot, id: id)
+            cell.view.alphaValue = 0
+            transfer.panel.contentView?.addSubview(cell.view)
+            cells[id] = cell
+        }
+        tabTransfer?.cells = cells
+        var incomingImages: [String: NSImageView] = [:]
+        for (id, cell) in cells {
+            guard let snapshot = targets[id], transfer.sources[id] != nil else { continue }
+            let image = NSImageView(frame: cell.view.bounds)
+            image.autoresizingMask = [.width, .height]
+            image.imageScaling = .scaleAxesIndependently
+            image.image = snapshot.image
+            image.alphaValue = 0
+            cell.view.addSubview(image)
+            incomingImages[id] = image
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.20
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            transfer.backdrop.animator().alphaValue = 0
+            for (id, cell) in cells {
+                if let target = targets[id] {
+                    cell.view.animator().frame = target.frame
+                    cell.view.animator().alphaValue = 1
+                    if let incoming = incomingImages[id] {
+                        cell.image.animator().alphaValue = 0
+                        incoming.animator().alphaValue = 1
+                    }
+                } else {
+                    cell.view.animator().alphaValue = 0
+                }
+            }
+        } completionHandler: { [weak self, panel = transfer.panel] in
+            MainActor.assumeIsolated {
+                guard self?.tabTransfer?.panel === panel else { return }
+                self?.cancelTabTransfer()
+            }
+        }
+    }
+
+    private func cancelTabTransfer() {
+        guard let transfer = tabTransfer else { return }
+        tabTransfer = nil
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            tabContainer(for: .verticalSidebar).animator().alphaValue = 1
+            tabContainer(for: .horizontalTitlebar).animator().alphaValue = 1
+        }
+        transfer.panel.parent?.removeChildWindow(transfer.panel)
+        transfer.panel.orderOut(nil)
     }
 
     private func synchronizeWindowToolbar(isVisible: Bool) {
@@ -207,6 +534,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
                 window.toolbar = toolbar
             }
             window.toolbarStyle = .unifiedCompact
+            if toolbar.items.contains(where: { $0.itemIdentifier == .toggleDocumentSidebar }) == false {
+                toolbar.insertItem(withItemIdentifier: .toggleDocumentSidebar, at: 0)
+            }
             return
         }
 
@@ -219,7 +549,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         if isVisible {
             configureTitlebarTabsItemIfNeeded()
             if itemIndex == nil {
-                toolbar.insertItem(withItemIdentifier: .titlebarTabs, at: 0)
+                toolbar.insertItem(withItemIdentifier: .titlebarTabs, at: toolbar.items.count)
             }
             toolbar.centeredItemIdentifier = nil
             return
@@ -247,7 +577,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.titlebarTabs]
+        [.toggleDocumentSidebar, .titlebarTabs]
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -259,6 +589,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
+        if itemIdentifier == .toggleDocumentSidebar { return sidebarToggleItem }
         guard itemIdentifier == .titlebarTabs else { return nil }
         configureTitlebarTabsItemIfNeeded()
         return titlebarTabsItem
@@ -418,10 +749,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     var isImmersiveModeEnabled: Bool {
-        // Requires an open session: an empty window may legitimately have both
-        // panes hidden (outline pane auto-collapsed by the empty-window policy,
-        // tabs pane hidden by horizontal mode) without being immersive.
-        documentStore.isLeftSidebarVisible(in: windowID) == false &&
+        // Horizontal tabs stay available when both panes are closed normally.
+        hidesTitlebarTabs &&
+            documentStore.isLeftSidebarVisible(in: windowID) == false &&
             documentStore.isRightSidebarVisible(in: windowID) == false &&
             documentStore.sessionCount(in: windowID) > 0
     }
@@ -450,9 +780,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         guard documentStore.activeSession(in: windowID) != nil else { return }
 
         immersiveModeSnapshot = nil
-        let shouldOpenBothSidebars =
-            documentStore.isLeftSidebarVisible(in: windowID) == false &&
-            documentStore.isRightSidebarVisible(in: windowID) == false
+        let shouldOpenBothSidebars = isImmersiveModeEnabled
         documentStore.setLeftSidebarVisible(shouldOpenBothSidebars, in: windowID)
         documentStore.setRightSidebarVisible(shouldOpenBothSidebars, in: windowID)
         hidesTitlebarTabs = !shouldOpenBothSidebars
@@ -529,6 +857,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowDidResize(_ notification: Notification) {
+        cancelTabTransfer()
         updateTitlebarTabsAvailableWidth()
     }
 
@@ -786,6 +1115,7 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func windowWillClose(_ notification: Notification) {
+        cancelTabTransfer()
         splitViewController.readerWorkspaceViewController.setPresentationEnabled(false)
         didCloseHandler?(self)
     }
@@ -860,7 +1190,9 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
     }
 
     func refreshThemeAppearance() {
+        cancelTabTransfer()
         window?.backgroundColor = SplitViewController.splitBackgroundColor
+        sidebarToggleButton.refreshChromeColors()
         splitViewController.refreshChromeColors()
     }
 
@@ -981,3 +1313,15 @@ final class MainWindowController: NSWindowController, NSToolbarDelegate, NSWindo
         let zoomScale: CGFloat
     }
 }
+
+#if DEBUG
+extension MainWindowController {
+    var testingTabTransferSourceFrames: [String: NSRect] {
+        tabTransfer?.sources.mapValues { $0.frame } ?? [:]
+    }
+
+    var testingTabTransferTargetFrames: [String: NSRect] {
+        tabTransfer?.targets.mapValues { $0.frame } ?? [:]
+    }
+}
+#endif

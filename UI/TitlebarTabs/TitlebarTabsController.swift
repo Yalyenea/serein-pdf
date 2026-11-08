@@ -49,9 +49,8 @@ private final class TitlebarTabsContainerView: NSView {
 }
 
 final class TitlebarTabsController: NSViewController {
-    static let defaultStripSize = NSSize(width: 760, height: 28)
+    static let defaultStripSize = NSSize(width: 760, height: 26)
     private static let hiddenStripSize = NSSize(width: 1, height: 1)
-    private static let contentHorizontalPadding: CGFloat = 16
     let documentStore: DocumentStore
     let windowID: UUID
     var onCloseSessionRequested: ((UUID) -> Void)?
@@ -116,7 +115,7 @@ final class TitlebarTabsController: NSViewController {
 
         stackView.orientation = .horizontal
         stackView.alignment = .centerY
-        stackView.spacing = 3
+        stackView.spacing = 0
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         documentContainerView.wantsLayer = true
@@ -155,8 +154,8 @@ final class TitlebarTabsController: NSViewController {
             scrollView.heightAnchor.constraint(equalTo: container.heightAnchor),
             stripWidthConstraint,
             stripHeightConstraint,
-            stackView.leadingAnchor.constraint(equalTo: documentContainerView.leadingAnchor, constant: 6),
-            stackView.trailingAnchor.constraint(equalTo: documentContainerView.trailingAnchor, constant: -6),
+            stackView.leadingAnchor.constraint(equalTo: documentContainerView.leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: documentContainerView.trailingAnchor),
             stackView.topAnchor.constraint(equalTo: documentContainerView.topAnchor),
             stackView.bottomAnchor.constraint(equalTo: documentContainerView.bottomAnchor),
             stackView.heightAnchor.constraint(equalTo: scrollView.contentView.heightAnchor),
@@ -174,6 +173,33 @@ final class TitlebarTabsController: NSViewController {
         stackView.arrangedSubviews
             .compactMap { $0 as? TitlebarTabItemView }
             .forEach { $0.refreshChromeColors() }
+    }
+
+    func tabItemView(for sessionID: UUID) -> NSView? {
+        guard isViewLoaded,
+              let tabSessionID = documentStore.publicSessionID(
+                forDisplayedSessionID: sessionID, in: windowID
+              ) else { return nil }
+        return stackView.arrangedSubviews
+            .compactMap { $0 as? TitlebarTabItemView }
+            .first { $0.sessionID == tabSessionID }
+    }
+
+    func presentationItems() -> [(id: String, view: NSView)] {
+        guard isViewLoaded else { return [] }
+        let tabs = stackView.arrangedSubviews
+            .compactMap { $0 as? TitlebarTabItemView }
+            .map { (id: "pdf:" + $0.sessionID.uuidString, view: $0 as NSView) }
+        return tabs + workspaceSelector.presentationItems()
+    }
+
+    func revealActiveTabForTransition() {
+        guard isViewLoaded else { return }
+        // The strip uses its visible viewport width to reveal an offscreen active tab.
+        needsRevealActiveTab = true
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+        revealActiveTabAfterViewportLayout()
     }
 
     private func applyChromeColors() {
@@ -336,7 +362,7 @@ final class TitlebarTabsController: NSViewController {
     }
 
     private func updateDocumentContainerFrame() {
-        let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
+        let fittingWidth = stackView.fittingSize.width
         let contentWidth = max(scrollView.contentSize.width, fittingWidth)
         documentContainerView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: Self.defaultStripSize.height)
     }
@@ -344,7 +370,7 @@ final class TitlebarTabsController: NSViewController {
     private func refreshPreferredStripSize() {
         let size: NSSize
         if isTabsStripVisible {
-            let fittingWidth = stackView.fittingSize.width + Self.contentHorizontalPadding
+            let fittingWidth = stackView.fittingSize.width
                 + workspaceSelector.intrinsicContentSize.width + 8
             let width = min(max(fittingWidth, Self.hiddenStripSize.width), availableWidth)
             size = NSSize(width: width, height: Self.defaultStripSize.height)

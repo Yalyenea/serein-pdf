@@ -141,7 +141,7 @@ final class VerticalTabsViewController: NSViewController {
 
         listStackView.orientation = .vertical
         listStackView.alignment = .leading
-        listStackView.spacing = 5
+        listStackView.spacing = 0
         listStackView.translatesAutoresizingMaskIntoConstraints = false
         listStackView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -194,12 +194,12 @@ final class VerticalTabsViewController: NSViewController {
 
             emptyStateView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             emptyStateView.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            emptyStateView.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
+            emptyStateView.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 8),
 
-            listScrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            listScrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
             listScrollView.trailingAnchor.constraint(
-                equalTo: container.trailingAnchor, constant: -8),
-            listScrollView.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
+                equalTo: container.trailingAnchor, constant: -4),
+            listScrollView.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 8),
         ]
         pinned.forEach { $0.priority = .defaultHigh }
         NSLayoutConstraint.activate(pinned)
@@ -218,7 +218,7 @@ final class VerticalTabsViewController: NSViewController {
         recentTopConstraints = [
             recentSectionContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
             recentSectionContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
-            recentSectionContainer.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
+            recentSectionContainer.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 8),
         ]
         recentBottomConstraints.forEach { $0.priority = .defaultHigh }
         recentTopConstraints.forEach { $0.priority = .defaultHigh }
@@ -238,6 +238,33 @@ final class VerticalTabsViewController: NSViewController {
             selectedView.scrollToVisible(selectedView.bounds)
             needsRevealActiveTab = false
         }
+    }
+
+    func tabItemView(for sessionID: UUID) -> NSView? {
+        guard isViewLoaded,
+              let tabSessionID = documentStore.publicSessionID(
+                forDisplayedSessionID: sessionID, in: windowID
+              ) else { return nil }
+        return listStackView.arrangedSubviews
+            .compactMap { $0 as? VerticalTabItemView }
+            .first { $0.sessionID == tabSessionID }
+    }
+
+    func presentationItems() -> [(id: String, view: NSView)] {
+        guard isViewLoaded else { return [] }
+        let tabs = listStackView.arrangedSubviews
+            .compactMap { $0 as? VerticalTabItemView }
+            .map { (id: "pdf:" + $0.sessionID.uuidString, view: $0 as NSView) }
+        return tabs + workspaceFooter.presentationItems()
+    }
+
+    func revealActiveTabForTransition() {
+        guard isViewLoaded else { return }
+        // Reveal after the host has settled its viewport, including a reopened sidebar.
+        needsRevealActiveTab = true
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+        workspaceFooter.revealActiveIconForTransition()
     }
 
     func refreshChromeColors() {

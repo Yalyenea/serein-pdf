@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 /// Keeps native divider geometry and hit testing without drawing a seam.
 private final class SeamlessSplitView: NSSplitView {
@@ -15,6 +16,12 @@ private final class SeamlessSplitView: NSSplitView {
 }
 
 final class SplitViewController: NSSplitViewController {
+    #if DEBUG
+    static var sidebarAnimationDuration: TimeInterval = 0.18
+    #else
+    static let sidebarAnimationDuration: TimeInterval = 0.18
+    #endif
+
     private struct ChromeLayoutState: Equatable {
         let sidebarsSwapped: Bool
         let isLeftSidebarVisible: Bool
@@ -35,6 +42,8 @@ final class SplitViewController: NSSplitViewController {
     let rightSidebarViewController: RightSidebarViewController
     let titlebarTabsController: TitlebarTabsController
     var onReaderControllersDidChange: (() -> Void)?
+    var onWillAnimateSidebarChange: (() -> Bool)?
+    var onDidApplyChromeLayout: (() -> Void)?
     private var tabsSidebarItem: NSSplitViewItem!
     private var outlineSidebarItem: NSSplitViewItem!
     private var centerItem: NSSplitViewItem!
@@ -43,8 +52,12 @@ final class SplitViewController: NSSplitViewController {
     private var isApplyingSidebarWidths = false
     /// True while collapse/width is driven from store — ignore reverse sync from split geometry.
     private var isApplyingChromeLayout = false
+    var isApplyingSidebarLayout: Bool { isApplyingChromeLayout }
     private var pendingSidebarWidthApply = false
     private var appliedChromeLayoutState: ChromeLayoutState?
+    private var isTitlebarRegionVisible = false
+    private var contentTopToWindow: NSLayoutConstraint?
+    private var contentTopToTitlebar: NSLayoutConstraint?
 
     var readerViewController: ReaderViewController {
         readerWorkspaceViewController.activeReaderViewController()
@@ -89,6 +102,43 @@ final class SplitViewController: NSSplitViewController {
     static var selectedChromeBackgroundColor: NSColor { NightModeStyle.selectedChromeBackgroundColor }
 
     static var chromeStrokeColor: NSColor { NightModeStyle.chromeStrokeColor }
+
+    override func loadView() {
+        super.loadView()
+        let content = view
+        let surface = NSView()
+        // Unlink the original controller view before giving it a new parent,
+        // so AppKit keeps a valid responder chain when the window is released.
+        view = surface
+        content.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(content)
+        let topToWindow = content.topAnchor.constraint(equalTo: surface.topAnchor)
+        let topToTitlebar = content.topAnchor.constraint(equalTo: surface.safeAreaLayoutGuide.topAnchor)
+        contentTopToWindow = topToWindow
+        contentTopToTitlebar = topToTitlebar
+        // Only horizontal tabs reserve a full-width header. With document tabs
+        // in the sidebar, the reader fills that space and the toggle stays put.
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
+            content.bottomAnchor.constraint(equalTo: surface.bottomAnchor),
+            isTitlebarRegionVisible ? topToTitlebar : topToWindow,
+        ])
+    }
+
+    func setTitlebarRegionVisible(_ isVisible: Bool) {
+        guard isTitlebarRegionVisible != isVisible else { return }
+        isTitlebarRegionVisible = isVisible
+        guard let contentTopToWindow, let contentTopToTitlebar else { return }
+        readerWorkspaceViewController.prepareReadersForChromeLayoutChange()
+        NSLayoutConstraint.deactivate([isVisible ? contentTopToWindow : contentTopToTitlebar])
+        NSLayoutConstraint.activate([isVisible ? contentTopToTitlebar : contentTopToWindow])
+        // A sidebar animation already owns its reader anchor and final reflow.
+        if !isApplyingChromeLayout {
+            view.layoutSubtreeIfNeeded()
+            readerWorkspaceViewController.reflowReadersForChromeLayoutChange()
+        }
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -215,6 +265,9 @@ final class SplitViewController: NSSplitViewController {
     @objc
     private func handleDocumentStoreDidChange(_ notification: Notification) {
         guard notification.affects(windowID: windowID) else { return }
+        // An animation owns the split geometry until completion. Its completion
+        // reads the latest store state, including toggles received in the meantime.
+        guard !isApplyingChromeLayout else { return }
         if notification.isOnlySidebarVisibilityChange {
             // Visibility is store-owned. Collapse + preferred widths + reader reflow
             // must run as one chrome pass so sidebars never "overlay" the PDF.
@@ -272,14 +325,52 @@ final class SplitViewController: NSSplitViewController {
     ///   reflow fit-width/fit-height so the PDF tracks the center remainder
     private func applyChromeLayout(syncRightSidebarMode: Bool = true, forceWidthReapply: Bool = false) {
         guard isApplyingChromeLayout == false else { return }
+        let targetState = chromeLayoutState()
+        let animate = forceWidthReapply
+            && Self.sidebarAnimationDuration > 0
+            && appliedChromeLayoutState != nil
+            && view.window?.isVisible == true
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            && collapseStateDiffersFromStore
+        // A tab-layout transfer measures the real final layout synchronously,
+        // then animates all navigation items together above it.
+        let transfersTabs = animate && (onWillAnimateSidebarChange?() ?? false)
         if forceWidthReapply {
-            readerWorkspaceViewController.prepareReadersForChromeLayoutChange()
+            readerWorkspaceViewController.prepareReadersForChromeLayoutChange(animated: animate)
         }
         isApplyingChromeLayout = true
-        defer { isApplyingChromeLayout = false }
 
-        applyCollapseStateFromStore()
+        if animate && !transfersTabs {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Self.sidebarAnimationDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                applyCollapseStateFromStore(animated: true)
+            } completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if targetState != self.chromeLayoutState() {
+                        // Keep the original reader anchor across quick repeated clicks.
+                        // Only the latest requested state needs a final width/reflow pass.
+                        self.rebuildSplitItemsIfSwapChanged()
+                        self.isApplyingChromeLayout = false
+                        self.applyChromeLayout(syncRightSidebarMode: syncRightSidebarMode, forceWidthReapply: true)
+                        return
+                    }
+                    self.finishChromeLayout(syncRightSidebarMode: syncRightSidebarMode, forceWidthReapply: true)
+                    self.isApplyingChromeLayout = false
+                    self.onDidApplyChromeLayout?()
+                }
+            }
+            return
+        }
 
+        applyCollapseStateFromStore(animated: false)
+        finishChromeLayout(syncRightSidebarMode: syncRightSidebarMode, forceWidthReapply: forceWidthReapply)
+        isApplyingChromeLayout = false
+        onDidApplyChromeLayout?()
+    }
+
+    private func finishChromeLayout(syncRightSidebarMode: Bool, forceWidthReapply: Bool) {
         if forceWidthReapply {
             splitView.layoutSubtreeIfNeeded()
             hasAppliedSidebarWidths = false
@@ -317,7 +408,15 @@ final class SplitViewController: NSSplitViewController {
         applyChromeLayout(syncRightSidebarMode: syncRightSidebarMode)
     }
 
-    private func applyCollapseStateFromStore() {
+    private var collapseStateDiffersFromStore: Bool {
+        let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
+        let physicalLeft: NSSplitViewItem = swapped ? outlineSidebarItem : tabsSidebarItem
+        let physicalRight: NSSplitViewItem = swapped ? tabsSidebarItem : outlineSidebarItem
+        return physicalLeft.isCollapsed == documentStore.isLeftSidebarVisible(in: windowID)
+            || physicalRight.isCollapsed == documentStore.isRightSidebarVisible(in: windowID)
+    }
+
+    private func applyCollapseStateFromStore(animated: Bool) {
         let swapped = documentStore.appConfiguration.layout.sidebarsSwapped
         let physicalLeft: NSSplitViewItem = swapped ? outlineSidebarItem : tabsSidebarItem
         let physicalRight: NSSplitViewItem = swapped ? tabsSidebarItem : outlineSidebarItem
@@ -325,13 +424,17 @@ final class SplitViewController: NSSplitViewController {
         let leftShouldCollapse = !documentStore.isLeftSidebarVisible(in: windowID)
         let rightShouldCollapse = !documentStore.isRightSidebarVisible(in: windowID)
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            context.allowsImplicitAnimation = false
+            if !animated {
+                context.duration = 0
+                context.allowsImplicitAnimation = false
+            }
             if physicalLeft.isCollapsed != leftShouldCollapse {
-                physicalLeft.isCollapsed = leftShouldCollapse
+                if animated { physicalLeft.animator().isCollapsed = leftShouldCollapse }
+                else { physicalLeft.isCollapsed = leftShouldCollapse }
             }
             if physicalRight.isCollapsed != rightShouldCollapse {
-                physicalRight.isCollapsed = rightShouldCollapse
+                if animated { physicalRight.animator().isCollapsed = rightShouldCollapse }
+                else { physicalRight.isCollapsed = rightShouldCollapse }
             }
         }
     }
@@ -344,6 +447,7 @@ final class SplitViewController: NSSplitViewController {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pendingReaderReflow = false
+            guard !self.isApplyingChromeLayout else { return }
             self.readerWorkspaceViewController.reflowReadersForChromeLayoutChange()
         }
     }
@@ -763,6 +867,12 @@ final class SplitViewController: NSSplitViewController {
         )
     }
 }
+
+#if DEBUG
+extension SplitViewController {
+    var testingIsApplyingChromeLayout: Bool { isApplyingChromeLayout }
+}
+#endif
 
 private extension Array {
     subscript(safe index: Int) -> Element? {

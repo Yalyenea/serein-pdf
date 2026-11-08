@@ -817,15 +817,80 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertEqual(store.tabPresentationMode, .verticalSidebar)
     }
 
-    func testSetTabPresentationModeAdjustsLeftSidebarVisibility() {
-        let store = makeStore()
+    func testSetTabPresentationModeAdjustsDocumentSidebarVisibility() {
+        for swapped in [false, true] {
+            var configuration = AppConfiguration.default
+            configuration.layout.sidebarsSwapped = swapped
+            let store = makeStore(appConfiguration: configuration)
 
-        store.setTabPresentationMode(.horizontalTitlebar)
-        XCTAssertEqual(store.tabPresentationMode, .horizontalTitlebar)
-        XCTAssertFalse(store.isLeftSidebarVisible)
+            store.setTabPresentationMode(.horizontalTitlebar)
+            XCTAssertEqual(store.tabPresentationMode, .horizontalTitlebar)
+            XCTAssertFalse(swapped ? store.isRightSidebarVisible : store.isLeftSidebarVisible)
 
-        store.setTabPresentationMode(.verticalSidebar)
-        XCTAssertTrue(store.isLeftSidebarVisible)
+            store.setTabPresentationMode(.verticalSidebar)
+            XCTAssertEqual(store.tabPresentationMode, .verticalSidebar)
+            XCTAssertTrue(swapped ? store.isRightSidebarVisible : store.isLeftSidebarVisible)
+        }
+    }
+
+    func testDocumentSidebarVisibilitySwitchesTabModeOnlyInItsWindow() {
+        for swapped in [false, true] {
+            var configuration = AppConfiguration.default
+            configuration.layout.sidebarsSwapped = swapped
+            let persistence = InMemoryDocumentStorePersistence()
+            let store = makeStore(persistence: persistence, appConfiguration: configuration)
+            let windowID = store.defaultWindowID
+            let otherWindowID = store.createWindow()
+
+            for visible in [false, true] {
+                if swapped {
+                    store.setRightSidebarVisible(visible, in: windowID)
+                } else {
+                    store.setLeftSidebarVisible(visible, in: windowID)
+                }
+
+                let expectedMode: TabPresentationMode = visible ? .verticalSidebar : .horizontalTitlebar
+                XCTAssertEqual(store.tabPresentationMode(in: windowID), expectedMode)
+                XCTAssertEqual(persistence.state?.workspaceWindows?.first { $0.id == windowID }?.tabPresentationMode, expectedMode)
+                XCTAssertEqual(store.tabPresentationMode(in: otherWindowID), .verticalSidebar)
+                XCTAssertFalse(store.isOutlinePaneVisible(in: windowID))
+            }
+        }
+    }
+
+    func testRestoringInconsistentTabModePreservesDocumentSidebarVisibility() throws {
+        for swapped in [false, true] {
+            for visible in [false, true] {
+                for usesWorkspaceWindows in [false, true] {
+                    var configuration = AppConfiguration.default
+                    configuration.layout.sidebarsSwapped = swapped
+                    let persistence = InMemoryDocumentStorePersistence()
+                    let oldMode: TabPresentationMode = visible ? .horizontalTitlebar : .verticalSidebar
+                    let leftVisible = swapped ? false : visible
+                    let rightVisible = swapped ? visible : false
+                    if usesWorkspaceWindows {
+                        persistence.state = PersistedDocumentStoreState(sessions: [], workspaceWindows: [
+                            WindowWorkspace(tabPresentationMode: oldMode,
+                                            isLeftSidebarVisible: leftVisible,
+                                            isRightSidebarVisible: rightVisible),
+                        ])
+                    } else {
+                        persistence.state = PersistedDocumentStoreState(
+                            sessions: [], activeSessionURL: nil, tabPresentationMode: oldMode,
+                            isLeftSidebarVisible: leftVisible, isRightSidebarVisible: rightVisible
+                        )
+                    }
+                    let store = makeStore(persistence: persistence, appConfiguration: configuration)
+
+                    try store.restorePersistedState()
+
+                    let expectedMode: TabPresentationMode = visible ? .verticalSidebar : .horizontalTitlebar
+                    XCTAssertEqual(store.tabPresentationMode, expectedMode)
+                    XCTAssertEqual(swapped ? store.isRightSidebarVisible : store.isLeftSidebarVisible, visible)
+                    XCTAssertEqual(persistence.state?.workspaceWindows?.first?.tabPresentationMode, expectedMode)
+                }
+            }
+        }
     }
 
     func testSidebarVisibilityUpdatesPersistedState() {
@@ -841,9 +906,10 @@ final class DocumentStoreTests: XCTestCase {
 
         XCTAssertEqual(persistence.state?.isLeftSidebarVisible, false)
         XCTAssertEqual(persistence.state?.isRightSidebarVisible, false)
+        XCTAssertEqual(persistence.state?.tabPresentationMode, .horizontalTitlebar)
     }
 
-    func testSidebarVisibilityChangePostsLightweightNotification() {
+    func testDocumentSidebarVisibilityChangePostsTabAndSidebarNotification() {
         let store = makeStore()
         let recorder = DocumentStoreChangeRecorder()
         let observer = NotificationCenter.default.addObserver(
@@ -856,6 +922,21 @@ final class DocumentStoreTests: XCTestCase {
         defer { NotificationCenter.default.removeObserver(observer) }
 
         store.setLeftSidebarVisible(false)
+
+        XCTAssertEqual(recorder.observedChange, [.tabs, .sidebarVisibility])
+    }
+
+    func testOutlineSidebarVisibilityChangePostsLightweightNotification() {
+        let store = makeStore()
+        let recorder = DocumentStoreChangeRecorder()
+        let observer = NotificationCenter.default.addObserver(
+            forName: .documentStoreDidChange, object: store, queue: nil
+        ) { notification in
+            recorder.observedChange = notification.documentStoreChange
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        store.setRightSidebarVisible(true)
 
         XCTAssertEqual(recorder.observedChange, .sidebarVisibility)
     }
@@ -1122,9 +1203,7 @@ final class DocumentStoreTests: XCTestCase {
         XCTAssertTrue(notedURLs.isEmpty)
     }
 
-    func testRestorePersistedVerticalModePreservesCollapsedLeftSidebar() throws {
-        // restorePersistedState keeps the saved left-sidebar flag; live
-        // setTabPresentationMode(.verticalSidebar) is what forces it visible.
+    func testRestorePersistedVerticalModeWithCollapsedSidebarShowsHorizontalTabs() throws {
         let url = try makeTemporaryPDF(named: "restore-vertical")
         let persistence = InMemoryDocumentStorePersistence()
         persistence.state = PersistedDocumentStoreState(
@@ -1142,7 +1221,7 @@ final class DocumentStoreTests: XCTestCase {
 
         try store.restorePersistedState()
 
-        XCTAssertEqual(store.tabPresentationMode, .verticalSidebar)
+        XCTAssertEqual(store.tabPresentationMode, .horizontalTitlebar)
         XCTAssertFalse(store.isLeftSidebarVisible)
     }
 

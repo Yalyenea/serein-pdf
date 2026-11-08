@@ -5,6 +5,8 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct ImmersiveTabChromeTests {
+    init() { SplitViewController.sidebarAnimationDuration = 0 }
+
     @Test(arguments: [false, true])
     func openingOutlineAfterImmersiveKeepsTitlebarTabsHidden(sidebarsSwapped: Bool) throws {
         let (store, controller) = try makeController(sidebarsSwapped: sidebarsSwapped)
@@ -17,22 +19,52 @@ struct ImmersiveTabChromeTests {
             setOutlineVisible(true, store: store, swapped: sidebarsSwapped)
             controller.window?.layoutIfNeeded()
             #expect(controller.isImmersiveModeEnabled == false)
-            #expect(controller.window?.toolbar == nil)
+            #expect(controller.window?.toolbar != nil)
             #expect(split.titlebarTabsController.view.isHidden)
             setOutlineVisible(false, store: store, swapped: sidebarsSwapped)
             controller.window?.layoutIfNeeded()
-            #expect(controller.window?.toolbar == nil)
+            #expect(controller.window?.toolbar != nil)
+            #expect(split.titlebarTabsController.view.isHidden)
         }
     }
 
     @Test
-    func closingLastSidebarAlsoKeepsTabsHiddenWhenOutlineReopens() throws {
+    func closingLastSidebarKeepsHorizontalTabsVisibleWhenOutlineReopens() throws {
+        let (store, controller) = try makeController()
+        defer { controller.close() }
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        store.setRightSidebarVisible(false)
+        #expect(controller.window?.toolbar != nil)
+        #expect(!split.titlebarTabsController.view.isHidden)
+        #expect(!controller.isImmersiveModeEnabled)
+        controller.toggleImmersiveMode()
+        #expect(controller.isImmersiveModeEnabled)
+        #expect(split.titlebarTabsController.view.isHidden)
+        controller.toggleImmersiveMode()
+        #expect(!controller.isImmersiveModeEnabled)
+        #expect(store.isLeftSidebarVisible)
+        store.setLeftSidebarVisible(false)
+        store.setRightSidebarVisible(true)
+        #expect(controller.window?.toolbar != nil)
+        #expect(!split.titlebarTabsController.view.isHidden)
+    }
+
+    @Test(arguments: [false, true])
+    func overviewRestoresExplicitTabChromeVisibility(wasHidden: Bool) throws {
         let (store, controller) = try makeController()
         defer { controller.close() }
         store.setRightSidebarVisible(false)
-        #expect(controller.window?.toolbar == nil)
-        store.setRightSidebarVisible(true)
-        #expect(controller.window?.toolbar == nil)
+        if wasHidden { controller.toggleImmersiveMode() }
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        let reader = split.readerViewController
+        reader.setAllPagesOverviewActive(true)
+        #expect(controller.window?.toolbar != nil)
+        #expect(split.titlebarTabsController.view.isHidden)
+
+        reader.setAllPagesOverviewActive(false)
+        #expect(split.titlebarTabsController.view.isHidden == wasHidden)
+        #expect(!store.isLeftSidebarVisible)
+        #expect(!store.isRightSidebarVisible)
     }
 
     @Test(arguments: [false, true])
@@ -59,14 +91,17 @@ struct ImmersiveTabChromeTests {
             controller.toggleImmersiveMode()
             store.setRightSidebarVisible(true)
         }
-        #expect((controller.window?.toolbar == nil) == wasHidden)
+        let split = try #require(controller.window?.contentViewController as? SplitViewController)
+        #expect(controller.window?.toolbar != nil)
+        #expect(split.titlebarTabsController.view.isHidden == wasHidden)
 
         controller.toggleDemoMode()
         #expect(controller.window?.toolbar == nil)
         controller.toggleDemoMode()
 
         #expect(store.isRightSidebarVisible)
-        #expect((controller.window?.toolbar == nil) == wasHidden)
+        #expect(controller.window?.toolbar != nil)
+        #expect(split.titlebarTabsController.view.isHidden == wasHidden)
     }
 
     @Test

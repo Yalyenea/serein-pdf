@@ -191,7 +191,7 @@ final class RightSidebarViewController: NSViewController {
             modeSegmented.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             segmentedLeading,
             segmentedTrailing,
-            modeSegmented.topAnchor.constraint(equalTo: container.topAnchor, constant: 32),
+            modeSegmented.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: 8),
         ])
 
         // M12-014: the no-document state centers its copy instead of leaving a

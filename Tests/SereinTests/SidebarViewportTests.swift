@@ -6,6 +6,8 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct SidebarViewportTests {
+    init() { SplitViewController.sidebarAnimationDuration = 0 }
+
     @Test(arguments: [false, true])
     func openingOutlinePreservesManualVisibleWidthAndHiddenTabs(locked: Bool) async throws {
         _ = NSApplication.shared
@@ -45,7 +47,7 @@ struct SidebarViewportTests {
             #expect(abs(after.midX - before.midX) < 2)
             #expect(abs(after.midY - before.midY) < 5)
             #expect(store.session(for: session.id)?.scaleMode == .manual)
-            #expect(window.toolbar == nil)
+            #expect(window.toolbar != nil)
             #expect(split.titlebarTabsController.view.isHidden)
             if visible {
                 #expect(reader.pdfView.scaleFactor < scaleBefore - 0.05)
@@ -61,8 +63,9 @@ struct SidebarViewportTests {
 
     private func settle(_ window: NSWindow) {
         window.layoutIfNeeded()
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.12))
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
         window.layoutIfNeeded()
+        #expect(waitForChromeLayout(in: window))
     }
 
     private func viewport(on page: PDFPage, reader: ReaderViewController) throws -> NSRect {

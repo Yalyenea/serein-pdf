@@ -212,6 +212,27 @@ final class WorkspaceSelectorView: NSView {
     private var activeIconButton: NSButton? {
         iconButtons.first { $0.identifier?.rawValue == displayedActiveID?.uuidString }
     }
+
+    func presentationItems() -> [(id: String, view: NSView)] {
+        if style == .compact {
+            guard let activeID = documentStore.activeWorkspaceID(in: windowID) else { return [] }
+            return [(id: "space:" + activeID.uuidString, view: menuButton)]
+        }
+        let icons = zip(iconButtons, displayedItems).map { button, workspace in
+            (id: "space:" + workspace.id.uuidString, view: button as NSView)
+        }
+        return icons + [(id: "space:add", view: addButton)]
+    }
+
+    func revealActiveIconForTransition() {
+        guard style == .sidebarFooter else { return }
+        layoutSubtreeIfNeeded()
+        iconsScrollView.layoutSubtreeIfNeeded()
+        // Capture the final icon position after its scroll viewport has settled.
+        needsRevealActiveIcon = true
+        layoutWorkspaceIcons()
+    }
+
     func refreshChromeColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             menuButton.contentTintColor = NightModeStyle.secondaryTextColor

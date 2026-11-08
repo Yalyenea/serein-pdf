@@ -1,4 +1,17 @@
 import AppKit
+@testable import Serein
+
+@MainActor
+func waitForChromeLayout(in window: NSWindow?, timeout: TimeInterval = 1.5) -> Bool {
+    guard let split = window?.contentViewController as? SplitViewController else { return true }
+    let deadline = Date(timeIntervalSinceNow: timeout)
+    while split.testingIsApplyingChromeLayout, Date() < deadline {
+        window?.layoutIfNeeded()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02))
+    }
+    window?.layoutIfNeeded()
+    return !split.testingIsApplyingChromeLayout
+}
 
 @MainActor
 func findDescendant<T: NSView>(of type: T.Type, in root: NSView) -> T? {

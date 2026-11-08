@@ -209,7 +209,7 @@ final class VerticalTabsViewControllerTests: XCTestCase {
             NSPoint(x: tabItem.bounds.midX, y: tabItem.bounds.midY),
             from: tabItem
         )
-        let closeButton = try XCTUnwrap(findButton(titled: "×", in: tabItem))
+        let closeButton = try XCTUnwrap(findView(identifier: "tabCloseButton", in: tabItem) as? NSButton)
         let closePoint = controller.view.convert(
             NSPoint(x: closeButton.bounds.midX, y: closeButton.bounds.midY),
             from: closeButton
@@ -393,12 +393,28 @@ final class VerticalTabsViewControllerTests: XCTestCase {
         }
 
         let topTab = tabItems[0]
-        let closeButton = try XCTUnwrap(findButton(titled: "×", in: topTab))
+        let closeButton = try XCTUnwrap(findView(identifier: "tabCloseButton", in: topTab) as? NSButton)
         let closePoint = closeButton.convert(
             NSPoint(x: closeButton.bounds.midX, y: closeButton.bounds.midY),
             to: controller.view
         )
+        // An inactive tab's reserved close slot must still select and drag the tab.
+        XCTAssertEqual(closeButton.alphaValue, 0)
+        XCTAssertFalse(closeButton.isEnabled)
+        XCTAssertTrue(controller.view.hitTest(closePoint) is TabDragSourceButton)
+        let hoverEvent = mouseDownEvent(in: window, at: controller.view.convert(closePoint, to: nil))
+        topTab.mouseEntered(with: hoverEvent)
+        XCTAssertEqual(closeButton.alphaValue, 1)
+        XCTAssertTrue(closeButton.isEnabled)
         XCTAssertTrue(controller.view.hitTest(closePoint) === closeButton)
+        topTab.mouseExited(with: hoverEvent)
+        XCTAssertTrue(controller.view.hitTest(closePoint) is TabDragSourceButton)
+
+        topTab.beginEditing()
+        XCTAssertEqual(closeButton.alphaValue, 1)
+        topTab.finishEditing()
+        XCTAssertEqual(closeButton.alphaValue, 0)
+        XCTAssertTrue(controller.view.hitTest(closePoint) is TabDragSourceButton)
 
         XCTAssertEqual(store.activeSessionID(in: store.defaultWindowID), third.id)
         let firstTab = tabItems[0]

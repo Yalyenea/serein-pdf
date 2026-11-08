@@ -90,6 +90,8 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
     let floatingOutlineViewController: FloatingOutlineViewController
     var onFocusedReaderDidChange: ((PDFView) -> Void)?
     var readersDidChange: (() -> Void)?
+    var onOverviewPresentationDidChange: (() -> Void)?
+    var isOverviewPresentationActive: Bool { !overviewPaneIDs.isEmpty }
     private(set) var isReadingFocusModeEnabled = false
     private(set) var isPresentationEnabled = false
     private(set) var readingFocusSettingsOverride: ReadingFocusSettings?
@@ -295,12 +297,12 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
 
     /// After left/right chrome collapse or width pin, force readers to match the
     /// new center size (fit-width / fit-height reflow + recenter).
-    func prepareReadersForChromeLayoutChange() {
-        allReaderViewControllers.forEach { $0.prepareForChromeSizeChange() }
+    func prepareReadersForChromeLayoutChange(animated: Bool = false) {
+        allReaderViewControllers.forEach { $0.prepareForChromeSizeChange(animated: animated) }
     }
 
     func reflowReadersForChromeLayoutChange() {
-        allReaderViewControllers.forEach { $0.reflowForContainerSizeChange() }
+        allReaderViewControllers.forEach { $0.reflowForContainerSizeChange(completesChromeAnimation: true) }
     }
 
     func fitToHeight() {
@@ -790,6 +792,7 @@ final class ReaderWorkspaceViewController: NSViewController, NSPopoverDelegate {
             if active { self.overviewPaneIDs.insert(pane) }
             else { self.overviewPaneIDs.remove(pane) }
             self.updateFloatingOutlineSuppression()
+            self.onOverviewPresentationDidChange?()
         }
         reader.onSplitRequested = { [weak self] sessionID, position, layout in
             self?.splitPane(from: pane, layout: layout, sessionID: sessionID, readingPosition: position) ?? false

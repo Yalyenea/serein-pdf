@@ -6,6 +6,8 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct ReaderTextWidthTests {
+    init() { SplitViewController.sidebarAnimationDuration = 0 }
+
     @Test(arguments: [ReaderDisplayMode.singlePage, .singlePageContinuous])
     func autoLockUpdatesReaderAndUnlocksAfterEveryZoomCommand(_ mode: ReaderDisplayMode) throws {
         var configuration = AppConfiguration.default
@@ -387,6 +389,7 @@ private func settle(_ controller: MainWindowController) {
     controller.window?.layoutIfNeeded()
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.08))
     controller.window?.layoutIfNeeded()
+    #expect(waitForChromeLayout(in: controller.window))
 }
 
 @MainActor

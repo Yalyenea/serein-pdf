@@ -19,6 +19,10 @@ All notable changes to Serein are captured here. Versions follow semver.
 
 ### Sidebars
 - Raise the default left sidebar minimum width from 36 to 180 points. Startup restoration and divider dragging use the configured minimum; existing configuration files retain their explicit value.
+- Move document tabs to the titlebar when their sidebar closes, and restore vertical tabs when it opens, including after swapping sidebars. Keep the sidebar button in place and repair inconsistent tab layouts from older saved sessions.
+- Use compact, flat tabs with regular text, a light selected background, and a bottom or left selection line. Reserve a solid titlebar region for horizontal tabs; collapse it in vertical mode so the PDF moves up beneath the window controls.
+- Animate visible PDF tabs and the active Space entry directly to their final positions in 200 ms. Continue from their current positions during rapid reversals, fade unmatched Space controls, and respect Reduce Motion.
+- Make `Cmd+Ctrl+L` enter immersive reading by hiding both sidebars and tabs; press it again while immersive to open both sidebars. Closing sidebars individually keeps horizontal tabs available.
 
 ### Spaces
 - Rename workspace controls to Spaces and replace the switcher menu with a compact themed panel. Keep the titlebar entry as the original group icon without a name or arrow.
@@ -28,6 +32,7 @@ All notable changes to Serein are captured here. Versions follow semver.
 - Add a delete button to each Space row. Hide it while renaming or when only one Space remains; update its color with the current theme.
 
 ### Development
+- Validation (2026-11-08): two targeted XCTest regressions passed, covering three PDF tabs and two Spaces transferring to precomputed final positions without taking focus, stable endpoints after completion, and rapid sidebar reversals preserving the final state and preferred widths.
 - Validation (2026-10-30): complete `just test` passed with 720 XCTest tests (one publisher-PDF test skipped by default) and 250 Swift Testing tests in 22 suites. Rerunning the publisher-PDF test with the local fixture passed and validated 73 citation previews and reader navigation.
 - Use an optimized incremental Release build for `just install`, with a separate `.build/install` cache. Keep whole-module optimization for `just build`, `just install release`, `just dmg`, and `just ship`.
 - Stabilize comment double-click tests with a fixed zoom, a visible highlight, and queued mouse-down and mouse-up events. Verify that the comment card enters editing without opening the sidebar.

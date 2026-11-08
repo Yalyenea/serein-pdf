@@ -7,8 +7,8 @@ final class VerticalTabItemView: NSView {
     private let dirtyIndicator = NSView()
     private let groupIndicator = NSView()
     private let titleLabel = NSTextField()
-    private let closeButton = NSButton(title: "×", target: nil, action: nil)
-    private let separator = NSBox()
+    private let closeButton = NSButton(title: "", target: nil, action: nil)
+    private let selectionIndicator = NSView()
     private let contentStackView = NSStackView()
     private var isContinuousReadingMember: Bool
     private var isContinuousReadingLeader: Bool
@@ -24,6 +24,8 @@ final class VerticalTabItemView: NSView {
     private var onStartContinuousReading: ((UUID) -> Void)?
     private var onExitContinuousReading: ((UUID) -> Void)?
     private var preEditTitle = ""
+    private var isHovered = false
+    private var hoverTrackingArea: NSTrackingArea?
 
     var isSelected: Bool = false {
         didSet { updateAppearance() }
@@ -78,7 +80,6 @@ final class VerticalTabItemView: NSView {
         selectButton.toolTip = filename
 
         wantsLayer = true
-        layer?.cornerRadius = 8
         layer?.borderWidth = 0
 
         selectButton.dragPayload = dragPayload
@@ -101,7 +102,7 @@ final class VerticalTabItemView: NSView {
         groupIndicator.isHidden = !(isContinuousReadingMember || isContinuousReadingLeader)
 
         titleLabel.stringValue = title
-        titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        titleLabel.font = .systemFont(ofSize: 11.5)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.maximumNumberOfLines = 1
         titleLabel.cell?.truncatesLastVisibleLine = true
@@ -116,7 +117,10 @@ final class VerticalTabItemView: NSView {
         titleLabel.backgroundColor = .clear
         titleLabel.delegate = self
 
-        closeButton.font = .systemFont(ofSize: 13, weight: .regular)
+        closeButton.identifier = NSUserInterfaceItemIdentifier("tabCloseButton")
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: L10n.text("Close Tab", "关闭标签"))
+        closeButton.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 9, weight: .regular)
+        closeButton.toolTip = L10n.text("Close Tab", "关闭标签")
         closeButton.isBordered = false
         closeButton.bezelStyle = .regularSquare
         closeButton.focusRingType = .none
@@ -127,30 +131,30 @@ final class VerticalTabItemView: NSView {
         closeButton.setContentHuggingPriority(.required, for: .horizontal)
         closeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        separator.boxType = .custom
-        separator.isTransparent = false
-        separator.fillColor = SplitViewController.dividerBackgroundColor
+        // Match the titlebar's active rule on the sidebar's leading edge.
+        selectionIndicator.identifier = NSUserInterfaceItemIdentifier("tabSelectionIndicator")
+        selectionIndicator.wantsLayer = true
+        selectionIndicator.translatesAutoresizingMaskIntoConstraints = false
 
         let row = contentStackView
         [dirtyIndicator, titleLabel, closeButton].forEach(row.addArrangedSubview)
         row.orientation = .horizontal
         row.alignment = .centerY
         row.distribution = .fill
-        row.spacing = 7
+        row.spacing = 6
         row.edgeInsets = NSEdgeInsets(
-            top: 6,
-            left: isContinuousReadingMember ? 24 : 10,
-            bottom: 6,
+            top: 0,
+            left: isContinuousReadingMember ? 24 : 9,
+            bottom: 0,
             right: 6
         )
 
         addSubview(selectButton)
         addSubview(groupIndicator)
         addSubview(row)
-        addSubview(separator)
+        addSubview(selectionIndicator, positioned: .below, relativeTo: selectButton)
         selectButton.translatesAutoresizingMaskIntoConstraints = false
         row.translatesAutoresizingMaskIntoConstraints = false
-        separator.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
             selectButton.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -167,11 +171,13 @@ final class VerticalTabItemView: NSView {
             row.bottomAnchor.constraint(equalTo: bottomAnchor),
             dirtyIndicator.widthAnchor.constraint(equalToConstant: 6),
             dirtyIndicator.heightAnchor.constraint(equalToConstant: 6),
-            closeButton.widthAnchor.constraint(equalToConstant: 20),
-            separator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            separator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            separator.bottomAnchor.constraint(equalTo: bottomAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 1),
+            closeButton.widthAnchor.constraint(equalToConstant: 16),
+            closeButton.heightAnchor.constraint(equalToConstant: 16),
+            heightAnchor.constraint(equalToConstant: 28),
+            selectionIndicator.leadingAnchor.constraint(equalTo: leadingAnchor),
+            selectionIndicator.topAnchor.constraint(equalTo: topAnchor),
+            selectionIndicator.bottomAnchor.constraint(equalTo: bottomAnchor),
+            selectionIndicator.widthAnchor.constraint(equalToConstant: 1.5),
         ])
 
         self.isSelected = isSelected
@@ -201,6 +207,25 @@ final class VerticalTabItemView: NSView {
         onClose?(sessionID)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        updateAppearance()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        updateAppearance()
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard frame.contains(point) else { return nil }
         if titleLabel.isEditable {
@@ -209,7 +234,7 @@ final class VerticalTabItemView: NSView {
 
         let localPoint = convert(point, from: superview)
         let closePoint = closeButton.convert(localPoint, from: self)
-        if closeButton.bounds.contains(closePoint) {
+        if closeButton.alphaValue > 0, closeButton.bounds.contains(closePoint) {
             return closeButton
         }
         return selectButton
@@ -304,9 +329,11 @@ final class VerticalTabItemView: NSView {
         let newTitle = titleLabel.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard newTitle.isEmpty == false, newTitle != preEditTitle else {
             titleLabel.stringValue = preEditTitle
+            updateAppearance()
             return
         }
         titleLabel.stringValue = newTitle
+        updateAppearance()
         let onRename = self.onRename
         let sessionID = self.sessionID
         DispatchQueue.main.async {
@@ -321,6 +348,7 @@ final class VerticalTabItemView: NSView {
         titleLabel.isBezeled = false
         titleLabel.drawsBackground = false
         titleLabel.backgroundColor = .clear
+        updateAppearance()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -344,34 +372,44 @@ final class VerticalTabItemView: NSView {
         self.canStartContinuousReading = canStartContinuousReading
         dirtyIndicator.isHidden = !isDirty
         groupIndicator.isHidden = !(isContinuousReadingMember || isContinuousReadingLeader)
-        contentStackView.edgeInsets.left = isContinuousReadingMember ? 24 : 10
+        contentStackView.edgeInsets.left = isContinuousReadingMember ? 24 : 9
         updateAppearance()
     }
 
     private func updateAppearance() {
+        // Keep the close slot stable while hidden; its hit area belongs to selection.
+        let showsCloseButton = isSelected || isHovered || isEditing
+        closeButton.alphaValue = showsCloseButton ? 1 : 0
+        closeButton.isEnabled = showsCloseButton
+        closeButton.setAccessibilityHidden(!showsCloseButton)
+        selectionIndicator.isHidden = !isSelected
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if isSelected {
-                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor.cgColor
+                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor.withAlphaComponent(0.32).cgColor
             } else if isTabSelected {
                 layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
-                    .withAlphaComponent(0.45)
+                    .withAlphaComponent(0.3)
+                    .cgColor
+            } else if isHovered {
+                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
+                    .withAlphaComponent(0.16)
                     .cgColor
             } else {
                 layer?.backgroundColor = NSColor.clear.cgColor
             }
-            layer?.borderColor = isSelected ? SplitViewController.chromeStrokeColor.cgColor : NSColor.clear.cgColor
-            layer?.borderWidth = isSelected ? 1 : 0
+            layer?.borderColor = NSColor.clear.cgColor
+            layer?.borderWidth = 0
+            selectionIndicator.layer?.backgroundColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.65).cgColor
             dirtyIndicator.layer?.backgroundColor = HighlightColor.pink.nsColor.cgColor
             groupIndicator.layer?.backgroundColor = isContinuousReadingLeader
                 ? HighlightColor.pink.nsColor.cgColor
                 : SplitViewController.chromeStrokeColor.withAlphaComponent(0.75).cgColor
-            separator.fillColor = SplitViewController.dividerBackgroundColor
             titleLabel.textColor = isSelected || isTabSelected || titleLabel.isEditable
                 ? NightModeStyle.primaryTextColor
                 : NightModeStyle.secondaryTextColor
             titleLabel.backgroundColor = titleLabel.isEditable ? NightModeStyle.readerBackdropColor : .clear
             closeButton.contentTintColor = isSelected
-                ? NightModeStyle.primaryTextColor
+                ? NightModeStyle.secondaryTextColor
                 : NightModeStyle.tertiaryTextColor
             if let editor = titleLabel.currentEditor() as? NSTextView {
                 editor.textColor = NightModeStyle.primaryTextColor
@@ -383,7 +421,6 @@ final class VerticalTabItemView: NSView {
                 ]
             }
         }
-        separator.isHidden = isSelected
     }
 }
 

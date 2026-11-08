@@ -2,7 +2,6 @@ import AppKit
 
 final class TitlebarTabItemView: NSView {
     override var acceptsFirstResponder: Bool { true }
-    private static let cornerRadius: CGFloat = 4
     private static let minimumWidth: CGFloat = 88
     private static let maximumWidth: CGFloat = 196
     let sessionID: UUID
@@ -12,6 +11,7 @@ final class TitlebarTabItemView: NSView {
     private let titleLabel = NSTextField()
     private let closeButton = NSButton(title: "", target: nil, action: nil)
     private let contentStackView = NSStackView()
+    private let selectionIndicator = NSView()
     private var isDirty: Bool
     private var isContinuousReadingMember: Bool
     private var isContinuousReadingLeader: Bool
@@ -45,7 +45,7 @@ final class TitlebarTabItemView: NSView {
         let dirtyWidth: CGFloat = isDirty ? 12 : 0
         let groupWidth: CGFloat = isContinuousReadingMember ? 8 : 0
         let width = titleLabel.intrinsicContentSize.width + dirtyWidth + groupWidth + 40
-        return NSSize(width: min(max(width, Self.minimumWidth), Self.maximumWidth), height: 24)
+        return NSSize(width: min(max(width, Self.minimumWidth), Self.maximumWidth), height: 26)
     }
 
     init(
@@ -92,7 +92,6 @@ final class TitlebarTabItemView: NSView {
         selectButton.toolTip = filename
 
         wantsLayer = true
-        layer?.cornerRadius = Self.cornerRadius
         layer?.borderWidth = 0
 
         selectButton.dragPayload = dragPayload
@@ -150,6 +149,11 @@ final class TitlebarTabItemView: NSView {
 
         addSubview(selectButton)
         addSubview(stack)
+        // A flush bottom rule anchors the active document to the titlebar plane.
+        selectionIndicator.identifier = NSUserInterfaceItemIdentifier("tabSelectionIndicator")
+        selectionIndicator.wantsLayer = true
+        selectionIndicator.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(selectionIndicator, positioned: .below, relativeTo: selectButton)
         selectButton.translatesAutoresizingMaskIntoConstraints = false
         stack.translatesAutoresizingMaskIntoConstraints = false
 
@@ -174,7 +178,11 @@ final class TitlebarTabItemView: NSView {
             dirtyIndicator.widthAnchor.constraint(equalToConstant: 6),
             dirtyIndicator.heightAnchor.constraint(equalToConstant: 6),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
-            heightAnchor.constraint(equalToConstant: 24),
+            heightAnchor.constraint(equalToConstant: 26),
+            selectionIndicator.leadingAnchor.constraint(equalTo: leadingAnchor),
+            selectionIndicator.trailingAnchor.constraint(equalTo: trailingAnchor),
+            selectionIndicator.bottomAnchor.constraint(equalTo: bottomAnchor),
+            selectionIndicator.heightAnchor.constraint(equalToConstant: 1.5),
         ])
 
         self.isSelected = isSelected
@@ -380,9 +388,10 @@ final class TitlebarTabItemView: NSView {
         closeButton.alphaValue = showsCloseButton ? 1 : 0
         closeButton.isEnabled = showsCloseButton
         closeButton.setAccessibilityHidden(!showsCloseButton)
+        selectionIndicator.isHidden = !isSelected
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if isSelected {
-                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor.withAlphaComponent(0.5).cgColor
+                layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor.withAlphaComponent(0.32).cgColor
             } else if isTabSelected {
                 layer?.backgroundColor = SplitViewController.selectedChromeBackgroundColor
                     .withAlphaComponent(0.3)
@@ -396,6 +405,7 @@ final class TitlebarTabItemView: NSView {
             }
             layer?.borderColor = NSColor.clear.cgColor
             layer?.borderWidth = 0
+            selectionIndicator.layer?.backgroundColor = NightModeStyle.secondaryTextColor.withAlphaComponent(0.65).cgColor
             dirtyIndicator.layer?.backgroundColor = HighlightColor.pink.nsColor.cgColor
             groupIndicator.layer?.backgroundColor = isContinuousReadingLeader
                 ? HighlightColor.pink.nsColor.cgColor

@@ -18,7 +18,7 @@ Requires an Apple silicon Mac running macOS 14 or later. Selection translation r
 
 ## Features
 
-- **Tabs and spaces.** Organize PDFs into named spaces with vertical or titlebar tabs, custom icons, and inline naming.
+- **Tabs and spaces.** Organize PDFs into named spaces with custom icons and inline naming; closing the document sidebar moves tabs to the titlebar, and reopening it restores vertical tabs.
 - **Split reading.** Compare documents in nested splits, with independent navigation and zoom in each pane.
 - **Reading modes.** Single-page, two-page, and book layouts, continuous scrolling, and an all-pages overview.
 - **Navigation.** Search the current PDF or open documents, browse outlines, and move through reading history.

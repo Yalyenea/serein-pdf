@@ -605,6 +605,7 @@ final class ReaderViewController: NSViewController {
         let anchor: PDFViewportAnchor
     }
     private var chromeResizeState: ChromeResizeState?
+    private var isAnimatingChromeSizeChange = false
     private var pendingFitWidthSessionID: UUID?
     private var pendingFitHeightSessionID: UUID?
     private var lastAppliedFitBoundsWidth: CGFloat = 0
@@ -868,6 +869,9 @@ final class ReaderViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
+        // Sidebar animation supplies many intermediate sizes; fit and persistence
+        // must use the final reader bounds and the anchor captured before it began.
+        guard !isAnimatingChromeSizeChange else { return }
         defer {
             syncPageCounter()
             publishViewportPosition()
@@ -1180,10 +1184,12 @@ final class ReaderViewController: NSViewController {
         }
     }
 
-    func prepareForChromeSizeChange() {
-        guard chromeResizeState == nil, isViewLoaded, !isApplyingStoreState, !isApplyingProgrammaticScale else { return }
+    func prepareForChromeSizeChange(animated: Bool = false) {
+        guard isViewLoaded, !isApplyingStoreState, !isApplyingProgrammaticScale else { return }
+        if animated { isAnimatingChromeSizeChange = true }
+        guard chromeResizeState == nil else { return }
         flushPendingReadingPositionWriteback()
-        guard let session = targetSession(), session.scaleMode == .manual,
+        guard let session = targetSession(), session.scaleMode == .manual || animated,
               session.id == displayedSessionID,
               let clip = pdfClipView(), clip.frame.width > 0,
               let anchor = captureViewportAnchor() else { return }
@@ -1195,9 +1201,23 @@ final class ReaderViewController: NSViewController {
 
     /// Called after split chrome changes so fit modes track the new reader width
     /// instead of leaving the previous scale (which looks like a sidebar overlay).
-    func reflowForContainerSizeChange() {
+    func reflowForContainerSizeChange(completesChromeAnimation: Bool = false) {
+        // Space/layout changes can request a reflow while the outer sidebar is
+        // still moving. Preserve its anchor until that animation settles.
+        guard !isAnimatingChromeSizeChange || completesChromeAnimation else { return }
         let resizeState = chromeResizeState
         chromeResizeState = nil
+        let wasAnimating = isAnimatingChromeSizeChange
+        let wasApplying = isApplyingStoreState
+        if wasAnimating { isApplyingStoreState = true }
+        defer {
+            isAnimatingChromeSizeChange = false
+            isApplyingStoreState = wasApplying
+            if wasAnimating {
+                syncPageCounter()
+                publishViewportPosition()
+            }
+        }
         guard isViewLoaded else { return }
         view.layoutSubtreeIfNeeded()
         pdfView.layoutSubtreeIfNeeded()
@@ -1222,7 +1242,8 @@ final class ReaderViewController: NSViewController {
             applyFitHeight(for: session)
         case .manual:
             if let resizeState, resizeState.sessionID == session.id,
-               let clip = pdfClipView(), abs(clip.frame.width - resizeState.width) > 0.5 {
+               let clip = pdfClipView(),
+               wasAnimating || abs(clip.frame.width - resizeState.width) > 0.5 {
                 let scale = min(max(resizeState.scale * clip.frame.width / resizeState.width,
                                     pdfView.minScaleFactor), pdfView.maxScaleFactor)
                 let wasApplying = isApplyingStoreState
@@ -1234,6 +1255,14 @@ final class ReaderViewController: NSViewController {
                     documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
                 }
                 isApplyingStoreState = wasApplying
+            }
+        }
+        if wasAnimating, session.scaleMode != .manual,
+           let resizeState, resizeState.sessionID == session.id {
+            applyProgrammaticScale(pdfView.scaleFactor, viewportAnchor: resizeState.anchor)
+            if let position = currentReadingPosition() {
+                displayedReadingPosition = position
+                documentStore.updateReadingPosition(position, scaleFactor: pdfView.scaleFactor, for: session.id)
             }
         }
         recenterDocumentViewIfNeeded()
@@ -2607,6 +2636,7 @@ final class ReaderViewController: NSViewController {
         annotationInteraction.clearPreview()
         markPDFPrivateViewTreeDirty()
         guard isApplyingStoreState == false,
+              isAnimatingChromeSizeChange == false,
               isNavigatingHistory == false,
               let session = targetSession(),
               session.id == displayedSessionID else { return }
@@ -2652,6 +2682,7 @@ final class ReaderViewController: NSViewController {
         markPDFPrivateViewTreeDirty()
         guard isApplyingProgrammaticScale == false,
               isApplyingStoreState == false,
+              isAnimatingChromeSizeChange == false,
               let session = targetSession(),
               session.id == displayedSessionID else { return }
 
@@ -3442,7 +3473,8 @@ final class ReaderViewController: NSViewController {
     }
 
     func publishViewportPosition(force: Bool = false) {
-        guard let sessionID = displayedSessionID,
+        guard !isAnimatingChromeSizeChange,
+              let sessionID = displayedSessionID,
               pdfView.document != nil,
               let position = currentReadingPosition() else { return }
         if !force, let previous = lastPublishedViewport,
@@ -3611,7 +3643,7 @@ final class ReaderViewController: NSViewController {
         annotationInteraction.clearPreview()
         let previousBounds = lastObservedPDFClipBounds
         lastObservedPDFClipBounds = clipView.bounds
-        guard isApplyingScrollClamp == false else { return }
+        guard isApplyingScrollClamp == false, !isAnimatingChromeSizeChange else { return }
         recenterDocumentViewIfNeeded()
         pdfContainerView.readingFocusOverlay.refreshFocusGeometry()
 
@@ -4210,6 +4242,12 @@ final class ReaderViewController: NSViewController {
     }
 
 }
+
+#if DEBUG
+extension ReaderViewController {
+    var testingIsAnimatingChromeSizeChange: Bool { isAnimatingChromeSizeChange }
+}
+#endif
 
 extension ReaderViewController {
     var testingSwitchTitleToastTitle: String {
